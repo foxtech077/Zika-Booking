@@ -1,0 +1,54 @@
+export type UserStatus = "pending_verification" | "active" | "suspended" | "banned";
+export type UserType = "guest" | "provider";
+export type OAuthProvider = "google" | "apple";
+export type LoyaltyTier = "bronze" | "silver" | "gold" | "diamond";
+
+export interface User {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  status: UserStatus;
+  userType: UserType;
+  businessName?: string | null;
+  country?: string | null;
+  emailVerified: boolean;
+  emailVerifiedAt?: string | null;
+  oauthProvider?: OAuthProvider | null;
+  currentTier: LoyaltyTier;
+  loyaltyPoints: number;
+  createdAt: string;
+}
+
+export interface PublicUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  status: UserStatus;
+  userType: UserType;
+  businessName?: string | null;
+  country?: string | null;
+  emailVerified: boolean;
+  currentTier: LoyaltyTier;
+  loyaltyPoints: number;
+}
+
+export type AdminRole =
+  | "super_admin"
+  | "admin"
+  | "country_manager"
+  | "sales"
+  | "support"
+  | "finance";
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: AdminRole;
+  countryScope: string[];
+  totpEnabled: boolean;
+  fido2Registered: boolean;
+  createdAt: string;
+}

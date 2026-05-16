@@ -1,0 +1,242 @@
+// This is the Prisma schema for the ZikaBooking auth service.
+// Run: pnpm db:generate  →  regenerates the Prisma client
+// Run: pnpm db:migrate   →  applies pending migrations to the DB
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum UserStatus {
+  pending_verification
+  active
+  suspended
+  banned
+}
+
+enum UserType {
+  guest
+  provider
+}
+
+enum OAuthProvider {
+  google
+  apple
+}
+
+enum LoyaltyTier {
+  bronze
+  silver
+  gold
+  diamond
+}
+
+enum TokenType {
+  email_verification
+  password_reset
+}
+
+enum EmailLogType {
+  verification
+  verification_resend
+  welcome
+  password_reset
+  account_suspended
+  account_reinstated
+  account_banned
+}
+
+enum EmailLogStatus {
+  sent
+  failed
+  bounced
+}
+
+enum AdminRole {
+  super_admin
+  admin
+  country_manager
+  sales
+  support
+  finance
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Users (guests and providers)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id              String        @id @default(cuid())
+  firstName       String        @db.VarChar(100)
+  lastName        String        @db.VarChar(100)
+  email           String        @unique @db.VarChar(255)
+  passwordHash    String?       @db.VarChar(255)   // null for OAuth-only accounts
+  status          UserStatus    @default(pending_verification)
+  userType        UserType
+  businessName    String?       @db.VarChar(255)   // providers only
+  country         String?       @db.Char(2)         // providers only (ISO 3166-1)
+  emailVerified   Boolean       @default(false)
+  emailVerifiedAt DateTime?
+  oauthProvider   OAuthProvider?
+  oauthSub        String?       @db.VarChar(255)
+  oauthRevoked    Boolean       @default(false)
+  currentTier     LoyaltyTier   @default(bronze)
+  loyaltyPoints   Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  verificationTokens VerificationToken[]
+  sessions           Session[]
+  emailLogs          EmailLog[]
+
+  @@unique([oauthProvider, oauthSub])
+  @@index([email])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Email verification & password reset tokens
+// ─────────────────────────────────────────────────────────────────────────────
+
+model VerificationToken {
+  id                 String     @id @default(cuid())
+  userId             String
+  user               User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash          String     @unique @db.Char(64)  // SHA-256 of plain token
+  tokenType          TokenType
+  expiresAt          DateTime
+  used               Boolean    @default(false)
+  usedAt             DateTime?
+  invalidatedReason  String?    @db.VarChar(50)       // 'superseded' | 'expired'
+  createdAt          DateTime   @default(now())
+
+  @@index([userId, tokenType])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Guest / provider refresh token sessions
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique @db.Char(64)   // SHA-256 of refresh token
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Email log
+// ─────────────────────────────────────────────────────────────────────────────
+
+model EmailLog {
+  id               String         @id @default(cuid())
+  userId           String?
+  user             User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type             EmailLogType
+  recipient        String         @db.VarChar(255)
+  status           EmailLogStatus @default(sent)
+  sendgridMsgId    String?        @db.VarChar(255)
+  sentAt           DateTime?
+  createdAt        DateTime       @default(now())
+
+  @@index([userId])
+  @@index([recipient])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin users
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AdminUser {
+  id                  String      @id @default(cuid())
+  name                String      @db.VarChar(200)
+  email               String      @unique @db.VarChar(255)
+  passwordHash        String      @db.VarChar(255)
+  role                AdminRole
+  countryScope        String[]    @default([])         // ISO 3166-1 codes; empty = global
+  totpEnabled         Boolean     @default(false)
+  totpSecretEncrypted String?     @db.Text             // AES-256 encrypted TOTP secret
+  fido2Credential     Json?                            // public key + credential ID (super_admin)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  cancellationCount   Int         @default(0)
+
+  // Relations
+  adminSessions    AdminSession[]
+  recoveryCodes    AdminRecoveryCode[]
+  auditLogs        AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Admin sessions (replaces short-lived JWT for admin panel)
+// Inactivity expiry of 8 hours enforced by lastActiveAt check (BR-1.11)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AdminSession {
+  id           String    @id @default(cuid())
+  adminUserId  String
+  adminUser    AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  tokenHash    String    @unique @db.Char(64)
+  revoked      Boolean   @default(false)
+  lastActiveAt DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+
+  @@index([adminUserId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOTP one-time recovery codes (8 codes per admin, single-use)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AdminRecoveryCode {
+  id          String    @id @default(cuid())
+  adminUserId String
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  codeHash    String    @db.Char(64)   // SHA-256 of plain code
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([adminUserId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Audit log — immutable; no UPDATE or DELETE permitted (7-year retention)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  adminId    String
+  admin      AdminUser @relation(fields: [adminId], references: [id])
+  role       String    @db.VarChar(50)
+  action     String    @db.VarChar(100)
+  targetType String?   @db.VarChar(50)
+  targetId   String?
+  oldValue   String?   @db.Text
+  newValue   String?   @db.Text
+  ipAddress  String    @db.VarChar(45)
+  timestamp  DateTime  @default(now())
+
+  @@index([adminId])
+  @@index([targetId])
+  @@index([timestamp])
+}

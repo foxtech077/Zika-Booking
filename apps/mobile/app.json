@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "ZikaBooking",
+    "slug": "zika-booking",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "zikabooking",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a73e8"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.zikabooking.app",
+      "entitlements": {
+        "com.apple.developer.applesignin": ["Default"]
+      },
+      "associatedDomains": ["applinks:zikabooking.com", "webcredentials:zikabooking.com"]
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a73e8"
+      },
+      "package": "com.zikabooking.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "zikabooking.com", "pathPrefix": "/verify" }, { "scheme": "https", "host": "zikabooking.com", "pathPrefix": "/reset-password" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-apple-authentication"],
+      ["@react-native-google-signin/google-signin", { "iosUrlScheme": "com.googleusercontent.apps.YOUR_IOS_CLIENT_ID" }]
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}
