@@ -76,7 +76,24 @@ function publicUser(u: {
 
 export async function authRoutes(app: FastifyInstance) {
   // ── POST /auth/register  (UC-1.1, UC-1.2) ──────────────────────────────────
-  app.post("/auth/register", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/register", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["firstName", "lastName", "email", "password", "confirmPassword", "userType"],
+        properties: {
+          firstName: { type: "string" },
+          lastName: { type: "string" },
+          email: { type: "string", format: "email" },
+          password: { type: "string" },
+          confirmPassword: { type: "string" },
+          userType: { type: "string", enum: ["guest", "provider"] },
+          businessName: { type: "string" },
+          country: { type: "string", minLength: 2, maxLength: 2, description: "2-letter ISO country code (e.g. 'IN', 'US')" },
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(reply, 422, "VALIDATION_ERROR", "Validation failed",
@@ -171,7 +188,17 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/resend-verification  (UC-1.4) ───────────────────────────────
-  app.post("/auth/resend-verification", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/resend-verification", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["email"],
+        properties: {
+          email: { type: "string", format: "email" },
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = resendVerificationSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid email.");
     const { email } = parsed.data;
@@ -218,7 +245,18 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/login  (UC-1.5) ─────────────────────────────────────────────
-  app.post("/auth/login", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/login", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["email", "password"],
+        properties: {
+          email: { type: "string", format: "email" },
+          password: { type: "string" },
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid credentials.");
     const { email, password } = parsed.data;
@@ -293,7 +331,17 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/forgot-password  (UC-1.8) ───────────────────────────────────
-  app.post("/auth/forgot-password", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/forgot-password", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["email"],
+        properties: {
+          email: { type: "string", format: "email" },
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = forgotPasswordSchema.safeParse(req.body);
     // Always 200 regardless (BR: prevents enumeration)
     if (!parsed.success) return sendSuccess(reply, 200, { message: "If an account with that email exists, we've sent a password reset link." });
@@ -313,7 +361,18 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/reset-password  (UC-1.8) ────────────────────────────────────
-  app.post("/auth/reset-password", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/reset-password", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["token", "password"],
+        properties: {
+          token: { type: "string" },
+          password: { type: "string" },
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = resetPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(reply, 422, "VALIDATION_ERROR", "Validation failed",

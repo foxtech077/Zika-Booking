@@ -1,8 +1,11 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import { getRedis } from "./lib/redis";
 import { authRoutes } from "./routes/auth";
 import { adminAuthRoutes, adminUserRoutes } from "./routes/admin-auth";
@@ -12,6 +15,46 @@ const HOST = process.env["AUTH_SERVICE_HOST"] ?? "0.0.0.0";
 
 async function build() {
   const app = Fastify({ logger: { level: process.env["NODE_ENV"] === "production" ? "warn" : "info" }, trustProxy: true });
+
+  // Register Swagger API documentation
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: "Zika Booking Auth Service API",
+        description: "API documentation for Zika Booking Auth Service",
+        version: "0.0.1",
+      },
+      servers: [
+        {
+          url: `http://localhost:${PORT}`,
+          description: "Local development server",
+        },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "Enter your Bearer Access Token (without 'Bearer ' prefix)",
+          },
+        },
+      },
+      security: [
+        {
+          bearerAuth: [],
+        },
+      ],
+    },
+  });
+
+  await app.register(swaggerUi, {
+    routePrefix: "/docs",
+    uiConfig: {
+      docExpansion: "list",
+      deepLinking: false,
+    },
+  });
 
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, {
