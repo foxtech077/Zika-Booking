@@ -1,7 +1,10 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import Redis from "ioredis";
 import { listingRoutes } from "./routes/listings.js";
 import { adminListingRoutes } from "./routes/admin-listings.js";
@@ -21,6 +24,46 @@ async function build() {
   const app = Fastify({
     logger: { level: process.env["NODE_ENV"] === "production" ? "warn" : "info" },
     trustProxy: true,
+  });
+
+  // Register Swagger API documentation
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: "Zika Booking Listing Service API",
+        description: "API documentation for Zika Booking Listing Service",
+        version: "0.0.1",
+      },
+      servers: [
+        {
+          url: `http://localhost:${PORT}`,
+          description: "Local development server",
+        },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "Enter your Bearer Access Token (without 'Bearer ' prefix)",
+          },
+        },
+      },
+      security: [
+        {
+          bearerAuth: [],
+        },
+      ],
+    },
+  });
+
+  await app.register(swaggerUi, {
+    routePrefix: "/docs",
+    uiConfig: {
+      docExpansion: "list",
+      deepLinking: false,
+    },
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
