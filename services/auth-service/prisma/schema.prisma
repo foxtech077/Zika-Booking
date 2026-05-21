@@ -1,4 +1,4 @@
-// This is the Prisma schema for the ZikaBooking auth service.
+`// This is the Prisma schema for the ZikaBooking auth service.
 // Run: pnpm db:generate  →  regenerates the Prisma client
 // Run: pnpm db:migrate   →  applies pending migrations to the DB
 
