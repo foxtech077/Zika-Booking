@@ -80,7 +80,17 @@ async function assertOwner(listingId: string, providerId: string, reply: Fastify
 export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings — Create new draft (UC-2.1)
-  app.post("/listings", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings", {
+    preHandler: [requireProviderRole],
+    schema: {
+      body: {
+        type: "object",
+        properties: {
+          category: { type: "string", enum: ["hotel", "apartment", "car"], default: "hotel" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { category = "hotel" } = req.body as { category?: string };
 
@@ -164,7 +174,61 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // PATCH /listings/:id — Update listing fields (UC-2.2 auto-save)
-  app.patch("/listings/:id", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/listings/:id", {
+    preHandler: [requireProviderRole],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      body: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          roomType: { type: "string", enum: ["standard", "superior", "deluxe", "suite", "junior_suite", "studio", "family_room", "presidential_suite"] },
+          unitCount: { type: "integer", minimum: 1 },
+          claimedStarRating: { type: "integer", minimum: 1, maximum: 5, nullable: true },
+          description: { type: "string", nullable: true },
+          pricePerNight: { type: "number" },
+          currency: { type: "string", minLength: 3, maxLength: 3 },
+          minStayNights: { type: "integer", minimum: 1 },
+          checkinTime: { type: "string", nullable: true },
+          checkoutTime: { type: "string", nullable: true },
+          cancellationPolicy: { type: "string", enum: ["flexible", "moderate", "strict"] },
+          smokingAllowed: { type: "boolean" },
+          petsAllowed: { type: "boolean" },
+          address: { type: "string", nullable: true },
+          lat: { type: "number", nullable: true },
+          lng: { type: "number", nullable: true },
+          town: { type: "string", nullable: true },
+          country: { type: "string", minLength: 2, maxLength: 2, nullable: true },
+          amenities: { type: "array", items: { type: "string" } },
+          customAmenities: { type: "array", items: { type: "string" } },
+          // apartment-specific
+          bedrooms: { type: "integer", minimum: 0, nullable: true },
+          bathrooms: { type: "integer", minimum: 0, nullable: true },
+          maxGuests: { type: "integer", minimum: 1, nullable: true },
+          longStayEnabled: { type: "boolean" },
+          longStayMinNights: { type: "integer", minimum: 1, nullable: true },
+          longStayDiscountType: { type: "string", enum: ["percentage", "fixed"], nullable: true },
+          longStayDiscountValue: { type: "number", nullable: true },
+          // car-specific
+          carMake: { type: "string", nullable: true },
+          carModel: { type: "string", nullable: true },
+          carYear: { type: "integer", minimum: 1900, maximum: 2100, nullable: true },
+          transmission: { type: "string", enum: ["manual", "automatic"], nullable: true },
+          fuelType: { type: "string", enum: ["petrol", "diesel", "electric", "hybrid"], nullable: true },
+          seats: { type: "integer", minimum: 1, nullable: true },
+          doors: { type: "integer", minimum: 2, nullable: true },
+          mileagePolicy: { type: "string", enum: ["unlimited", "limited"], nullable: true },
+          mileageLimitKm: { type: "integer", minimum: 1, nullable: true },
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
