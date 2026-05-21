@@ -1,7 +1,20 @@
 import axios from "axios";
+import Constants from "expo-constants";
 import { useAuthStore } from "../store/auth";
 
-const BASE_URL = process.env["EXPO_PUBLIC_API_URL"] ?? "http://localhost:3001";
+const getBaseUrl = () => {
+  const envUrl = process.env["EXPO_PUBLIC_API_URL"];
+  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1") && !envUrl.includes("10.249.75.161")) {
+    return envUrl;
+  }
+  const host = Constants.expoConfig?.hostUri?.split(":")[0];
+  if (host) {
+    return `http://${host}:3001`;
+  }
+  return "http://localhost:3001";
+};
+
+const BASE_URL = getBaseUrl();
 
 export const api = axios.create({
   baseURL: BASE_URL,

@@ -1,7 +1,20 @@
 import axios from "axios";
+import Constants from "expo-constants";
 import { useAuthStore } from "../store/auth";
 
-const LISTING_BASE_URL = process.env["EXPO_PUBLIC_LISTING_API_URL"] ?? "http://localhost:3003";
+const getListingBaseUrl = () => {
+  const envUrl = process.env["EXPO_PUBLIC_LISTING_API_URL"];
+  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1") && !envUrl.includes("10.249.75.161")) {
+    return envUrl;
+  }
+  const host = Constants.expoConfig?.hostUri?.split(":")[0];
+  if (host) {
+    return `http://${host}:3003`;
+  }
+  return "http://localhost:3003";
+};
+
+const LISTING_BASE_URL = getListingBaseUrl();
 
 export const listingApi = axios.create({
   baseURL: LISTING_BASE_URL,

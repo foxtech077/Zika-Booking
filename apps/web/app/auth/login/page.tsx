@@ -29,8 +29,8 @@ export default function LoginPage() {
       // Redirect based on user type
       router.replace(data.user.userType === "provider" ? "/provider" : "/");
     },
-    onError: (err: unknown) => {
-      const e = (err as { error?: { code?: string; message?: string } }).error;
+    onError: (err: any) => {
+      const e = err.response?.data?.error;
       if (e?.code === "EMAIL_NOT_VERIFIED") {
         router.push(`/auth/verify-pending?email=${encodeURIComponent(form.email)}`);
         return;

@@ -30,20 +30,32 @@ export default function RegisterPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post<ApiResponse<{ message: string }>>("/auth/register", { ...form, userType });
+      const payload = {
+        ...form,
+        userType,
+        businessName: userType === "provider" ? form.businessName : undefined,
+        country: userType === "provider" ? form.country || undefined : undefined,
+      };
+      const res = await api.post<ApiResponse<{ message: string }>>("/auth/register", payload);
       if (!res.data.success) throw res.data;
       return res.data.data;
     },
     onSuccess: () => setSubmitted(true),
-    onError: (err: unknown) => {
-      const e = (err as { error?: { message?: string; fields?: Record<string, string> } }).error;
+    onError: (err: any) => {
+      const e = err.response?.data?.error;
       setErrors({ ...e?.fields, general: e?.fields ? undefined : e?.message });
     },
   });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const result = registerSchema.safeParse({ ...form, userType });
+    const payload = {
+      ...form,
+      userType,
+      businessName: userType === "provider" ? form.businessName : undefined,
+      country: userType === "provider" ? form.country || undefined : undefined,
+    };
+    const result = registerSchema.safeParse(payload);
     if (!result.success) {
       const fe: FieldErrors = {};
       for (const issue of result.error.issues) {
