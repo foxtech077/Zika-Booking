@@ -45,8 +45,8 @@ export default function RegisterScreen() {
       const payload = {
         ...form,
         userType,
-        businessName: userType === "provider" ? form.businessName : undefined,
-        country: userType === "provider" ? form.country || undefined : undefined,
+        businessName: userType === "provider" ? (form.businessName || undefined) : undefined,
+        country: userType === "provider" ? (form.country || undefined) : undefined,
       };
       const res = await api.post<ApiResponse<{ message?: string; user?: PublicUser; tokens?: { accessToken: string } }>>("/auth/register", payload);
       return res.data;
@@ -71,13 +71,13 @@ export default function RegisterScreen() {
   });
 
   function validate(): boolean {
-    const payload = {
+    const dataToValidate = {
       ...form,
       userType,
-      businessName: userType === "provider" ? form.businessName : undefined,
-      country: userType === "provider" ? form.country || undefined : undefined,
+      businessName: userType === "provider" ? (form.businessName || undefined) : undefined,
+      country: userType === "provider" ? (form.country || undefined) : undefined,
     };
-    const result = registerSchema.safeParse(payload);
+    const result = registerSchema.safeParse(dataToValidate);
     if (!result.success) {
       const fieldErrors: FieldErrors = {};
       for (const issue of result.error.issues) {
