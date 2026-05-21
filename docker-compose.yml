@@ -4,10 +4,10 @@ services:
     container_name: zika-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: kashpass123
+      POSTGRES_PASSWORD: 12345678
       POSTGRES_DB: zika_booking
     ports:
-      - "5432:5432"
+      - "5438:5432"
     volumes:
       - zika-postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
