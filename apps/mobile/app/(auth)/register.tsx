@@ -60,12 +60,16 @@ export default function RegisterScreen() {
       }
     },
     onError: (err: unknown) => {
-      const data = (err as { response?: { data?: ApiResponse<unknown> } }).response?.data;
+      const axiosErr = err as { message?: string; code?: string; config?: { url?: string; baseURL?: string }; response?: { data?: ApiResponse<unknown> } };
+      const data = axiosErr.response?.data;
       if (data && !data.success) {
         const fields = data.error.fields ?? {};
         setErrors({ ...fields, general: data.error.fields ? undefined : data.error.message });
       } else {
-        setErrors({ general: "Something went wrong. Please check your connection and try again." });
+        const details = __DEV__
+          ? `\n\n[Dev Details]\nURL: ${axiosErr.config?.baseURL ?? api.defaults.baseURL}${axiosErr.config?.url ?? ""}\nError: ${axiosErr.message ?? "Unknown Network Error"}\nCode: ${axiosErr.code ?? "Unknown Code"}`
+          : "";
+        setErrors({ general: `Something went wrong. Please check your connection and try again.${details}` });
       }
     },
   });

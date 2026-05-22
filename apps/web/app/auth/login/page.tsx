@@ -27,7 +27,7 @@ export default function LoginPage() {
     onSuccess: (data) => {
       storeToken(data.tokens.accessToken);
       // Redirect based on user type
-      router.replace(data.user.userType === "provider" ? "/provider" : "/");
+      router.replace(data.user.userType === "provider" ? "/listings" : "/traveller");
     },
     onError: (err: any) => {
       const e = err.response?.data?.error;
