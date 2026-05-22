@@ -3,14 +3,15 @@ import Constants from "expo-constants";
 import { useAuthStore } from "../store/auth";
 
 const getListingBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_LISTING_API_URL"];
-  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1") && !envUrl.includes("10.249.75.161")) {
-    return envUrl;
-  }
+  // Prefer the Expo dev server host (auto-detected from the QR code) so any
+  // phone on the same Wi-Fi can reach the API without hardcoded IP addresses.
   const host = Constants.expoConfig?.hostUri?.split(":")[0];
-  if (host) {
+  const isIP = host && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+  if (isIP && host !== "localhost" && host !== "127.0.0.1") {
     return `http://${host}:3003`;
   }
+  const envUrl = process.env["EXPO_PUBLIC_LISTING_API_URL"];
+  if (envUrl) return envUrl;
   return "http://localhost:3003";
 };
 
