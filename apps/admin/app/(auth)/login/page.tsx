@@ -21,10 +21,15 @@ export default function AdminLoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post<{ data: LoginResult }>("/admin/auth/login", form);
+      const res = await api.post<{ data: LoginResult & { sessionToken?: string } }>("/admin/auth/login", form);
       return res.data.data;
     },
     onSuccess: (data) => {
+      if (data.sessionToken) {
+        storeAdminToken(data.sessionToken);
+        router.replace("/dashboard");
+        return;
+      }
       setFlow({ step: data.step, intermediateToken: data.intermediateToken });
     },
     onError: (err: unknown) => {

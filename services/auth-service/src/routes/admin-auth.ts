@@ -130,17 +130,10 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     const ok = admin ? await verifyPassword(password, admin.passwordHash) : await verifyPassword(password, dummyHash).then(() => false);
     if (!admin || !ok) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
 
-    await writeAudit(admin.id, admin.role, "admin_login_step1", req);
+    await writeAudit(admin.id, admin.role, "admin_login", req);
 
-    const step = admin.role === "super_admin" ? "awaiting_webauthn" : "awaiting_totp";
-    const intermediateToken = await signIntermediateToken({ sub: admin.id, role: admin.role, step });
-
-    // If TOTP not yet set up, return step = setup
-    if (!admin.totpEnabled) {
-      return sendSuccess(reply, 200, { step: "totp_setup", intermediateToken });
-    }
-
-    return sendSuccess(reply, 200, { step, intermediateToken });
+    const sessionToken = await issueAdminSession(admin.id, admin.role);
+    return sendSuccess(reply, 200, { sessionToken });
   });
 
   // ── POST /admin/auth/totp/setup  (UC-1.10 — first login) ─────────────────
