@@ -41,7 +41,8 @@ async function requireIntermediate(req: FastifyRequest, reply: FastifyReply) {
   try {
     const payload = await verifyIntermediateToken(token);
     (req as FastifyRequest & { adminIntermediate: typeof payload }).adminIntermediate = payload;
-  } catch {
+  } catch (err) {
+    req.log.error(err, "Intermediate token verification failed");
     return sendError(reply, 401, "INVALID_TOKEN", "Intermediate token invalid or expired.");
   }
 }
@@ -146,10 +147,28 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     const ok = admin ? await verifyPassword(password, admin.passwordHash) : await verifyPassword(password, dummyHash).then(() => false);
     if (!admin || !ok) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
 
-    await writeAudit(admin.id, admin.role, "admin_login", req);
+    // Enforce TOTP 2FA (PRD UC-1.10 and UC-1.11)
+    const intermediateToken = await signIntermediateToken({
+      sub: admin.id,
+      role: admin.role,
+      step: "awaiting_totp",
+    });
 
-    const sessionToken = await issueAdminSession(admin.id, admin.role);
-    return sendSuccess(reply, 200, { sessionToken });
+    if (admin.totpEnabled) {
+      await writeAudit(admin.id, admin.role, "admin_login_attempt", req);
+      return sendSuccess(reply, 200, {
+        totpRequired: true,
+        setupRequired: false,
+        intermediateToken,
+      });
+    } else {
+      await writeAudit(admin.id, admin.role, "admin_login_attempt_setup_required", req);
+      return sendSuccess(reply, 200, {
+        totpRequired: true,
+        setupRequired: true,
+        intermediateToken,
+      });
+    }
   });
 
   // ── POST /admin/auth/totp/setup  (UC-1.10 — first login) ─────────────────
