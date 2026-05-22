@@ -7,7 +7,7 @@ const monorepoRoot = path.resolve(projectRoot, "../..");
 const config = getDefaultConfig(projectRoot);
 
 // Watch the entire monorepo so Metro can serve files from the pnpm store
-config.watchFolders = [monorepoRoot];
+config.watchFolders = [...(config.watchFolders || []), monorepoRoot];
 
 // Resolve packages from local node_modules first, then the monorepo root
 config.resolver.nodeModulesPaths = [

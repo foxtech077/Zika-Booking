@@ -124,34 +124,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/approve — Approve listing (UC-2.9)
-  app.post("/admin/listings/:id/approve", {
-    preHandler: [requireAdmin],
-    schema: {
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "Listing ID" }
-        }
-      },
-      body: {
-        type: "object",
-        required: ["starRating"],
-        properties: {
-          starRating: {
-            type: "integer",
-            minimum: 1,
-            maximum: 5,
-            description: "Verified star rating (1–5) for the hotel"
-          },
-          adminNote: {
-            type: "string",
-            description: "Internal note from the admin"
-          }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/approve", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { starRating, adminNote } = req.body as { starRating: number; adminNote?: string };
@@ -193,47 +166,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/reject — Reject listing (UC-2.10)
-  app.post("/admin/listings/:id/reject", {
-    preHandler: [requireAdmin],
-    schema: {
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "Listing ID" }
-        }
-      },
-      body: {
-        type: "object",
-        required: ["reasons"],
-        properties: {
-          reasons: {
-            type: "array",
-            items: {
-              type: "string",
-              enum: [
-                "Insufficient documentation",
-                "Operating permit expired",
-                "Star rating unverifiable from submitted documents",
-                "Document image quality too poor to verify",
-                "Business name on documents does not match listing name",
-                "Other"
-              ]
-            },
-            description: "Reasons for listing rejection"
-          },
-          providerNote: {
-            type: "string",
-            description: "Note shown to the provider (mandatory if 'Other' is chosen)"
-          },
-          adminNote: {
-            type: "string",
-            description: "Internal admin review task note"
-          }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/reject", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reasons, providerNote, adminNote } = req.body as {
@@ -284,34 +217,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // PATCH /admin/listings/:id/star-rating — Update star rating on approved listing (UC-2.12)
-  app.patch("/admin/listings/:id/star-rating", {
-    preHandler: [requireAdmin],
-    schema: {
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "Listing ID" }
-        }
-      },
-      body: {
-        type: "object",
-        required: ["starRating", "reason"],
-        properties: {
-          starRating: {
-            type: "integer",
-            minimum: 1,
-            maximum: 5,
-            description: "New star rating"
-          },
-          reason: {
-            type: "string",
-            description: "Reason for changing the star rating"
-          }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/listings/:id/star-rating", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { starRating, reason } = req.body as { starRating: number; reason: string };
@@ -334,33 +240,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/suspend — Suspend approved listing (UC-2.14)
-  app.post("/admin/listings/:id/suspend", {
-    preHandler: [requireAdmin],
-    schema: {
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "Listing ID" }
-        }
-      },
-      body: {
-        type: "object",
-        required: ["reason"],
-        properties: {
-          reason: {
-            type: "string",
-            description: "Reason for listing suspension"
-          },
-          notifyProvider: {
-            type: "boolean",
-            default: true,
-            description: "Whether to notify the provider via email"
-          }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/suspend", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };

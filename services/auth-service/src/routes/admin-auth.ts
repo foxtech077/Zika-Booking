@@ -118,18 +118,7 @@ async function checkTotpAttempts(adminId: string): Promise<boolean> {
 export async function adminAuthRoutes(app: FastifyInstance) {
 
   // ── POST /admin/auth/login  (UC-1.11 step 1, UC-1.12 step 1) ─────────────
-  app.post("/admin/auth/login", {
-    schema: {
-      body: {
-        type: "object",
-        required: ["email", "password"],
-        properties: {
-          email: { type: "string", format: "email" },
-          password: { type: "string" }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/login", async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = adminLoginSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid credentials.");
     const { email, password } = parsed.data;
@@ -141,32 +130,14 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     const ok = admin ? await verifyPassword(password, admin.passwordHash) : await verifyPassword(password, dummyHash).then(() => false);
     if (!admin || !ok) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
 
-    await writeAudit(admin.id, admin.role, "admin_login_step1", req);
+    await writeAudit(admin.id, admin.role, "admin_login", req);
 
-    const step = admin.role === "super_admin" ? "awaiting_webauthn" : "awaiting_totp";
-    const intermediateToken = await signIntermediateToken({ sub: admin.id, role: admin.role, step });
-
-    // If TOTP not yet set up, return step = setup
-    if (!admin.totpEnabled) {
-      return sendSuccess(reply, 200, { step: "totp_setup", intermediateToken });
-    }
-
-    return sendSuccess(reply, 200, { step, intermediateToken });
+    const sessionToken = await issueAdminSession(admin.id, admin.role);
+    return sendSuccess(reply, 200, { sessionToken });
   });
 
   // ── POST /admin/auth/totp/setup  (UC-1.10 — first login) ─────────────────
-  app.post("/admin/auth/totp/setup", {
-    preHandler: [requireIntermediate],
-    schema: {
-      headers: {
-        type: "object",
-        required: ["x-intermediate-token"],
-        properties: {
-          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/setup", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId } = (req as FastifyRequest & { adminIntermediate: { sub: string } }).adminIntermediate;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
@@ -182,25 +153,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/totp/confirm  (UC-1.10 step 7 onward) ───────────────
-  app.post("/admin/auth/totp/confirm", {
-    preHandler: [requireIntermediate],
-    schema: {
-      headers: {
-        type: "object",
-        required: ["x-intermediate-token"],
-        properties: {
-          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
-        }
-      },
-      body: {
-        type: "object",
-        required: ["code"],
-        properties: {
-          code: { type: "string", minLength: 6, maxLength: 6, pattern: "^\\d{6}$", description: "6-digit TOTP code" }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/confirm", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = totpCodeSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid code format.");
     const { code } = parsed.data;
@@ -230,25 +183,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/totp/verify  (UC-1.11 step 5) ───────────────────────
-  app.post("/admin/auth/totp/verify", {
-    preHandler: [requireIntermediate],
-    schema: {
-      headers: {
-        type: "object",
-        required: ["x-intermediate-token"],
-        properties: {
-          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
-        }
-      },
-      body: {
-        type: "object",
-        properties: {
-          code: { type: "string", minLength: 6, maxLength: 6, pattern: "^\\d{6}$", description: "6-digit TOTP code" },
-          recoveryCode: { type: "string", description: "Emergency recovery code" }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/verify", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
 
     // Check for recovery code usage
@@ -308,18 +243,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   }
 
   // ── POST /admin/auth/webauthn/challenge  (UC-1.12 step 2) ────────────────
-  app.post("/admin/auth/webauthn/challenge", {
-    preHandler: [requireIntermediate],
-    schema: {
-      headers: {
-        type: "object",
-        required: ["x-intermediate-token"],
-        properties: {
-          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/challenge", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId } = (req as FastifyRequest & { adminIntermediate: { sub: string } }).adminIntermediate;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
@@ -332,36 +256,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/webauthn/verify  (UC-1.12 step 6) ───────────────────
-  app.post("/admin/auth/webauthn/verify", {
-    preHandler: [requireIntermediate],
-    schema: {
-      headers: {
-        type: "object",
-        required: ["x-intermediate-token"],
-        properties: {
-          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
-        }
-      },
-      body: {
-        type: "object",
-        description: "WebAuthn authentication credential payload",
-        properties: {
-          id: { type: "string" },
-          rawId: { type: "string" },
-          type: { type: "string" },
-          response: {
-            type: "object",
-            properties: {
-              clientDataJSON: { type: "string" },
-              authenticatorData: { type: "string" },
-              signature: { type: "string" },
-              userHandle: { type: "string" }
-            }
-          }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/verify", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
@@ -390,40 +285,14 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/webauthn/register  (UC-1.12 A3) ─────────────────────
-  app.post("/admin/auth/webauthn/register", {
-    preHandler: [requireAdminSession],
-    schema: {
-      security: [{ bearerAuth: [] }]
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/register", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
     const options = await waStartRegistration(adminId, admin.email);
     return sendSuccess(reply, 200, { options });
   });
 
-  app.post("/admin/auth/webauthn/register/complete", {
-    preHandler: [requireAdminSession],
-    schema: {
-      security: [{ bearerAuth: [] }],
-      body: {
-        type: "object",
-        description: "WebAuthn registration credential payload",
-        properties: {
-          id: { type: "string" },
-          rawId: { type: "string" },
-          type: { type: "string" },
-          response: {
-            type: "object",
-            properties: {
-              clientDataJSON: { type: "string" },
-              attestationObject: { type: "string" }
-            }
-          }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/register/complete", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     let result: Awaited<ReturnType<typeof waFinishRegistration>>;
     try {
@@ -448,12 +317,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/logout ───────────────────────────────────────────────
-  app.post("/admin/auth/logout", {
-    preHandler: [requireAdminSession],
-    schema: {
-      security: [{ bearerAuth: [] }]
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/logout", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const token = req.headers.authorization?.slice(7) ?? "";
     await prisma.adminSession.updateMany({ where: { tokenHash: hashToken(token) }, data: { revoked: true } });
     return sendSuccess(reply, 200, { message: "Signed out." });
@@ -465,21 +329,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
 export async function adminUserRoutes(app: FastifyInstance) {
 
   // ── GET /admin/users ──────────────────────────────────────────────────────
-  app.get("/admin/users", {
-    preHandler: [requireAdminSession],
-    schema: {
-      security: [{ bearerAuth: [] }],
-      querystring: {
-        type: "object",
-        properties: {
-          q: { type: "string", description: "Search query for name or email" },
-          status: { type: "string", enum: ["pending_verification", "active", "suspended", "banned"], description: "Filter by status" },
-          page: { type: "string", default: "1", description: "Page number" },
-          limit: { type: "string", default: "20", description: "Number of items per page" }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/users", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -523,26 +373,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/users/:id/suspend ───────────────────────────────────────
-  app.patch("/admin/users/:id/suspend", {
-    preHandler: [requireAdminSession],
-    schema: {
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "User ID to suspend" }
-        }
-      },
-      body: {
-        type: "object",
-        required: ["reason"],
-        properties: {
-          reason: { type: "string", minLength: 1, description: "Reason for suspending the user" }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/users/:id/suspend", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };
@@ -575,19 +406,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/users/:id/reinstate ─────────────────────────────────────
-  app.patch("/admin/users/:id/reinstate", {
-    preHandler: [requireAdminSession],
-    schema: {
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "User ID to reinstate" }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/users/:id/reinstate", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };
@@ -609,26 +428,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/users/:id/ban ────────────────────────────────────────────
-  app.patch("/admin/users/:id/ban", {
-    preHandler: [requireAdminSession],
-    schema: {
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "User ID to ban" }
-        }
-      },
-      body: {
-        type: "object",
-        required: ["reason"],
-        properties: {
-          reason: { type: "string", minLength: 1, description: "Reason for banning the user" }
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/users/:id/ban", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };

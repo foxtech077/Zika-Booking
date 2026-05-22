@@ -56,45 +56,6 @@ async function build() {
         },
       ],
     },
-    transform: ({ schema, url }) => {
-      const newSchema = { ...schema };
-      if (!newSchema.tags) {
-        if (url.startsWith("/admin/listings")) {
-          newSchema.tags = ["Admin Listings"];
-        } else if (url.startsWith("/admin/vouchers")) {
-          newSchema.tags = ["Admin Vouchers"];
-        } else if (url.startsWith("/admin/commission-rates")) {
-          newSchema.tags = ["Admin Commission"];
-        } else if (url.startsWith("/listings")) {
-          if (url.includes("/ical-feeds")) {
-            newSchema.tags = ["iCal"];
-          } else {
-            newSchema.tags = ["Listings"];
-          }
-        } else if (url.startsWith("/bookings")) {
-          newSchema.tags = ["Bookings"];
-        } else if (url.startsWith("/reviews")) {
-          newSchema.tags = ["Reviews"];
-        } else if (url.startsWith("/vouchers")) {
-          newSchema.tags = ["Vouchers"];
-        } else if (url.startsWith("/conversations")) {
-          newSchema.tags = ["Messaging"];
-        } else if (url.startsWith("/provider")) {
-          newSchema.tags = ["Provider"];
-        } else if (url.startsWith("/guests")) {
-          newSchema.tags = ["Guests"];
-        } else if (url.startsWith("/search")) {
-          newSchema.tags = ["Search"];
-        } else if (url.startsWith("/geocode")) {
-          newSchema.tags = ["Geocoding"];
-        } else if (url === "/health") {
-          newSchema.tags = ["System"];
-        } else {
-          newSchema.tags = ["Default"];
-        }
-      }
-      return { schema: newSchema, url };
-    },
   });
 
   await app.register(swaggerUi, {

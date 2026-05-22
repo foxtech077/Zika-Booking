@@ -19,7 +19,7 @@ export async function startRegistration(adminId: string, email: string) {
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
     rpID: RP_ID,
-    userID: new TextEncoder().encode(adminId),
+    userID: isoUint8Array.fromUTF8String(adminId),
     userName: email,
     userDisplayName: email,
     attestationType: "none",
