@@ -140,7 +140,17 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── GET /auth/verify  (UC-1.3) ─────────────────────────────────────────────
-  app.get("/auth/verify", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/auth/verify", {
+    schema: {
+      querystring: {
+        type: "object",
+        required: ["token"],
+        properties: {
+          token: { type: "string", minLength: 64, maxLength: 64, description: "64-character email verification token sent via email link" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { token } = req.query as { token?: string };
     if (!token || token.length !== 64) {
       return sendError(reply, 400, "INVALID_TOKEN", "This verification link is invalid. Please request a new one.");
@@ -287,7 +297,11 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/logout  (UC-1.9) ────────────────────────────────────────────
-  app.post("/auth/logout", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/logout", {
+    schema: {
+      description: "Revokes the current session. The refreshToken cookie is cleared. No request body needed."
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const refreshToken = req.cookies["refreshToken"];
     if (refreshToken) {
       const tokenHash = hashToken(refreshToken);
@@ -298,7 +312,13 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/logout-all  (UC-1.9 A2) ────────────────────────────────────
-  app.post("/auth/logout-all", { preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/logout-all", {
+    preHandler: [requireAuth],
+    schema: {
+      security: [{ bearerAuth: [] }],
+      description: "Revokes all active sessions for the authenticated user across all devices."
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as FastifyRequest & { userId: string }).userId;
     await prisma.session.updateMany({ where: { userId }, data: { revoked: true } });
     reply.clearCookie("refreshToken", { path: "/" });
@@ -306,7 +326,11 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/refresh  (UC-1.5) ───────────────────────────────────────────
-  app.post("/auth/refresh", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/refresh", {
+    schema: {
+      description: "Issues a new access token using the refreshToken cookie (httpOnly). No request body needed — the token is read from the cookie automatically."
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const refreshToken = req.cookies["refreshToken"];
     if (!refreshToken) return sendError(reply, 401, "NO_TOKEN", "No refresh token.");
 
@@ -409,7 +433,20 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/oauth/google  (UC-1.6) ──────────────────────────────────────
-  app.post("/auth/oauth/google", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/oauth/google", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["idToken"],
+        properties: {
+          idToken: { type: "string", description: "Google ID token from client-side sign-in" },
+          userType: { type: "string", enum: ["guest", "provider"], description: "Account type (required for new users)" },
+          businessName: { type: "string", description: "Business name (required if userType is provider)" },
+          country: { type: "string", minLength: 2, maxLength: 2, description: "2-letter ISO country code" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = googleOAuthSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid payload.");
     const { idToken, userType, businessName, country } = parsed.data;
@@ -474,7 +511,21 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/oauth/apple  (UC-1.7) ───────────────────────────────────────
-  app.post("/auth/oauth/apple", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/oauth/apple", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["identityToken"],
+        properties: {
+          authorizationCode: { type: "string", description: "Apple authorization code" },
+          identityToken: { type: "string", description: "Apple identity token (JWT) from client-side Sign in with Apple" },
+          userType: { type: "string", enum: ["guest", "provider"], description: "Account type (required for new users)" },
+          businessName: { type: "string", description: "Business name (required if userType is provider)" },
+          country: { type: "string", minLength: 2, maxLength: 2, description: "2-letter ISO country code" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = appleOAuthSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid payload.");
     const { identityToken, userType, businessName, country } = parsed.data;
@@ -529,7 +580,21 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/account-type  (post-OAuth account type selection) ───────────
-  app.post("/auth/account-type", { preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/account-type", {
+    preHandler: [requireAuth],
+    schema: {
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        required: ["userType"],
+        properties: {
+          userType: { type: "string", enum: ["guest", "provider"], description: "Account type to assign after OAuth sign-up" },
+          businessName: { type: "string", description: "Business name (required if userType is provider)" },
+          country: { type: "string", minLength: 2, maxLength: 2, description: "2-letter ISO country code" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = accountTypeSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(reply, 422, "VALIDATION_ERROR", "Validation failed",
