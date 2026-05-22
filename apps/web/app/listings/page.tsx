@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listingApi } from "@/lib/listing-api";
+import { api, clearToken } from "@/lib/api";
 
 interface Listing {
   id: string;
@@ -39,8 +41,20 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 export default function MyListingsPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const [confirmAction, setConfirmAction] = useState<{ type: "delete" | "deactivate"; id: string } | null>(null);
+
+  const signOutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await api.post("/auth/logout");
+      return res.data;
+    },
+    onSettled: () => {
+      clearToken();
+      router.replace("/auth/login");
+    },
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["my-listings"],
@@ -68,12 +82,21 @@ export default function MyListingsPage() {
             <h1 className="text-2xl font-bold text-gray-900">My Listings</h1>
             <p className="text-sm text-gray-500 mt-1">Manage your hotels, apartments, and car rentals.</p>
           </div>
-          <Link
-            href="/listings/new"
-            className="bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary-dark transition"
-          >
-            + Add new listing
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/listings/new"
+              className="bg-primary text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary-dark transition"
+            >
+              + Add new listing
+            </Link>
+            <button
+              onClick={() => signOutMutation.mutate()}
+              disabled={signOutMutation.isPending}
+              className="border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              {signOutMutation.isPending ? "Signing out..." : "Sign Out"}
+            </button>
+          </div>
         </div>
 
         {isLoading && (
