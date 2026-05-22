@@ -46,6 +46,23 @@ async function build() {
         },
       ],
     },
+    transform: ({ schema, url }) => {
+      const newSchema = { ...schema };
+      if (!newSchema.tags) {
+        if (url.startsWith("/admin/users")) {
+          newSchema.tags = ["Admin Users"];
+        } else if (url.startsWith("/admin/auth")) {
+          newSchema.tags = ["Admin Auth"];
+        } else if (url.startsWith("/auth")) {
+          newSchema.tags = ["Auth"];
+        } else if (url === "/health") {
+          newSchema.tags = ["System"];
+        } else {
+          newSchema.tags = ["Default"];
+        }
+      }
+      return { schema: newSchema, url };
+    },
   });
 
   await app.register(swaggerUi, {
@@ -89,7 +106,7 @@ async function build() {
   await app.register(adminUserRoutes);
 
   // Global error handler
-  app.setErrorHandler((error, _req, reply) => {
+  app.setErrorHandler((error: any, _req, reply) => {
     app.log.error(error);
     const statusCode = error.statusCode ?? 500;
     reply.status(statusCode).send({
