@@ -52,7 +52,7 @@ export async function webhookRoutes(app: FastifyInstance) {
     try {
       event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
     } catch (err) {
-      app.log.warn("[stripe-webhook] Signature verification failed:", (err as Error).message);
+      app.log.warn(`[stripe-webhook] Signature verification failed: ${(err as Error).message}`);
       return sendError(reply, 400, "INVALID_SIGNATURE", "Stripe signature verification failed.");
     }
 

@@ -49,7 +49,7 @@ async function build() {
   await app.register(paymentMethodRoutes);
 
   // ── Global error handler ──────────────────────────────────────────────────
-  app.setErrorHandler((error, _req, reply) => {
+  app.setErrorHandler((error: any, _req, reply) => {
     app.log.error(error);
     const statusCode = error.statusCode ?? 500;
     reply.status(statusCode).send({

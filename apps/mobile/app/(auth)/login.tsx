@@ -33,7 +33,8 @@ export default function LoginScreen() {
       router.replace("/(tabs)");
     },
     onError: (err: unknown) => {
-      const data = (err as { response?: { data?: ApiResponse<unknown> } }).response?.data;
+      const axiosErr = err as { message?: string; code?: string; config?: { url?: string; baseURL?: string }; response?: { data?: ApiResponse<unknown> } };
+      const data = axiosErr.response?.data;
       if (data && !data.success) {
         if (data.error.code === "EMAIL_NOT_VERIFIED") {
           router.push({ pathname: "/(auth)/verify-pending", params: { email: form.email } });
@@ -41,7 +42,10 @@ export default function LoginScreen() {
         }
         setErrors({ general: data.error.message });
       } else {
-        setErrors({ general: "Unable to connect. Please check your network and try again." });
+        const details = __DEV__
+          ? `\n\n[Dev Details]\nURL: ${axiosErr.config?.baseURL ?? api.defaults.baseURL}${axiosErr.config?.url ?? ""}\nError: ${axiosErr.message ?? "Unknown Network Error"}\nCode: ${axiosErr.code ?? "Unknown Code"}`
+          : "";
+        setErrors({ general: `Unable to connect. Please check your network and try again.${details}` });
       }
     },
   });

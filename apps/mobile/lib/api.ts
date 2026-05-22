@@ -3,14 +3,16 @@ import Constants from "expo-constants";
 import { useAuthStore } from "../store/auth";
 
 const getBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_API_URL"];
-  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1") && !envUrl.includes("10.249.75.161")) {
-    return envUrl;
-  }
+  // Always prefer the Expo dev server host so that any phone scanning the QR
+  // code automatically reaches the correct machine — no hardcoded IPs needed.
   const host = Constants.expoConfig?.hostUri?.split(":")[0];
-  if (host) {
+  const isIP = host && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+  if (isIP && host !== "localhost" && host !== "127.0.0.1") {
     return `http://${host}:3001`;
   }
+  // Fallback to the env var (useful for tunnel mode / production / standalone builds)
+  const envUrl = process.env["EXPO_PUBLIC_API_URL"];
+  if (envUrl) return envUrl;
   return "http://localhost:3001";
 };
 

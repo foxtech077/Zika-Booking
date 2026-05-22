@@ -57,11 +57,17 @@ async function build() {
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
+  const isDev = process.env["NODE_ENV"] !== "production";
   await app.register(cors, {
-    origin: [
-      process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
-      process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-    ],
+    // In development, allow all origins so the Expo mobile app (which sends no
+    // Origin header from React Native) can reach the API.  In production, lock
+    // down to known web / admin URLs only.
+    origin: isDev
+      ? true
+      : [
+          process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+          process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+        ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   });
@@ -89,7 +95,7 @@ async function build() {
   await app.register(adminUserRoutes);
 
   // Global error handler
-  app.setErrorHandler((error, _req, reply) => {
+  app.setErrorHandler((error: any, _req, reply) => {
     app.log.error(error);
     const statusCode = error.statusCode ?? 500;
     reply.status(statusCode).send({
