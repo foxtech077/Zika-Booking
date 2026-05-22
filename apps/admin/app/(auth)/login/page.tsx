@@ -1,8 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { api, storeAdminToken } from "@/lib/api";
+import { api, storeAdminToken, getAdminToken } from "@/lib/api";
 import { FormField } from "@/components/ui/FormField";
 import { Button } from "@/components/ui/Button";
 
@@ -18,6 +18,16 @@ export default function AdminLoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [flow, setFlow] = useState<{ step: Step; intermediateToken: string } | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    if (getAdminToken()) {
+      router.replace("/dashboard");
+    } else {
+      setChecking(false);
+    }
+  }, [router]);
+
 
   const loginMutation = useMutation({
     mutationFn: async () => {
@@ -37,6 +47,17 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setError(null);
     loginMutation.mutate();
+  }
+
+  if (checking) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <svg className="animate-spin h-6 w-6 text-primary" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+      </div>
+    );
   }
 
   if (flow?.step === "totp_setup") {
