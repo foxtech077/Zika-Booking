@@ -314,7 +314,21 @@ export async function searchRoutes(app: FastifyInstance) {
   });
 
   // ── POST /listings/batch-summary — for anonymous recently-viewed ─────────
-  app.post("/listings/batch-summary", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/batch-summary", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["ids"],
+        properties: {
+          ids: {
+            type: "array",
+            items: { type: "string" },
+            description: "List of listing IDs (maximum 20)"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as { ids?: string[] };
     const ids = (body.ids ?? []).slice(0, 20);
     if (!ids.length) return sendSuccess(reply, 200, { listings: [] });
@@ -340,7 +354,18 @@ export async function searchRoutes(app: FastifyInstance) {
 
   // ── Favourites ───────────────────────────────────────────────────────────
 
-  app.post("/guests/me/favourites", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/guests/me/favourites", {
+    preHandler: [requireProvider],
+    schema: {
+      body: {
+        type: "object",
+        required: ["listingId"],
+        properties: {
+          listingId: { type: "string" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as any).providerId as string;
     const { listingId } = req.body as { listingId: string };
 
@@ -407,7 +432,18 @@ export async function searchRoutes(app: FastifyInstance) {
 
   // ── Recently Viewed ───────────────────────────────────────────────────────
 
-  app.post("/guests/me/recently-viewed", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/guests/me/recently-viewed", {
+    preHandler: [requireProvider],
+    schema: {
+      body: {
+        type: "object",
+        required: ["listingId"],
+        properties: {
+          listingId: { type: "string" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as any).providerId as string;
     const { listingId } = req.body as { listingId: string };
 
@@ -466,7 +502,28 @@ export async function searchRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post("/guests/me/recently-viewed/import", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/guests/me/recently-viewed/import", {
+    preHandler: [requireProvider],
+    schema: {
+      body: {
+        type: "object",
+        required: ["items"],
+        properties: {
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["listingId", "viewedAt"],
+              properties: {
+                listingId: { type: "string" },
+                viewedAt: { type: "string", format: "date-time" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as any).providerId as string;
     const { items } = req.body as { items: { listingId: string; viewedAt: string }[] };
 

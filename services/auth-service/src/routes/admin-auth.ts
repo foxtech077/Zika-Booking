@@ -2,9 +2,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { ZodError } from "zod";
 import { adminLoginSchema, totpCodeSchema, recoveryCodeSchema } from "@zika/validators";
 import { prisma } from "../lib/prisma";
-import type { AdminRole as PrismaAdminRole } from "../generated/client";
-import { verifyPassword, hashPassword } from "../lib/password";
-import { hashToken } from "../lib/crypto";
+import { verifyPassword } from "../lib/password";
+import { hashToken, generateCode } from "../lib/crypto";
 import {
   signIntermediateToken,
   verifyIntermediateToken,
@@ -75,28 +74,13 @@ export async function requireAdminSession(req: FastifyRequest, reply: FastifyRep
 // ── Helper: issue admin session ───────────────────────────────────────────────
 
 async function issueAdminSession(adminId: string, role: string): Promise<string> {
+  const rawToken = generateCode(32);
+  const tokenHash = hashToken(rawToken);
   const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
-
-  // Create a placeholder session to get a sessionId, then sign the JWT with it
-  const tempSession = await prisma.adminSession.create({
-    data: {
-      adminUserId: adminId,
-      tokenHash: "pending",
-      expiresAt,
-    },
-  });
-
-  // Sign the JWT — this IS the session token returned to the client
-  const jwt = await signAdminSessionToken({ sub: adminId, role, sessionId: tempSession.id });
-
-  // Hash the JWT for DB revocation lookups (client sends JWT, we hash it to find the session)
-  const tokenHash = hashToken(jwt);
-  await prisma.adminSession.update({
-    where: { id: tempSession.id },
-    data: { tokenHash },
-  });
-
-  return jwt;
+  const session = await prisma.adminSession.create({ data: { adminUserId: adminId, tokenHash, expiresAt } });
+  // We embed sessionId in the JWT for reference but the hash is what matters for revocation
+  await signAdminSessionToken({ sub: adminId, role, sessionId: session.id });
+  return rawToken;
 }
 
 // ── Helper: log audit event ───────────────────────────────────────────────────
@@ -134,7 +118,18 @@ async function checkTotpAttempts(adminId: string): Promise<boolean> {
 export async function adminAuthRoutes(app: FastifyInstance) {
 
   // ── POST /admin/auth/login  (UC-1.11 step 1, UC-1.12 step 1) ─────────────
-  app.post("/admin/auth/login", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/login", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["email", "password"],
+        properties: {
+          email: { type: "string", format: "email" },
+          password: { type: "string" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = adminLoginSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid credentials.");
     const { email, password } = parsed.data;
@@ -146,14 +141,32 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     const ok = admin ? await verifyPassword(password, admin.passwordHash) : await verifyPassword(password, dummyHash).then(() => false);
     if (!admin || !ok) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
 
-    await writeAudit(admin.id, admin.role, "admin_login", req);
+    await writeAudit(admin.id, admin.role, "admin_login_step1", req);
 
-    const sessionToken = await issueAdminSession(admin.id, admin.role);
-    return sendSuccess(reply, 200, { sessionToken });
+    const step = admin.role === "super_admin" ? "awaiting_webauthn" : "awaiting_totp";
+    const intermediateToken = await signIntermediateToken({ sub: admin.id, role: admin.role, step });
+
+    // If TOTP not yet set up, return step = setup
+    if (!admin.totpEnabled) {
+      return sendSuccess(reply, 200, { step: "totp_setup", intermediateToken });
+    }
+
+    return sendSuccess(reply, 200, { step, intermediateToken });
   });
 
   // ── POST /admin/auth/totp/setup  (UC-1.10 — first login) ─────────────────
-  app.post("/admin/auth/totp/setup", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/setup", {
+    preHandler: [requireIntermediate],
+    schema: {
+      headers: {
+        type: "object",
+        required: ["x-intermediate-token"],
+        properties: {
+          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId } = (req as FastifyRequest & { adminIntermediate: { sub: string } }).adminIntermediate;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
@@ -169,7 +182,25 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/totp/confirm  (UC-1.10 step 7 onward) ───────────────
-  app.post("/admin/auth/totp/confirm", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/confirm", {
+    preHandler: [requireIntermediate],
+    schema: {
+      headers: {
+        type: "object",
+        required: ["x-intermediate-token"],
+        properties: {
+          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["code"],
+        properties: {
+          code: { type: "string", minLength: 6, maxLength: 6, pattern: "^\\d{6}$", description: "6-digit TOTP code" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = totpCodeSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid code format.");
     const { code } = parsed.data;
@@ -199,7 +230,25 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/totp/verify  (UC-1.11 step 5) ───────────────────────
-  app.post("/admin/auth/totp/verify", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/verify", {
+    preHandler: [requireIntermediate],
+    schema: {
+      headers: {
+        type: "object",
+        required: ["x-intermediate-token"],
+        properties: {
+          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
+        }
+      },
+      body: {
+        type: "object",
+        properties: {
+          code: { type: "string", minLength: 6, maxLength: 6, pattern: "^\\d{6}$", description: "6-digit TOTP code" },
+          recoveryCode: { type: "string", description: "Emergency recovery code" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
 
     // Check for recovery code usage
@@ -259,7 +308,18 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   }
 
   // ── POST /admin/auth/webauthn/challenge  (UC-1.12 step 2) ────────────────
-  app.post("/admin/auth/webauthn/challenge", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/challenge", {
+    preHandler: [requireIntermediate],
+    schema: {
+      headers: {
+        type: "object",
+        required: ["x-intermediate-token"],
+        properties: {
+          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId } = (req as FastifyRequest & { adminIntermediate: { sub: string } }).adminIntermediate;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
@@ -272,7 +332,36 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/webauthn/verify  (UC-1.12 step 6) ───────────────────
-  app.post("/admin/auth/webauthn/verify", { preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/verify", {
+    preHandler: [requireIntermediate],
+    schema: {
+      headers: {
+        type: "object",
+        required: ["x-intermediate-token"],
+        properties: {
+          "x-intermediate-token": { type: "string", description: "Intermediate token from step 1" }
+        }
+      },
+      body: {
+        type: "object",
+        description: "WebAuthn authentication credential payload",
+        properties: {
+          id: { type: "string" },
+          rawId: { type: "string" },
+          type: { type: "string" },
+          response: {
+            type: "object",
+            properties: {
+              clientDataJSON: { type: "string" },
+              authenticatorData: { type: "string" },
+              signature: { type: "string" },
+              userHandle: { type: "string" }
+            }
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
@@ -301,14 +390,40 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/webauthn/register  (UC-1.12 A3) ─────────────────────
-  app.post("/admin/auth/webauthn/register", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/register", {
+    preHandler: [requireAdminSession],
+    schema: {
+      security: [{ bearerAuth: [] }]
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
     const options = await waStartRegistration(adminId, admin.email);
     return sendSuccess(reply, 200, { options });
   });
 
-  app.post("/admin/auth/webauthn/register/complete", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/register/complete", {
+    preHandler: [requireAdminSession],
+    schema: {
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        description: "WebAuthn registration credential payload",
+        properties: {
+          id: { type: "string" },
+          rawId: { type: "string" },
+          type: { type: "string" },
+          response: {
+            type: "object",
+            properties: {
+              clientDataJSON: { type: "string" },
+              attestationObject: { type: "string" }
+            }
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     let result: Awaited<ReturnType<typeof waFinishRegistration>>;
     try {
@@ -333,58 +448,38 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/logout ───────────────────────────────────────────────
-  app.post("/admin/auth/logout", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/logout", {
+    preHandler: [requireAdminSession],
+    schema: {
+      security: [{ bearerAuth: [] }]
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const token = req.headers.authorization?.slice(7) ?? "";
     await prisma.adminSession.updateMany({ where: { tokenHash: hashToken(token) }, data: { revoked: true } });
     return sendSuccess(reply, 200, { message: "Signed out." });
   });
-
-  // ── GET /admin/auth/me — return current admin profile ────────────────────
-  app.get("/admin/auth/me", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const adminId = (req as FastifyRequest & { adminId: string }).adminId;
-    const admin = await prisma.adminUser.findUnique({
-      where: { id: adminId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        countryScope: true,
-        totpEnabled: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-    if (!admin) return sendError(reply, 404, "NOT_FOUND", "Admin user not found.");
-    return sendSuccess(reply, 200, { user: admin });
-  });
 }
-
 
 // ── Admin user management routes (UC-1.13) ────────────────────────────────────
 
 export async function adminUserRoutes(app: FastifyInstance) {
 
-  // ── GET /admin/audit-logs ──────────────────────────────────────────────────
-  app.get("/admin/audit-logs", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { page = "1", limit = "20" } = req.query as Record<string, string>;
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const take = Math.min(parseInt(limit, 10), 100);
-
-    const [total, logs] = await Promise.all([
-      prisma.auditLog.count(),
-      prisma.auditLog.findMany({
-        skip,
-        take,
-        orderBy: { timestamp: "desc" },
-      }),
-    ]);
-
-    return sendSuccess(reply, 200, { logs, total, page: parseInt(page, 10), limit: take });
-  });
-
   // ── GET /admin/users ──────────────────────────────────────────────────────
-  app.get("/admin/users", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/users", {
+    preHandler: [requireAdminSession],
+    schema: {
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: "object",
+        properties: {
+          q: { type: "string", description: "Search query for name or email" },
+          status: { type: "string", enum: ["pending_verification", "active", "suspended", "banned"], description: "Filter by status" },
+          page: { type: "string", default: "1", description: "Page number" },
+          limit: { type: "string", default: "20", description: "Number of items per page" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -418,11 +513,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
           emailVerified: true,
           oauthProvider: true,
           currentTier: true,
-          loyaltyPoints: true,
-          businessName: true,
-          country: true,
           createdAt: true,
-          updatedAt: true,
         },
         orderBy: { createdAt: "desc" },
       }),
@@ -432,7 +523,26 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/users/:id/suspend ───────────────────────────────────────
-  app.patch("/admin/users/:id/suspend", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/users/:id/suspend", {
+    preHandler: [requireAdminSession],
+    schema: {
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "User ID to suspend" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["reason"],
+        properties: {
+          reason: { type: "string", minLength: 1, description: "Reason for suspending the user" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };
@@ -465,7 +575,19 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/users/:id/reinstate ─────────────────────────────────────
-  app.patch("/admin/users/:id/reinstate", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/users/:id/reinstate", {
+    preHandler: [requireAdminSession],
+    schema: {
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "User ID to reinstate" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };
@@ -487,7 +609,26 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/users/:id/ban ────────────────────────────────────────────
-  app.patch("/admin/users/:id/ban", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/users/:id/ban", {
+    preHandler: [requireAdminSession],
+    schema: {
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "User ID to ban" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["reason"],
+        properties: {
+          reason: { type: "string", minLength: 1, description: "Reason for banning the user" }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };
@@ -514,180 +655,3 @@ export async function adminUserRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { message: "Account permanently banned." });
   });
 }
-
-// ── Admin operator management routes (create/list/delete admin users) ─────────
-
-export async function adminOperatorRoutes(app: FastifyInstance) {
-
-  // Helper: guard super_admin only
-  async function requireSuperAdmin(req: FastifyRequest, reply: FastifyReply) {
-    await requireAdminSession(req, reply);
-    const role = (req as FastifyRequest & { adminRole: string }).adminRole;
-    if (role !== "super_admin") {
-      return sendError(reply, 403, "FORBIDDEN", "Only Super Admins can manage admin operators.");
-    }
-  }
-
-  // ── GET /admin/operators — List all admin users ─────────────────────────────
-  app.get("/admin/operators", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { q = "", role, page = "1", limit = "20" } = req.query as Record<string, string>;
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const take = Math.min(parseInt(limit, 10), 100);
-
-    const where: any = {
-      AND: [
-        q ? {
-          OR: [
-            { email: { contains: q, mode: "insensitive" } },
-            { name: { contains: q, mode: "insensitive" } },
-          ],
-        } : {},
-        role ? { role } : {},
-      ],
-    };
-
-    const [total, operators] = await Promise.all([
-      prisma.adminUser.count({ where }),
-      prisma.adminUser.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          countryScope: true,
-          totpEnabled: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-    ]);
-
-    return sendSuccess(reply, 200, { operators, total, page: parseInt(page, 10), limit: take });
-  });
-
-  // ── POST /admin/operators — Create a new admin user ─────────────────────────
-  app.post("/admin/operators", { preHandler: [requireSuperAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const adminId = (req as FastifyRequest & { adminId: string }).adminId;
-    const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
-    const { name, email, password, role, countryScope } = req.body as {
-      name: string;
-      email: string;
-      password: string;
-      role: string;
-      countryScope?: string[];
-    };
-
-    if (!name?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Name is required.");
-    if (!email?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Email is required.");
-    if (!password || password.length < 8) return sendError(reply, 422, "VALIDATION_ERROR", "Password must be at least 8 characters.");
-
-    const VALID_ROLES = ["admin", "country_manager", "sales", "support", "finance"];
-    if (!VALID_ROLES.includes(role)) {
-      return sendError(reply, 422, "VALIDATION_ERROR", `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}.`);
-    }
-
-    const existing = await prisma.adminUser.findUnique({ where: { email } });
-    if (existing) return sendError(reply, 409, "EMAIL_TAKEN", "An admin with this email already exists.");
-
-    const passwordHash = await hashPassword(password);
-
-    const newAdmin = await prisma.adminUser.create({
-      data: {
-        name,
-        email,
-        passwordHash,
-        role: role as PrismaAdminRole,
-        countryScope: countryScope ?? [],
-        totpEnabled: false,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        countryScope: true,
-        totpEnabled: true,
-        createdAt: true,
-      },
-    });
-
-    await writeAudit(adminId, adminRole, "admin_operator_created", req, {
-      targetType: "admin_user",
-      targetId: newAdmin.id,
-      newValue: JSON.stringify({ email, role }),
-    });
-
-    return sendSuccess(reply, 201, { operator: newAdmin, message: `Admin account created for ${email}.` });
-  });
-
-  // ── DELETE /admin/operators/:id — Delete an admin user ──────────────────────
-  app.delete("/admin/operators/:id", { preHandler: [requireSuperAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const adminId = (req as FastifyRequest & { adminId: string }).adminId;
-    const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
-    const { id: targetId } = req.params as { id: string };
-
-    if (targetId === adminId) {
-      return sendError(reply, 403, "FORBIDDEN", "You cannot delete your own account.");
-    }
-
-    const target = await prisma.adminUser.findUnique({ where: { id: targetId } });
-    if (!target) return sendError(reply, 404, "NOT_FOUND", "Admin user not found.");
-    if (target.role === "super_admin") {
-      return sendError(reply, 403, "FORBIDDEN", "Cannot delete a Super Admin account.");
-    }
-
-    // Revoke all sessions
-    await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
-    await prisma.adminUser.delete({ where: { id: targetId } });
-
-    await writeAudit(adminId, adminRole, "admin_operator_deleted", req, {
-      targetType: "admin_user",
-      targetId,
-      oldValue: JSON.stringify({ email: target.email, role: target.role }),
-    });
-
-    return sendSuccess(reply, 200, { message: `Admin account ${target.email} deleted.` });
-  });
-
-  // ── PATCH /admin/operators/:id/role — Change an admin's role ────────────────
-  app.patch("/admin/operators/:id/role", { preHandler: [requireSuperAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const adminId = (req as FastifyRequest & { adminId: string }).adminId;
-    const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
-    const { id: targetId } = req.params as { id: string };
-    const { role, countryScope } = req.body as { role: string; countryScope?: string[] };
-
-    if (targetId === adminId) return sendError(reply, 403, "FORBIDDEN", "You cannot change your own role.");
-
-    const VALID_ROLES = ["admin", "country_manager", "sales", "support", "finance"];
-    if (!VALID_ROLES.includes(role)) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "Invalid role.");
-    }
-
-    const target = await prisma.adminUser.findUnique({ where: { id: targetId } });
-    if (!target) return sendError(reply, 404, "NOT_FOUND", "Admin user not found.");
-    if (target.role === "super_admin") return sendError(reply, 403, "FORBIDDEN", "Cannot change Super Admin role.");
-
-    const updated = await prisma.adminUser.update({
-      where: { id: targetId },
-      data: { role: role as PrismaAdminRole, countryScope: countryScope ?? target.countryScope },
-      select: { id: true, name: true, email: true, role: true, countryScope: true },
-    });
-
-    // Revoke existing sessions so they must re-login with new role
-    await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
-
-    await writeAudit(adminId, adminRole, "admin_role_changed", req, {
-      targetType: "admin_user",
-      targetId,
-      oldValue: JSON.stringify({ role: target.role }),
-      newValue: JSON.stringify({ role }),
-    });
-
-    return sendSuccess(reply, 200, { operator: updated, message: "Role updated. Their session has been revoked." });
-  });
-}
-

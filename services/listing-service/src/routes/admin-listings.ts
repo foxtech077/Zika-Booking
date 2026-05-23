@@ -124,7 +124,34 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/approve — Approve listing (UC-2.9)
-  app.post("/admin/listings/:id/approve", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/approve", {
+    preHandler: [requireAdmin],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Listing ID" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["starRating"],
+        properties: {
+          starRating: {
+            type: "integer",
+            minimum: 1,
+            maximum: 5,
+            description: "Verified star rating (1–5) for the hotel"
+          },
+          adminNote: {
+            type: "string",
+            description: "Internal note from the admin"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { starRating, adminNote } = req.body as { starRating: number; adminNote?: string };
@@ -166,7 +193,47 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/reject — Reject listing (UC-2.10)
-  app.post("/admin/listings/:id/reject", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/reject", {
+    preHandler: [requireAdmin],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Listing ID" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["reasons"],
+        properties: {
+          reasons: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: [
+                "Insufficient documentation",
+                "Operating permit expired",
+                "Star rating unverifiable from submitted documents",
+                "Document image quality too poor to verify",
+                "Business name on documents does not match listing name",
+                "Other"
+              ]
+            },
+            description: "Reasons for listing rejection"
+          },
+          providerNote: {
+            type: "string",
+            description: "Note shown to the provider (mandatory if 'Other' is chosen)"
+          },
+          adminNote: {
+            type: "string",
+            description: "Internal admin review task note"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reasons, providerNote, adminNote } = req.body as {
@@ -217,7 +284,34 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // PATCH /admin/listings/:id/star-rating — Update star rating on approved listing (UC-2.12)
-  app.patch("/admin/listings/:id/star-rating", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/listings/:id/star-rating", {
+    preHandler: [requireAdmin],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Listing ID" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["starRating", "reason"],
+        properties: {
+          starRating: {
+            type: "integer",
+            minimum: 1,
+            maximum: 5,
+            description: "New star rating"
+          },
+          reason: {
+            type: "string",
+            description: "Reason for changing the star rating"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { starRating, reason } = req.body as { starRating: number; reason: string };
@@ -240,7 +334,33 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/suspend — Suspend approved listing (UC-2.14)
-  app.post("/admin/listings/:id/suspend", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/suspend", {
+    preHandler: [requireAdmin],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Listing ID" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["reason"],
+        properties: {
+          reason: {
+            type: "string",
+            description: "Reason for listing suspension"
+          },
+          notifyProvider: {
+            type: "boolean",
+            default: true,
+            description: "Whether to notify the provider via email"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };
@@ -335,327 +455,5 @@ export async function adminListingRoutes(app: FastifyInstance) {
     ]);
 
     return sendSuccess(reply, 200, { listings, total, page: parseInt(page, 10), limit: take });
-  });
-
-  // ── GET /admin/bookings — Admin booking list with filters ─────────────────
-  app.get("/admin/bookings", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { q = "", status, listingType, country, page = "1", limit = "20" } = req.query as Record<string, string>;
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const take = Math.min(parseInt(limit, 10), 100);
-
-    const where: any = {
-      AND: [
-        q ? {
-          OR: [
-            { reference: { contains: q, mode: "insensitive" } },
-            { guestEmail: { contains: q, mode: "insensitive" } },
-            { guestFirstName: { contains: q, mode: "insensitive" } },
-            { guestLastName: { contains: q, mode: "insensitive" } },
-          ],
-        } : {},
-        status ? { status } : {},
-        listingType ? { listingType } : {},
-        country ? { listing: { country } } : {},
-      ],
-    };
-
-    const [total, bookings] = await Promise.all([
-      prisma.booking.count({ where }),
-      prisma.booking.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          reference: true,
-          listingId: true,
-          guestId: true,
-          providerId: true,
-          listingType: true,
-          status: true,
-          checkIn: true,
-          checkOut: true,
-          pickupDatetime: true,
-          returnDatetime: true,
-          nightsOrDays: true,
-          guestFirstName: true,
-          guestLastName: true,
-          guestEmail: true,
-          totalAmount: true,
-          currency: true,
-          commissionAmount: true,
-          providerPayout: true,
-          voucherDiscount: true,
-          cancelledAt: true,
-          confirmedAt: true,
-          createdAt: true,
-          listing: { select: { name: true } },
-        },
-      }),
-    ]);
-
-    return sendSuccess(reply, 200, { bookings, total, page: parseInt(page, 10), limit: take });
-  });
-
-  // ── GET /admin/bookings/:id — Full booking detail with status log ──────────
-  app.get("/admin/bookings/:id", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
-
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: {
-        statusLog: { orderBy: { createdAt: "asc" } },
-        listing: { select: { name: true, country: true, category: true } },
-      },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-
-    return sendSuccess(reply, 200, booking);
-  });
-
-  // ── POST /admin/bookings/:id/cancel — Admin-forced cancellation ───────────
-  app.post("/admin/bookings/:id/cancel", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const admin = req as AdminRequest;
-    const { id } = req.params as { id: string };
-    const { reason } = req.body as { reason: string };
-
-    if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Cancellation reason is required.");
-
-    const booking = await prisma.booking.findUnique({ where: { id } });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    if (!["pending_payment", "confirmed"].includes(booking.status)) {
-      return sendError(reply, 409, "INVALID_STATUS", `Cannot cancel booking in status: ${booking.status}`);
-    }
-
-    await prisma.booking.update({
-      where: { id },
-      data: {
-        status: "cancelled_by_system",
-        cancelledAt: new Date(),
-        cancelledBy: admin.adminId,
-        cancellationReason: reason,
-        refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
-      },
-    });
-
-    await prisma.bookingStatusLog.create({
-      data: {
-        bookingId: id,
-        fromStatus: booking.status,
-        toStatus: "cancelled_by_system",
-        actorType: "admin",
-        changedBy: admin.adminId,
-        reason,
-      },
-    });
-
-    return sendSuccess(reply, 200, { message: "Booking cancelled by admin." });
-  });
-
-  // ── GET /admin/conversations — All conversations (admin view) ─────────────
-  app.get("/admin/conversations", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const take = Math.min(parseInt(limit, 10), 100);
-
-    const where: any = {
-      AND: [
-        status ? { status } : {},
-        q ? {
-          OR: [
-            { guestId: { contains: q } },
-            { bookingId: { contains: q } },
-          ],
-        } : {},
-      ],
-    };
-
-    const [total, conversations] = await Promise.all([
-      prisma.conversation.count({ where }),
-      prisma.conversation.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { updatedAt: "desc" },
-        include: {
-          messages: { orderBy: { createdAt: "desc" }, take: 1 },
-        },
-      }),
-    ]);
-
-    return sendSuccess(reply, 200, {
-      conversations: conversations.map((c) => ({
-        id: c.id,
-        listingId: c.listingId,
-        bookingId: c.bookingId,
-        guestId: c.guestId,
-        providerId: c.providerId,
-        status: c.status,
-        lastMessage: c.messages[0]
-          ? {
-              body: c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
-              senderId: c.messages[0].senderId,
-              senderType: c.messages[0].senderType,
-              isFiltered: c.messages[0].isFiltered,
-              createdAt: c.messages[0].createdAt.toISOString(),
-            }
-          : null,
-        updatedAt: c.updatedAt.toISOString(),
-        createdAt: c.createdAt.toISOString(),
-      })),
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
-  });
-
-  // ── GET /admin/conversations/:id/messages — Admin message viewer ──────────
-  app.get("/admin/conversations/:id/messages", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
-
-    const convo = await prisma.conversation.findUnique({ where: { id } });
-    if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
-
-    const messages = await prisma.message.findMany({
-      where: { conversationId: id },
-      orderBy: { createdAt: "asc" },
-    });
-
-    return sendSuccess(reply, 200, {
-      conversation: {
-        id: convo.id,
-        listingId: convo.listingId,
-        bookingId: convo.bookingId,
-        guestId: convo.guestId,
-        providerId: convo.providerId,
-        status: convo.status,
-      },
-      messages: messages.map((m) => ({
-        id: m.id,
-        senderId: m.senderId,
-        senderType: m.senderType,
-        body: m.body,
-        isFiltered: m.isFiltered,
-        readAt: m.readAt?.toISOString() ?? null,
-        createdAt: m.createdAt.toISOString(),
-      })),
-    });
-  });
-
-  // ── GET /admin/ical-feeds — All iCal feeds across all listings ────────────
-  app.get("/admin/ical-feeds", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { page = "1", limit = "20", isActive } = req.query as Record<string, string>;
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const take = Math.min(parseInt(limit, 10), 100);
-
-    const where: any = {
-      ...(isActive !== undefined ? { isActive: isActive === "true" } : {}),
-    };
-
-    const [total, feeds] = await Promise.all([
-      prisma.icalFeed.count({ where }),
-      prisma.icalFeed.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { updatedAt: "desc" },
-        include: {
-          listing: { select: { name: true, category: true, country: true } },
-        },
-      }),
-    ]);
-
-    return sendSuccess(reply, 200, {
-      feeds: feeds.map((f) => ({
-        id: f.id,
-        listingId: f.listingId,
-        listingName: f.listing.name,
-        listingCategory: f.listing.category,
-        listingCountry: f.listing.country,
-        platform: f.platform,
-        feedUrl: f.feedUrl,
-        isActive: f.isActive,
-        lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
-        lastError: f.lastError,
-        createdAt: f.createdAt.toISOString(),
-        updatedAt: f.updatedAt.toISOString(),
-      })),
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
-  });
-
-  // ── POST /admin/ical-feeds/:id/sync — Admin manual iCal resync ───────────
-  app.post("/admin/ical-feeds/:id/sync", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
-
-    const feed = await prisma.icalFeed.findUnique({ where: { id } });
-    if (!feed) return sendError(reply, 404, "NOT_FOUND", "iCal feed not found.");
-
-    // Import syncFeed dynamically to avoid circular import
-    const { syncFeed } = await import("./ical.js");
-    const result = await syncFeed(id);
-
-    if (result.error) {
-      return sendSuccess(reply, 200, { synced: 0, error: result.error, message: "Sync failed." });
-    }
-    return sendSuccess(reply, 200, { synced: result.synced, message: `Synced ${result.synced} events.` });
-  });
-
-  // ── GET /admin/reviews — Admin review list with filters ───────────────────
-  app.get("/admin/reviews", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { q = "", isHidden, rating, listingId, page = "1", limit = "20" } = req.query as Record<string, string>;
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const take = Math.min(parseInt(limit, 10), 100);
-
-    const where: any = {
-      AND: [
-        isHidden !== undefined ? { isHidden: isHidden === "true" } : {},
-        rating ? { rating: parseInt(rating, 10) } : {},
-        listingId ? { listingId } : {},
-        q ? {
-          OR: [
-            { title: { contains: q, mode: "insensitive" } },
-            { body: { contains: q, mode: "insensitive" } },
-            { guestId: { contains: q } },
-          ],
-        } : {},
-      ],
-    };
-
-    const [total, reviews] = await Promise.all([
-      prisma.listingReview.count({ where }),
-      prisma.listingReview.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { createdAt: "desc" },
-        include: { listing: { select: { name: true } } },
-      }),
-    ]);
-
-    return sendSuccess(reply, 200, {
-      reviews: reviews.map((r) => ({
-        id: r.id,
-        bookingId: r.bookingId,
-        listingId: r.listingId,
-        listingName: r.listing.name,
-        guestId: r.guestId,
-        rating: r.rating,
-        title: r.title,
-        body: r.body,
-        providerReply: r.providerReply,
-        isHidden: r.isHidden,
-        hiddenBy: r.hiddenBy,
-        hiddenAt: r.hiddenAt?.toISOString() ?? null,
-        hiddenReason: r.hiddenReason,
-        createdAt: r.createdAt.toISOString(),
-      })),
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
   });
 }

@@ -1,298 +1,135 @@
 "use client";
-
 import { useQuery } from "@tanstack/react-query";
-import {
-  Users, Building2, CalendarDays, BadgeCheck,
-  DollarSign, TrendingUp, Clock, AlertCircle,
-} from "lucide-react";
-import { api } from "@/lib/api";
+import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
-import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Charts";
-import { Card, CardHeader, SectionHeader } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Avatar } from "@/components/ui/Avatar";
-import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
+import { api } from "@/lib/api";
 
-// ── Fetch helpers ─────────────────────────────────────────────────────────────
-
-const fetchUsers = () =>
-  api.get("/admin/users?limit=1").then((r) => r.data.data ?? r.data);
-
-const fetchBookings = () =>
-  listingApi.get("/admin/bookings?limit=100").then((r) => r.data.data ?? r.data);
-
-const fetchListings = () =>
-  listingApi.get("/admin/listings?limit=1").then((r) => r.data.data ?? r.data);
-
-const fetchReviewQueue = () =>
-  listingApi.get("/admin/listings/review-queue?limit=1").then((r) => r.data.data ?? r.data);
-
-const fetchAuditLogs = () =>
-  api.get("/admin/audit-logs?limit=8").then((r) => r.data.data ?? r.data);
-
-// ── Revenue aggregator (from bookings) ───────────────────────────────────────
-
-function buildRevenueChart(bookings: any[]) {
-  const byMonth: Record<string, { revenue: number; bookings: number }> = {};
-  const now = new Date();
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = d.toLocaleString("default", { month: "short" });
-    byMonth[key] = { revenue: 0, bookings: 0 };
-  }
-  for (const b of bookings ?? []) {
-    if (b.status === "confirmed" || b.status === "completed") {
-      const d = new Date(b.createdAt);
-      const key = d.toLocaleString("default", { month: "short" });
-      if (byMonth[key]) {
-        byMonth[key].revenue += Number(b.totalAmount ?? 0);
-        byMonth[key].bookings += 1;
-      }
-    }
-  }
-  return Object.entries(byMonth).map(([label, v]) => ({ label, ...v }));
+interface ReviewQueueData {
+  total: number;
 }
 
-// ── Booking status donut data ─────────────────────────────────────────────────
-
-const STATUS_COLORS_MAP: Record<string, string> = {
-  confirmed:          "#3b82f6",
-  completed:          "#10b981",
-  pending_payment:    "#f59e0b",
-  cancelled_by_guest: "#94a3b8",
-  cancelled_by_provider: "#f97316",
-  cancelled_by_system: "#ef4444",
-};
-
-function buildStatusDonut(bookings: any[]) {
-  const counts: Record<string, number> = {};
-  for (const b of bookings ?? []) {
-    counts[b.status] = (counts[b.status] ?? 0) + 1;
-  }
-  return Object.entries(counts)
-    .map(([name, value]) => ({
-      name: slugToLabel(name),
-      value,
-      color: STATUS_COLORS_MAP[name] ?? "#94a3b8",
-    }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 6);
+interface UsersData {
+  total: number;
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+interface ListingsData {
+  total: number;
+}
 
 export default function DashboardPage() {
-  const { data: usersData, isLoading: loadingUsers } = useQuery({ queryKey: ["admin-users-count"], queryFn: fetchUsers });
-  const { data: bookingsData, isLoading: loadingBookings } = useQuery({ queryKey: ["admin-bookings-dash"], queryFn: fetchBookings });
-  const { data: listingsData, isLoading: loadingListings } = useQuery({ queryKey: ["admin-listings-dash"], queryFn: fetchListings });
-  const { data: queueData, isLoading: loadingQueue } = useQuery({ queryKey: ["admin-queue-dash"], queryFn: fetchReviewQueue });
-  const { data: auditData, isLoading: loadingAudit } = useQuery({ queryKey: ["admin-audit-dash"], queryFn: fetchAuditLogs });
+  const { data: queueData } = useQuery<ReviewQueueData>({
+    queryKey: ["dashboard-queue-count"],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: ReviewQueueData }>("/admin/listings/review-queue?limit=1");
+      return res.data.data;
+    },
+  });
 
-  const bookings: any[] = bookingsData?.bookings ?? [];
-  const confirmedBookings = bookings.filter((b) => ["confirmed", "completed"].includes(b.status));
-  const totalRevenue = confirmedBookings.reduce((s, b) => s + Number(b.totalAmount ?? 0), 0);
-  const totalCommission = confirmedBookings.reduce((s, b) => s + Number(b.commissionAmount ?? 0), 0);
-  const revenueChart = buildRevenueChart(bookings);
-  const statusDonut = buildStatusDonut(bookings);
-  const auditLogs: any[] = auditData?.logs ?? [];
+  const { data: usersData } = useQuery<UsersData>({
+    queryKey: ["dashboard-users-count"],
+    queryFn: async () => {
+      const res = await api.get<{ data: UsersData }>("/admin/users?limit=1");
+      return res.data.data;
+    },
+  });
+
+  const { data: listingsData } = useQuery<ListingsData>({
+    queryKey: ["dashboard-listings-count"],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: ListingsData }>("/admin/listings?limit=1");
+      return res.data.data;
+    },
+  });
+
+  const { data: pendingListingsData } = useQuery<ListingsData>({
+    queryKey: ["dashboard-pending-count"],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: ListingsData }>("/admin/listings?status=pending_review&limit=1");
+      return res.data.data;
+    },
+  });
+
+  const stats = [
+    {
+      label: "Pending Hotel Reviews",
+      value: queueData?.total ?? pendingListingsData?.total ?? null,
+      href: "/dashboard/listings",
+      urgent: (queueData?.total ?? 0) > 0,
+    },
+    {
+      label: "Total Users",
+      value: usersData?.total ?? null,
+      href: "/dashboard/users",
+      urgent: false,
+    },
+    {
+      label: "Total Listings",
+      value: listingsData?.total ?? null,
+      href: "/dashboard/listings",
+      urgent: false,
+    },
+    {
+      label: "Active Listings",
+      value: null, // placeholder — no dedicated endpoint
+      href: "/dashboard/listings",
+      urgent: false,
+    },
+  ];
 
   return (
-    <div className="space-y-6 max-w-screen-2xl">
-      <SectionHeader
-        title="Dashboard"
-        description={`Overview · ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`}
-      />
+    <div className="p-8">
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">Overview</h1>
+      <p className="text-sm text-gray-500 mb-8">Welcome to the ZikaBooking admin panel.</p>
 
-      {/* KPI Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Bookings"
-          value={bookingsData?.total ?? 0}
-          change={3.4}
-          icon={<CalendarDays className="h-4 w-4 text-primary" />}
-          iconBg="bg-primary/10"
-          loading={loadingBookings}
-        />
-        <StatCard
-          title="Total Revenue"
-          value={totalRevenue}
-          currency="USD"
-          change={7.2}
-          icon={<DollarSign className="h-4 w-4 text-success" />}
-          iconBg="bg-success/10"
-          loading={loadingBookings}
-        />
-        <StatCard
-          title="Platform Commission"
-          value={totalCommission}
-          currency="USD"
-          change={5.1}
-          icon={<TrendingUp className="h-4 w-4 text-info" />}
-          iconBg="bg-info/10"
-          loading={loadingBookings}
-        />
-        <StatCard
-          title="Total Users"
-          value={usersData?.total ?? 0}
-          change={12.8}
-          icon={<Users className="h-4 w-4 text-purple-600" />}
-          iconBg="bg-purple-100"
-          loading={loadingUsers}
-        />
-        <StatCard
-          title="Total Listings"
-          value={listingsData?.total ?? 0}
-          change={2.1}
-          icon={<Building2 className="h-4 w-4 text-teal-600" />}
-          iconBg="bg-teal-100"
-          loading={loadingListings}
-        />
-        <StatCard
-          title="Pending Accreditation"
-          value={queueData?.total ?? 0}
-          icon={<BadgeCheck className="h-4 w-4 text-warning" />}
-          iconBg="bg-warning/10"
-          loading={loadingQueue}
-        />
-        <StatCard
-          title="Confirmed Bookings"
-          value={confirmedBookings.length}
-          subValue={`of ${bookings.length} total`}
-          icon={<CalendarDays className="h-4 w-4 text-green-600" />}
-          iconBg="bg-green-100"
-          loading={loadingBookings}
-        />
-        <StatCard
-          title="Conversion Rate"
-          value={bookings.length > 0 ? Math.round((confirmedBookings.length / bookings.length) * 100) : 0}
-          subValue="confirmed / total"
-          icon={<TrendingUp className="h-4 w-4 text-indigo-600" />}
-          iconBg="bg-indigo-100"
-          loading={loadingBookings}
-        />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {stats.map((stat) => (
+          <Link
+            key={stat.label}
+            href={stat.href}
+            className={`bg-white rounded-xl border p-5 hover:shadow-sm transition ${stat.urgent ? "border-amber-300 bg-amber-50" : "border-gray-200"}`}
+          >
+            <p className="text-sm text-gray-500 mb-1">{stat.label}</p>
+            <p className={`text-2xl font-bold ${stat.urgent ? "text-amber-600" : "text-gray-900"}`}>
+              {stat.value === null ? "—" : stat.value.toLocaleString()}
+            </p>
+          </Link>
+        ))}
       </div>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2" padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Monthly Revenue" description="Last 6 months — confirmed + completed bookings" />
-          </div>
-          <div className="p-5">
-            {loadingBookings ? (
-              <div className="h-[220px] bg-slate-100 rounded-lg animate-shimmer" />
-            ) : (
-              <RevenueBarChart data={revenueChart} />
-            )}
-          </div>
-        </Card>
-
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Booking Status" description="Distribution across all bookings" />
-          </div>
-          <div className="p-5">
-            {loadingBookings ? (
-              <div className="h-[220px] bg-slate-100 rounded-lg animate-shimmer" />
-            ) : statusDonut.length > 0 ? (
-              <DonutChart data={statusDonut} />
-            ) : (
-              <div className="h-[220px] flex items-center justify-center text-slate-400 text-sm">
-                No booking data
-              </div>
-            )}
-          </div>
-        </Card>
-      </div>
-
-      {/* Bottom row — Recent activity + pending queue */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Recent bookings */}
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Recent Bookings" description="Latest activity" />
-          </div>
-          <div className="divide-y divide-border">
-            {loadingBookings ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 p-4">
-                  <div className="h-8 w-8 bg-slate-200 rounded-full animate-shimmer" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3 bg-slate-200 rounded w-3/4 animate-shimmer" />
-                    <div className="h-3 bg-slate-200 rounded w-1/2 animate-shimmer" />
-                  </div>
-                </div>
-              ))
-            ) : bookings.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">No bookings yet</div>
-            ) : (
-              bookings.slice(0, 6).map((b: any) => (
-                <div key={b.id} className="flex items-center gap-3 px-5 py-3">
-                  <Avatar
-                    name={`${b.guestFirstName ?? "G"} ${b.guestLastName ?? ""}`}
-                    size="sm"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">
-                      {b.guestFirstName} {b.guestLastName}
-                    </p>
-                    <p className="text-xs text-slate-500 truncate">
-                      {b.reference} · {b.listing?.name ?? b.listingId}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-semibold text-slate-900 tabular">
-                      {formatCurrency(Number(b.totalAmount), b.currency)}
-                    </p>
-                    <Badge label={b.status} status={b.status} />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
-
-        {/* Audit activity feed */}
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Audit Activity" description="Recent admin actions" />
-          </div>
-          <div className="divide-y divide-border">
-            {loadingAudit ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex gap-3 p-4">
-                  <div className="h-2 w-2 bg-slate-200 rounded-full mt-2 animate-shimmer flex-shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3 bg-slate-200 rounded w-full animate-shimmer" />
-                    <div className="h-3 bg-slate-200 rounded w-2/3 animate-shimmer" />
-                  </div>
-                </div>
-              ))
-            ) : auditLogs.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">No audit entries</div>
-            ) : (
-              auditLogs.map((log: any) => (
-                <div key={log.id} className="flex gap-3 px-5 py-3">
-                  <div className="mt-1.5 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-900">
-                      <span className="font-medium">{slugToLabel(log.action)}</span>
-                      {log.targetType && (
-                        <span className="text-slate-500"> on {slugToLabel(log.targetType)}</span>
-                      )}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Badge label={log.role} status={log.role} size="sm" />
-                      <span className="text-xs text-slate-400">
-                        {formatRelativeTime(log.timestamp)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
+      {/* Quick links */}
+      <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {[
+          {
+            href: "/dashboard/listings",
+            title: "Hotel Review Queue",
+            description: "Review and approve or reject hotel listings pending accreditation.",
+          },
+          {
+            href: "/dashboard/users",
+            title: "User Management",
+            description: "Suspend, ban or reinstate user accounts.",
+          },
+          {
+            href: "/dashboard/commission",
+            title: "Commission Rates",
+            description: "Set country-specific commission rates or update the global default.",
+          },
+          {
+            href: "/dashboard/vouchers",
+            title: "Vouchers",
+            description: "Create and manage promotional discount vouchers.",
+          },
+        ].map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="bg-white rounded-xl border border-gray-200 p-5 hover:border-primary hover:shadow-sm transition"
+          >
+            <h3 className="font-semibold text-gray-900 mb-1 text-sm">{item.title}</h3>
+            <p className="text-xs text-gray-500 leading-relaxed">{item.description}</p>
+          </Link>
+        ))}
       </div>
     </div>
   );

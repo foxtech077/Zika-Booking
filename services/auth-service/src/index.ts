@@ -8,7 +8,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { getRedis } from "./lib/redis";
 import { authRoutes } from "./routes/auth";
-import { adminAuthRoutes, adminUserRoutes, adminOperatorRoutes } from "./routes/admin-auth";
+import { adminAuthRoutes, adminUserRoutes } from "./routes/admin-auth";
 
 const PORT = Number(process.env["AUTH_SERVICE_PORT"] ?? 3001);
 const HOST = process.env["AUTH_SERVICE_HOST"] ?? "0.0.0.0";
@@ -45,6 +45,23 @@ async function build() {
           bearerAuth: [],
         },
       ],
+    },
+    transform: ({ schema, url }) => {
+      const newSchema = { ...schema };
+      if (!newSchema.tags) {
+        if (url.startsWith("/admin/users")) {
+          newSchema.tags = ["Admin Users"];
+        } else if (url.startsWith("/admin/auth")) {
+          newSchema.tags = ["Admin Auth"];
+        } else if (url.startsWith("/auth")) {
+          newSchema.tags = ["Auth"];
+        } else if (url === "/health") {
+          newSchema.tags = ["System"];
+        } else {
+          newSchema.tags = ["Default"];
+        }
+      }
+      return { schema: newSchema, url };
     },
   });
 
@@ -93,16 +110,14 @@ async function build() {
   await app.register(authRoutes);
   await app.register(adminAuthRoutes);
   await app.register(adminUserRoutes);
-  await app.register(adminOperatorRoutes);
 
   // Global error handler
-  app.setErrorHandler((error, _req, reply) => {
+  app.setErrorHandler((error: any, _req, reply) => {
     app.log.error(error);
-    const err = error as any;
-    const statusCode = err.statusCode ?? 500;
+    const statusCode = error.statusCode ?? 500;
     reply.status(statusCode).send({
       success: false,
-      error: { code: "SERVER_ERROR", message: statusCode === 500 ? "An unexpected error occurred." : err.message },
+      error: { code: "SERVER_ERROR", message: statusCode === 500 ? "An unexpected error occurred." : error.message },
     });
   });
 

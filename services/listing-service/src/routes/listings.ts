@@ -476,7 +476,29 @@ export async function listingRoutes(app: FastifyInstance) {
   // ── Photo endpoints ────────────────────────────────────────────────────────
 
   // POST /listings/:id/photos/presign — Request presigned S3 upload URL
-  app.post("/listings/:id/photos/presign", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/photos/presign", {
+    preHandler: [requireProviderRole],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Listing ID" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["contentType"],
+        properties: {
+          contentType: {
+            type: "string",
+            enum: ["image/jpeg", "image/png", "image/webp"],
+            description: "MIME type of the photo to upload"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { contentType, filename } = req.body as { contentType: string; filename: string };
@@ -500,7 +522,28 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/photos/confirm — Register photo after S3 upload
-  app.post("/listings/:id/photos/confirm", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/photos/confirm", {
+    preHandler: [requireProviderRole],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Listing ID" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["s3Key"],
+        properties: {
+          s3Key: {
+            type: "string",
+            description: "The s3Key returned from the /photos/presign response"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { s3Key } = req.body as { s3Key: string };
@@ -526,7 +569,29 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // PATCH /listings/:id/photos/reorder — Update photo positions (UC-2.5 A1, A2)
-  app.patch("/listings/:id/photos/reorder", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/listings/:id/photos/reorder", {
+    preHandler: [requireProviderRole],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Listing ID" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["order"],
+        properties: {
+          order: {
+            type: "array",
+            items: { type: "string" },
+            description: "Array of photo IDs in the new order"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { order } = req.body as { order: string[] }; // array of photo IDs in new order
@@ -578,7 +643,34 @@ export async function listingRoutes(app: FastifyInstance) {
   // ── Document endpoints ─────────────────────────────────────────────────────
 
   // POST /listings/:id/documents/presign — Request presigned S3 URL for document
-  app.post("/listings/:id/documents/presign", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/documents/presign", {
+    preHandler: [requireProviderRole],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Listing ID" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["contentType", "documentType"],
+        properties: {
+          contentType: {
+            type: "string",
+            enum: ["application/pdf", "image/jpeg", "image/png", "image/webp"],
+            description: "MIME type of the document to upload"
+          },
+          documentType: {
+            type: "string",
+            enum: ["business_licence", "operating_permit", "tourism_certificate"],
+            description: "Category of the compliance document"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { contentType, documentType } = req.body as { contentType: string; documentType: string };
@@ -600,7 +692,38 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/documents/confirm — Register document after S3 upload
-  app.post("/listings/:id/documents/confirm", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/documents/confirm", {
+    preHandler: [requireProviderRole],
+    schema: {
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Listing ID" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["s3Key", "documentType", "contentType"],
+        properties: {
+          s3Key: {
+            type: "string",
+            description: "The s3Key returned from the /documents/presign response"
+          },
+          documentType: {
+            type: "string",
+            enum: ["business_licence", "operating_permit", "tourism_certificate"],
+            description: "Must match the documentType used in /documents/presign"
+          },
+          contentType: {
+            type: "string",
+            enum: ["application/pdf", "image/jpeg", "image/png", "image/webp"],
+            description: "Must match the contentType used in /documents/presign"
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { s3Key, documentType, contentType } = req.body as { s3Key: string; documentType: string; contentType: string };

@@ -1,301 +1,311 @@
 "use client";
-
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ticket, Plus, ToggleLeft, ToggleRight } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
-import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
-import { Card, SectionHeader } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input, Select } from "@/components/ui/Input";
-import { ActionModal } from "@/components/modals/Modals";
-import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
-import type { Voucher } from "@/types/admin";
+import { FormField } from "@/components/ui/FormField";
 
-const fetchVouchers = (params: Record<string, string>) =>
-  listingApi.get(`/admin/vouchers?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Voucher {
+  id: string;
+  code: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  minOrderValue: number | null;
+  maxDiscount: number | null;
+  usageLimit: number | null;
+  usageCount: number;
+  redemptionCount: number;
+  validFrom: string;
+  validUntil: string;
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+}
+
+interface VouchersResponse {
+  vouchers: Voucher[];
+}
+
+interface CreateVoucherBody {
+  code: string;
+  discountType: "percentage" | "fixed";
+  discountValue: string;
+  minOrderValue: string;
+  maxDiscount: string;
+  usageLimit: string;
+  validFrom: string;
+  validUntil: string;
+}
+
+const EMPTY_FORM: CreateVoucherBody = {
+  code: "",
+  discountType: "percentage",
+  discountValue: "",
+  minOrderValue: "",
+  maxDiscount: "",
+  usageLimit: "",
+  validFrom: "",
+  validUntil: "",
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function isExpired(validUntil: string) {
+  return new Date(validUntil) < new Date();
+}
+
+function statusBadge(v: Voucher) {
+  if (!v.isActive) return { label: "Inactive", cls: "bg-gray-100 text-gray-600" };
+  if (isExpired(v.validUntil)) return { label: "Expired", cls: "bg-red-100 text-red-700" };
+  if (v.usageLimit !== null && v.usageCount >= v.usageLimit) return { label: "Exhausted", cls: "bg-orange-100 text-orange-700" };
+  if (new Date(v.validFrom) > new Date()) return { label: "Scheduled", cls: "bg-blue-100 text-blue-700" };
+  return { label: "Active", cls: "bg-green-100 text-green-700" };
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function VouchersPage() {
   const qc = useQueryClient();
-  const [page, setPage] = useState(1);
-  const [isActive, setIsActive] = useState("");
-  const [addModal, setAddModal] = useState(false);
-  const [form, setForm] = useState({
-    code: "",
-    discountType: "percentage" as "percentage" | "fixed",
-    discountValue: "",
-    minOrderValue: "",
-    maxDiscount: "",
-    usageLimit: "",
-    validFrom: "",
-    validUntil: "",
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<CreateVoucherBody>(EMPTY_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const { data, isLoading, error } = useQuery<VouchersResponse>({
+    queryKey: ["admin-vouchers"],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: VouchersResponse }>("/admin/vouchers");
+      return res.data.data;
+    },
   });
 
-  const params = { ...(isActive ? { isActive } : {}), page: String(page), limit: "20" };
-  const { data, isLoading } = useQuery({
-    queryKey: ["admin-vouchers", params],
-    queryFn: () => fetchVouchers(params),
-  });
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const code = form.code.trim().toUpperCase();
+      if (!code) throw new Error("Voucher code is required.");
+      const discountValue = parseFloat(form.discountValue);
+      if (isNaN(discountValue) || discountValue <= 0) throw new Error("Discount value must be greater than 0.");
+      if (form.discountType === "percentage" && discountValue > 100) throw new Error("Percentage discount cannot exceed 100.");
+      if (!form.validFrom || !form.validUntil) throw new Error("Valid from and valid until dates are required.");
+      if (new Date(form.validUntil) <= new Date(form.validFrom)) throw new Error("Valid until must be after valid from.");
 
-  const vouchers: Voucher[] = data?.vouchers ?? [];
-  const total: number = data?.total ?? 0;
+      const body: Record<string, unknown> = {
+        code,
+        discountType: form.discountType,
+        discountValue,
+        validFrom: new Date(form.validFrom).toISOString(),
+        validUntil: new Date(form.validUntil).toISOString(),
+      };
+      if (form.minOrderValue) body.minOrderValue = parseFloat(form.minOrderValue);
+      if (form.maxDiscount) body.maxDiscount = parseFloat(form.maxDiscount);
+      if (form.usageLimit) body.usageLimit = parseInt(form.usageLimit, 10);
 
-  const createMut = useMutation({
-    mutationFn: (body: any) => listingApi.post("/admin/vouchers", body),
+      await listingApi.post("/admin/vouchers", body);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
-      setAddModal(false);
-      setForm({ code: "", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscount: "", usageLimit: "", validFrom: "", validUntil: "" });
+      setForm(EMPTY_FORM);
+      setShowForm(false);
+      setFormError(null);
+      setSuccessMsg("Voucher created successfully.");
+      setTimeout(() => setSuccessMsg(null), 3000);
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } }).response?.data?.error?.message;
+      setFormError(msg ?? (err as Error).message ?? "Failed to create voucher.");
     },
   });
 
-  const toggleMut = useMutation({
-    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      listingApi.patch(`/admin/vouchers/${id}`, { isActive }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-vouchers"] }),
-  });
-
-  const columns: Column<Voucher>[] = [
-    {
-      key: "code",
-      label: "Code",
-      render: (v) => (
-        <div>
-          <span className="font-mono font-bold text-sm tracking-wider text-slate-900 bg-slate-100 px-2 py-0.5 rounded">
-            {v.code}
-          </span>
-        </div>
-      ),
-    },
-    {
-      key: "discount",
-      label: "Discount",
-      render: (v) => (
-        <div>
-          <p className="font-semibold text-slate-900">
-            {v.discountType === "percentage"
-              ? `${v.discountValue}% off`
-              : formatCurrency(v.discountValue, "USD")}
-          </p>
-          {v.minOrderValue && (
-            <p className="text-xs text-slate-500">
-              Min. order: {formatCurrency(v.minOrderValue, "USD")}
-            </p>
-          )}
-          {v.maxDiscount && v.discountType === "percentage" && (
-            <p className="text-xs text-slate-500">
-              Max. discount: {formatCurrency(v.maxDiscount, "USD")}
-            </p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "usage",
-      label: "Usage",
-      render: (v) => (
-        <div>
-          <p className="text-sm font-medium">
-            {(v.usageCount ?? v.redemptionCount ?? 0).toLocaleString()}
-            {v.usageLimit ? ` / ${v.usageLimit.toLocaleString()}` : ""}
-          </p>
-          {v.usageLimit && (
-            <div className="mt-1 h-1.5 bg-slate-100 rounded-full overflow-hidden w-24">
-              <div
-                className="h-full bg-primary rounded-full"
-                style={{ width: `${Math.min(((v.usageCount ?? 0) / v.usageLimit) * 100, 100)}%` }}
-              />
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: "validity",
-      label: "Validity",
-      render: (v) => (
-        <div className="text-xs text-slate-600">
-          <p>{formatDate(v.validFrom)} →</p>
-          <p>{formatDate(v.validUntil)}</p>
-        </div>
-      ),
-    },
-    {
-      key: "status",
-      label: "Status",
-      render: (v) => (
-        <Badge label={v.isActive ? "Active" : "Inactive"} status={v.isActive ? "active" : "deactivated"} />
-      ),
-    },
-    {
-      key: "actions",
-      label: "",
-      align: "right",
-      render: (v) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); toggleMut.mutate({ id: v.id, isActive: !v.isActive }); }}
-          className={`p-1.5 rounded-lg transition-colors ${v.isActive ? "text-success hover:bg-success/5" : "text-slate-400 hover:bg-slate-100"}`}
-          title={v.isActive ? "Deactivate" : "Activate"}
-        >
-          {v.isActive ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
-        </button>
-      ),
-    },
-  ];
+  function updateField(key: keyof CreateVoucherBody, value: string) {
+    setForm((p) => ({ ...p, [key]: value }));
+    setFormError(null);
+  }
 
   return (
-    <div className="space-y-5 max-w-screen-xl">
-      <SectionHeader
-        title="Vouchers"
-        description={`${total.toLocaleString()} vouchers`}
-        action={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setAddModal(true)}
-            leftIcon={<Plus className="h-4 w-4" />}
-          >
-            Create Voucher
-          </Button>
-        }
-      />
+    <div className="p-8 max-w-5xl">
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-bold text-gray-900">Vouchers</h1>
+        <Button onClick={() => { setShowForm((v) => !v); setFormError(null); }}>
+          {showForm ? "Cancel" : "Create Voucher"}
+        </Button>
+      </div>
+      <p className="text-sm text-gray-500 mb-8">
+        Create and manage discount vouchers for guests.
+      </p>
 
-      <Card padding="none">
-        <FilterBar
-          filters={[
-            {
-              key: "isActive",
-              label: "All Status",
-              value: isActive,
-              onChange: (v) => { setIsActive(v); setPage(1); },
-              options: [
-                { value: "true", label: "Active" },
-                { value: "false", label: "Inactive" },
-              ],
-            },
-          ]}
-        />
-        <DataTable
-          columns={columns}
-          data={vouchers}
-          loading={isLoading}
-          emptyTitle="No vouchers found"
-          emptyDescription="Create your first promotional voucher."
-          emptyIcon={<Ticket className="h-10 w-10" />}
-        />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
-      </Card>
+      {successMsg && (
+        <p className="text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-5">{successMsg}</p>
+      )}
 
-      {/* Create voucher modal */}
-      <ActionModal
-        open={addModal}
-        onClose={() => setAddModal(false)}
-        title="Create Voucher"
-        description="Configure a new promotional voucher code."
-        size="md"
-        footer={
-          <>
-            <Button variant="secondary" size="sm" onClick={() => setAddModal(false)}>Cancel</Button>
+      {/* Create form */}
+      {showForm && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <h2 className="font-semibold text-gray-900 mb-4 text-sm">New Voucher</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+            <FormField
+              label="Voucher code"
+              value={form.code}
+              onChange={(e) => updateField("code", e.target.value.toUpperCase())}
+              placeholder="e.g. SUMMER25"
+              maxLength={30}
+            />
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Discount type</label>
+              <select
+                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                value={form.discountType}
+                onChange={(e) => updateField("discountType", e.target.value)}
+              >
+                <option value="percentage">Percentage (%)</option>
+                <option value="fixed">Fixed amount</option>
+              </select>
+            </div>
+            <FormField
+              label={`Discount value (${form.discountType === "percentage" ? "%" : "amount"})`}
+              type="number"
+              value={form.discountValue}
+              onChange={(e) => updateField("discountValue", e.target.value)}
+              placeholder={form.discountType === "percentage" ? "e.g. 15" : "e.g. 1000"}
+              min="0"
+              step="0.01"
+            />
+            <FormField
+              label="Min order value (optional)"
+              type="number"
+              value={form.minOrderValue}
+              onChange={(e) => updateField("minOrderValue", e.target.value)}
+              placeholder="e.g. 5000"
+              min="0"
+            />
+            {form.discountType === "percentage" && (
+              <FormField
+                label="Max discount cap (optional)"
+                type="number"
+                value={form.maxDiscount}
+                onChange={(e) => updateField("maxDiscount", e.target.value)}
+                placeholder="e.g. 2000"
+                min="0"
+              />
+            )}
+            <FormField
+              label="Usage limit (optional)"
+              type="number"
+              value={form.usageLimit}
+              onChange={(e) => updateField("usageLimit", e.target.value)}
+              placeholder="Leave blank for unlimited"
+              min="1"
+            />
+            <FormField
+              label="Valid from"
+              type="datetime-local"
+              value={form.validFrom}
+              onChange={(e) => updateField("validFrom", e.target.value)}
+            />
+            <FormField
+              label="Valid until"
+              type="datetime-local"
+              value={form.validUntil}
+              onChange={(e) => updateField("validUntil", e.target.value)}
+            />
+          </div>
+
+          {formError && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">{formError}</p>
+          )}
+
+          <div className="flex gap-3">
             <Button
-              variant="primary"
-              size="sm"
-              loading={createMut.isPending}
-              onClick={() => createMut.mutate({
-                code: form.code.toUpperCase(),
-                discountType: form.discountType,
-                discountValue: parseFloat(form.discountValue),
-                minOrderValue: form.minOrderValue ? parseFloat(form.minOrderValue) : undefined,
-                maxDiscount: form.maxDiscount ? parseFloat(form.maxDiscount) : undefined,
-                usageLimit: form.usageLimit ? parseInt(form.usageLimit) : undefined,
-                validFrom: form.validFrom,
-                validUntil: form.validUntil,
-              })}
-              disabled={!form.code || !form.discountValue || !form.validFrom || !form.validUntil}
+              variant="secondary"
+              onClick={() => { setShowForm(false); setForm(EMPTY_FORM); setFormError(null); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => createMutation.mutate()}
+              loading={createMutation.isPending}
             >
               Create Voucher
             </Button>
-          </>
-        }
-      >
-        <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
-            <Input
-              id="voucher-code"
-              label="Voucher Code"
-              value={form.code}
-              onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
-              placeholder="SUMMER20"
-              className="font-mono uppercase tracking-wider"
-              required
-            />
           </div>
-          <Select
-            id="discount-type"
-            label="Discount Type"
-            value={form.discountType}
-            onChange={(e) => setForm((f) => ({ ...f, discountType: e.target.value as any }))}
-            options={[
-              { value: "percentage", label: "Percentage (%)" },
-              { value: "fixed", label: "Fixed Amount" },
-            ]}
-          />
-          <Input
-            id="discount-value"
-            label={form.discountType === "percentage" ? "Discount %" : "Discount Amount"}
-            type="number"
-            value={form.discountValue}
-            onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
-            placeholder={form.discountType === "percentage" ? "20" : "50"}
-            required
-          />
-          <Input
-            id="min-order"
-            label="Min. Order Value"
-            type="number"
-            value={form.minOrderValue}
-            onChange={(e) => setForm((f) => ({ ...f, minOrderValue: e.target.value }))}
-            placeholder="0"
-            hint="Leave empty for no minimum"
-          />
-          {form.discountType === "percentage" && (
-            <Input
-              id="max-discount"
-              label="Max. Discount Amount"
-              type="number"
-              value={form.maxDiscount}
-              onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
-              placeholder="100"
-              hint="Cap for percentage discounts"
-            />
-          )}
-          <Input
-            id="usage-limit"
-            label="Usage Limit"
-            type="number"
-            value={form.usageLimit}
-            onChange={(e) => setForm((f) => ({ ...f, usageLimit: e.target.value }))}
-            placeholder="100"
-            hint="Leave empty for unlimited"
-          />
-          <Input
-            id="valid-from"
-            label="Valid From"
-            type="datetime-local"
-            value={form.validFrom}
-            onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
-            required
-          />
-          <Input
-            id="valid-until"
-            label="Valid Until"
-            type="datetime-local"
-            value={form.validUntil}
-            onChange={(e) => setForm((f) => ({ ...f, validUntil: e.target.value }))}
-            required
-          />
         </div>
-      </ActionModal>
+      )}
+
+      {/* Vouchers table */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 bg-gray-50">
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Code</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Discount</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Usage</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Valid period</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={5} className="text-center py-12 text-gray-400">Loading…</td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={5} className="text-center py-12 text-red-400">Failed to load vouchers.</td>
+              </tr>
+            ) : !data?.vouchers.length ? (
+              <tr>
+                <td colSpan={5} className="text-center py-12 text-gray-400">
+                  No vouchers yet. Create one above to get started.
+                </td>
+              </tr>
+            ) : data.vouchers.map((v) => {
+              const badge = statusBadge(v);
+              return (
+                <tr key={v.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition">
+                  <td className="px-4 py-3">
+                    <p className="font-mono font-semibold text-gray-900">{v.code}</p>
+                    {v.minOrderValue !== null && (
+                      <p className="text-xs text-gray-500">Min order: {v.minOrderValue}</p>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium text-gray-900">
+                      {v.discountType === "percentage"
+                        ? `${v.discountValue}%`
+                        : `${v.discountValue} (fixed)`}
+                    </p>
+                    {v.maxDiscount !== null && (
+                      <p className="text-xs text-gray-500">Cap: {v.maxDiscount}</p>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-gray-900">
+                      {v.usageCount} / {v.usageLimit !== null ? v.usageLimit : "unlimited"}
+                    </p>
+                    {v.redemptionCount !== v.usageCount && (
+                      <p className="text-xs text-gray-500">{v.redemptionCount} redemptions</p>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">
+                    <p>{formatDate(v.validFrom)}</p>
+                    <p className="text-xs text-gray-500">to {formatDate(v.validUntil)}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${badge.cls}`}>
+                      {badge.label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
