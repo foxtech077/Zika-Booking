@@ -1,0 +1,30 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/Zika-Booking
+            pm2 stop all
+            git pull origin main
+            pnpm install
+            pnpm run build
+            cp -r services/auth-service/src/generated services/auth-service/dist/
+            cp -r services/payment-service/src/generated services/payment-service/dist/
+            sed -i 's|from "../generated/client"|from "../generated/client/index.js"|' services/payment-service/dist/lib/prisma.js
+            cd services/auth-service && pnpm prisma migrate deploy && cd ~/Zika-Booking
+            cd services/listing-service && pnpm prisma migrate deploy && cd ~/Zika-Booking
+            cd services/payment-service && pnpm prisma migrate deploy && cd ~/Zika-Booking
+            pm2 restart all
