@@ -1,7 +1,5 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useMutation } from "@tanstack/react-query";
-import { listingApi } from "@/lib/listing-api";
 
 const CATEGORIES = [
   { key: "hotel", title: "Hotel", description: "Rooms and suites in a hotel property", icon: "🏨" },
@@ -12,13 +10,9 @@ const CATEGORIES = [
 export default function NewListingPage() {
   const router = useRouter();
 
-  const createMutation = useMutation({
-    mutationFn: async (category: string) => {
-      const res = await listingApi.post<{ data: { id: string } }>("/listings", { category });
-      return res.data.data;
-    },
-    onSuccess: (data) => router.push(`/listings/${data.id}/edit`),
-  });
+  const handleSelect = (catKey: string) => {
+    router.push(`/listings/new/${catKey}`);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -30,9 +24,8 @@ export default function NewListingPage() {
           {CATEGORIES.map((cat) => (
             <button
               key={cat.key}
-              onClick={() => createMutation.mutate(cat.key)}
-              disabled={createMutation.isPending}
-              className="w-full bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4 hover:border-primary hover:bg-primary/5 transition text-left disabled:opacity-60"
+              onClick={() => handleSelect(cat.key)}
+              className="w-full bg-white border border-gray-200 rounded-xl p-5 flex items-center gap-4 hover:border-primary hover:bg-primary/5 transition text-left"
             >
               <span className="text-3xl">{cat.icon}</span>
               <div className="flex-1">
@@ -43,10 +36,6 @@ export default function NewListingPage() {
             </button>
           ))}
         </div>
-
-        {createMutation.isError && (
-          <p className="mt-4 text-sm text-red-600 text-center">Failed to create listing. Please try again.</p>
-        )}
       </div>
     </div>
   );
