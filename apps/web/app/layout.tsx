@@ -1,6 +1,14 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { Poppins } from "next/font/google";
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  variable: "--font-poppins",
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: { default: "ZikaBooking", template: "%s | ZikaBooking" },
@@ -9,10 +17,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="antialiased bg-white text-gray-900">
+    <html lang="en" className={poppins.variable}>
+      <body className="antialiased bg-white text-gray-900 font-sans">
         <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
+
+
