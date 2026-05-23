@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, Clock, AlertTriangle, CheckCircle, XCircle, UserCheck, ChevronRight } from "lucide-react";
+import { BadgeCheck, Clock, AlertTriangle, CheckCircle, XCircle, UserCheck, ChevronRight, Hotel, Car, Home } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -13,6 +13,13 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import type { ListingReviewTask } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
+
+function CategoryIcon({ category }: { category: string }) {
+  if (category === "hotel") return <Hotel className="w-4 h-4 text-blue-500" />;
+  if (category === "car") return <Car className="w-4 h-4 text-amber-500" />;
+  return <Home className="w-4 h-4 text-emerald-500" />;
+}
 
 const REJECTION_REASONS = [
   "Insufficient documentation",
@@ -37,6 +44,7 @@ function getSlaClass(deadline: string) {
 }
 
 export default function AccreditationPage() {
+  const { token } = useAuthStore();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [country, setCountry] = useState("");
@@ -53,6 +61,7 @@ export default function AccreditationPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["accreditation-queue", params],
     queryFn: () => fetchQueue(params),
+    enabled: !!token,
   });
 
   const tasks: ListingReviewTask[] = data?.tasks ?? [];
@@ -86,11 +95,24 @@ export default function AccreditationPage() {
     {
       key: "listing",
       label: "Listing",
-      width: "240px",
+      width: "300px",
       render: (t) => (
-        <div>
-          <p className="font-medium text-slate-900 text-sm truncate">{t.listing.name ?? "—"}</p>
-          <p className="text-xs text-slate-500">{t.listing.town}, {t.listing.country}</p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
+            {t.listing.photos?.[0]?.cdnUrl ? (
+              <img src={t.listing.photos[0].cdnUrl} alt={t.listing.name ?? ""} className="w-full h-full object-cover" />
+            ) : (
+              <CategoryIcon category={t.listing.category} />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm text-slate-900 truncate">{t.listing.name ?? "(Untitled)"}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <CategoryIcon category={t.listing.category} />
+              <span className="text-xs text-slate-500 capitalize">{t.listing.category}</span>
+              {t.listing.town && <span className="text-xs text-slate-400">· {t.listing.town}, {t.listing.country}</span>}
+            </div>
+          </div>
         </div>
       ),
     },

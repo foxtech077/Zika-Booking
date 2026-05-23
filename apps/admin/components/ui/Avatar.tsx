@@ -14,7 +14,8 @@ const AVATAR_COLORS = [
   "bg-orange-500",
 ];
 
-function getAvatarColor(name: string): string {
+function getAvatarColor(name?: string | null): string {
+  if (!name) return "bg-blue-500";
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
@@ -22,17 +23,20 @@ function getAvatarColor(name: string): string {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length]!;
 }
 
-function getInitials(name: string): string {
-  return name
-    .split(" ")
+function getInitials(name?: string | null): string {
+  if (!name) return "A";
+  const cleaned = name.trim();
+  if (!cleaned) return "A";
+  return cleaned
+    .split(/\s+/)
     .slice(0, 2)
-    .map((n) => n[0])
+    .map((n) => n[0] || "")
     .join("")
-    .toUpperCase();
+    .toUpperCase() || "A";
 }
 
 interface AvatarProps {
-  name: string;
+  name?: string | null;
   size?: "xs" | "sm" | "md" | "lg";
   className?: string;
 }
@@ -55,7 +59,7 @@ export function Avatar({ name, size = "md", className }: AvatarProps) {
         color,
         className
       )}
-      title={name}
+      title={name ?? "Avatar"}
     >
       {initials}
     </div>

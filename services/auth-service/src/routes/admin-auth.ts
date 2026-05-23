@@ -404,22 +404,34 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   // ── GET /admin/users ──────────────────────────────────────────────────────
   app.get("/admin/users", { preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const { q = "", status, userType, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
 
-    const where = {
-      AND: [
-        q ? {
-          OR: [
-            { email: { contains: q, mode: "insensitive" as const } },
-            { firstName: { contains: q, mode: "insensitive" as const } },
-            { lastName: { contains: q, mode: "insensitive" as const } },
-          ],
-        } : {},
-        status ? { status: status as "pending_verification" | "active" | "suspended" | "banned" } : {},
-      ],
-    };
+    const where: any = {};
+    const and: any[] = [];
+
+    if (q) {
+      and.push({
+        OR: [
+          { email: { contains: q, mode: "insensitive" as const } },
+          { firstName: { contains: q, mode: "insensitive" as const } },
+          { lastName: { contains: q, mode: "insensitive" as const } },
+        ],
+      });
+    }
+
+    if (status) {
+      and.push({ status: status as "pending_verification" | "active" | "suspended" | "banned" });
+    }
+
+    if (userType) {
+      and.push({ userType: userType as "guest" | "provider" });
+    }
+
+    if (and.length > 0) {
+      where.AND = and;
+    }
 
     const [total, users] = await Promise.all([
       prisma.user.count({ where }),

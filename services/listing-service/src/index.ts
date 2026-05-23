@@ -77,6 +77,7 @@ async function build() {
       : [
           process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
           process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3004",
         ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],

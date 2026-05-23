@@ -109,6 +109,7 @@ export interface Listing {
   suspendedAt: string | null;
   updatedAt: string;
   createdAt: string;
+  photos?: ListingPhoto[];
 }
 
 export interface ListingReviewTask {
@@ -131,6 +132,8 @@ export interface ListingReviewTask {
     submissionCount: number;
     submittedAt: string | null;
     providerId: string;
+    category: ListingCategory;
+    photos?: ListingPhoto[];
   };
 }
 

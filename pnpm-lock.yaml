@@ -191,6 +191,76 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  apps/provider:
+    dependencies:
+      '@tanstack/react-query':
+        specifier: ^5.65.1
+        version: 5.100.5(react@18.3.1)
+      '@zika/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+      '@zika/validators':
+        specifier: workspace:*
+        version: link:../../packages/validators
+      axios:
+        specifier: ^1.7.9
+        version: 1.15.2
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
+      date-fns:
+        specifier: ^4.2.1
+        version: 4.2.1
+      framer-motion:
+        specifier: ^12.40.0
+        version: 12.40.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      lucide-react:
+        specifier: ^1.16.0
+        version: 1.16.0(react@18.3.1)
+      next:
+        specifier: 14.2.21
+        version: 14.2.21(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react:
+        specifier: ^18.3.1
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.3.1
+        version: 18.3.1(react@18.3.1)
+      recharts:
+        specifier: ^3.8.1
+        version: 3.8.1(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react-is@19.2.5)(react@18.3.1)(redux@5.0.1)
+      tailwind-merge:
+        specifier: ^3.6.0
+        version: 3.6.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+      zustand:
+        specifier: ^5.0.3
+        version: 5.0.12(@types/react@18.3.28)(immer@11.1.8)(react@18.3.1)(use-sync-external-store@1.6.0(react@18.3.1))
+    devDependencies:
+      '@types/node':
+        specifier: ^22.13.4
+        version: 22.19.17
+      '@types/react':
+        specifier: ^18.3.12
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.3.1
+        version: 18.3.7(@types/react@18.3.28)
+      autoprefixer:
+        specifier: ^10.4.20
+        version: 10.5.0(postcss@8.5.12)
+      postcss:
+        specifier: ^8.5.1
+        version: 8.5.12
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.19(tsx@4.21.0)(yaml@2.8.3)
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   apps/web:
     dependencies:
       '@tanstack/react-query':

@@ -11,6 +11,7 @@
     "dev:listing": "turbo run dev --filter=@zika/listing-service",
     "dev:web": "turbo run dev --filter=@zika/web",
     "dev:admin": "turbo run dev --filter=@zika/admin",
+    "dev:provider": "turbo run dev --filter=@zika/provider",
     "dev:mobile": "turbo run dev --filter=@zika/mobile",
     "dev:backend": "turbo run dev --filter=@zika/auth-service --filter=@zika/listing-service",
     "db:generate": "turbo run db:generate",

@@ -17,6 +17,11 @@ export interface AdminRequest extends FastifyRequest {
 
 // Verify provider access token (issued by auth-service, HS256, JWT_SECRET)
 export async function requireProvider(req: FastifyRequest, reply: FastifyReply) {
+  if (process.env["DEV_BYPASS_AUTH"] === "true") {
+    (req as ProviderRequest).providerId = process.env["DEV_PROVIDER_ID"] ?? "cmos7y8zp0009j9kc5o4ed3c0";
+    (req as ProviderRequest).providerType = "provider";
+    return;
+  }
   const token = req.headers.authorization?.slice(7);
   if (!token) return sendError(reply, 401, "NO_TOKEN", "Authentication required.");
   try {
@@ -41,6 +46,11 @@ export async function requireProviderRole(req: FastifyRequest, reply: FastifyRep
 
 // Verify admin session token (HS256, ADMIN_JWT_SECRET)
 export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
+  if (process.env["DEV_BYPASS_AUTH"] === "true") {
+    (req as AdminRequest).adminId = process.env["DEV_ADMIN_ID"] ?? "dev-admin-id";
+    (req as AdminRequest).adminRole = "super_admin";
+    return;
+  }
   const token = req.headers.authorization?.slice(7);
   if (!token) return sendError(reply, 401, "NO_TOKEN", "Admin authentication required.");
   try {

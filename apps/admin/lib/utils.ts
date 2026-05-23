@@ -68,25 +68,31 @@ export function formatRelativeTime(
 }
 
 // ── String helpers ────────────────────────────────────────────────────────────
-export function capitalize(s: string): string {
+export function capitalize(s?: string | null): string {
+  if (!s) return "";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function slugToLabel(s: string): string {
+export function slugToLabel(s?: string | null): string {
+  if (!s) return "";
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function truncate(s: string, max: number): string {
+export function truncate(s?: string | null, max: number = 30): string {
+  if (!s) return "";
   return s.length > max ? s.slice(0, max) + "…" : s;
 }
 
-export function getInitials(name: string): string {
-  return name
-    .split(" ")
+export function getInitials(name?: string | null): string {
+  if (!name) return "A";
+  const cleaned = name.trim();
+  if (!cleaned) return "A";
+  return cleaned
+    .split(/\s+/)
     .slice(0, 2)
-    .map((n) => n[0])
+    .map((n) => n[0] || "")
     .join("")
-    .toUpperCase();
+    .toUpperCase() || "A";
 }
 
 // ── URL / query helpers ───────────────────────────────────────────────────────

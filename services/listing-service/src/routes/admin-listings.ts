@@ -62,6 +62,16 @@ export async function adminListingRoutes(app: FastifyInstance) {
             submissionCount: true,
             submittedAt: true,
             providerId: true,
+            category: true,
+            photos: {
+              where: { deletedAt: null },
+              orderBy: { position: "asc" },
+              select: {
+                id: true,
+                cdnUrl: true,
+                position: true,
+              },
+            },
           },
         },
       },
@@ -329,6 +339,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
           submissionCount: true,
           providerId: true,
           approvedAt: true,
+          photos: {
+            where: { deletedAt: null },
+            orderBy: { position: "asc" },
+            select: {
+              id: true,
+              cdnUrl: true,
+              position: true,
+            },
+          },
         },
         orderBy: { updatedAt: "desc" },
       }),

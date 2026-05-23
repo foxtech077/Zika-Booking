@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, ShieldOff, ShieldCheck, ChevronRight, Star } from "lucide-react";
+import { Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -13,11 +13,19 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency } from "@/lib/utils";
 import type { Listing } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
+
+function CategoryIcon({ category }: { category: string }) {
+  if (category === "hotel") return <Hotel className="w-4 h-4 text-blue-500" />;
+  if (category === "car") return <Car className="w-4 h-4 text-amber-500" />;
+  return <Home className="w-4 h-4 text-emerald-500" />;
+}
 
 const fetchListings = (params: Record<string, string>) =>
   listingApi.get(`/admin/listings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 export default function ListingsPage() {
+  const { token } = useAuthStore();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -36,6 +44,7 @@ export default function ListingsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-listings", params],
     queryFn: () => fetchListings(params),
+    enabled: !!token,
   });
 
   const listings: Listing[] = data?.listings ?? [];
@@ -62,11 +71,24 @@ export default function ListingsPage() {
     {
       key: "name",
       label: "Listing",
-      width: "240px",
+      width: "300px",
       render: (l) => (
-        <div>
-          <p className="font-medium text-sm text-slate-900 truncate">{l.name ?? "—"}</p>
-          <p className="text-xs text-slate-500">{l.town}, {l.country} · {l.category}</p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
+            {l.photos?.[0]?.cdnUrl ? (
+              <img src={l.photos[0].cdnUrl} alt={l.name ?? ""} className="w-full h-full object-cover" />
+            ) : (
+              <CategoryIcon category={l.category} />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm text-slate-900 truncate">{l.name ?? "(Untitled)"}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <CategoryIcon category={l.category} />
+              <span className="text-xs text-slate-500 capitalize">{l.category}</span>
+              {l.town && <span className="text-xs text-slate-400">· {l.town}, {l.country}</span>}
+            </div>
+          </div>
         </div>
       ),
     },
@@ -198,10 +220,20 @@ export default function ListingsPage() {
       {/* Detail drawer */}
       <SlideDrawer open={!!selected} onClose={() => setSelected(null)} title={selected?.name ?? "Listing"} width="sm">
         {selected && (
-          <dl className="space-y-3 text-sm">
-            {[
-              ["ID", selected.id],
-              ["Category", selected.category],
+          <div className="space-y-4">
+            {selected.photos?.[0]?.cdnUrl && (
+              <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
+                <img
+                  src={selected.photos[0].cdnUrl}
+                  alt={selected.name ?? ""}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <dl className="space-y-3 text-sm">
+              {[
+                ["ID", selected.id],
+                ["Category", selected.category],
               ["Status", selected.status],
               ["Country", selected.country ?? "—"],
               ["Town", selected.town ?? "—"],
@@ -221,7 +253,8 @@ export default function ListingsPage() {
               </div>
             ))}
           </dl>
-        )}
+        </div>
+      )}
       </SlideDrawer>
 
       {/* Suspend modal */}
