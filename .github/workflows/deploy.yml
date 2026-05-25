@@ -18,7 +18,7 @@ jobs:
           script: |
             cd ~/Zika-Booking
             pm2 stop all
-            git pull origin main
+            git pull origin dev
             pnpm install
             pnpm run build
             cp -r services/auth-service/src/generated services/auth-service/dist/
