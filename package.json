@@ -17,7 +17,8 @@
     "db:migrate": "turbo run db:migrate",
     "db:studio:auth": "turbo run db:studio --filter=@zika/auth-service",
     "db:studio:listing": "turbo run db:studio --filter=@zika/listing-service",
-    "db:seed:auth": "turbo run db:seed --filter=@zika/auth-service"
+    "db:seed:auth": "turbo run db:seed --filter=@zika/auth-service",
+    "db:seed:all": "pnpm --filter @zika/auth-service db:seed:all"
   },
   "devDependencies": {
     "turbo": "^2.3.3",
