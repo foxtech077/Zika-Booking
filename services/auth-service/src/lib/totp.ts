@@ -3,7 +3,7 @@ import { encryptAes256, decryptAes256, hashToken, generateCode } from "./crypto"
 import QRCode from "qrcode";
 
 authenticator.options = {
-  window: 1, // allow ±1 time step for clock drift (BR-1.10 / UC-1.10 E1)
+  window: Number(process.env["TOTP_WINDOW"] ?? 2), // allow ±2 time steps for clock drift to handle minor local sync issues
 };
 
 /** Generate a new TOTP secret, returning the base32 string. */

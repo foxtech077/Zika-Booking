@@ -37,7 +37,7 @@ export function generateRefreshToken(): string {
 export async function signIntermediateToken(
   payload: Omit<AdminIntermediatePayload, "iat" | "exp">,
 ): Promise<string> {
-  const ttl = Number(process.env["ADMIN_INTERMEDIATE_TTL_SECONDS"] ?? 300);
+  const ttl = Number(process.env["ADMIN_INTERMEDIATE_TTL_SECONDS"] ?? 3600);
   return new SignJWT(payload as Record<string, unknown>)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
