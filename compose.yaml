@@ -1,11 +1,41 @@
+# services:
+#   db:
+#     container_name: zika-db
+#     image: docker.io/postgres:18-alpine
+#     environment:
+#       POSTGRES_USER: postgres
+#       POSTGRES_PASSWORD: ultrasonicboom
+#       POSTGRES_DB: zika_db_local
+#     ports:
+#       - "5432:5432"
+#     volumes:
+#       - db_data:/var/lib/postgresql
+
+#   redis:
+#     image: redis:7-alpine
+#     container_name: zika-redis
+#     ports:
+#       - "6379:6379"
+#     volumes:
+#       - zika-redis-data:/data
+
+# volumes:
+#   db_data:
+#   zika-redis-data:
+
+
 services:
   db:
     container_name: zika-db
     image: docker.io/postgres:18-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ultrasonicboom
-      POSTGRES_DB: zika_db_local
+      # POSTGRES_USER: postgres
+      # POSTGRES_PASSWORD: ultrasonicboom
+      # POSTGRES_DB: zika_db_local
+      POSTGRES_USER: zika_user
+      POSTGRES_PASSWORD: aakopass123
+      POSTGRES_DB: zika_booking
+      TZ: Asia/Kolkata
     ports:
       - "5432:5432"
     volumes:
