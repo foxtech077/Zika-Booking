@@ -26,8 +26,10 @@ async function build() {
       },
       servers: [
         {
-          url: `http://localhost:${PORT}`,
-          description: "Local development server",
+          url: process.env["NODE_ENV"] === "production"
+            ? "https://kainook.duckdns.org/api/auth"
+            : `http://localhost:${PORT}`,
+          description: process.env["NODE_ENV"] === "production" ? "Production server" : "Local development server",
         },
       ],
       components: {
