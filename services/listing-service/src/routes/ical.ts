@@ -270,12 +270,20 @@ export function startIcalPoller() {
   const POLL_INTERVAL_MS = 15 * 60 * 1000;
 
   async function poll() {
-    const feeds = await prisma.icalFeed.findMany({ where: { isActive: true }, select: { id: true } });
-    for (const { id } of feeds) {
-      await syncFeed(id).catch(() => null);
+    try {
+      const feeds = await prisma.icalFeed.findMany({ where: { isActive: true }, select: { id: true } });
+      for (const { id } of feeds) {
+        await syncFeed(id).catch(() => null);
+      }
+    } catch (error) {
+      console.warn('[iCal Poller] Database connection error (will retry):', error instanceof Error ? error.message : error);
     }
   }
 
   setInterval(() => { poll().catch(() => null); }, POLL_INTERVAL_MS);
-  poll().catch(() => null);
+  
+  // Start polling with a small delay to avoid connection errors on startup
+  setTimeout(() => {
+    poll().catch(() => null);
+  }, 5000);
 }
