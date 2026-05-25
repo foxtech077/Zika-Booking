@@ -3,7 +3,7 @@ name: Deploy to EC2
 on:
   push:
     branches:
-      - main
+      - dev
 
 jobs:
   deploy:
@@ -17,8 +17,9 @@ jobs:
           key: ${{ secrets.ZIKA__SSH_KEY }}
           script: |
             cd ~/Zika-Booking
+            git checkout dev
             pm2 stop all
-            git pull origin main
+            git pull origin dev
             pnpm install
             pnpm run build
             cp -r services/auth-service/src/generated services/auth-service/dist/
