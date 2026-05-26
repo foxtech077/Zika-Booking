@@ -5,7 +5,7 @@ import { requireProvider, requireProviderRole, type ProviderRequest } from "../m
 
 export async function reviewRoutes(app: FastifyInstance) {
   // ── POST /reviews — guest submits a review ────────────────────────────
-  app.post("/reviews", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/reviews", { schema: { tags: ["Reviews"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const body = req.body as {
       bookingId: string;
@@ -83,7 +83,7 @@ export async function reviewRoutes(app: FastifyInstance) {
   });
 
   // ── GET /listings/:id/reviews — public paginated reviews ─────────────
-  app.get("/listings/:id/reviews", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings/:id/reviews", { schema: { tags: ["Reviews"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const q = req.query as Record<string, string>;
     const page = Math.max(1, parseInt(q["page"] ?? "1", 10));
@@ -129,7 +129,7 @@ export async function reviewRoutes(app: FastifyInstance) {
   });
 
   // ── POST /reviews/:id/reply — provider replies to a review ────────────
-  app.post("/reviews/:id/reply", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/reviews/:id/reply", { schema: { tags: ["Reviews"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const providerId = (req as ProviderRequest).providerId;
     const { id } = req.params as { id: string };
     const body = req.body as { reply: string };
@@ -160,7 +160,7 @@ export async function reviewRoutes(app: FastifyInstance) {
   });
 
   // ── GET /reviews/me — guest's own reviews ────────────────────────────
-  app.get("/reviews/me", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/reviews/me", { schema: { tags: ["Reviews"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
 
     const reviews = await prisma.listingReview.findMany({
@@ -187,7 +187,7 @@ export async function reviewRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /reviews/:id/hide — admin hide/unhide a review ─────────────
-  app.patch("/reviews/:id/hide", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/reviews/:id/hide", { schema: { tags: ["Admin Reviews"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminKey = req.headers["x-admin-key"];
     const expectedKey = process.env["ADMIN_JWT_SECRET"];
     if (!adminKey || adminKey !== expectedKey) {

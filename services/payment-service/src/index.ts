@@ -1,5 +1,8 @@
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import { paymentRoutes } from "./routes/payments.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { paymentMethodRoutes } from "./routes/payment-methods.js";
@@ -11,6 +14,55 @@ async function build() {
   const app = Fastify({
     logger: { level: process.env["NODE_ENV"] === "production" ? "warn" : "info" },
     trustProxy: true,
+  });
+
+  // ── Swagger API documentation ─────────────────────────────────────────────
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: "Zika Booking Payment Service API",
+        description: "API documentation for Zika Booking Payment Service",
+        version: "0.0.1",
+      },
+      servers: [
+        {
+          url: `http://localhost:${PORT}`,
+          description: "Local development server",
+        },
+        {
+          url: "https://kainook.duckdns.org/api/payments",
+          description: "Production server",
+        },
+      ],
+      tags: [
+        { name: "Payments", description: "Payment initiation, status lookup and refund management" },
+        { name: "Payment Methods", description: "Saved payment method management — add, list and remove" },
+        { name: "Webhooks", description: "Stripe webhook event handling (internal)" },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "Enter your Bearer Access Token (without 'Bearer ' prefix)",
+          },
+        },
+      },
+      security: [
+        {
+          bearerAuth: [],
+        },
+      ],
+    },
+  });
+
+  await app.register(swaggerUi, {
+    routePrefix: "/docs",
+    uiConfig: {
+      docExpansion: "list",
+      deepLinking: false,
+    },
   });
 
   // ── CORS ──────────────────────────────────────────────────────────────────
