@@ -21,8 +21,8 @@ jobs:
             pm2 stop all
             git pull origin dev
             pnpm install
-            pnpm run build
             pnpm --filter auth-service db:generate && pnpm --filter auth-service db:migrate:deploy
             pnpm --filter listing-service db:generate && pnpm --filter listing-service db:migrate:deploy
             pnpm --filter payment-service db:generate && pnpm --filter payment-service db:migrate:deploy
+            pnpm run build
             pm2 restart all
