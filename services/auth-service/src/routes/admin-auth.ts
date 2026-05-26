@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { ZodError } from "zod";
 import { adminLoginSchema, totpCodeSchema, recoveryCodeSchema } from "@zika/validators";
 import { prisma } from "../lib/prisma";
-import type { AdminRole as PrismaAdminRole } from "../generated/client";
+import type { AdminRole as PrismaAdminRole } from "../../node_modules/.prisma/client/index.js";
 import { verifyPassword, hashPassword } from "../lib/password";
 import { hashToken } from "../lib/crypto";
 import {
