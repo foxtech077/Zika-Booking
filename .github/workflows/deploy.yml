@@ -22,7 +22,7 @@ jobs:
             git pull origin dev
             pnpm install
             pnpm run build
-            cd services/auth-service && pnpm prisma generate && pnpm prisma migrate deploy && cd ~/Zika-Booking
-            cd services/listing-service && pnpm prisma generate && pnpm prisma migrate deploy && cd ~/Zika-Booking
-            cd services/payment-service && pnpm prisma generate && pnpm prisma migrate deploy && cd ~/Zika-Booking
+            pnpm --filter auth-service db:generate && pnpm --filter auth-service db:migrate:deploy
+            pnpm --filter listing-service db:generate && pnpm --filter listing-service db:migrate:deploy
+            pnpm --filter payment-service db:generate && pnpm --filter payment-service db:migrate:deploy
             pm2 restart all

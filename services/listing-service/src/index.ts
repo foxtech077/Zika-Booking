@@ -61,7 +61,7 @@ async function build() {
   });
 
   await app.register(swaggerUi, {
-    prefix: "/docs",
+    routePrefix: "/docs",
     uiConfig: {
       docExpansion: "list",
       deepLinking: false,
