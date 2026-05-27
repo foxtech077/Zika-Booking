@@ -135,7 +135,7 @@ async function checkTotpAttempts(adminId: string): Promise<boolean> {
 export async function adminAuthRoutes(app: FastifyInstance) {
 
   // ── POST /admin/auth/login  (UC-1.11 step 1, UC-1.12 step 1) ─────────────
-  app.post("/admin/auth/login", { schema: { tags: ["Admin Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/login", { schema: { tags: ["Admin Auth"], body: { type: "object", required: ["email", "password"], properties: { email: { type: "string", format: "email" }, password: { type: "string" } } } } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = adminLoginSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid credentials.");
     const { email, password } = parsed.data;
@@ -188,7 +188,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/totp/confirm  (UC-1.10 step 7 onward) ───────────────
-  app.post("/admin/auth/totp/confirm", { schema: { tags: ["Admin Auth"] }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/confirm", { schema: { tags: ["Admin Auth"], body: { type: "object", required: ["code"], properties: { code: { type: "string", description: "6-digit TOTP code from authenticator app" } } } }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = totpCodeSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid code format.");
     const { code } = parsed.data;
@@ -218,7 +218,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/totp/verify  (UC-1.11 step 5) ───────────────────────
-  app.post("/admin/auth/totp/verify", { schema: { tags: ["Admin Auth"] }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/verify", { schema: { tags: ["Admin Auth"], body: { type: "object", properties: { code: { type: "string", description: "6-digit TOTP code from authenticator app" }, recoveryCode: { type: "string", description: "Recovery code as alternative to TOTP" } } } }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
 
     // Check for recovery code usage
@@ -291,7 +291,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/webauthn/verify  (UC-1.12 step 6) ───────────────────
-  app.post("/admin/auth/webauthn/verify", { schema: { tags: ["Admin Auth"] }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/verify", { schema: { tags: ["Admin Auth"], body: { type: "object", required: ["id", "rawId", "response", "type"], properties: { id: { type: "string" }, rawId: { type: "string" }, response: { type: "object" }, type: { type: "string", enum: ["public-key"] } } } }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
@@ -327,7 +327,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { options });
   });
 
-  app.post("/admin/auth/webauthn/register/complete", { schema: { tags: ["Admin Auth"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/webauthn/register/complete", { schema: { tags: ["Admin Auth"], body: { type: "object", required: ["id", "rawId", "response", "type"], properties: { id: { type: "string" }, rawId: { type: "string" }, response: { type: "object" }, type: { type: "string", enum: ["public-key"] } } } }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     let result: Awaited<ReturnType<typeof waFinishRegistration>>;
     try {
@@ -463,7 +463,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/users/:id/suspend ───────────────────────────────────────
-  app.patch("/admin/users/:id/suspend", { schema: { tags: ["Admin Users"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/users/:id/suspend", { schema: { tags: ["Admin Users"], body: { type: "object", required: ["reason"], properties: { reason: { type: "string", description: "Reason for suspending the account" } } } }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };
@@ -518,7 +518,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/users/:id/ban ────────────────────────────────────────────
-  app.patch("/admin/users/:id/ban", { schema: { tags: ["Admin Users"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/users/:id/ban", { schema: { tags: ["Admin Users"], body: { type: "object", required: ["reason"], properties: { reason: { type: "string", description: "Reason for banning the account" } } } }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };
@@ -601,7 +601,7 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/operators — Create a new admin user ─────────────────────────
-  app.post("/admin/operators", { schema: { tags: ["Admin Operators"] }, preHandler: [requireSuperAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/operators", { schema: { tags: ["Admin Operators"], body: { type: "object", required: ["name", "email", "password", "role"], properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, role: { type: "string", enum: ["admin", "country_manager", "sales", "support", "finance"] }, countryScope: { type: "array", items: { type: "string" } } } } }, preHandler: [requireSuperAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { name, email, password, role, countryScope } = req.body as {
@@ -685,7 +685,7 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /admin/operators/:id/role — Change an admin's role ────────────────
-  app.patch("/admin/operators/:id/role", { schema: { tags: ["Admin Operators"] }, preHandler: [requireSuperAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/operators/:id/role", { schema: { tags: ["Admin Operators"], body: { type: "object", required: ["role"], properties: { role: { type: "string", enum: ["admin", "country_manager", "sales", "support", "finance"] }, countryScope: { type: "array", items: { type: "string" } } } } }, preHandler: [requireSuperAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };
