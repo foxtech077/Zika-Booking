@@ -57,7 +57,7 @@ function calcHotelApartmentPricing(listing: any, checkIn: string, checkOut: stri
 function calcCarPricing(listing: any, pickupDatetime: string, returnDatetime: string, deliveryRequested: boolean, commissionRate: number = DEFAULT_COMMISSION_RATE) {
   const rentalMs = new Date(returnDatetime).getTime() - new Date(pickupDatetime).getTime();
   const days = Math.ceil(rentalMs / 86_400_000);
-  const rate = Number(listing.pricePerNight ?? 0);
+  const rate = Number(listing.pricePerDay ?? 0);
   const subtotal = rate * days;
   const deliveryFee = deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0;
   const totalAmount = subtotal + deliveryFee;
@@ -663,40 +663,5 @@ export async function bookingRoutes(app: FastifyInstance) {
     });
   });
 
-  // ── GET /provider/bookings — provider's booking list ──────────────────
-  app.get("/provider/bookings", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const providerId = (req as ProviderRequest).providerId;
-    const q = req.query as Record<string, string>;
-    const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
-    const limit = 20;
-
-    const bookings = await prisma.booking.findMany({
-      where: { providerId, status: { notIn: ["cancelled_by_system"] as any } },
-      orderBy: { createdAt: "desc" },
-      skip: cursor,
-      take: limit + 1,
-      include: { listing: { select: { name: true } } },
-    });
-
-    const hasMore = bookings.length > limit;
-    const page = hasMore ? bookings.slice(0, limit) : bookings;
-
-    return sendSuccess(reply, 200, {
-      nextCursor: hasMore ? String(cursor + limit) : null,
-      bookings: page.map((b) => ({
-        id: b.id,
-        reference: b.reference,
-        status: b.status,
-        listingTitle: b.listing.name,
-        guestName: `${b.guestFirstName} ${b.guestLastName}`,
-        checkIn: b.checkIn?.toISOString().slice(0, 10) ?? null,
-        checkOut: b.checkOut?.toISOString().slice(0, 10) ?? null,
-        pickupDatetime: b.pickupDatetime?.toISOString() ?? null,
-        returnDatetime: b.returnDatetime?.toISOString() ?? null,
-        totalAmount: Number(b.totalAmount),
-        currency: b.currency,
-        createdAt: b.createdAt,
-      })),
-    });
-  });
+  // Note: GET /provider/bookings has been moved to provider.ts to support pagination, search and status filtering.
 }

@@ -1,6 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
+  provider      = "prisma-client-js"
+  output        = "../node_modules/.prisma/client"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -34,6 +35,7 @@ enum LongStayDiscountType {
 enum Transmission {
   manual
   automatic
+  semi_auto
 }
 
 enum FuelType {
@@ -69,6 +71,44 @@ enum DocumentType {
   business_licence
   operating_permit
   tourism_certificate
+  insurance_certificate
+  roadworthiness_certificate
+  hotel_operating_permit
+  tourism_authority_certificate
+}
+
+enum CarCategory {
+  Economy
+  Compact
+  SUV
+  Minivan
+  Pickup
+  Luxury
+  Electric
+  Convertible
+}
+
+enum DriveType {
+  TWO_WD   @map("2WD")
+  FOUR_WD  @map("4WD")
+  AWD      @map("AWD")
+}
+
+enum InsuranceType {
+  basic
+  standard
+  premium
+  comprehensive
+  basic_third_party
+  premium_zero_excess
+}
+
+enum FuelPolicy {
+  full_to_full
+  same_to_same
+  free_tank
+  full_to_empty
+  pre_purchase
 }
 
 enum ReviewTaskStatus {
@@ -87,6 +127,7 @@ model Listing {
   unitCount             Int?               @map("unit_count")
   description           String?            @db.Text
   pricePerNight         Decimal?           @map("price_per_night") @db.Decimal(10, 2)
+  pricePerDay           Decimal?           @map("price_per_day") @db.Decimal(10, 2)
   currency              String?            @db.Char(3)
   minStayNights         Int                @default(1) @map("min_stay_nights")
   checkinTime           String?            @map("checkin_time") @db.VarChar(5)
@@ -133,6 +174,28 @@ model Listing {
   doors                 Int?               @default(4)
   mileagePolicy         MileagePolicy?     @map("mileage_policy")
   mileageLimitKm        Int?               @map("mileage_limit_km")
+  carCategory           CarCategory?       @map("car_category")
+  driveType             DriveType?         @map("drive_type")
+  airConditioning       Boolean?           @map("air_conditioning")
+  odometerReading       Int?               @map("odometer_reading")
+  licencePlate          String?            @map("licence_plate") @db.VarChar(20)
+  engineSize            String?            @map("engine_size") @db.VarChar(20)
+  colour                String?            @map("colour") @db.VarChar(30)
+  securityDeposit       Decimal?           @map("security_deposit") @db.Decimal(10, 2)
+  minimumDriverAge      Int?               @map("minimum_driver_age")
+  minimumRentalDays     Int?               @map("minimum_rental_days")
+  fuelPolicy            FuelPolicy?        @map("fuel_policy")
+  extraKmRate           Decimal?           @map("extra_km_rate") @db.Decimal(10, 2)
+  roadsideAssistance    Boolean            @default(false) @map("roadside_assistance")
+  crossBorderAllowed    Boolean            @default(false) @map("cross_border_allowed")
+  airportPickup         Boolean            @default(false) @map("airport_pickup")
+  deliveryEnabled       Boolean            @default(false) @map("delivery_enabled")
+  deliveryRadiusKm      Int?               @map("delivery_radius_km")
+  deliveryFee           Decimal?           @map("delivery_fee") @db.Decimal(10, 2)
+  pickupHoursFrom       String?            @map("pickup_hours_from") @db.VarChar(5)
+  pickupHoursTo         String?            @map("pickup_hours_to") @db.VarChar(5)
+  returnSameLocation    Boolean            @default(true) @map("return_same_location")
+  insuranceType         InsuranceType?     @map("insurance_type")
   updatedAt             DateTime           @updatedAt @map("updated_at")
   createdAt             DateTime           @default(now()) @map("created_at")
   deletedAt             DateTime?          @map("deleted_at")

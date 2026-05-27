@@ -42,7 +42,12 @@ export default function RegisterScreen() {
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      const payload = { ...form, userType };
+      const payload = {
+        ...form,
+        userType,
+        businessName: userType === "provider" ? (form.businessName || undefined) : undefined,
+        country: userType === "provider" ? (form.country || undefined) : undefined,
+      };
       const res = await api.post<ApiResponse<{ message?: string; user?: PublicUser; tokens?: { accessToken: string } }>>("/auth/register", payload);
       return res.data;
     },
@@ -55,18 +60,28 @@ export default function RegisterScreen() {
       }
     },
     onError: (err: unknown) => {
-      const data = (err as { response?: { data?: ApiResponse<unknown> } }).response?.data;
+      const axiosErr = err as { message?: string; code?: string; config?: { url?: string; baseURL?: string }; response?: { data?: ApiResponse<unknown> } };
+      const data = axiosErr.response?.data;
       if (data && !data.success) {
         const fields = data.error.fields ?? {};
         setErrors({ ...fields, general: data.error.fields ? undefined : data.error.message });
       } else {
-        setErrors({ general: "Something went wrong. Please check your connection and try again." });
+        const details = __DEV__
+          ? `\n\n[Dev Details]\nURL: ${axiosErr.config?.baseURL ?? api.defaults.baseURL}${axiosErr.config?.url ?? ""}\nError: ${axiosErr.message ?? "Unknown Network Error"}\nCode: ${axiosErr.code ?? "Unknown Code"}`
+          : "";
+        setErrors({ general: `Something went wrong. Please check your connection and try again.${details}` });
       }
     },
   });
 
   function validate(): boolean {
-    const result = registerSchema.safeParse({ ...form, userType });
+    const dataToValidate = {
+      ...form,
+      userType,
+      businessName: userType === "provider" ? (form.businessName || undefined) : undefined,
+      country: userType === "provider" ? (form.country || undefined) : undefined,
+    };
+    const result = registerSchema.safeParse(dataToValidate);
     if (!result.success) {
       const fieldErrors: FieldErrors = {};
       for (const issue of result.error.issues) {

@@ -1,169 +1,343 @@
 "use client";
+
 import { useState } from "react";
-import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
+import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
+import { Card, SectionHeader } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Select, Textarea } from "@/components/ui/Input";
+import { SlideDrawer } from "@/components/drawers/SlideDrawer";
+import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
+import { formatDate, formatRelativeTime, formatCurrency } from "@/lib/utils";
+import type { Listing } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
 
-interface ReviewTask {
-  id: string;
-  submissionNumber: number;
-  assignedTo: string | null;
-  slaDeadline: string;
-  listing: {
-    id: string;
-    name: string | null;
-    country: string | null;
-    town: string | null;
-    claimedStarRating: number | null;
-    submissionCount: number;
-    submittedAt: string | null;
-    providerId: string;
-  };
+function CategoryIcon({ category }: { category: string }) {
+  if (category === "hotel") return <Hotel className="w-4 h-4 text-blue-500" />;
+  if (category === "car") return <Car className="w-4 h-4 text-amber-500" />;
+  return <Home className="w-4 h-4 text-emerald-500" />;
 }
 
-function slaClass(deadline: string): string {
-  const ms = new Date(deadline).getTime() - Date.now();
-  const hours = ms / 3_600_000;
-  if (hours < 0) return "bg-red-100 text-red-700";
-  if (hours < 4) return "bg-amber-100 text-amber-700";
-  return "bg-green-100 text-green-700";
-}
+const fetchListings = (params: Record<string, string>) =>
+  listingApi.get(`/admin/listings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
-function slaLabel(deadline: string): string {
-  const ms = new Date(deadline).getTime() - Date.now();
-  if (ms < 0) return "SLA breached";
-  const h = Math.floor(ms / 3_600_000);
-  const m = Math.floor((ms % 3_600_000) / 60_000);
-  return `${h}h ${m}m remaining`;
-}
-
-export default function ListingReviewQueuePage() {
+export default function ListingsPage() {
+  const { token } = useAuthStore();
   const qc = useQueryClient();
-  const [country, setCountry] = useState("");
-  const [slaStatus, setSlaStatus] = useState("");
   const [page, setPage] = useState(1);
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("");
+  const [category, setCategory] = useState("");
+  const [country, setCountry] = useState("");
+  const [selected, setSelected] = useState<Listing | null>(null);
+  const [suspendModal, setSuspendModal] = useState<Listing | null>(null);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [reinstateConfirm, setReinstateConfirm] = useState<Listing | null>(null);
+  const [starModal, setStarModal] = useState<Listing | null>(null);
+  const [newStar, setNewStar] = useState("3");
+  const [starReason, setStarReason] = useState("");
 
+  const params = { q, status, category, country, page: String(page), limit: "20" };
   const { data, isLoading } = useQuery({
-    queryKey: ["review-queue", country, slaStatus, page],
-    queryFn: async () => {
-      const params = new URLSearchParams({ page: String(page), limit: "20" });
-      if (country) params.set("country", country);
-      if (slaStatus) params.set("slaStatus", slaStatus);
-      const res = await listingApi.get<{ data: { tasks: ReviewTask[]; total: number } }>(
-        `/admin/listings/review-queue?${params}`
-      );
-      return res.data.data;
-    },
+    queryKey: ["admin-listings", params],
+    queryFn: () => fetchListings(params),
+    enabled: !!token,
   });
 
-  const assignMutation = useMutation({
-    mutationFn: (taskId: string) => listingApi.patch(`/admin/listings/review-tasks/${taskId}/assign`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["review-queue"] }),
+  const listings: Listing[] = data?.listings ?? [];
+  const total: number = data?.total ?? 0;
+
+  const suspendMut = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      listingApi.post(`/admin/listings/${id}/suspend`, { reason }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setSuspendModal(null); setSuspendReason(""); },
   });
 
-  const totalPages = data ? Math.ceil(data.total / 20) : 1;
+  const reinstateMut = useMutation({
+    mutationFn: (id: string) => listingApi.post(`/admin/listings/${id}/reinstate`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setReinstateConfirm(null); },
+  });
 
-  return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Hotel Review Queue</h1>
-      <p className="text-sm text-gray-500 mb-6">Review and approve hotel listings submitted by providers.</p>
+  const starMut = useMutation({
+    mutationFn: ({ id, starRating, reason }: any) =>
+      listingApi.patch(`/admin/listings/${id}/star-rating`, { starRating: parseInt(starRating), reason }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setStarModal(null); setStarReason(""); },
+  });
 
-      {/* Filters */}
-      <div className="flex gap-3 mb-6">
-        <input
-          className="border border-gray-300 rounded-lg px-4 py-2 text-sm w-40 focus:outline-none focus:ring-2 focus:ring-primary/40"
-          placeholder="Country (e.g. KE)"
-          value={country}
-          maxLength={2}
-          onChange={(e) => { setCountry(e.target.value.toUpperCase()); setPage(1); }}
-        />
-        <select
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-          value={slaStatus}
-          onChange={(e) => { setSlaStatus(e.target.value); setPage(1); }}
-        >
-          <option value="">All SLA statuses</option>
-          <option value="ok">Within SLA</option>
-          <option value="approaching">Approaching (≤4h)</option>
-          <option value="breached">Breached</option>
-        </select>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Listing</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Location</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Submission</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">SLA</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Assigned</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading ? (
-              <tr><td colSpan={6} className="text-center py-12 text-gray-400">Loading…</td></tr>
-            ) : !data?.tasks.length ? (
-              <tr><td colSpan={6} className="text-center py-12 text-gray-400">No listings pending review.</td></tr>
-            ) : data.tasks.map((task) => (
-              <tr key={task.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition">
-                <td className="px-4 py-3">
-                  <p className="font-medium text-gray-900">{task.listing.name ?? "Untitled"}</p>
-                  {task.listing.claimedStarRating && (
-                    <p className="text-xs text-gray-500">Claimed: {task.listing.claimedStarRating}★</p>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-gray-600">
-                  {[task.listing.town, task.listing.country].filter(Boolean).join(", ") || "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <p className="text-gray-900">#{task.submissionNumber} submission</p>
-                  <p className="text-xs text-gray-500">
-                    {task.listing.submittedAt ? new Date(task.listing.submittedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "—"}
-                  </p>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${slaClass(task.slaDeadline)}`}>
-                    {slaLabel(task.slaDeadline)}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-gray-500 text-xs">
-                  {task.assignedTo ? `Admin ${task.assignedTo.slice(-4)}` : (
-                    <button
-                      onClick={() => assignMutation.mutate(task.id)}
-                      disabled={assignMutation.isPending}
-                      className="text-primary hover:underline text-xs"
-                    >
-                      Assign to me
-                    </button>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/dashboard/listings/${task.listing.id}`}
-                    className="inline-block px-3 py-1.5 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary-dark transition"
-                  >
-                    Review
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4">
-          <p className="text-sm text-gray-500">Page {page} of {totalPages} · {data?.total} total</p>
-          <div className="flex gap-2">
-            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">Previous</button>
-            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-              className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50">Next</button>
+  const columns: Column<Listing>[] = [
+    {
+      key: "name",
+      label: "Listing",
+      width: "300px",
+      render: (l) => (
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
+            {l.photos?.[0]?.cdnUrl ? (
+              <img src={l.photos[0].cdnUrl} alt={l.name ?? ""} className="w-full h-full object-cover" />
+            ) : (
+              <CategoryIcon category={l.category} />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm text-slate-900 truncate">{l.name ?? "(Untitled)"}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <CategoryIcon category={l.category} />
+              <span className="text-xs text-slate-500 capitalize">{l.category}</span>
+              {l.town && <span className="text-xs text-slate-400">· {l.town}, {l.country}</span>}
+            </div>
           </div>
         </div>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      render: (l) => <Badge label={l.status} status={l.status} />,
+    },
+    {
+      key: "stars",
+      label: "Stars",
+      render: (l) => (
+        <div className="flex items-center gap-1">
+          <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+          <span className="text-sm text-slate-700">{l.starRating ?? l.claimedStarRating ?? "—"}</span>
+          {l.starRating !== l.claimedStarRating && l.claimedStarRating && (
+            <span className="text-xs text-slate-400">(claimed: {l.claimedStarRating})</span>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "price",
+      label: "Price",
+      align: "right",
+      render: (l) => (
+        <span className="text-sm tabular">
+          {l.pricePerNight ? formatCurrency(Number(l.pricePerNight), l.currency ?? "USD") : "—"}
+        </span>
+      ),
+    },
+    {
+      key: "approved",
+      label: "Approved",
+      render: (l) => <span className="text-xs text-slate-500">{formatDate(l.approvedAt)}</span>,
+    },
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      width: "100px",
+      render: (l) => (
+        <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          {l.category === "hotel" && l.status === "approved" && (
+            <button
+              onClick={() => setStarModal(l)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+              title="Update star rating"
+            >
+              <Star className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {["approved", "active"].includes(l.status) && (
+            <button
+              onClick={() => setSuspendModal(l)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-warning hover:bg-warning/5 transition-colors"
+              title="Suspend"
+            >
+              <ShieldOff className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {l.status === "suspended" && (
+            <button
+              onClick={() => setReinstateConfirm(l)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-success hover:bg-success/5 transition-colors"
+              title="Reinstate"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-5 max-w-screen-xl">
+      <SectionHeader
+        title="Listings"
+        description={`${total.toLocaleString()} total listings`}
+      />
+
+      <Card padding="none">
+        <FilterBar
+          search={q}
+          onSearchChange={(v) => { setQ(v); setPage(1); }}
+          searchPlaceholder="Search name or town…"
+          filters={[
+            {
+              key: "status",
+              label: "All Statuses",
+              value: status,
+              onChange: (v) => { setStatus(v); setPage(1); },
+              options: [
+                { value: "draft", label: "Draft" },
+                { value: "pending_review", label: "Pending Review" },
+                { value: "approved", label: "Approved" },
+                { value: "rejected", label: "Rejected" },
+                { value: "active", label: "Active" },
+                { value: "suspended", label: "Suspended" },
+                { value: "auto_suspended", label: "Auto-Suspended" },
+              ],
+            },
+            {
+              key: "category",
+              label: "All Categories",
+              value: category,
+              onChange: (v) => { setCategory(v); setPage(1); },
+              options: [
+                { value: "hotel", label: "Hotel" },
+                { value: "apartment", label: "Apartment" },
+                { value: "car", label: "Car" },
+              ],
+            },
+          ]}
+        />
+        <DataTable
+          columns={columns}
+          data={listings}
+          loading={isLoading}
+          onRowClick={(l) => setSelected(l)}
+          emptyTitle="No listings found"
+          emptyDescription="Try adjusting your search or filters."
+          emptyIcon={<Building2 className="h-10 w-10" />}
+        />
+        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+      </Card>
+
+      {/* Detail drawer */}
+      <SlideDrawer open={!!selected} onClose={() => setSelected(null)} title={selected?.name ?? "Listing"} width="sm">
+        {selected && (
+          <div className="space-y-4">
+            {selected.photos?.[0]?.cdnUrl && (
+              <div className="aspect-video bg-slate-100 rounded-xl overflow-hidden border border-slate-200">
+                <img
+                  src={selected.photos[0].cdnUrl}
+                  alt={selected.name ?? ""}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <dl className="space-y-3 text-sm">
+              {[
+                ["ID", selected.id],
+                ["Category", selected.category],
+              ["Status", selected.status],
+              ["Country", selected.country ?? "—"],
+              ["Town", selected.town ?? "—"],
+              ["Star Rating", selected.starRating ?? "—"],
+              ["Claimed Stars", selected.claimedStarRating ?? "—"],
+              ["Price/Night", selected.pricePerNight ? formatCurrency(Number(selected.pricePerNight), selected.currency ?? "USD") : "—"],
+              ["Submissions", selected.submissionCount],
+              ["Provider ID", selected.providerId],
+              ["Approved", formatDate(selected.approvedAt)],
+              ["Rejected", formatDate(selected.rejectedAt)],
+              ["Suspended", formatDate(selected.suspendedAt)],
+              ["Created", formatDate(selected.createdAt)],
+            ].map(([k, v]) => (
+              <div key={String(k)} className="flex justify-between gap-4">
+                <dt className="text-slate-500 flex-shrink-0">{k}</dt>
+                <dd className="text-slate-900 font-medium text-right truncate">{String(v)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
       )}
+      </SlideDrawer>
+
+      {/* Suspend modal */}
+      <ActionModal
+        open={!!suspendModal}
+        onClose={() => { setSuspendModal(null); setSuspendReason(""); }}
+        title="Suspend listing"
+        description={`Suspend "${suspendModal?.name}"? This will remove it from search.`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setSuspendModal(null)}>Cancel</Button>
+            <Button
+              variant="danger" size="sm"
+              loading={suspendMut.isPending}
+              onClick={() => suspendModal && suspendMut.mutate({ id: suspendModal.id, reason: suspendReason })}
+            >
+              Suspend
+            </Button>
+          </>
+        }
+      >
+        <Textarea
+          id="suspend-reason"
+          label="Suspension reason"
+          value={suspendReason}
+          onChange={(e) => setSuspendReason(e.target.value)}
+          placeholder="Describe the reason for suspension…"
+          required
+          rows={3}
+        />
+      </ActionModal>
+
+      {/* Reinstate confirm */}
+      <ConfirmModal
+        open={!!reinstateConfirm}
+        onClose={() => setReinstateConfirm(null)}
+        onConfirm={() => reinstateConfirm && reinstateMut.mutate(reinstateConfirm.id)}
+        loading={reinstateMut.isPending}
+        title="Reinstate listing"
+        description={`Restore "${reinstateConfirm?.name}" to live status?`}
+        variant="info"
+        confirmLabel="Reinstate"
+      />
+
+      {/* Star rating modal */}
+      <ActionModal
+        open={!!starModal}
+        onClose={() => { setStarModal(null); setStarReason(""); }}
+        title="Update star rating"
+        description={`Update verified star rating for "${starModal?.name}"`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setStarModal(null)}>Cancel</Button>
+            <Button
+              variant="primary" size="sm"
+              loading={starMut.isPending}
+              onClick={() => starModal && starMut.mutate({ id: starModal.id, starRating: newStar, reason: starReason })}
+            >
+              Update Rating
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <Select
+            id="new-star"
+            label="New Star Rating"
+            value={newStar}
+            onChange={(e) => setNewStar(e.target.value)}
+            options={[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `${n} ★` }))}
+          />
+          <Textarea
+            id="star-reason"
+            label="Reason for change"
+            value={starReason}
+            onChange={(e) => setStarReason(e.target.value)}
+            placeholder="e.g. Re-inspection confirmed downgrade…"
+            required
+          />
+        </div>
+      </ActionModal>
     </div>
   );
 }

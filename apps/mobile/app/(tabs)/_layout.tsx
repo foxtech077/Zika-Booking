@@ -1,6 +1,14 @@
 import { Tabs, Redirect } from "expo-router";
 import { useAuthStore } from "../../store/auth";
 
+const tabConfig: Record<string, { title: string }> = {
+  index:     { title: "Home" },
+  bookings:  { title: "Bookings" },
+  dashboard: { title: "Dashboard" },
+  saved:     { title: "Saved" },
+  profile:   { title: "Profile" },
+};
+
 export default function TabLayout() {
   const user = useAuthStore((s) => s.user);
   if (!user) return <Redirect href="/(auth)/login" />;
@@ -8,15 +16,15 @@ export default function TabLayout() {
   const isProvider = user.userType === "provider";
 
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: "#1a73e8" }}>
-      <Tabs.Screen name="index" options={{ title: "Home" }} />
-      <Tabs.Screen name="bookings" options={{ title: "Bookings" }} />
-      <Tabs.Screen
-        name="dashboard"
-        options={{ title: "Dashboard", href: isProvider ? undefined : null }}
-      />
-      <Tabs.Screen name="saved" options={{ title: "Saved" }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-    </Tabs>
+    <Tabs
+      screenOptions={({ route }) => ({
+        tabBarActiveTintColor: "#1a73e8",
+        title: tabConfig[route.name]?.title ?? route.name,
+        // Hide dashboard tab for non-providers
+        ...(route.name === "dashboard" && !isProvider
+          ? { href: null }
+          : {}),
+      })}
+    />
   );
 }

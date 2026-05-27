@@ -6,7 +6,7 @@ import {
   type VerifiedRegistrationResponse,
   type VerifiedAuthenticationResponse,
 } from "@simplewebauthn/server";
-import { isoBase64URL } from "@simplewebauthn/server/helpers";
+import { isoBase64URL, isoUint8Array } from "@simplewebauthn/server/helpers";
 import { getAndDeleteChallenge, setChallenge } from "./redis";
 
 const RP_ID = process.env["WEBAUTHN_RP_ID"] ?? "admin.zikabooking.com";
@@ -19,7 +19,7 @@ export async function startRegistration(adminId: string, email: string) {
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
     rpID: RP_ID,
-    userID: isoBase64URL.fromString(adminId),
+    userID: isoUint8Array.fromUTF8String(adminId),
     userName: email,
     userDisplayName: email,
     attestationType: "none",

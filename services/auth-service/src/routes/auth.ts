@@ -543,6 +543,216 @@ export async function authRoutes(app: FastifyInstance) {
     });
     return sendSuccess(reply, 200, { user: publicUser(updated) });
   });
+
+  // ── GET /auth/oauth/google/redirect (Web OAuth Start) ──────────────────────
+  app.get("/auth/oauth/google/redirect", async (req: FastifyRequest, reply: FastifyReply) => {
+    const redirectUri = `${process.env["WEB_BASE_URL"] ?? "http://localhost:3000"}/api/auth/oauth/google/callback`;
+    const client = new OAuth2Client({
+      clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
+      clientSecret: process.env["GOOGLE_CLIENT_SECRET"],
+      redirectUri,
+    });
+
+    const authUrl = client.generateAuthUrl({
+      access_type: "offline",
+      scope: [
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/userinfo.email",
+      ],
+      prompt: "select_account",
+    });
+
+    reply.redirect(authUrl);
+  });
+
+  // ── GET /auth/oauth/google/callback (Web OAuth Callback) ──────────────────
+  app.get("/auth/oauth/google/callback", async (req: FastifyRequest, reply: FastifyReply) => {
+    const { code, error } = req.query as { code?: string; error?: string };
+
+    const webBaseUrl = process.env["WEB_BASE_URL"] ?? "http://localhost:3000";
+
+    if (error || !code) {
+      const errMsg = error || "Google authentication failed";
+      return reply.redirect(`${webBaseUrl}/auth/login?error=OAUTH_FAILED&message=${encodeURIComponent(errMsg)}`);
+    }
+
+    try {
+      const redirectUri = `${webBaseUrl}/api/auth/oauth/google/callback`;
+      const client = new OAuth2Client({
+        clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
+        clientSecret: process.env["GOOGLE_CLIENT_SECRET"],
+        redirectUri,
+      });
+
+      const { tokens: googleTokens } = await client.getToken(code);
+      client.setCredentials(googleTokens);
+
+      const idToken = googleTokens.id_token;
+      if (!idToken) throw new Error("Missing ID Token from Google");
+
+      const ticket = await client.verifyIdToken({
+        idToken,
+        audience: process.env["GOOGLE_CLIENT_ID_WEB"],
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload?.email || !payload?.sub) throw new Error("Missing email or sub in ID Token");
+
+      const { email, given_name: firstName, family_name: lastName, sub: googleSub } = payload;
+
+      // Check if account exists with a different auth method
+      const existingByEmail = await prisma.user.findUnique({ where: { email } });
+      if (existingByEmail && !existingByEmail.oauthProvider) {
+        const errMsg = "An account with this email already exists. Please sign in with your password.";
+        return reply.redirect(`${webBaseUrl}/auth/login?error=ACCOUNT_EXISTS&message=${encodeURIComponent(errMsg)}`);
+      }
+
+      let user = existingByEmail;
+
+      if (!user) {
+        // New user
+        user = await prisma.user.create({
+          data: {
+            firstName: firstName ?? "User",
+            lastName: lastName ?? "",
+            email,
+            status: "active",
+            emailVerified: true,
+            emailVerifiedAt: new Date(),
+            oauthProvider: "google",
+            oauthSub: googleSub,
+            userType: "guest", // Default to guest
+          },
+        });
+        await sendWelcomeEmail(email, user.firstName).catch(() => null);
+      } else {
+        // Returning user
+        if (user.status === "suspended") {
+          return reply.redirect(`${webBaseUrl}/auth/login?error=ACCOUNT_SUSPENDED&message=${encodeURIComponent("Your account has been suspended.")}`);
+        }
+        if (user.status === "banned") {
+          return reply.redirect(`${webBaseUrl}/auth/login?error=ACCOUNT_BANNED&message=${encodeURIComponent("Your account has been permanently removed.")}`);
+        }
+      }
+
+      // Issue Zika tokens and set HTTP-only cookie
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+
+      // Return a beautiful loading HTML that initializes sessionStorage and redirects
+      reply.type("text/html").send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authenticating...</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      background: radial-gradient(circle at 10% 20%, rgb(87, 108, 117) 0%, rgb(37, 50, 55) 100.2%);
+      font-family: 'Outfit', sans-serif;
+      color: #ffffff;
+      overflow: hidden;
+    }
+    .container {
+      text-align: center;
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 3rem;
+      border-radius: 24px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+      max-width: 400px;
+      width: 90%;
+      animation: fadeIn 0.8s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .logo {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #a5f3fc 0%, #0284c7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      color: #94a3b8;
+      font-size: 1rem;
+      margin-bottom: 2rem;
+    }
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-left-color: #38bdf8;
+      border-radius: 50%;
+      margin: 0 auto 2rem;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .status {
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 0.5rem;
+    }
+    .redirect-text {
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">ZikaBooking</div>
+    <div class="subtitle">Secure Google Authentication</div>
+    <div class="spinner"></div>
+    <div class="status" id="status-text">Completing sign-in...</div>
+    <div class="redirect-text">Please wait while we redirect you.</div>
+  </div>
+
+  <script>
+    try {
+      const accessToken = "${tokens.accessToken}";
+      const userType = "${user.userType}";
+      
+      // Store token in session storage
+      sessionStorage.setItem("zika:access_token", accessToken);
+      
+      // Redirect based on user type
+      setTimeout(() => {
+        const dest = userType === "provider" ? "/listings" : "/traveller";
+        window.location.href = dest;
+      }, 800);
+    } catch (e) {
+      console.error(e);
+      document.getElementById('status-text').innerText = "An error occurred during redirection.";
+      setTimeout(() => {
+        window.location.href = "/auth/login?error=REDIRECT_FAILED";
+      }, 2000);
+    }
+  </script>
+</body>
+</html>
+      `);
+    } catch (err: any) {
+      app.log.error(err);
+      return reply.redirect(`${webBaseUrl}/auth/login?error=OAUTH_FAILED&message=${encodeURIComponent(err.message || "OAuth verification failed")}`);
+    }
+  });
 }
 
 // ── Auth middleware for protected routes ─────────────────────────────────────

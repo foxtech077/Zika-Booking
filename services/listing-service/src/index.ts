@@ -36,8 +36,10 @@ async function build() {
       },
       servers: [
         {
-          url: `http://localhost:${PORT}`,
-          description: "Local development server",
+          url: process.env["NODE_ENV"] === "production"
+            ? "https://kainook.duckdns.org/api/listings"
+            : `http://localhost:${PORT}`,
+          description: process.env["NODE_ENV"] === "production" ? "Production server" : "Local development server",
         },
       ],
       components: {
@@ -58,20 +60,27 @@ async function build() {
     },
   });
 
-  await app.register(swaggerUi, {
-    routePrefix: "/docs",
-    uiConfig: {
-      docExpansion: "list",
-      deepLinking: false,
-    },
-  });
+ await app.register(swaggerUi, {
+routePrefix: "/docs",
+uiConfig: {
+docExpansion: "list",
+deepLinking: false,
+},
+});
 
   await app.register(helmet, { contentSecurityPolicy: false });
+  const isDev = process.env["NODE_ENV"] !== "production";
   await app.register(cors, {
-    origin: [
-      process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
-      process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-    ],
+    // In development, allow all origins so the Expo mobile app (which sends no
+    // Origin header from React Native) can reach the API. In production, lock
+    // down to known web / admin URLs only.
+    origin: isDev
+      ? true
+      : [
+          process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+          process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3004",
+        ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   });

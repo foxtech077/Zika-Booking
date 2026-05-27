@@ -99,6 +99,10 @@ export async function searchRoutes(app: FastifyInstance) {
     const transmission = q["transmission"];
     const seatsMin = q["seats_min"] ? parseInt(q["seats_min"], 10) : undefined;
     const mileagePolicy = q["mileage_policy"];
+    const carCategory = q["car_category"];
+    const driveType = q["drive_type"];
+    const airConditioning = q["air_conditioning"];
+    const driverAge = q["driver_age"] ? parseInt(q["driver_age"], 10) : undefined;
 
     if (!category || isNaN(lat) || isNaN(lng)) {
       return sendError(reply, 400, "INVALID_PARAMS", "category, lat, and lng are required.");
@@ -115,8 +119,10 @@ export async function searchRoutes(app: FastifyInstance) {
       lat: { not: null },
       lng: { not: null },
     };
-    if (priceMin !== undefined) where.pricePerNight = { ...where.pricePerNight, gte: priceMin };
-    if (priceMax !== undefined) where.pricePerNight = { ...where.pricePerNight, lte: priceMax };
+    // Category-aware price filtering
+    const priceField = category === "car" ? "pricePerDay" : "pricePerNight";
+    if (priceMin !== undefined) where[priceField] = { ...where[priceField], gte: priceMin };
+    if (priceMax !== undefined) where[priceField] = { ...where[priceField], lte: priceMax };
     if (cancellationPolicy) where.cancellationPolicy = cancellationPolicy;
     if (starRatings?.length) where.starRating = { in: starRatings };
     if (bedroomsMin !== undefined) where.bedrooms = { gte: bedroomsMin };
@@ -125,6 +131,15 @@ export async function searchRoutes(app: FastifyInstance) {
     if (transmission) where.transmission = transmission;
     if (seatsMin !== undefined) where.seats = { gte: seatsMin };
     if (mileagePolicy) where.mileagePolicy = mileagePolicy;
+    if (carCategory) where.carCategory = carCategory;
+    if (driveType) where.driveType = driveType;
+    if (airConditioning !== undefined) where.airConditioning = airConditioning === "true";
+    if (driverAge !== undefined) {
+      where.OR = [
+        { minimumDriverAge: null },
+        { minimumDriverAge: { lte: driverAge } },
+      ];
+    }
     if (amenityIds?.length) {
       where.amenities = { some: { amenityKey: { in: amenityIds } } };
     }
@@ -155,9 +170,10 @@ export async function searchRoutes(app: FastifyInstance) {
     const available = withDistance.filter((l) => !bookedIds.has(l.id));
 
     // Sort
+    const sortPriceField = category === "car" ? "pricePerDay" : "pricePerNight";
     let sorted = [...available];
-    if (sort === "price_asc") sorted.sort((a, b) => Number(a.pricePerNight ?? 0) - Number(b.pricePerNight ?? 0));
-    else if (sort === "price_desc") sorted.sort((a, b) => Number(b.pricePerNight ?? 0) - Number(a.pricePerNight ?? 0));
+    if (sort === "price_asc") sorted.sort((a, b) => Number((a as any)[sortPriceField] ?? 0) - Number((b as any)[sortPriceField] ?? 0));
+    else if (sort === "price_desc") sorted.sort((a, b) => Number((b as any)[sortPriceField] ?? 0) - Number((a as any)[sortPriceField] ?? 0));
     else if (sort === "distance") sorted.sort((a, b) => a.distanceKm - b.distanceKm);
     else if (sort === "newest") sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     else sorted.sort((a, b) => a.distanceKm - b.distanceKm); // recommended default = nearest
@@ -204,8 +220,8 @@ export async function searchRoutes(app: FastifyInstance) {
       countryCode: l.country,
       distanceKm: Math.round(l.distanceKm * 10) / 10,
       primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
-      nightlyRate: l.pricePerNight ? Number(l.pricePerNight) : null,
-      dailyRate: l.pricePerNight ? Number(l.pricePerNight) : null,
+      nightlyRate: l.category !== "car" && l.pricePerNight ? Number(l.pricePerNight) : null,
+      dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
       currency: l.currency,
       cancellationPolicy: l.cancellationPolicy,
       // Hotel
@@ -269,9 +285,12 @@ export async function searchRoutes(app: FastifyInstance) {
     // Strip sensitive car fields pre-booking
     const data: any = {
       ...listing,
-      // Never expose car licence plate here
+      licencePlate: undefined, // Never expose car licence plate here
       isFavourited: guestId ? isFavourited : undefined,
     };
+    if (data.licencePlate !== undefined) {
+      delete data.licencePlate;
+    }
 
     return sendSuccess(reply, 200, data);
   });

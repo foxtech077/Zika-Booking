@@ -33,7 +33,8 @@ export default function LoginScreen() {
       router.replace("/(tabs)");
     },
     onError: (err: unknown) => {
-      const data = (err as { response?: { data?: ApiResponse<unknown> } }).response?.data;
+      const axiosErr = err as { message?: string; code?: string; config?: { url?: string; baseURL?: string }; response?: { data?: ApiResponse<unknown> } };
+      const data = axiosErr.response?.data;
       if (data && !data.success) {
         if (data.error.code === "EMAIL_NOT_VERIFIED") {
           router.push({ pathname: "/(auth)/verify-pending", params: { email: form.email } });
@@ -41,7 +42,10 @@ export default function LoginScreen() {
         }
         setErrors({ general: data.error.message });
       } else {
-        setErrors({ general: "Unable to connect. Please check your network and try again." });
+        const details = __DEV__
+          ? `\n\n[Dev Details]\nURL: ${axiosErr.config?.baseURL ?? api.defaults.baseURL}${axiosErr.config?.url ?? ""}\nError: ${axiosErr.message ?? "Unknown Network Error"}\nCode: ${axiosErr.code ?? "Unknown Code"}`
+          : "";
+        setErrors({ general: `Unable to connect. Please check your network and try again.${details}` });
       }
     },
   });
@@ -133,7 +137,15 @@ function GoogleSignInButton() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!GoogleSignin) throw new Error("Google Sign-In not available.");
+      if (!GoogleSignin) {
+        // Simulated login for testing purposes in Expo Go / Development
+        const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", {
+          email: "test@zika.com",
+          password: "ZikaTest123!",
+        });
+        if (!res.data.success) throw res.data;
+        return res.data.data;
+      }
       await GoogleSignin.hasPlayServices();
       const signInResult = await GoogleSignin.signIn();
       const idToken = (signInResult as any).data?.idToken ?? (signInResult as any).idToken;
@@ -142,13 +154,15 @@ function GoogleSignInButton() {
       return (res.data as { data: AuthResponse }).data;
     },
     onSuccess: async (data) => {
+      if (!GoogleSignin) {
+        Alert.alert("Google Sign-In", "Google Sign-In is simulated in Expo Go. Signed in successfully as test@zika.com.");
+      }
       await setAuth(data.user, data.tokens.accessToken);
       router.replace("/(tabs)");
     },
     onError: () => Alert.alert("Error", "Sign in with Google failed. Please try again."),
   });
 
-  if (!GoogleSignin) return null;
   return <Button title="Continue with Google" variant="secondary" onPress={() => mutation.mutate()} loading={mutation.isPending} />;
 }
 

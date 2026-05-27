@@ -1,6 +1,6 @@
 services:
   db:
-    container_name: zika-db
+    container_name: zika_booking
     image: docker.io/postgres:18-alpine
     environment:
       # POSTGRES_USER: postgres
@@ -11,7 +11,7 @@ services:
       POSTGRES_DB: zika_booking
       TZ: Asia/Kolkata
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - db_data:/var/lib/postgresql
 

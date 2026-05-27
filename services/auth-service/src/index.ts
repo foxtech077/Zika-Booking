@@ -8,7 +8,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { getRedis } from "./lib/redis";
 import { authRoutes } from "./routes/auth";
-import { adminAuthRoutes, adminUserRoutes } from "./routes/admin-auth";
+import { adminAuthRoutes, adminUserRoutes, adminOperatorRoutes } from "./routes/admin-auth";
 
 const PORT = Number(process.env["AUTH_SERVICE_PORT"] ?? 3001);
 const HOST = process.env["AUTH_SERVICE_HOST"] ?? "0.0.0.0";
@@ -26,8 +26,10 @@ async function build() {
       },
       servers: [
         {
-          url: `http://localhost:${PORT}`,
-          description: "Local development server",
+          url: process.env["NODE_ENV"] === "production"
+            ? "https://kainook.duckdns.org/api/auth"
+            : `http://localhost:${PORT}`,
+          description: process.env["NODE_ENV"] === "production" ? "Production server" : "Local development server",
         },
       ],
       components: {
@@ -49,7 +51,7 @@ async function build() {
   });
 
   await app.register(swaggerUi, {
-    routePrefix: "/docs",
+    prefix: "/docs",
     uiConfig: {
       docExpansion: "list",
       deepLinking: false,
@@ -57,11 +59,17 @@ async function build() {
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
+  const isDev = process.env["NODE_ENV"] !== "production";
   await app.register(cors, {
-    origin: [
-      process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
-      process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-    ],
+    // In development, allow all origins so the Expo mobile app (which sends no
+    // Origin header from React Native) can reach the API.  In production, lock
+    // down to known web / admin URLs only.
+    origin: isDev
+      ? true
+      : [
+          process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+          process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+        ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   });
@@ -87,14 +95,16 @@ async function build() {
   await app.register(authRoutes);
   await app.register(adminAuthRoutes);
   await app.register(adminUserRoutes);
+  await app.register(adminOperatorRoutes);
 
   // Global error handler
   app.setErrorHandler((error, _req, reply) => {
     app.log.error(error);
-    const statusCode = error.statusCode ?? 500;
+    const err = error as any;
+    const statusCode = err.statusCode ?? 500;
     reply.status(statusCode).send({
       success: false,
-      error: { code: "SERVER_ERROR", message: statusCode === 500 ? "An unexpected error occurred." : error.message },
+      error: { code: "SERVER_ERROR", message: statusCode === 500 ? "An unexpected error occurred." : err.message },
     });
   });
 
