@@ -322,7 +322,7 @@ export default function ListingReviewPage() {
       {/* ── Approve modal ─────────────────────────────────────────────────── */}
       {showApprove && (
         <Modal title="Approve & Publish Listing" onClose={() => setShowApprove(false)}>
-          <p className="text-sm text-gray-600 mb-4">Assign a verified star rating to publish this listing on ZikaBooking.</p>
+          <p className="text-sm text-gray-600 mb-4">Assign a verified star rating to publish this listing on Kainook.</p>
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">Verified star rating *</label>
             <div className="flex gap-2">
