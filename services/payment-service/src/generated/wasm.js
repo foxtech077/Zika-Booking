@@ -197,7 +197,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\Salma\\Documents\\GitHub\\Zika-Booking\\services\\payment-service\\src\\generated\\client",
+      "value": "C:\\Users\\nicho\\Desktop\\Zika-Booking\\services\\payment-service\\src\\generated",
       "fromEnvVar": null
     },
     "config": {
@@ -208,23 +208,28 @@ const config = {
         "fromEnvVar": null,
         "value": "windows",
         "native": true
+      },
+      {
+        "fromEnvVar": null,
+        "value": "debian-openssl-3.0.x"
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\Salma\\Documents\\GitHub\\Zika-Booking\\services\\payment-service\\prisma\\schema.prisma",
+    "sourceFilePath": "C:\\Users\\nicho\\Desktop\\Zika-Booking\\services\\payment-service\\prisma\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
-    "rootEnvPath": null,
-    "schemaEnvPath": "../../../.env"
+    "rootEnvPath": "../../.env",
+    "schemaEnvPath": "../../.env"
   },
-  "relativePath": "../../../prisma",
+  "relativePath": "../../prisma",
   "clientVersion": "6.19.3",
   "engineVersion": "c2990dca591cba766e3b7ef5d9e8a84796e47ab7",
   "datasourceNames": [
     "db"
   ],
   "activeProvider": "postgresql",
+  "postinstall": false,
   "inlineDatasources": {
     "db": {
       "url": {
@@ -233,8 +238,8 @@ const config = {
       }
     }
   },
-  "inlineSchema": "generator client {\n  provider = \"prisma-client-js\"\n  output   = \"../src/generated/client\"\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nenum PaymentProvider {\n  stripe\n  tara\n}\n\nenum PaymentStatus {\n  initiated\n  pending\n  captured\n  failed\n  timed_out\n  refunded\n}\n\nenum RefundStatus {\n  pending\n  submitted\n  succeeded\n  failed\n}\n\nmodel Payment {\n  id                 String          @id @default(uuid())\n  bookingId          String\n  paymentProvider    PaymentProvider\n  status             PaymentStatus   @default(initiated)\n  attemptNumber      Int             @default(1)\n  idempotencyKey     String          @unique\n  providerPaymentId  String?\n  providerPmId       String?\n  amount             Decimal         @db.Decimal(12, 2)\n  currency           String          @db.Char(3)\n  paymentMethodType  String?\n  cardBrand          String?\n  cardLast4          String?         @db.Char(4)\n  mobileNumberMasked String?\n  failureCode        String?\n  failureMessage     String?\n  capturedAt         DateTime?\n  createdAt          DateTime        @default(now())\n  updatedAt          DateTime        @updatedAt\n  refund             Refund?\n\n  @@index([bookingId, attemptNumber(sort: Desc)])\n  @@index([status, createdAt(sort: Desc)])\n}\n\nmodel Refund {\n  id               String       @id @default(uuid())\n  paymentId        String       @unique\n  bookingId        String\n  amount           Decimal      @db.Decimal(12, 2)\n  currency         String       @db.Char(3)\n  status           RefundStatus @default(pending)\n  reason           String?\n  providerRefundId String?\n  failureReason    String?\n  refundedAt       DateTime?\n  createdAt        DateTime     @default(now())\n  updatedAt        DateTime     @updatedAt\n  payment          Payment      @relation(fields: [paymentId], references: [id])\n\n  @@index([bookingId])\n  @@index([status, createdAt(sort: Desc)])\n}\n\nmodel PaymentMethod {\n  id                 String          @id @default(uuid())\n  userId             String\n  paymentProvider    PaymentProvider\n  type               String\n  providerPmId       String?\n  cardBrand          String?\n  cardLast4          String?         @db.Char(4)\n  cardExpMonth       Int?\n  cardExpYear        Int?\n  mobileNumberMasked String?\n  isDefault          Boolean         @default(false)\n  isDeleted          Boolean         @default(false)\n  createdAt          DateTime        @default(now())\n\n  @@index([userId, isDeleted])\n}\n",
-  "inlineSchemaHash": "c8c318fd0c58d1aeb0c914d9557dfee23e737f97dd5d3b0704b34b129e7ba830",
+  "inlineSchema": "generator client {\n  provider      = \"prisma-client-js\"\n  output        = \"../src/generated\"\n  binaryTargets = [\"native\", \"debian-openssl-3.0.x\"]\n}\n\ndatasource db {\n  provider = \"postgresql\"\n  url      = env(\"DATABASE_URL\")\n}\n\nenum PaymentProvider {\n  stripe\n  tara\n}\n\nenum PaymentStatus {\n  initiated\n  pending\n  captured\n  failed\n  timed_out\n  refunded\n}\n\nenum RefundStatus {\n  pending\n  submitted\n  succeeded\n  failed\n}\n\nmodel Payment {\n  id                 String          @id @default(uuid())\n  bookingId          String\n  paymentProvider    PaymentProvider\n  status             PaymentStatus   @default(initiated)\n  attemptNumber      Int             @default(1)\n  idempotencyKey     String          @unique\n  providerPaymentId  String?\n  providerPmId       String?\n  amount             Decimal         @db.Decimal(12, 2)\n  currency           String          @db.Char(3)\n  paymentMethodType  String?\n  cardBrand          String?\n  cardLast4          String?         @db.Char(4)\n  mobileNumberMasked String?\n  failureCode        String?\n  failureMessage     String?\n  capturedAt         DateTime?\n  createdAt          DateTime        @default(now())\n  updatedAt          DateTime        @updatedAt\n  refund             Refund?\n\n  @@index([bookingId, attemptNumber(sort: Desc)])\n  @@index([status, createdAt(sort: Desc)])\n}\n\nmodel Refund {\n  id               String       @id @default(uuid())\n  paymentId        String       @unique\n  bookingId        String\n  amount           Decimal      @db.Decimal(12, 2)\n  currency         String       @db.Char(3)\n  status           RefundStatus @default(pending)\n  reason           String?\n  providerRefundId String?\n  failureReason    String?\n  refundedAt       DateTime?\n  createdAt        DateTime     @default(now())\n  updatedAt        DateTime     @updatedAt\n  payment          Payment      @relation(fields: [paymentId], references: [id])\n\n  @@index([bookingId])\n  @@index([status, createdAt(sort: Desc)])\n}\n\nmodel PaymentMethod {\n  id                 String          @id @default(uuid())\n  userId             String\n  paymentProvider    PaymentProvider\n  type               String\n  providerPmId       String?\n  cardBrand          String?\n  cardLast4          String?         @db.Char(4)\n  cardExpMonth       Int?\n  cardExpYear        Int?\n  mobileNumberMasked String?\n  isDefault          Boolean         @default(false)\n  isDeleted          Boolean         @default(false)\n  createdAt          DateTime        @default(now())\n\n  @@index([userId, isDeleted])\n}\n",
+  "inlineSchemaHash": "9577ed2f3a7500f9d683eec1fa7b4afd216476c25b7d1c14d720b1378333947d",
   "copyEngine": true
 }
 config.dirname = '/'

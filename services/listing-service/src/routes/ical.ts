@@ -137,7 +137,7 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
 
 export async function icalRoutes(app: FastifyInstance) {
   // ── GET /listings/:id/ical-feeds — list provider's iCal feeds ─────────
-  app.get("/listings/:id/ical-feeds", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings/:id/ical-feeds", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const providerId = (req as ProviderRequest).providerId;
 
@@ -163,7 +163,7 @@ export async function icalRoutes(app: FastifyInstance) {
   });
 
   // ── POST /listings/:id/ical-feeds — add a new iCal feed ───────────────
-  app.post("/listings/:id/ical-feeds", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/ical-feeds", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const providerId = (req as ProviderRequest).providerId;
     const body = req.body as { platform: string; feedUrl: string };
@@ -203,7 +203,7 @@ export async function icalRoutes(app: FastifyInstance) {
   });
 
   // ── DELETE /listings/:id/ical-feeds/:feedId — remove an iCal feed ─────
-  app.delete("/listings/:id/ical-feeds/:feedId", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/listings/:id/ical-feeds/:feedId", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id, feedId } = req.params as { id: string; feedId: string };
     const providerId = (req as ProviderRequest).providerId;
 
@@ -219,7 +219,7 @@ export async function icalRoutes(app: FastifyInstance) {
   });
 
   // ── POST /listings/:id/ical-feeds/:feedId/sync — manual sync trigger ──
-  app.post("/listings/:id/ical-feeds/:feedId/sync", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/ical-feeds/:feedId/sync", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id, feedId } = req.params as { id: string; feedId: string };
     const providerId = (req as ProviderRequest).providerId;
 
@@ -239,7 +239,7 @@ export async function icalRoutes(app: FastifyInstance) {
   });
 
   // ── GET /listings/:id/blocked-dates — get external blocked date ranges ─
-  app.get("/listings/:id/blocked-dates", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings/:id/blocked-dates", { schema: { tags: ["iCal Calendar Sync"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const { from, to } = req.query as { from?: string; to?: string };
 

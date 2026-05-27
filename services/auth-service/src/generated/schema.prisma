@@ -3,8 +3,9 @@
 // Run: pnpm db:migrate   →  applies pending migrations to the DB
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/client"
+  provider      = "prisma-client-js"
+  output        = "../src/generated"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

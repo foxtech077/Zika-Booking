@@ -65,7 +65,7 @@ async function getBookedListingIds(
 export async function searchRoutes(app: FastifyInstance) {
 
   // ── GET /search ──────────────────────────────────────────────────────────
-  app.get("/search", { preHandler: [optionalGuest] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/search", { schema: { tags: ["Search"] }, preHandler: [optionalGuest] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as GuestRequest).guestId;
     const q = req.query as Record<string, string>;
 
@@ -253,7 +253,7 @@ export async function searchRoutes(app: FastifyInstance) {
   });
 
   // ── GET /listings/:id/public — public listing detail ─────────────────────
-  app.get("/listings/:id/public", { preHandler: [optionalGuest] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings/:id/public", { schema: { tags: ["Search"] }, preHandler: [optionalGuest] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as GuestRequest).guestId;
     const { id } = req.params as { id: string };
 
@@ -296,7 +296,7 @@ export async function searchRoutes(app: FastifyInstance) {
   });
 
   // ── GET /listings/:id/availability ───────────────────────────────────────
-  app.get("/listings/:id/availability", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings/:id/availability", { schema: { tags: ["Search"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const { month } = req.query as { month?: string };
 
@@ -333,7 +333,7 @@ export async function searchRoutes(app: FastifyInstance) {
   });
 
   // ── POST /listings/batch-summary — for anonymous recently-viewed ─────────
-  app.post("/listings/batch-summary", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/batch-summary", { schema: { tags: ["Search"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as { ids?: string[] };
     const ids = (body.ids ?? []).slice(0, 20);
     if (!ids.length) return sendSuccess(reply, 200, { listings: [] });
@@ -359,7 +359,7 @@ export async function searchRoutes(app: FastifyInstance) {
 
   // ── Favourites ───────────────────────────────────────────────────────────
 
-  app.post("/guests/me/favourites", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/guests/me/favourites", { schema: { tags: ["Favourites"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as any).providerId as string;
     const { listingId } = req.body as { listingId: string };
 
@@ -375,7 +375,7 @@ export async function searchRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 201, { message: "Saved to favourites." });
   });
 
-  app.delete("/guests/me/favourites/:listingId", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/guests/me/favourites/:listingId", { schema: { tags: ["Favourites"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as any).providerId as string;
     const { listingId } = req.params as { listingId: string };
 
@@ -383,7 +383,7 @@ export async function searchRoutes(app: FastifyInstance) {
     reply.status(204).send();
   });
 
-  app.get("/guests/me/favourites", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/guests/me/favourites", { schema: { tags: ["Favourites"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as any).providerId as string;
     const q = req.query as Record<string, string>;
     const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
@@ -426,7 +426,7 @@ export async function searchRoutes(app: FastifyInstance) {
 
   // ── Recently Viewed ───────────────────────────────────────────────────────
 
-  app.post("/guests/me/recently-viewed", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/guests/me/recently-viewed", { schema: { tags: ["Recently Viewed"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as any).providerId as string;
     const { listingId } = req.body as { listingId: string };
 
@@ -453,7 +453,7 @@ export async function searchRoutes(app: FastifyInstance) {
     reply.status(204).send();
   });
 
-  app.get("/guests/me/recently-viewed", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/guests/me/recently-viewed", { schema: { tags: ["Recently Viewed"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as any).providerId as string;
 
     const views = await prisma.userRecentlyViewed.findMany({
@@ -485,7 +485,7 @@ export async function searchRoutes(app: FastifyInstance) {
     });
   });
 
-  app.post("/guests/me/recently-viewed/import", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/guests/me/recently-viewed/import", { schema: { tags: ["Recently Viewed"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as any).providerId as string;
     const { items } = req.body as { items: { listingId: string; viewedAt: string }[] };
 

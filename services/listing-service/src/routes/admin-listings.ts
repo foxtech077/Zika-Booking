@@ -24,7 +24,7 @@ const REJECTION_REASONS = new Set([
 export async function adminListingRoutes(app: FastifyInstance) {
 
   // GET /admin/listings/review-queue (UC-2.8)
-  app.get("/admin/listings/review-queue", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/listings/review-queue", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { country, starRating, slaStatus, page = "1", limit = "20", sortBy = "sla_deadline" } = req.query as Record<string, string>;
 
@@ -88,7 +88,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // GET /admin/listings/:id/review — Full listing detail for review (UC-2.9)
-  app.get("/admin/listings/:id/review", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/listings/:id/review", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
 
     const listing = await prisma.listing.findUnique({
@@ -173,7 +173,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // GET /admin/listings/:id/documents/:docId — Presigned download URL for document viewer
-  app.get("/admin/listings/:id/documents/:docId", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/listings/:id/documents/:docId", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id, docId } = req.params as { id: string; docId: string };
 
     const doc = await prisma.listingDocument.findFirst({ where: { id: docId, listingId: id } });
@@ -184,7 +184,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // PATCH /admin/listings/review-tasks/:taskId/assign — Self-assign review task (UC-2.8 A3)
-  app.patch("/admin/listings/review-tasks/:taskId/assign", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/listings/review-tasks/:taskId/assign", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
@@ -199,7 +199,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/approve — Approve listing (UC-2.9)
-  app.post("/admin/listings/:id/approve", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/approve", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { starRating, adminNote } = req.body as { starRating: number; adminNote?: string };
@@ -241,7 +241,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/reject — Reject listing (UC-2.10)
-  app.post("/admin/listings/:id/reject", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/reject", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reasons, providerNote, adminNote } = req.body as {
@@ -292,7 +292,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // PATCH /admin/listings/:id/star-rating — Update star rating on approved listing (UC-2.12)
-  app.patch("/admin/listings/:id/star-rating", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/admin/listings/:id/star-rating", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { starRating, reason } = req.body as { starRating: number; reason: string };
@@ -315,7 +315,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/suspend — Suspend approved listing (UC-2.14)
-  app.post("/admin/listings/:id/suspend", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/suspend", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };
@@ -347,7 +347,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/reinstate — Reinstate suspended listing (UC-2.14 A1)
-  app.post("/admin/listings/:id/reinstate", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/reinstate", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
 
     const listing = await prisma.listing.findUnique({ where: { id } });
@@ -365,7 +365,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // GET /admin/listings — Search all listings (for admin use)
-  app.get("/admin/listings", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/listings", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { q = "", status, category, country, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -422,7 +422,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /admin/bookings — Admin booking list with filters ─────────────────
-  app.get("/admin/bookings", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/bookings", { schema: { tags: ["Admin Bookings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { q = "", status, listingType, country, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -483,7 +483,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /admin/bookings/:id — Full booking detail with status log ──────────
-  app.get("/admin/bookings/:id", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/bookings/:id", { schema: { tags: ["Admin Bookings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
 
     const booking = await prisma.booking.findUnique({
@@ -499,7 +499,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/bookings/:id/cancel — Admin-forced cancellation ───────────
-  app.post("/admin/bookings/:id/cancel", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/bookings/:id/cancel", { schema: { tags: ["Admin Bookings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reason } = req.body as { reason: string };
@@ -538,7 +538,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /admin/conversations — All conversations (admin view) ─────────────
-  app.get("/admin/conversations", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/conversations", { schema: { tags: ["Admin Conversations"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -595,7 +595,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /admin/conversations/:id/messages — Admin message viewer ──────────
-  app.get("/admin/conversations/:id/messages", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/conversations/:id/messages", { schema: { tags: ["Admin Conversations"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
 
     const convo = await prisma.conversation.findUnique({ where: { id } });
@@ -628,7 +628,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /admin/ical-feeds — All iCal feeds across all listings ────────────
-  app.get("/admin/ical-feeds", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/ical-feeds", { schema: { tags: ["Admin iCal"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { page = "1", limit = "20", isActive } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -672,7 +672,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/ical-feeds/:id/sync — Admin manual iCal resync ───────────
-  app.post("/admin/ical-feeds/:id/sync", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/ical-feeds/:id/sync", { schema: { tags: ["Admin iCal"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
 
     const feed = await prisma.icalFeed.findUnique({ where: { id } });
@@ -689,7 +689,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /admin/reviews — Admin review list with filters ───────────────────
-  app.get("/admin/reviews", { preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/reviews", { schema: { tags: ["Admin Reviews"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { q = "", isHidden, rating, listingId, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);

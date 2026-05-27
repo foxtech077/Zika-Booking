@@ -35,7 +35,6 @@ enum LongStayDiscountType {
 enum Transmission {
   manual
   automatic
-  semi_auto
 }
 
 enum FuelType {
@@ -71,44 +70,6 @@ enum DocumentType {
   business_licence
   operating_permit
   tourism_certificate
-  insurance_certificate
-  roadworthiness_certificate
-  hotel_operating_permit
-  tourism_authority_certificate
-}
-
-enum CarCategory {
-  Economy
-  Compact
-  SUV
-  Minivan
-  Pickup
-  Luxury
-  Electric
-  Convertible
-}
-
-enum DriveType {
-  TWO_WD   @map("2WD")
-  FOUR_WD  @map("4WD")
-  AWD      @map("AWD")
-}
-
-enum InsuranceType {
-  basic
-  standard
-  premium
-  comprehensive
-  basic_third_party
-  premium_zero_excess
-}
-
-enum FuelPolicy {
-  full_to_full
-  same_to_same
-  free_tank
-  full_to_empty
-  pre_purchase
 }
 
 enum ReviewTaskStatus {
@@ -119,86 +80,63 @@ enum ReviewTaskStatus {
 }
 
 model Listing {
-  id                    String             @id @default(uuid())
-  providerId            String             @map("provider_id")
+  id                    String                @id @default(uuid())
+  providerId            String                @map("provider_id")
   category              ListingCategory
-  name                  String?            @db.VarChar(200)
-  roomType              RoomType?          @map("room_type")
-  unitCount             Int?               @map("unit_count")
-  description           String?            @db.Text
-  pricePerNight         Decimal?           @map("price_per_night") @db.Decimal(10, 2)
-  pricePerDay           Decimal?           @map("price_per_day") @db.Decimal(10, 2)
-  currency              String?            @db.Char(3)
-  minStayNights         Int                @default(1) @map("min_stay_nights")
-  checkinTime           String?            @map("checkin_time") @db.VarChar(5)
-  checkoutTime          String?            @map("checkout_time") @db.VarChar(5)
-  cancellationPolicy    CancellationPolicy? @map("cancellation_policy")
-  smokingAllowed        Boolean            @default(false) @map("smoking_allowed")
-  petsAllowed           Boolean            @default(false) @map("pets_allowed")
-  address               String?            @db.Text
-  lat                   Decimal?           @db.Decimal(9, 6)
-  lng                   Decimal?           @db.Decimal(9, 6)
-  town                  String?            @db.VarChar(100)
-  country               String?            @db.Char(2)
-  claimedStarRating     Int?               @map("claimed_star_rating")
-  starRating            Int?               @map("star_rating")
-  status                ListingStatus      @default(draft)
-  submissionCount       Int                @default(0) @map("submission_count")
-  submittedAt           DateTime?          @map("submitted_at")
-  approvedAt            DateTime?          @map("approved_at")
-  approvedBy            String?            @map("approved_by")
-  rejectedAt            DateTime?          @map("rejected_at")
-  rejectedBy            String?            @map("rejected_by")
-  rejectionReasons      String[]           @map("rejection_reasons")
-  rejectionNote         String?            @map("rejection_note") @db.Text
-  suspendedAt           DateTime?          @map("suspended_at")
-  suspendedBy           String?            @map("suspended_by")
-  suspensionReason      String?            @map("suspension_reason") @db.Text
-  consecutiveNegative   Int                @default(0) @map("consecutive_negative_count")
+  name                  String?               @db.VarChar(200)
+  roomType              RoomType?             @map("room_type")
+  unitCount             Int?                  @map("unit_count")
+  description           String?               @db.Text
+  pricePerNight         Decimal?              @map("price_per_night") @db.Decimal(10, 2)
+  currency              String?               @db.Char(3)
+  minStayNights         Int                   @default(1) @map("min_stay_nights")
+  checkinTime           String?               @map("checkin_time") @db.VarChar(5)
+  checkoutTime          String?               @map("checkout_time") @db.VarChar(5)
+  cancellationPolicy    CancellationPolicy?   @map("cancellation_policy")
+  smokingAllowed        Boolean               @default(false) @map("smoking_allowed")
+  petsAllowed           Boolean               @default(false) @map("pets_allowed")
+  address               String?               @db.Text
+  lat                   Decimal?              @db.Decimal(9, 6)
+  lng                   Decimal?              @db.Decimal(9, 6)
+  town                  String?               @db.VarChar(100)
+  country               String?               @db.Char(2)
+  claimedStarRating     Int?                  @map("claimed_star_rating")
+  starRating            Int?                  @map("star_rating")
+  status                ListingStatus         @default(draft)
+  submissionCount       Int                   @default(0) @map("submission_count")
+  submittedAt           DateTime?             @map("submitted_at")
+  approvedAt            DateTime?             @map("approved_at")
+  approvedBy            String?               @map("approved_by")
+  rejectedAt            DateTime?             @map("rejected_at")
+  rejectedBy            String?               @map("rejected_by")
+  rejectionReasons      String[]              @map("rejection_reasons")
+  rejectionNote         String?               @map("rejection_note") @db.Text
+  suspendedAt           DateTime?             @map("suspended_at")
+  suspendedBy           String?               @map("suspended_by")
+  suspensionReason      String?               @map("suspension_reason") @db.Text
+  consecutiveNegative   Int                   @default(0) @map("consecutive_negative_count")
   // apartment-specific fields
   bedrooms              Int?
   bathrooms             Int?
-  maxGuests             Int?               @map("max_guests")
-  longStayEnabled       Boolean            @default(false) @map("long_stay_discount_enabled")
-  longStayMinNights     Int?               @map("long_stay_min_nights")
+  maxGuests             Int?                  @map("max_guests")
+  longStayEnabled       Boolean               @default(false) @map("long_stay_discount_enabled")
+  longStayMinNights     Int?                  @map("long_stay_min_nights")
   longStayDiscountType  LongStayDiscountType? @map("long_stay_discount_type")
-  longStayDiscountValue Decimal?           @map("long_stay_discount_value") @db.Decimal(10, 2)
-  activatedAt           DateTime?          @map("activated_at")
+  longStayDiscountValue Decimal?              @map("long_stay_discount_value") @db.Decimal(10, 2)
+  activatedAt           DateTime?             @map("activated_at")
   // car-specific fields
-  carMake               String?            @map("car_make") @db.VarChar(80)
-  carModel              String?            @map("car_model") @db.VarChar(80)
-  carYear               Int?               @map("car_year")
+  carMake               String?               @map("car_make") @db.VarChar(80)
+  carModel              String?               @map("car_model") @db.VarChar(80)
+  carYear               Int?                  @map("car_year")
   transmission          Transmission?
-  fuelType              FuelType?          @map("fuel_type")
+  fuelType              FuelType?             @map("fuel_type")
   seats                 Int?
-  doors                 Int?               @default(4)
-  mileagePolicy         MileagePolicy?     @map("mileage_policy")
-  mileageLimitKm        Int?               @map("mileage_limit_km")
-  carCategory           CarCategory?       @map("car_category")
-  driveType             DriveType?         @map("drive_type")
-  airConditioning       Boolean?           @map("air_conditioning")
-  odometerReading       Int?               @map("odometer_reading")
-  licencePlate          String?            @map("licence_plate") @db.VarChar(20)
-  engineSize            String?            @map("engine_size") @db.VarChar(20)
-  colour                String?            @map("colour") @db.VarChar(30)
-  securityDeposit       Decimal?           @map("security_deposit") @db.Decimal(10, 2)
-  minimumDriverAge      Int?               @map("minimum_driver_age")
-  minimumRentalDays     Int?               @map("minimum_rental_days")
-  fuelPolicy            FuelPolicy?        @map("fuel_policy")
-  extraKmRate           Decimal?           @map("extra_km_rate") @db.Decimal(10, 2)
-  roadsideAssistance    Boolean            @default(false) @map("roadside_assistance")
-  crossBorderAllowed    Boolean            @default(false) @map("cross_border_allowed")
-  airportPickup         Boolean            @default(false) @map("airport_pickup")
-  deliveryEnabled       Boolean            @default(false) @map("delivery_enabled")
-  deliveryRadiusKm      Int?               @map("delivery_radius_km")
-  deliveryFee           Decimal?           @map("delivery_fee") @db.Decimal(10, 2)
-  pickupHoursFrom       String?            @map("pickup_hours_from") @db.VarChar(5)
-  pickupHoursTo         String?            @map("pickup_hours_to") @db.VarChar(5)
-  returnSameLocation    Boolean            @default(true) @map("return_same_location")
-  insuranceType         InsuranceType?     @map("insurance_type")
-  updatedAt             DateTime           @updatedAt @map("updated_at")
-  createdAt             DateTime           @default(now()) @map("created_at")
-  deletedAt             DateTime?          @map("deleted_at")
+  doors                 Int?                  @default(4)
+  mileagePolicy         MileagePolicy?        @map("mileage_policy")
+  mileageLimitKm        Int?                  @map("mileage_limit_km")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  deletedAt             DateTime?             @map("deleted_at")
 
   photos          ListingPhoto[]
   documents       ListingDocument[]
@@ -232,13 +170,13 @@ model ListingReviewTask {
 }
 
 model ListingPhoto {
-  id          String    @id @default(uuid())
-  listingId   String    @map("listing_id")
-  s3Key       String    @map("s3_key") @db.VarChar(500)
-  cdnUrl      String    @map("cdn_url") @db.VarChar(500)
-  position    Int
-  uploadedAt  DateTime  @default(now()) @map("uploaded_at")
-  deletedAt   DateTime? @map("deleted_at")
+  id         String    @id @default(uuid())
+  listingId  String    @map("listing_id")
+  s3Key      String    @map("s3_key") @db.VarChar(500)
+  cdnUrl     String    @map("cdn_url") @db.VarChar(500)
+  position   Int
+  uploadedAt DateTime  @default(now()) @map("uploaded_at")
+  deletedAt  DateTime? @map("deleted_at")
 
   listing Listing @relation(fields: [listingId], references: [id])
 
@@ -337,12 +275,12 @@ enum BookingStatus {
 }
 
 model Booking {
-  id          String        @id @default(uuid())
-  reference   String        @unique @db.VarChar(25)
-  listingId   String        @map("listing_id")
-  guestId     String        @map("guest_id")
-  providerId  String        @map("provider_id")
-  listingType String        @map("listing_type") @db.VarChar(20)
+  id          String @id @default(uuid())
+  reference   String @unique @db.VarChar(25)
+  listingId   String @map("listing_id")
+  guestId     String @map("guest_id")
+  providerId  String @map("provider_id")
+  listingType String @map("listing_type") @db.VarChar(20)
 
   status BookingStatus @default(pending_payment)
 
@@ -360,11 +298,11 @@ model Booking {
   children        Int?    @default(0)
   specialRequests String? @map("special_requests") @db.Text
 
-  driverFirstName   String?  @map("driver_first_name") @db.VarChar(100)
-  driverLastName    String?  @map("driver_last_name") @db.VarChar(100)
-  driverAge         Int?     @map("driver_age")
-  deliveryRequested Boolean  @default(false) @map("delivery_requested")
-  deliveryAddress   String?  @map("delivery_address") @db.Text
+  driverFirstName   String? @map("driver_first_name") @db.VarChar(100)
+  driverLastName    String? @map("driver_last_name") @db.VarChar(100)
+  driverAge         Int?    @map("driver_age")
+  deliveryRequested Boolean @default(false) @map("delivery_requested")
+  deliveryAddress   String? @map("delivery_address") @db.Text
 
   nightlyRate     Decimal? @map("nightly_rate") @db.Decimal(12, 2)
   dailyRate       Decimal? @map("daily_rate") @db.Decimal(12, 2)
@@ -379,7 +317,7 @@ model Booking {
   commissionAmount Decimal @map("commission_amount") @db.Decimal(12, 2)
   providerPayout   Decimal @map("provider_payout") @db.Decimal(12, 2)
 
-  cancellationPolicy String  @map("cancellation_policy") @db.VarChar(20)
+  cancellationPolicy String   @map("cancellation_policy") @db.VarChar(20)
   refundAmount       Decimal? @map("refund_amount") @db.Decimal(12, 2)
 
   cancelledAt        DateTime? @map("cancelled_at")
@@ -392,8 +330,8 @@ model Booking {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  voucherCode     String?  @map("voucher_code") @db.VarChar(30)
-  voucherDiscount Decimal  @default(0) @map("voucher_discount") @db.Decimal(10, 2)
+  voucherCode     String? @map("voucher_code") @db.VarChar(30)
+  voucherDiscount Decimal @default(0) @map("voucher_discount") @db.Decimal(10, 2)
 
   listing   Listing            @relation(fields: [listingId], references: [id])
   statusLog BookingStatusLog[]
@@ -420,21 +358,21 @@ model BookingStatusLog {
 // ── E14 — Reviews ─────────────────────────────────────────────────────────────
 
 model ListingReview {
-  id               String    @id @default(uuid())
-  bookingId        String    @unique @map("booking_id")
-  listingId        String    @map("listing_id")
-  guestId          String    @map("guest_id")
-  rating           Int
-  title            String?   @db.VarChar(100)
-  body             String?   @db.Text
-  providerReply    String?   @map("provider_reply") @db.Text
+  id                String    @id @default(uuid())
+  bookingId         String    @unique @map("booking_id")
+  listingId         String    @map("listing_id")
+  guestId           String    @map("guest_id")
+  rating            Int
+  title             String?   @db.VarChar(100)
+  body              String?   @db.Text
+  providerReply     String?   @map("provider_reply") @db.Text
   providerRepliedAt DateTime? @map("provider_replied_at")
-  isHidden         Boolean   @default(false) @map("is_hidden")
-  hiddenBy         String?   @map("hidden_by")
-  hiddenAt         DateTime? @map("hidden_at")
-  hiddenReason     String?   @map("hidden_reason") @db.Text
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  isHidden          Boolean   @default(false) @map("is_hidden")
+  hiddenBy          String?   @map("hidden_by")
+  hiddenAt          DateTime? @map("hidden_at")
+  hiddenReason      String?   @map("hidden_reason") @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   listing Listing @relation(fields: [listingId], references: [id])
   booking Booking @relation(fields: [bookingId], references: [id])
@@ -445,12 +383,12 @@ model ListingReview {
 // ── E11 — Commission Management ───────────────────────────────────────────────
 
 model CommissionRate {
-  id          String   @id @default(uuid())
-  country     String   @unique @db.Char(2)
-  rate        Decimal  @db.Decimal(6, 4)
-  setBy       String   @map("set_by")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  country   String   @unique @db.Char(2)
+  rate      Decimal  @db.Decimal(6, 4)
+  setBy     String   @map("set_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("commission_rates")
 }
@@ -508,7 +446,7 @@ model IcalFeed {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  listing     Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing      Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
   blockedDates IcalBlockedDate[]
 
   @@map("ical_feeds")
@@ -553,18 +491,16 @@ model Conversation {
 }
 
 model Message {
-  id             String   @id @default(uuid())
-  conversationId String   @map("conversation_id")
-  senderId       String   @map("sender_id")
-  senderType     String   @map("sender_type") @db.VarChar(20)
-  body           String   @db.Text
-  isFiltered     Boolean  @default(false) @map("is_filtered")
+  id             String    @id @default(uuid())
+  conversationId String    @map("conversation_id")
+  senderId       String    @map("sender_id")
+  senderType     String    @map("sender_type") @db.VarChar(20)
+  body           String    @db.Text
+  isFiltered     Boolean   @default(false) @map("is_filtered")
   readAt         DateTime? @map("read_at")
-  createdAt      DateTime @default(now()) @map("created_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@map("messages")
 }
-
-
