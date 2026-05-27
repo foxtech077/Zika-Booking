@@ -6,7 +6,7 @@ const DEFAULT_RATE = 0.05;
 
 export async function commissionRoutes(app: FastifyInstance) {
   // ── GET /admin/commission-rates — list all country-specific rates ─────
-  app.get("/admin/commission-rates", async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/commission-rates", { schema: { tags: ["Admin Commission"] } }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const rates = await prisma.commissionRate.findMany({
       orderBy: { country: "asc" },
     });
@@ -25,7 +25,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/commission-rates — upsert a country rate ─────────────
-  app.post("/admin/commission-rates", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/commission-rates", { schema: { tags: ["Admin Commission"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as { country: string; rate: number };
 
     if (!body.country || typeof body.country !== "string" || body.country.length !== 2) {
@@ -54,7 +54,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   });
 
   // ── DELETE /admin/commission-rates/:country — remove country rate ─────
-  app.delete("/admin/commission-rates/:country", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/admin/commission-rates/:country", { schema: { tags: ["Admin Commission"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
 
@@ -67,7 +67,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   });
 
   // ── GET /commission-rates/effective/:country — effective rate ─────────
-  app.get("/commission-rates/effective/:country", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/commission-rates/effective/:country", { schema: { tags: ["Commission"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
 

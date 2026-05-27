@@ -36,11 +36,33 @@ async function build() {
       },
       servers: [
         {
-          url: process.env["NODE_ENV"] === "production"
-            ? "https://kainook.duckdns.org/api/listings"
-            : `http://localhost:${PORT}`,
-          description: process.env["NODE_ENV"] === "production" ? "Production server" : "Local development server",
+          url: `http://localhost:${PORT}`,
+          description: "Local development server",
         },
+        {
+          url: "https://kainook.duckdns.org/api/listings",
+          description: "Production server",
+        },
+      ],
+      tags: [
+        { name: "Listings", description: "Provider property management — create, edit, submit and photo/document uploads" },
+        { name: "Bookings", description: "Guest and provider reservation management — initiate, lock, confirm and cancel" },
+        { name: "Search", description: "Public search, availability check, detail and summary views" },
+        { name: "Favourites", description: "Guest saved listings management" },
+        { name: "Recently Viewed", description: "Guest browsing history tracking" },
+        { name: "Reviews", description: "Guest reviews and ratings, and provider replies" },
+        { name: "Messaging", description: "Guest-provider direct messaging with contact information filtering" },
+        { name: "iCal Calendar Sync", description: "iCal external calendar feeds registration and sync" },
+        { name: "Commission", description: "Platform commission rate rules lookup" },
+        { name: "Vouchers", description: "Voucher validation and discount calculation" },
+        { name: "Provider Portal", description: "Provider dashboard analytics, summarized statistics, bookings, reviews and earnings" },
+        { name: "Admin Listings", description: "Admin listing review queue management, approvals, suspensions and status search" },
+        { name: "Admin Bookings", description: "Admin booking tracking, detailed status logs and cancellations" },
+        { name: "Admin Conversations", description: "Admin direct conversation viewer and filter audit" },
+        { name: "Admin iCal", description: "Admin iCal feed configurations and sync triggers" },
+        { name: "Admin Reviews", description: "Admin user review feed review and moderation" },
+        { name: "Admin Commission", description: "Admin commission rates management per country scope" },
+        { name: "Admin Vouchers", description: "Admin voucher code generation and validation rules management" },
       ],
       components: {
         securitySchemes: {

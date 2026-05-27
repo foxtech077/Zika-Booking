@@ -10,7 +10,7 @@
  * Run from project root:
  *   pnpm db:seed:all
  */
-import { PrismaClient } from "../node_modules/.prisma/client/index.js";
+import { PrismaClient } from "../src/generated/index.js";
 import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
@@ -19,8 +19,13 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ── Auth schema client ───────────────────────────────────────────────────────
-const authPrisma = new PrismaClient();
+// ── Auth schema client (uses DATABASE_URL which must include ?schema=auth) ────
+const authDbUrl = process.env.DATABASE_URL;
+if (!authDbUrl) throw new Error("DATABASE_URL env variable is not set!");
+
+const authPrisma = new PrismaClient({
+  datasources: { db: { url: authDbUrl } },
+});
 
 // ── Listings schema client (raw SQL only — no generated types for this schema)
 const listingsDbUrl = process.env.DATABASE_URL?.replace(

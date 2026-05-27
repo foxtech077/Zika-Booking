@@ -27,7 +27,7 @@ function filterMessage(body: string): { filtered: boolean; text: string } {
 
 export async function messagingRoutes(app: FastifyInstance) {
   // ── POST /conversations — start or get a conversation ─────────────────
-  app.post("/conversations", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/conversations", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const user = req as ProviderRequest;
     const body = req.body as { listingId: string; bookingId?: string };
 
@@ -75,7 +75,7 @@ export async function messagingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /conversations — list conversations for the current user ───────
-  app.get("/conversations", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/conversations", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as ProviderRequest).providerId;
     const { page = "1", limit = "20" } = req.query as { page?: string; limit?: string };
     const skip = (Number(page) - 1) * Number(limit);
@@ -123,7 +123,7 @@ export async function messagingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /conversations/:id/messages — get messages in a conversation ───
-  app.get("/conversations/:id/messages", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/conversations/:id/messages", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const userId = (req as ProviderRequest).providerId;
     const { before, limit = "50" } = req.query as { before?: string; limit?: string };
@@ -167,7 +167,7 @@ export async function messagingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /conversations/:id/messages — send a message ─────────────────
-  app.post("/conversations/:id/messages", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/conversations/:id/messages", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const userId = (req as ProviderRequest).providerId;
     const body = req.body as { body: string };
@@ -216,7 +216,7 @@ export async function messagingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /conversations/unread-count — unread message count ────────────
-  app.get("/conversations/unread-count", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as ProviderRequest).providerId;
 
     const count = await prisma.message.count({

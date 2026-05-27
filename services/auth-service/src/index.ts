@@ -26,11 +26,19 @@ async function build() {
       },
       servers: [
         {
-          url: process.env["NODE_ENV"] === "production"
-            ? "https://kainook.duckdns.org/api/auth"
-            : `http://localhost:${PORT}`,
-          description: process.env["NODE_ENV"] === "production" ? "Production server" : "Local development server",
+          url: `http://localhost:${PORT}`,
+          description: "Local development server",
         },
+        {
+          url: "https://kainook.duckdns.org/api",
+          description: "Production server",
+        },
+      ],
+      tags: [
+        { name: "User Auth", description: "User registration, login, email verification, OAuth and password management" },
+        { name: "Admin Auth", description: "Admin login, TOTP 2FA setup/verify and WebAuthn hardware key management" },
+        { name: "Admin Users", description: "Admin management of platform users — suspend, reinstate, ban and audit logs" },
+        { name: "Admin Operators", description: "Super-admin management of admin operator accounts and roles" },
       ],
       components: {
         securitySchemes: {
