@@ -57,7 +57,7 @@ function calcHotelApartmentPricing(listing: any, checkIn: string, checkOut: stri
 function calcCarPricing(listing: any, pickupDatetime: string, returnDatetime: string, deliveryRequested: boolean, commissionRate: number = DEFAULT_COMMISSION_RATE) {
   const rentalMs = new Date(returnDatetime).getTime() - new Date(pickupDatetime).getTime();
   const days = Math.ceil(rentalMs / 86_400_000);
-  const rate = Number(listing.pricePerNight ?? 0);
+  const rate = Number(listing.pricePerDay ?? 0);
   const subtotal = rate * days;
   const deliveryFee = deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0;
   const totalAmount = subtotal + deliveryFee;

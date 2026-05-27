@@ -104,7 +104,72 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-    return sendSuccess(reply, 200, listing);
+    const legacyAmenityCategoryMap: Record<string, string> = {
+      wifi: "Connectivity",
+      high_speed_wifi: "Connectivity",
+      ethernet: "Connectivity",
+      pool: "Wellness",
+      spa: "Wellness",
+      gym: "Wellness",
+      sauna: "Wellness",
+      massage: "Wellness",
+      hot_tub: "Wellness",
+      restaurant: "Food & Drink",
+      bar: "Food & Drink",
+      room_service: "Food & Drink",
+      mini_bar: "Food & Drink",
+      breakfast: "Food & Drink",
+      kitchen: "Food & Drink",
+      air_conditioning: "Comfort",
+      heating: "Comfort",
+      fireplace: "Comfort",
+      balcony: "Comfort",
+      concierge: "Services",
+      parking: "Services",
+      security: "Services",
+      laundry: "Services",
+      dry_cleaning: "Services",
+      housekeeping: "Services",
+      luggage_storage: "Services",
+      airport_shuttle: "Services",
+      tv: "Services",
+      workspace: "Services",
+      washing_machine: "Services",
+      garden: "Services",
+    };
+
+    // Group amenities!
+    const groupedAmenities: Record<string, string[]> = {
+      Connectivity: [],
+      "Food & Drink": [],
+      Wellness: [],
+      Comfort: [],
+      Services: [],
+    };
+    for (const item of listing.amenities) {
+      const key = item.amenityKey;
+      if (key.includes(":")) {
+        const [cat = "Services", val = ""] = key.split(":");
+        if (groupedAmenities[cat]) {
+          groupedAmenities[cat].push(val);
+        } else {
+          groupedAmenities[cat] = [val];
+        }
+      } else {
+        const cat = legacyAmenityCategoryMap[key] || "Services";
+        if (!groupedAmenities[cat]) {
+          groupedAmenities[cat] = [];
+        }
+        groupedAmenities[cat].push(key);
+      }
+    }
+
+    const formattedListing = {
+      ...listing,
+      amenities: groupedAmenities,
+    };
+
+    return sendSuccess(reply, 200, formattedListing);
   });
 
   // GET /admin/listings/:id/documents/:docId — Presigned download URL for document viewer

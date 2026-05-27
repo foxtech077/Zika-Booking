@@ -262,6 +262,122 @@ export async function icalRoutes(app: FastifyInstance) {
       })),
     });
   });
+
+  // ── GET /listings/:id/ical — outbound iCal export (public) ────────────
+  // Returns a standards-compliant .ics feed of all confirmed bookings so
+  // external calendars (Airbnb, Google Calendar, etc.) can subscribe to it.
+  app.get("/listings/:id/ical", async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+
+    const listing = await prisma.listing.findUnique({
+      where: { id, deletedAt: null },
+      select: { id: true, name: true, status: true },
+    });
+
+    if (!listing) {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    }
+
+    const validStatuses = ["approved", "active"];
+    if (!validStatuses.includes(listing.status)) {
+      return reply.status(410).send({ success: false, error: { code: "LISTING_INACTIVE", message: "This listing is not available." } });
+    }
+
+    // Fetch only confirmed bookings (no pending/cancelled)
+    const bookings = await prisma.booking.findMany({
+      where: {
+        listingId: id,
+        status: "confirmed",
+      },
+      select: {
+        id: true,
+        reference: true,
+        checkIn: true,
+        checkOut: true,
+        pickupDatetime: true,
+        returnDatetime: true,
+        guestFirstName: true,
+        guestLastName: true,
+        confirmedAt: true,
+        updatedAt: true,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // Helper: format a Date as iCal UTC datetime string (YYYYMMDDTHHmmssZ)
+    function toIcalUtc(d: Date): string {
+      return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    }
+
+    // Helper: fold long iCal lines at 75 octets per RFC 5545 §3.1
+    function foldLine(line: string): string {
+      const bytes = Buffer.from(line, "utf8");
+      if (bytes.length <= 75) return line;
+      const chunks: string[] = [];
+      let offset = 0;
+      let first = true;
+      while (offset < bytes.length) {
+        const chunkSize = first ? 75 : 74;
+        chunks.push((first ? "" : " ") + bytes.slice(offset, offset + chunkSize).toString("utf8"));
+        offset += chunkSize;
+        first = false;
+      }
+      return chunks.join("\r\n");
+    }
+
+    const prodId = "-//ZikaBooking//Listing Service//EN";
+    const now = toIcalUtc(new Date());
+    const listingName = (listing.name ?? "ZikaBooking").replace(/[\\;,]/g, "\\$&");
+
+    const vevents = bookings.map((b) => {
+      const dtstart = b.checkIn ?? b.pickupDatetime;
+      const dtend   = b.checkOut ?? b.returnDatetime;
+      if (!dtstart || !dtend) return "";
+
+      // UID is deterministic: booking reference + listing id
+      const uid = `${b.reference}@${id}.zikabooking`;
+      const dtstamp = toIcalUtc(b.updatedAt ?? new Date());
+      const created = toIcalUtc(b.confirmedAt ?? new Date());
+      const summary = foldLine(`SUMMARY:Booking - ${listingName}`);
+      const guestName = `${b.guestFirstName} ${b.guestLastName}`.trim();
+      const description = foldLine(`DESCRIPTION:Guest: ${guestName}\\nRef: ${b.reference}`);
+
+      return [
+        "BEGIN:VEVENT",
+        `UID:${uid}`,
+        `DTSTAMP:${dtstamp}`,
+        `CREATED:${created}`,
+        `DTSTART:${toIcalUtc(dtstart)}`,
+        `DTEND:${toIcalUtc(dtend)}`,
+        summary,
+        description,
+        "TRANSP:OPAQUE",
+        "STATUS:CONFIRMED",
+        "END:VEVENT",
+      ].join("\r\n");
+    }).filter(Boolean);
+
+    const icsBody = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      `PRODID:${prodId}`,
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
+      `X-WR-CALNAME:${listingName}`,
+      `X-WR-CALDESC:Confirmed bookings for ${listingName}`,
+      `X-WR-TIMEZONE:UTC`,
+      `LAST-MODIFIED:${now}`,
+      ...vevents,
+      "END:VCALENDAR",
+    ].join("\r\n") + "\r\n";
+
+    reply
+      .header("Content-Type", "text/calendar; charset=utf-8")
+      .header("Content-Disposition", `attachment; filename="listing-${id}.ics"`)
+      .header("Cache-Control", "no-cache")
+      .status(200)
+      .send(icsBody);
+  });
 }
 
 // ── Background polling (15-min cycle) ────────────────────────────────────────
@@ -271,9 +387,20 @@ export function startIcalPoller() {
 
   async function poll() {
     try {
-      const feeds = await prisma.icalFeed.findMany({ where: { isActive: true }, select: { id: true } });
-      for (const { id } of feeds) {
-        await syncFeed(id).catch(() => null);
+      const feeds = await prisma.icalFeed.findMany({
+        where: { isActive: true },
+        select: { id: true, lastError: true, updatedAt: true }
+      });
+      const now = new Date();
+      for (const feed of feeds) {
+        if (feed.lastError && feed.updatedAt) {
+          const errorAgeMinutes = (now.getTime() - feed.updatedAt.getTime()) / (60 * 1000);
+          if (errorAgeMinutes < 60) {
+            console.log(`[iCal Poller] Skipping feed ${feed.id} due to recent error (backoff)`);
+            continue;
+          }
+        }
+        await syncFeed(feed.id).catch(() => null);
       }
     } catch (error) {
       console.warn('[iCal Poller] Database connection error (will retry):', error instanceof Error ? error.message : error);
