@@ -110,18 +110,18 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const passwordHash = await hashPassword(password);
-    const isDev = process.env["NODE_ENV"] !== "production";
+    const skipVerification = process.env["SKIP_EMAIL_VERIFICATION"] === "true";
     const user = await prisma.user.create({
       data: {
         firstName, lastName, email, passwordHash,
         userType: userType as "guest" | "provider",
         businessName: businessName ?? null,
         country: country ?? null,
-        ...(isDev ? { status: "active", emailVerified: true, emailVerifiedAt: new Date() } : {}),
+        ...(skipVerification ? { status: "active", emailVerified: true, emailVerifiedAt: new Date() } : {}),
       },
     });
 
-    if (isDev) {
+    if (skipVerification) {
       const tokens = await issueTokens(reply, user.id, user.userType, "active");
       return sendSuccess(reply, 201, { user: publicUser(user), tokens });
     }

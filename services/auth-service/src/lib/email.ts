@@ -34,6 +34,16 @@ export async function sendVerificationEmail(
   plainToken: string,
 ): Promise<void> {
   const link = `${WEB}/verify?token=${plainToken}`;
+
+  if (process.env["NODE_ENV"] !== "production") {
+    console.log("\n" + "=".repeat(60));
+    console.log("📧 [Email Sandbox] Verification Email Sent");
+    console.log(`To: ${to}`);
+    console.log(`Subject: Verify your ZikaBooking email`);
+    console.log(`Verification Link: ${link}`);
+    console.log("=".repeat(60) + "\n");
+  }
+
   await sendWithRetry({
     to,
     from: FROM,

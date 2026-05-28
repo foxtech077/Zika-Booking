@@ -147,7 +147,8 @@ export type LongStayDiscountType = (typeof LongStayDiscountType)[keyof typeof Lo
 
 export const Transmission: {
   manual: 'manual',
-  automatic: 'automatic'
+  automatic: 'automatic',
+  semi_auto: 'semi_auto'
 };
 
 export type Transmission = (typeof Transmission)[keyof typeof Transmission]
@@ -157,7 +158,8 @@ export const FuelType: {
   petrol: 'petrol',
   diesel: 'diesel',
   electric: 'electric',
-  hybrid: 'hybrid'
+  hybrid: 'hybrid',
+  lpg: 'lpg'
 };
 
 export type FuelType = (typeof FuelType)[keyof typeof FuelType]
@@ -197,10 +199,61 @@ export type CancellationPolicy = (typeof CancellationPolicy)[keyof typeof Cancel
 export const DocumentType: {
   business_licence: 'business_licence',
   operating_permit: 'operating_permit',
-  tourism_certificate: 'tourism_certificate'
+  tourism_certificate: 'tourism_certificate',
+  insurance_certificate: 'insurance_certificate',
+  roadworthiness_certificate: 'roadworthiness_certificate',
+  vehicle_registration: 'vehicle_registration',
+  hotel_operating_permit: 'hotel_operating_permit',
+  tourism_authority_certificate: 'tourism_authority_certificate'
 };
 
 export type DocumentType = (typeof DocumentType)[keyof typeof DocumentType]
+
+
+export const CarCategory: {
+  Economy: 'Economy',
+  Compact: 'Compact',
+  SUV: 'SUV',
+  Minivan: 'Minivan',
+  Pickup: 'Pickup',
+  Luxury: 'Luxury',
+  Electric: 'Electric',
+  Convertible: 'Convertible'
+};
+
+export type CarCategory = (typeof CarCategory)[keyof typeof CarCategory]
+
+
+export const DriveType: {
+  TWO_WD: 'TWO_WD',
+  FOUR_WD: 'FOUR_WD',
+  AWD: 'AWD'
+};
+
+export type DriveType = (typeof DriveType)[keyof typeof DriveType]
+
+
+export const InsuranceType: {
+  basic: 'basic',
+  standard: 'standard',
+  premium: 'premium',
+  comprehensive: 'comprehensive',
+  basic_third_party: 'basic_third_party',
+  premium_zero_excess: 'premium_zero_excess'
+};
+
+export type InsuranceType = (typeof InsuranceType)[keyof typeof InsuranceType]
+
+
+export const FuelPolicy: {
+  full_to_full: 'full_to_full',
+  same_to_same: 'same_to_same',
+  free_tank: 'free_tank',
+  full_to_empty: 'full_to_empty',
+  pre_purchase: 'pre_purchase'
+};
+
+export type FuelPolicy = (typeof FuelPolicy)[keyof typeof FuelPolicy]
 
 
 export const ReviewTaskStatus: {
@@ -277,6 +330,22 @@ export const CancellationPolicy: typeof $Enums.CancellationPolicy
 export type DocumentType = $Enums.DocumentType
 
 export const DocumentType: typeof $Enums.DocumentType
+
+export type CarCategory = $Enums.CarCategory
+
+export const CarCategory: typeof $Enums.CarCategory
+
+export type DriveType = $Enums.DriveType
+
+export const DriveType: typeof $Enums.DriveType
+
+export type InsuranceType = $Enums.InsuranceType
+
+export const InsuranceType: typeof $Enums.InsuranceType
+
+export type FuelPolicy = $Enums.FuelPolicy
+
+export const FuelPolicy: typeof $Enums.FuelPolicy
 
 export type ReviewTaskStatus = $Enums.ReviewTaskStatus
 
@@ -2934,6 +3003,7 @@ export namespace Prisma {
   export type ListingAvgAggregateOutputType = {
     unitCount: number | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     minStayNights: number | null
     lat: Decimal | null
     lng: Decimal | null
@@ -2950,11 +3020,19 @@ export namespace Prisma {
     seats: number | null
     doors: number | null
     mileageLimitKm: number | null
+    odometerReading: number | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    extraKmRate: Decimal | null
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
   }
 
   export type ListingSumAggregateOutputType = {
     unitCount: number | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     minStayNights: number | null
     lat: Decimal | null
     lng: Decimal | null
@@ -2971,6 +3049,13 @@ export namespace Prisma {
     seats: number | null
     doors: number | null
     mileageLimitKm: number | null
+    odometerReading: number | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    extraKmRate: Decimal | null
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
   }
 
   export type ListingMinAggregateOutputType = {
@@ -2982,6 +3067,7 @@ export namespace Prisma {
     unitCount: number | null
     description: string | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     currency: string | null
     minStayNights: number | null
     checkinTime: string | null
@@ -3025,6 +3111,28 @@ export namespace Prisma {
     doors: number | null
     mileagePolicy: $Enums.MileagePolicy | null
     mileageLimitKm: number | null
+    carCategory: $Enums.CarCategory | null
+    driveType: $Enums.DriveType | null
+    airConditioning: boolean | null
+    odometerReading: number | null
+    licencePlate: string | null
+    engineSize: string | null
+    colour: string | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    fuelPolicy: $Enums.FuelPolicy | null
+    extraKmRate: Decimal | null
+    roadsideAssistance: boolean | null
+    crossBorderAllowed: boolean | null
+    airportPickup: boolean | null
+    deliveryEnabled: boolean | null
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
+    pickupHoursFrom: string | null
+    pickupHoursTo: string | null
+    returnSameLocation: boolean | null
+    insuranceType: $Enums.InsuranceType | null
     updatedAt: Date | null
     createdAt: Date | null
     deletedAt: Date | null
@@ -3039,6 +3147,7 @@ export namespace Prisma {
     unitCount: number | null
     description: string | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     currency: string | null
     minStayNights: number | null
     checkinTime: string | null
@@ -3082,6 +3191,28 @@ export namespace Prisma {
     doors: number | null
     mileagePolicy: $Enums.MileagePolicy | null
     mileageLimitKm: number | null
+    carCategory: $Enums.CarCategory | null
+    driveType: $Enums.DriveType | null
+    airConditioning: boolean | null
+    odometerReading: number | null
+    licencePlate: string | null
+    engineSize: string | null
+    colour: string | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    fuelPolicy: $Enums.FuelPolicy | null
+    extraKmRate: Decimal | null
+    roadsideAssistance: boolean | null
+    crossBorderAllowed: boolean | null
+    airportPickup: boolean | null
+    deliveryEnabled: boolean | null
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
+    pickupHoursFrom: string | null
+    pickupHoursTo: string | null
+    returnSameLocation: boolean | null
+    insuranceType: $Enums.InsuranceType | null
     updatedAt: Date | null
     createdAt: Date | null
     deletedAt: Date | null
@@ -3096,6 +3227,7 @@ export namespace Prisma {
     unitCount: number
     description: number
     pricePerNight: number
+    pricePerDay: number
     currency: number
     minStayNights: number
     checkinTime: number
@@ -3140,6 +3272,28 @@ export namespace Prisma {
     doors: number
     mileagePolicy: number
     mileageLimitKm: number
+    carCategory: number
+    driveType: number
+    airConditioning: number
+    odometerReading: number
+    licencePlate: number
+    engineSize: number
+    colour: number
+    securityDeposit: number
+    minimumDriverAge: number
+    minimumRentalDays: number
+    fuelPolicy: number
+    extraKmRate: number
+    roadsideAssistance: number
+    crossBorderAllowed: number
+    airportPickup: number
+    deliveryEnabled: number
+    deliveryRadiusKm: number
+    deliveryFee: number
+    pickupHoursFrom: number
+    pickupHoursTo: number
+    returnSameLocation: number
+    insuranceType: number
     updatedAt: number
     createdAt: number
     deletedAt: number
@@ -3150,6 +3304,7 @@ export namespace Prisma {
   export type ListingAvgAggregateInputType = {
     unitCount?: true
     pricePerNight?: true
+    pricePerDay?: true
     minStayNights?: true
     lat?: true
     lng?: true
@@ -3166,11 +3321,19 @@ export namespace Prisma {
     seats?: true
     doors?: true
     mileageLimitKm?: true
+    odometerReading?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    extraKmRate?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
   }
 
   export type ListingSumAggregateInputType = {
     unitCount?: true
     pricePerNight?: true
+    pricePerDay?: true
     minStayNights?: true
     lat?: true
     lng?: true
@@ -3187,6 +3350,13 @@ export namespace Prisma {
     seats?: true
     doors?: true
     mileageLimitKm?: true
+    odometerReading?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    extraKmRate?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
   }
 
   export type ListingMinAggregateInputType = {
@@ -3198,6 +3368,7 @@ export namespace Prisma {
     unitCount?: true
     description?: true
     pricePerNight?: true
+    pricePerDay?: true
     currency?: true
     minStayNights?: true
     checkinTime?: true
@@ -3241,6 +3412,28 @@ export namespace Prisma {
     doors?: true
     mileagePolicy?: true
     mileageLimitKm?: true
+    carCategory?: true
+    driveType?: true
+    airConditioning?: true
+    odometerReading?: true
+    licencePlate?: true
+    engineSize?: true
+    colour?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    fuelPolicy?: true
+    extraKmRate?: true
+    roadsideAssistance?: true
+    crossBorderAllowed?: true
+    airportPickup?: true
+    deliveryEnabled?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
+    pickupHoursFrom?: true
+    pickupHoursTo?: true
+    returnSameLocation?: true
+    insuranceType?: true
     updatedAt?: true
     createdAt?: true
     deletedAt?: true
@@ -3255,6 +3448,7 @@ export namespace Prisma {
     unitCount?: true
     description?: true
     pricePerNight?: true
+    pricePerDay?: true
     currency?: true
     minStayNights?: true
     checkinTime?: true
@@ -3298,6 +3492,28 @@ export namespace Prisma {
     doors?: true
     mileagePolicy?: true
     mileageLimitKm?: true
+    carCategory?: true
+    driveType?: true
+    airConditioning?: true
+    odometerReading?: true
+    licencePlate?: true
+    engineSize?: true
+    colour?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    fuelPolicy?: true
+    extraKmRate?: true
+    roadsideAssistance?: true
+    crossBorderAllowed?: true
+    airportPickup?: true
+    deliveryEnabled?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
+    pickupHoursFrom?: true
+    pickupHoursTo?: true
+    returnSameLocation?: true
+    insuranceType?: true
     updatedAt?: true
     createdAt?: true
     deletedAt?: true
@@ -3312,6 +3528,7 @@ export namespace Prisma {
     unitCount?: true
     description?: true
     pricePerNight?: true
+    pricePerDay?: true
     currency?: true
     minStayNights?: true
     checkinTime?: true
@@ -3356,6 +3573,28 @@ export namespace Prisma {
     doors?: true
     mileagePolicy?: true
     mileageLimitKm?: true
+    carCategory?: true
+    driveType?: true
+    airConditioning?: true
+    odometerReading?: true
+    licencePlate?: true
+    engineSize?: true
+    colour?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    fuelPolicy?: true
+    extraKmRate?: true
+    roadsideAssistance?: true
+    crossBorderAllowed?: true
+    airportPickup?: true
+    deliveryEnabled?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
+    pickupHoursFrom?: true
+    pickupHoursTo?: true
+    returnSameLocation?: true
+    insuranceType?: true
     updatedAt?: true
     createdAt?: true
     deletedAt?: true
@@ -3457,6 +3696,7 @@ export namespace Prisma {
     unitCount: number | null
     description: string | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     currency: string | null
     minStayNights: number
     checkinTime: string | null
@@ -3501,6 +3741,28 @@ export namespace Prisma {
     doors: number | null
     mileagePolicy: $Enums.MileagePolicy | null
     mileageLimitKm: number | null
+    carCategory: $Enums.CarCategory | null
+    driveType: $Enums.DriveType | null
+    airConditioning: boolean | null
+    odometerReading: number | null
+    licencePlate: string | null
+    engineSize: string | null
+    colour: string | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    fuelPolicy: $Enums.FuelPolicy | null
+    extraKmRate: Decimal | null
+    roadsideAssistance: boolean
+    crossBorderAllowed: boolean
+    airportPickup: boolean
+    deliveryEnabled: boolean
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
+    pickupHoursFrom: string | null
+    pickupHoursTo: string | null
+    returnSameLocation: boolean
+    insuranceType: $Enums.InsuranceType | null
     updatedAt: Date
     createdAt: Date
     deletedAt: Date | null
@@ -3534,6 +3796,7 @@ export namespace Prisma {
     unitCount?: boolean
     description?: boolean
     pricePerNight?: boolean
+    pricePerDay?: boolean
     currency?: boolean
     minStayNights?: boolean
     checkinTime?: boolean
@@ -3578,6 +3841,28 @@ export namespace Prisma {
     doors?: boolean
     mileagePolicy?: boolean
     mileageLimitKm?: boolean
+    carCategory?: boolean
+    driveType?: boolean
+    airConditioning?: boolean
+    odometerReading?: boolean
+    licencePlate?: boolean
+    engineSize?: boolean
+    colour?: boolean
+    securityDeposit?: boolean
+    minimumDriverAge?: boolean
+    minimumRentalDays?: boolean
+    fuelPolicy?: boolean
+    extraKmRate?: boolean
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: boolean
+    deliveryFee?: boolean
+    pickupHoursFrom?: boolean
+    pickupHoursTo?: boolean
+    returnSameLocation?: boolean
+    insuranceType?: boolean
     updatedAt?: boolean
     createdAt?: boolean
     deletedAt?: boolean
@@ -3603,6 +3888,7 @@ export namespace Prisma {
     unitCount?: boolean
     description?: boolean
     pricePerNight?: boolean
+    pricePerDay?: boolean
     currency?: boolean
     minStayNights?: boolean
     checkinTime?: boolean
@@ -3647,6 +3933,28 @@ export namespace Prisma {
     doors?: boolean
     mileagePolicy?: boolean
     mileageLimitKm?: boolean
+    carCategory?: boolean
+    driveType?: boolean
+    airConditioning?: boolean
+    odometerReading?: boolean
+    licencePlate?: boolean
+    engineSize?: boolean
+    colour?: boolean
+    securityDeposit?: boolean
+    minimumDriverAge?: boolean
+    minimumRentalDays?: boolean
+    fuelPolicy?: boolean
+    extraKmRate?: boolean
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: boolean
+    deliveryFee?: boolean
+    pickupHoursFrom?: boolean
+    pickupHoursTo?: boolean
+    returnSameLocation?: boolean
+    insuranceType?: boolean
     updatedAt?: boolean
     createdAt?: boolean
     deletedAt?: boolean
@@ -3661,6 +3969,7 @@ export namespace Prisma {
     unitCount?: boolean
     description?: boolean
     pricePerNight?: boolean
+    pricePerDay?: boolean
     currency?: boolean
     minStayNights?: boolean
     checkinTime?: boolean
@@ -3705,6 +4014,28 @@ export namespace Prisma {
     doors?: boolean
     mileagePolicy?: boolean
     mileageLimitKm?: boolean
+    carCategory?: boolean
+    driveType?: boolean
+    airConditioning?: boolean
+    odometerReading?: boolean
+    licencePlate?: boolean
+    engineSize?: boolean
+    colour?: boolean
+    securityDeposit?: boolean
+    minimumDriverAge?: boolean
+    minimumRentalDays?: boolean
+    fuelPolicy?: boolean
+    extraKmRate?: boolean
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: boolean
+    deliveryFee?: boolean
+    pickupHoursFrom?: boolean
+    pickupHoursTo?: boolean
+    returnSameLocation?: boolean
+    insuranceType?: boolean
     updatedAt?: boolean
     createdAt?: boolean
     deletedAt?: boolean
@@ -3719,6 +4050,7 @@ export namespace Prisma {
     unitCount?: boolean
     description?: boolean
     pricePerNight?: boolean
+    pricePerDay?: boolean
     currency?: boolean
     minStayNights?: boolean
     checkinTime?: boolean
@@ -3763,12 +4095,34 @@ export namespace Prisma {
     doors?: boolean
     mileagePolicy?: boolean
     mileageLimitKm?: boolean
+    carCategory?: boolean
+    driveType?: boolean
+    airConditioning?: boolean
+    odometerReading?: boolean
+    licencePlate?: boolean
+    engineSize?: boolean
+    colour?: boolean
+    securityDeposit?: boolean
+    minimumDriverAge?: boolean
+    minimumRentalDays?: boolean
+    fuelPolicy?: boolean
+    extraKmRate?: boolean
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: boolean
+    deliveryFee?: boolean
+    pickupHoursFrom?: boolean
+    pickupHoursTo?: boolean
+    returnSameLocation?: boolean
+    insuranceType?: boolean
     updatedAt?: boolean
     createdAt?: boolean
     deletedAt?: boolean
   }
 
-  export type ListingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "providerId" | "category" | "name" | "roomType" | "unitCount" | "description" | "pricePerNight" | "currency" | "minStayNights" | "checkinTime" | "checkoutTime" | "cancellationPolicy" | "smokingAllowed" | "petsAllowed" | "address" | "lat" | "lng" | "town" | "country" | "claimedStarRating" | "starRating" | "status" | "submissionCount" | "submittedAt" | "approvedAt" | "approvedBy" | "rejectedAt" | "rejectedBy" | "rejectionReasons" | "rejectionNote" | "suspendedAt" | "suspendedBy" | "suspensionReason" | "consecutiveNegative" | "bedrooms" | "bathrooms" | "maxGuests" | "longStayEnabled" | "longStayMinNights" | "longStayDiscountType" | "longStayDiscountValue" | "activatedAt" | "carMake" | "carModel" | "carYear" | "transmission" | "fuelType" | "seats" | "doors" | "mileagePolicy" | "mileageLimitKm" | "updatedAt" | "createdAt" | "deletedAt", ExtArgs["result"]["listing"]>
+  export type ListingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "providerId" | "category" | "name" | "roomType" | "unitCount" | "description" | "pricePerNight" | "pricePerDay" | "currency" | "minStayNights" | "checkinTime" | "checkoutTime" | "cancellationPolicy" | "smokingAllowed" | "petsAllowed" | "address" | "lat" | "lng" | "town" | "country" | "claimedStarRating" | "starRating" | "status" | "submissionCount" | "submittedAt" | "approvedAt" | "approvedBy" | "rejectedAt" | "rejectedBy" | "rejectionReasons" | "rejectionNote" | "suspendedAt" | "suspendedBy" | "suspensionReason" | "consecutiveNegative" | "bedrooms" | "bathrooms" | "maxGuests" | "longStayEnabled" | "longStayMinNights" | "longStayDiscountType" | "longStayDiscountValue" | "activatedAt" | "carMake" | "carModel" | "carYear" | "transmission" | "fuelType" | "seats" | "doors" | "mileagePolicy" | "mileageLimitKm" | "carCategory" | "driveType" | "airConditioning" | "odometerReading" | "licencePlate" | "engineSize" | "colour" | "securityDeposit" | "minimumDriverAge" | "minimumRentalDays" | "fuelPolicy" | "extraKmRate" | "roadsideAssistance" | "crossBorderAllowed" | "airportPickup" | "deliveryEnabled" | "deliveryRadiusKm" | "deliveryFee" | "pickupHoursFrom" | "pickupHoursTo" | "returnSameLocation" | "insuranceType" | "updatedAt" | "createdAt" | "deletedAt", ExtArgs["result"]["listing"]>
   export type ListingInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     photos?: boolean | Listing$photosArgs<ExtArgs>
     documents?: boolean | Listing$documentsArgs<ExtArgs>
@@ -3808,6 +4162,7 @@ export namespace Prisma {
       unitCount: number | null
       description: string | null
       pricePerNight: Prisma.Decimal | null
+      pricePerDay: Prisma.Decimal | null
       currency: string | null
       minStayNights: number
       checkinTime: string | null
@@ -3852,6 +4207,28 @@ export namespace Prisma {
       doors: number | null
       mileagePolicy: $Enums.MileagePolicy | null
       mileageLimitKm: number | null
+      carCategory: $Enums.CarCategory | null
+      driveType: $Enums.DriveType | null
+      airConditioning: boolean | null
+      odometerReading: number | null
+      licencePlate: string | null
+      engineSize: string | null
+      colour: string | null
+      securityDeposit: Prisma.Decimal | null
+      minimumDriverAge: number | null
+      minimumRentalDays: number | null
+      fuelPolicy: $Enums.FuelPolicy | null
+      extraKmRate: Prisma.Decimal | null
+      roadsideAssistance: boolean
+      crossBorderAllowed: boolean
+      airportPickup: boolean
+      deliveryEnabled: boolean
+      deliveryRadiusKm: number | null
+      deliveryFee: Prisma.Decimal | null
+      pickupHoursFrom: string | null
+      pickupHoursTo: string | null
+      returnSameLocation: boolean
+      insuranceType: $Enums.InsuranceType | null
       updatedAt: Date
       createdAt: Date
       deletedAt: Date | null
@@ -4296,6 +4673,7 @@ export namespace Prisma {
     readonly unitCount: FieldRef<"Listing", 'Int'>
     readonly description: FieldRef<"Listing", 'String'>
     readonly pricePerNight: FieldRef<"Listing", 'Decimal'>
+    readonly pricePerDay: FieldRef<"Listing", 'Decimal'>
     readonly currency: FieldRef<"Listing", 'String'>
     readonly minStayNights: FieldRef<"Listing", 'Int'>
     readonly checkinTime: FieldRef<"Listing", 'String'>
@@ -4340,6 +4718,28 @@ export namespace Prisma {
     readonly doors: FieldRef<"Listing", 'Int'>
     readonly mileagePolicy: FieldRef<"Listing", 'MileagePolicy'>
     readonly mileageLimitKm: FieldRef<"Listing", 'Int'>
+    readonly carCategory: FieldRef<"Listing", 'CarCategory'>
+    readonly driveType: FieldRef<"Listing", 'DriveType'>
+    readonly airConditioning: FieldRef<"Listing", 'Boolean'>
+    readonly odometerReading: FieldRef<"Listing", 'Int'>
+    readonly licencePlate: FieldRef<"Listing", 'String'>
+    readonly engineSize: FieldRef<"Listing", 'String'>
+    readonly colour: FieldRef<"Listing", 'String'>
+    readonly securityDeposit: FieldRef<"Listing", 'Decimal'>
+    readonly minimumDriverAge: FieldRef<"Listing", 'Int'>
+    readonly minimumRentalDays: FieldRef<"Listing", 'Int'>
+    readonly fuelPolicy: FieldRef<"Listing", 'FuelPolicy'>
+    readonly extraKmRate: FieldRef<"Listing", 'Decimal'>
+    readonly roadsideAssistance: FieldRef<"Listing", 'Boolean'>
+    readonly crossBorderAllowed: FieldRef<"Listing", 'Boolean'>
+    readonly airportPickup: FieldRef<"Listing", 'Boolean'>
+    readonly deliveryEnabled: FieldRef<"Listing", 'Boolean'>
+    readonly deliveryRadiusKm: FieldRef<"Listing", 'Int'>
+    readonly deliveryFee: FieldRef<"Listing", 'Decimal'>
+    readonly pickupHoursFrom: FieldRef<"Listing", 'String'>
+    readonly pickupHoursTo: FieldRef<"Listing", 'String'>
+    readonly returnSameLocation: FieldRef<"Listing", 'Boolean'>
+    readonly insuranceType: FieldRef<"Listing", 'InsuranceType'>
     readonly updatedAt: FieldRef<"Listing", 'DateTime'>
     readonly createdAt: FieldRef<"Listing", 'DateTime'>
     readonly deletedAt: FieldRef<"Listing", 'DateTime'>
@@ -21115,8 +21515,18 @@ export namespace Prisma {
 
   export type AggregateIcalFeed = {
     _count: IcalFeedCountAggregateOutputType | null
+    _avg: IcalFeedAvgAggregateOutputType | null
+    _sum: IcalFeedSumAggregateOutputType | null
     _min: IcalFeedMinAggregateOutputType | null
     _max: IcalFeedMaxAggregateOutputType | null
+  }
+
+  export type IcalFeedAvgAggregateOutputType = {
+    consecutiveFailures: number | null
+  }
+
+  export type IcalFeedSumAggregateOutputType = {
+    consecutiveFailures: number | null
   }
 
   export type IcalFeedMinAggregateOutputType = {
@@ -21126,6 +21536,8 @@ export namespace Prisma {
     feedUrl: string | null
     lastSyncedAt: Date | null
     lastError: string | null
+    consecutiveFailures: number | null
+    nextRetryAt: Date | null
     isActive: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -21138,6 +21550,8 @@ export namespace Prisma {
     feedUrl: string | null
     lastSyncedAt: Date | null
     lastError: string | null
+    consecutiveFailures: number | null
+    nextRetryAt: Date | null
     isActive: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -21150,12 +21564,22 @@ export namespace Prisma {
     feedUrl: number
     lastSyncedAt: number
     lastError: number
+    consecutiveFailures: number
+    nextRetryAt: number
     isActive: number
     createdAt: number
     updatedAt: number
     _all: number
   }
 
+
+  export type IcalFeedAvgAggregateInputType = {
+    consecutiveFailures?: true
+  }
+
+  export type IcalFeedSumAggregateInputType = {
+    consecutiveFailures?: true
+  }
 
   export type IcalFeedMinAggregateInputType = {
     id?: true
@@ -21164,6 +21588,8 @@ export namespace Prisma {
     feedUrl?: true
     lastSyncedAt?: true
     lastError?: true
+    consecutiveFailures?: true
+    nextRetryAt?: true
     isActive?: true
     createdAt?: true
     updatedAt?: true
@@ -21176,6 +21602,8 @@ export namespace Prisma {
     feedUrl?: true
     lastSyncedAt?: true
     lastError?: true
+    consecutiveFailures?: true
+    nextRetryAt?: true
     isActive?: true
     createdAt?: true
     updatedAt?: true
@@ -21188,6 +21616,8 @@ export namespace Prisma {
     feedUrl?: true
     lastSyncedAt?: true
     lastError?: true
+    consecutiveFailures?: true
+    nextRetryAt?: true
     isActive?: true
     createdAt?: true
     updatedAt?: true
@@ -21232,6 +21662,18 @@ export namespace Prisma {
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
+     * Select which fields to average
+    **/
+    _avg?: IcalFeedAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: IcalFeedSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
      * Select which fields to find the minimum value
     **/
     _min?: IcalFeedMinAggregateInputType
@@ -21262,6 +21704,8 @@ export namespace Prisma {
     take?: number
     skip?: number
     _count?: IcalFeedCountAggregateInputType | true
+    _avg?: IcalFeedAvgAggregateInputType
+    _sum?: IcalFeedSumAggregateInputType
     _min?: IcalFeedMinAggregateInputType
     _max?: IcalFeedMaxAggregateInputType
   }
@@ -21273,10 +21717,14 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt: Date | null
     lastError: string | null
+    consecutiveFailures: number
+    nextRetryAt: Date | null
     isActive: boolean
     createdAt: Date
     updatedAt: Date
     _count: IcalFeedCountAggregateOutputType | null
+    _avg: IcalFeedAvgAggregateOutputType | null
+    _sum: IcalFeedSumAggregateOutputType | null
     _min: IcalFeedMinAggregateOutputType | null
     _max: IcalFeedMaxAggregateOutputType | null
   }
@@ -21302,6 +21750,8 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -21317,6 +21767,8 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -21330,6 +21782,8 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -21343,12 +21797,14 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type IcalFeedOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "platform" | "feedUrl" | "lastSyncedAt" | "lastError" | "isActive" | "createdAt" | "updatedAt", ExtArgs["result"]["icalFeed"]>
+  export type IcalFeedOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "platform" | "feedUrl" | "lastSyncedAt" | "lastError" | "consecutiveFailures" | "nextRetryAt" | "isActive" | "createdAt" | "updatedAt", ExtArgs["result"]["icalFeed"]>
   export type IcalFeedInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     listing?: boolean | ListingDefaultArgs<ExtArgs>
     blockedDates?: boolean | IcalFeed$blockedDatesArgs<ExtArgs>
@@ -21374,6 +21830,8 @@ export namespace Prisma {
       feedUrl: string
       lastSyncedAt: Date | null
       lastError: string | null
+      consecutiveFailures: number
+      nextRetryAt: Date | null
       isActive: boolean
       createdAt: Date
       updatedAt: Date
@@ -21808,6 +22266,8 @@ export namespace Prisma {
     readonly feedUrl: FieldRef<"IcalFeed", 'String'>
     readonly lastSyncedAt: FieldRef<"IcalFeed", 'DateTime'>
     readonly lastError: FieldRef<"IcalFeed", 'String'>
+    readonly consecutiveFailures: FieldRef<"IcalFeed", 'Int'>
+    readonly nextRetryAt: FieldRef<"IcalFeed", 'DateTime'>
     readonly isActive: FieldRef<"IcalFeed", 'Boolean'>
     readonly createdAt: FieldRef<"IcalFeed", 'DateTime'>
     readonly updatedAt: FieldRef<"IcalFeed", 'DateTime'>
@@ -25575,6 +26035,7 @@ export namespace Prisma {
     unitCount: 'unitCount',
     description: 'description',
     pricePerNight: 'pricePerNight',
+    pricePerDay: 'pricePerDay',
     currency: 'currency',
     minStayNights: 'minStayNights',
     checkinTime: 'checkinTime',
@@ -25619,6 +26080,28 @@ export namespace Prisma {
     doors: 'doors',
     mileagePolicy: 'mileagePolicy',
     mileageLimitKm: 'mileageLimitKm',
+    carCategory: 'carCategory',
+    driveType: 'driveType',
+    airConditioning: 'airConditioning',
+    odometerReading: 'odometerReading',
+    licencePlate: 'licencePlate',
+    engineSize: 'engineSize',
+    colour: 'colour',
+    securityDeposit: 'securityDeposit',
+    minimumDriverAge: 'minimumDriverAge',
+    minimumRentalDays: 'minimumRentalDays',
+    fuelPolicy: 'fuelPolicy',
+    extraKmRate: 'extraKmRate',
+    roadsideAssistance: 'roadsideAssistance',
+    crossBorderAllowed: 'crossBorderAllowed',
+    airportPickup: 'airportPickup',
+    deliveryEnabled: 'deliveryEnabled',
+    deliveryRadiusKm: 'deliveryRadiusKm',
+    deliveryFee: 'deliveryFee',
+    pickupHoursFrom: 'pickupHoursFrom',
+    pickupHoursTo: 'pickupHoursTo',
+    returnSameLocation: 'returnSameLocation',
+    insuranceType: 'insuranceType',
     updatedAt: 'updatedAt',
     createdAt: 'createdAt',
     deletedAt: 'deletedAt'
@@ -25865,6 +26348,8 @@ export namespace Prisma {
     feedUrl: 'feedUrl',
     lastSyncedAt: 'lastSyncedAt',
     lastError: 'lastError',
+    consecutiveFailures: 'consecutiveFailures',
+    nextRetryAt: 'nextRetryAt',
     isActive: 'isActive',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -26136,6 +26621,62 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'CarCategory'
+   */
+  export type EnumCarCategoryFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CarCategory'>
+    
+
+
+  /**
+   * Reference to a field of type 'CarCategory[]'
+   */
+  export type ListEnumCarCategoryFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CarCategory[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'DriveType'
+   */
+  export type EnumDriveTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DriveType'>
+    
+
+
+  /**
+   * Reference to a field of type 'DriveType[]'
+   */
+  export type ListEnumDriveTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DriveType[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'FuelPolicy'
+   */
+  export type EnumFuelPolicyFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'FuelPolicy'>
+    
+
+
+  /**
+   * Reference to a field of type 'FuelPolicy[]'
+   */
+  export type ListEnumFuelPolicyFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'FuelPolicy[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'InsuranceType'
+   */
+  export type EnumInsuranceTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'InsuranceType'>
+    
+
+
+  /**
+   * Reference to a field of type 'InsuranceType[]'
+   */
+  export type ListEnumInsuranceTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'InsuranceType[]'>
+    
+
+
+  /**
    * Reference to a field of type 'ReviewTaskStatus'
    */
   export type EnumReviewTaskStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ReviewTaskStatus'>
@@ -26248,6 +26789,7 @@ export namespace Prisma {
     unitCount?: IntNullableFilter<"Listing"> | number | null
     description?: StringNullableFilter<"Listing"> | string | null
     pricePerNight?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
     currency?: StringNullableFilter<"Listing"> | string | null
     minStayNights?: IntFilter<"Listing"> | number
     checkinTime?: StringNullableFilter<"Listing"> | string | null
@@ -26292,6 +26834,28 @@ export namespace Prisma {
     doors?: IntNullableFilter<"Listing"> | number | null
     mileagePolicy?: EnumMileagePolicyNullableFilter<"Listing"> | $Enums.MileagePolicy | null
     mileageLimitKm?: IntNullableFilter<"Listing"> | number | null
+    carCategory?: EnumCarCategoryNullableFilter<"Listing"> | $Enums.CarCategory | null
+    driveType?: EnumDriveTypeNullableFilter<"Listing"> | $Enums.DriveType | null
+    airConditioning?: BoolNullableFilter<"Listing"> | boolean | null
+    odometerReading?: IntNullableFilter<"Listing"> | number | null
+    licencePlate?: StringNullableFilter<"Listing"> | string | null
+    engineSize?: StringNullableFilter<"Listing"> | string | null
+    colour?: StringNullableFilter<"Listing"> | string | null
+    securityDeposit?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: IntNullableFilter<"Listing"> | number | null
+    minimumRentalDays?: IntNullableFilter<"Listing"> | number | null
+    fuelPolicy?: EnumFuelPolicyNullableFilter<"Listing"> | $Enums.FuelPolicy | null
+    extraKmRate?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFilter<"Listing"> | boolean
+    crossBorderAllowed?: BoolFilter<"Listing"> | boolean
+    airportPickup?: BoolFilter<"Listing"> | boolean
+    deliveryEnabled?: BoolFilter<"Listing"> | boolean
+    deliveryRadiusKm?: IntNullableFilter<"Listing"> | number | null
+    deliveryFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: StringNullableFilter<"Listing"> | string | null
+    pickupHoursTo?: StringNullableFilter<"Listing"> | string | null
+    returnSameLocation?: BoolFilter<"Listing"> | boolean
+    insuranceType?: EnumInsuranceTypeNullableFilter<"Listing"> | $Enums.InsuranceType | null
     updatedAt?: DateTimeFilter<"Listing"> | Date | string
     createdAt?: DateTimeFilter<"Listing"> | Date | string
     deletedAt?: DateTimeNullableFilter<"Listing"> | Date | string | null
@@ -26316,6 +26880,7 @@ export namespace Prisma {
     unitCount?: SortOrderInput | SortOrder
     description?: SortOrderInput | SortOrder
     pricePerNight?: SortOrderInput | SortOrder
+    pricePerDay?: SortOrderInput | SortOrder
     currency?: SortOrderInput | SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrderInput | SortOrder
@@ -26360,6 +26925,28 @@ export namespace Prisma {
     doors?: SortOrderInput | SortOrder
     mileagePolicy?: SortOrderInput | SortOrder
     mileageLimitKm?: SortOrderInput | SortOrder
+    carCategory?: SortOrderInput | SortOrder
+    driveType?: SortOrderInput | SortOrder
+    airConditioning?: SortOrderInput | SortOrder
+    odometerReading?: SortOrderInput | SortOrder
+    licencePlate?: SortOrderInput | SortOrder
+    engineSize?: SortOrderInput | SortOrder
+    colour?: SortOrderInput | SortOrder
+    securityDeposit?: SortOrderInput | SortOrder
+    minimumDriverAge?: SortOrderInput | SortOrder
+    minimumRentalDays?: SortOrderInput | SortOrder
+    fuelPolicy?: SortOrderInput | SortOrder
+    extraKmRate?: SortOrderInput | SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrderInput | SortOrder
+    deliveryFee?: SortOrderInput | SortOrder
+    pickupHoursFrom?: SortOrderInput | SortOrder
+    pickupHoursTo?: SortOrderInput | SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrderInput | SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrderInput | SortOrder
@@ -26387,6 +26974,7 @@ export namespace Prisma {
     unitCount?: IntNullableFilter<"Listing"> | number | null
     description?: StringNullableFilter<"Listing"> | string | null
     pricePerNight?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
     currency?: StringNullableFilter<"Listing"> | string | null
     minStayNights?: IntFilter<"Listing"> | number
     checkinTime?: StringNullableFilter<"Listing"> | string | null
@@ -26431,6 +27019,28 @@ export namespace Prisma {
     doors?: IntNullableFilter<"Listing"> | number | null
     mileagePolicy?: EnumMileagePolicyNullableFilter<"Listing"> | $Enums.MileagePolicy | null
     mileageLimitKm?: IntNullableFilter<"Listing"> | number | null
+    carCategory?: EnumCarCategoryNullableFilter<"Listing"> | $Enums.CarCategory | null
+    driveType?: EnumDriveTypeNullableFilter<"Listing"> | $Enums.DriveType | null
+    airConditioning?: BoolNullableFilter<"Listing"> | boolean | null
+    odometerReading?: IntNullableFilter<"Listing"> | number | null
+    licencePlate?: StringNullableFilter<"Listing"> | string | null
+    engineSize?: StringNullableFilter<"Listing"> | string | null
+    colour?: StringNullableFilter<"Listing"> | string | null
+    securityDeposit?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: IntNullableFilter<"Listing"> | number | null
+    minimumRentalDays?: IntNullableFilter<"Listing"> | number | null
+    fuelPolicy?: EnumFuelPolicyNullableFilter<"Listing"> | $Enums.FuelPolicy | null
+    extraKmRate?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFilter<"Listing"> | boolean
+    crossBorderAllowed?: BoolFilter<"Listing"> | boolean
+    airportPickup?: BoolFilter<"Listing"> | boolean
+    deliveryEnabled?: BoolFilter<"Listing"> | boolean
+    deliveryRadiusKm?: IntNullableFilter<"Listing"> | number | null
+    deliveryFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: StringNullableFilter<"Listing"> | string | null
+    pickupHoursTo?: StringNullableFilter<"Listing"> | string | null
+    returnSameLocation?: BoolFilter<"Listing"> | boolean
+    insuranceType?: EnumInsuranceTypeNullableFilter<"Listing"> | $Enums.InsuranceType | null
     updatedAt?: DateTimeFilter<"Listing"> | Date | string
     createdAt?: DateTimeFilter<"Listing"> | Date | string
     deletedAt?: DateTimeNullableFilter<"Listing"> | Date | string | null
@@ -26455,6 +27065,7 @@ export namespace Prisma {
     unitCount?: SortOrderInput | SortOrder
     description?: SortOrderInput | SortOrder
     pricePerNight?: SortOrderInput | SortOrder
+    pricePerDay?: SortOrderInput | SortOrder
     currency?: SortOrderInput | SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrderInput | SortOrder
@@ -26499,6 +27110,28 @@ export namespace Prisma {
     doors?: SortOrderInput | SortOrder
     mileagePolicy?: SortOrderInput | SortOrder
     mileageLimitKm?: SortOrderInput | SortOrder
+    carCategory?: SortOrderInput | SortOrder
+    driveType?: SortOrderInput | SortOrder
+    airConditioning?: SortOrderInput | SortOrder
+    odometerReading?: SortOrderInput | SortOrder
+    licencePlate?: SortOrderInput | SortOrder
+    engineSize?: SortOrderInput | SortOrder
+    colour?: SortOrderInput | SortOrder
+    securityDeposit?: SortOrderInput | SortOrder
+    minimumDriverAge?: SortOrderInput | SortOrder
+    minimumRentalDays?: SortOrderInput | SortOrder
+    fuelPolicy?: SortOrderInput | SortOrder
+    extraKmRate?: SortOrderInput | SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrderInput | SortOrder
+    deliveryFee?: SortOrderInput | SortOrder
+    pickupHoursFrom?: SortOrderInput | SortOrder
+    pickupHoursTo?: SortOrderInput | SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrderInput | SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrderInput | SortOrder
@@ -26521,6 +27154,7 @@ export namespace Prisma {
     unitCount?: IntNullableWithAggregatesFilter<"Listing"> | number | null
     description?: StringNullableWithAggregatesFilter<"Listing"> | string | null
     pricePerNight?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
     currency?: StringNullableWithAggregatesFilter<"Listing"> | string | null
     minStayNights?: IntWithAggregatesFilter<"Listing"> | number
     checkinTime?: StringNullableWithAggregatesFilter<"Listing"> | string | null
@@ -26565,6 +27199,28 @@ export namespace Prisma {
     doors?: IntNullableWithAggregatesFilter<"Listing"> | number | null
     mileagePolicy?: EnumMileagePolicyNullableWithAggregatesFilter<"Listing"> | $Enums.MileagePolicy | null
     mileageLimitKm?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    carCategory?: EnumCarCategoryNullableWithAggregatesFilter<"Listing"> | $Enums.CarCategory | null
+    driveType?: EnumDriveTypeNullableWithAggregatesFilter<"Listing"> | $Enums.DriveType | null
+    airConditioning?: BoolNullableWithAggregatesFilter<"Listing"> | boolean | null
+    odometerReading?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    licencePlate?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    engineSize?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    colour?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    securityDeposit?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    minimumRentalDays?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    fuelPolicy?: EnumFuelPolicyNullableWithAggregatesFilter<"Listing"> | $Enums.FuelPolicy | null
+    extraKmRate?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolWithAggregatesFilter<"Listing"> | boolean
+    crossBorderAllowed?: BoolWithAggregatesFilter<"Listing"> | boolean
+    airportPickup?: BoolWithAggregatesFilter<"Listing"> | boolean
+    deliveryEnabled?: BoolWithAggregatesFilter<"Listing"> | boolean
+    deliveryRadiusKm?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    deliveryFee?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    pickupHoursTo?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    returnSameLocation?: BoolWithAggregatesFilter<"Listing"> | boolean
+    insuranceType?: EnumInsuranceTypeNullableWithAggregatesFilter<"Listing"> | $Enums.InsuranceType | null
     updatedAt?: DateTimeWithAggregatesFilter<"Listing"> | Date | string
     createdAt?: DateTimeWithAggregatesFilter<"Listing"> | Date | string
     deletedAt?: DateTimeNullableWithAggregatesFilter<"Listing"> | Date | string | null
@@ -27757,6 +28413,8 @@ export namespace Prisma {
     feedUrl?: StringFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeFilter<"IcalFeed"> | Date | string
@@ -27771,6 +28429,8 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrderInput | SortOrder
     lastError?: SortOrderInput | SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrderInput | SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -27788,6 +28448,8 @@ export namespace Prisma {
     feedUrl?: StringFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeFilter<"IcalFeed"> | Date | string
@@ -27802,12 +28464,16 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrderInput | SortOrder
     lastError?: SortOrderInput | SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrderInput | SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: IcalFeedCountOrderByAggregateInput
+    _avg?: IcalFeedAvgOrderByAggregateInput
     _max?: IcalFeedMaxOrderByAggregateInput
     _min?: IcalFeedMinOrderByAggregateInput
+    _sum?: IcalFeedSumOrderByAggregateInput
   }
 
   export type IcalFeedScalarWhereWithAggregatesInput = {
@@ -27820,6 +28486,8 @@ export namespace Prisma {
     feedUrl?: StringWithAggregatesFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableWithAggregatesFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableWithAggregatesFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntWithAggregatesFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableWithAggregatesFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolWithAggregatesFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeWithAggregatesFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"IcalFeed"> | Date | string
@@ -28045,6 +28713,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -28089,6 +28758,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -28113,6 +28804,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -28157,6 +28849,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -28181,6 +28895,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -28225,6 +28940,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -28249,6 +28986,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -28293,6 +29031,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -28317,6 +29077,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -28361,6 +29122,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -28375,6 +29158,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -28419,6 +29203,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -28433,6 +29239,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -28477,6 +29284,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -29811,6 +30640,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -29825,6 +30656,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -29837,6 +30670,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -29851,6 +30686,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -29864,6 +30701,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -29875,6 +30714,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -29887,6 +30728,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -30268,6 +31111,39 @@ export namespace Prisma {
     not?: NestedEnumMileagePolicyNullableFilter<$PrismaModel> | $Enums.MileagePolicy | null
   }
 
+  export type EnumCarCategoryNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.CarCategory | EnumCarCategoryFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCarCategoryNullableFilter<$PrismaModel> | $Enums.CarCategory | null
+  }
+
+  export type EnumDriveTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.DriveType | EnumDriveTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumDriveTypeNullableFilter<$PrismaModel> | $Enums.DriveType | null
+  }
+
+  export type BoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
+  export type EnumFuelPolicyNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.FuelPolicy | EnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    in?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumFuelPolicyNullableFilter<$PrismaModel> | $Enums.FuelPolicy | null
+  }
+
+  export type EnumInsuranceTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.InsuranceType | EnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel> | $Enums.InsuranceType | null
+  }
+
   export type DateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -30393,6 +31269,7 @@ export namespace Prisma {
     unitCount?: SortOrder
     description?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     currency?: SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrder
@@ -30437,6 +31314,28 @@ export namespace Prisma {
     doors?: SortOrder
     mileagePolicy?: SortOrder
     mileageLimitKm?: SortOrder
+    carCategory?: SortOrder
+    driveType?: SortOrder
+    airConditioning?: SortOrder
+    odometerReading?: SortOrder
+    licencePlate?: SortOrder
+    engineSize?: SortOrder
+    colour?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    fuelPolicy?: SortOrder
+    extraKmRate?: SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
+    pickupHoursFrom?: SortOrder
+    pickupHoursTo?: SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrder
@@ -30445,6 +31344,7 @@ export namespace Prisma {
   export type ListingAvgOrderByAggregateInput = {
     unitCount?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     minStayNights?: SortOrder
     lat?: SortOrder
     lng?: SortOrder
@@ -30461,6 +31361,13 @@ export namespace Prisma {
     seats?: SortOrder
     doors?: SortOrder
     mileageLimitKm?: SortOrder
+    odometerReading?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    extraKmRate?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
   }
 
   export type ListingMaxOrderByAggregateInput = {
@@ -30472,6 +31379,7 @@ export namespace Prisma {
     unitCount?: SortOrder
     description?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     currency?: SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrder
@@ -30515,6 +31423,28 @@ export namespace Prisma {
     doors?: SortOrder
     mileagePolicy?: SortOrder
     mileageLimitKm?: SortOrder
+    carCategory?: SortOrder
+    driveType?: SortOrder
+    airConditioning?: SortOrder
+    odometerReading?: SortOrder
+    licencePlate?: SortOrder
+    engineSize?: SortOrder
+    colour?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    fuelPolicy?: SortOrder
+    extraKmRate?: SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
+    pickupHoursFrom?: SortOrder
+    pickupHoursTo?: SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrder
@@ -30529,6 +31459,7 @@ export namespace Prisma {
     unitCount?: SortOrder
     description?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     currency?: SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrder
@@ -30572,6 +31503,28 @@ export namespace Prisma {
     doors?: SortOrder
     mileagePolicy?: SortOrder
     mileageLimitKm?: SortOrder
+    carCategory?: SortOrder
+    driveType?: SortOrder
+    airConditioning?: SortOrder
+    odometerReading?: SortOrder
+    licencePlate?: SortOrder
+    engineSize?: SortOrder
+    colour?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    fuelPolicy?: SortOrder
+    extraKmRate?: SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
+    pickupHoursFrom?: SortOrder
+    pickupHoursTo?: SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrder
@@ -30580,6 +31533,7 @@ export namespace Prisma {
   export type ListingSumOrderByAggregateInput = {
     unitCount?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     minStayNights?: SortOrder
     lat?: SortOrder
     lng?: SortOrder
@@ -30596,6 +31550,13 @@ export namespace Prisma {
     seats?: SortOrder
     doors?: SortOrder
     mileageLimitKm?: SortOrder
+    odometerReading?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    extraKmRate?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
   }
 
   export type StringWithAggregatesFilter<$PrismaModel = never> = {
@@ -30782,6 +31743,54 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedEnumMileagePolicyNullableFilter<$PrismaModel>
     _max?: NestedEnumMileagePolicyNullableFilter<$PrismaModel>
+  }
+
+  export type EnumCarCategoryNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CarCategory | EnumCarCategoryFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCarCategoryNullableWithAggregatesFilter<$PrismaModel> | $Enums.CarCategory | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumCarCategoryNullableFilter<$PrismaModel>
+    _max?: NestedEnumCarCategoryNullableFilter<$PrismaModel>
+  }
+
+  export type EnumDriveTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.DriveType | EnumDriveTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumDriveTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.DriveType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumDriveTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumDriveTypeNullableFilter<$PrismaModel>
+  }
+
+  export type BoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
+  }
+
+  export type EnumFuelPolicyNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.FuelPolicy | EnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    in?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumFuelPolicyNullableWithAggregatesFilter<$PrismaModel> | $Enums.FuelPolicy | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumFuelPolicyNullableFilter<$PrismaModel>
+    _max?: NestedEnumFuelPolicyNullableFilter<$PrismaModel>
+  }
+
+  export type EnumInsuranceTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.InsuranceType | EnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumInsuranceTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.InsuranceType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel>
   }
 
   export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
@@ -31689,9 +32698,15 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrder
     lastError?: SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type IcalFeedAvgOrderByAggregateInput = {
+    consecutiveFailures?: SortOrder
   }
 
   export type IcalFeedMaxOrderByAggregateInput = {
@@ -31701,6 +32716,8 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrder
     lastError?: SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -31713,9 +32730,15 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrder
     lastError?: SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type IcalFeedSumOrderByAggregateInput = {
+    consecutiveFailures?: SortOrder
   }
 
   export type IcalFeedScalarRelationFilter = {
@@ -32078,6 +33101,26 @@ export namespace Prisma {
 
   export type NullableEnumMileagePolicyFieldUpdateOperationsInput = {
     set?: $Enums.MileagePolicy | null
+  }
+
+  export type NullableEnumCarCategoryFieldUpdateOperationsInput = {
+    set?: $Enums.CarCategory | null
+  }
+
+  export type NullableEnumDriveTypeFieldUpdateOperationsInput = {
+    set?: $Enums.DriveType | null
+  }
+
+  export type NullableBoolFieldUpdateOperationsInput = {
+    set?: boolean | null
+  }
+
+  export type NullableEnumFuelPolicyFieldUpdateOperationsInput = {
+    set?: $Enums.FuelPolicy | null
+  }
+
+  export type NullableEnumInsuranceTypeFieldUpdateOperationsInput = {
+    set?: $Enums.InsuranceType | null
   }
 
   export type DateTimeFieldUpdateOperationsInput = {
@@ -32935,6 +33978,39 @@ export namespace Prisma {
     not?: NestedEnumMileagePolicyNullableFilter<$PrismaModel> | $Enums.MileagePolicy | null
   }
 
+  export type NestedEnumCarCategoryNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.CarCategory | EnumCarCategoryFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCarCategoryNullableFilter<$PrismaModel> | $Enums.CarCategory | null
+  }
+
+  export type NestedEnumDriveTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.DriveType | EnumDriveTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumDriveTypeNullableFilter<$PrismaModel> | $Enums.DriveType | null
+  }
+
+  export type NestedBoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
+  export type NestedEnumFuelPolicyNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.FuelPolicy | EnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    in?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumFuelPolicyNullableFilter<$PrismaModel> | $Enums.FuelPolicy | null
+  }
+
+  export type NestedEnumInsuranceTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.InsuranceType | EnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel> | $Enums.InsuranceType | null
+  }
+
   export type NestedDateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -33150,6 +34226,54 @@ export namespace Prisma {
     _count?: NestedIntNullableFilter<$PrismaModel>
     _min?: NestedEnumMileagePolicyNullableFilter<$PrismaModel>
     _max?: NestedEnumMileagePolicyNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumCarCategoryNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CarCategory | EnumCarCategoryFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCarCategoryNullableWithAggregatesFilter<$PrismaModel> | $Enums.CarCategory | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumCarCategoryNullableFilter<$PrismaModel>
+    _max?: NestedEnumCarCategoryNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumDriveTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.DriveType | EnumDriveTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumDriveTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.DriveType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumDriveTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumDriveTypeNullableFilter<$PrismaModel>
+  }
+
+  export type NestedBoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumFuelPolicyNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.FuelPolicy | EnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    in?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumFuelPolicyNullableWithAggregatesFilter<$PrismaModel> | $Enums.FuelPolicy | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumFuelPolicyNullableFilter<$PrismaModel>
+    _max?: NestedEnumFuelPolicyNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumInsuranceTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.InsuranceType | EnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumInsuranceTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.InsuranceType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel>
   }
 
   export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
@@ -33633,6 +34757,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -33645,6 +34771,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -33983,6 +35111,8 @@ export namespace Prisma {
     feedUrl?: StringFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeFilter<"IcalFeed"> | Date | string
@@ -33997,6 +35127,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34041,6 +35172,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -34064,6 +35217,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34108,6 +35262,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -34147,6 +35323,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34191,6 +35368,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -34214,6 +35413,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34258,6 +35458,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -34281,6 +35503,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34325,6 +35548,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -34348,6 +35593,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34392,6 +35638,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -34431,6 +35699,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34475,6 +35744,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -34498,6 +35789,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34542,6 +35834,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -34565,6 +35879,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34609,6 +35924,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -34632,6 +35969,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34676,6 +36014,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -34715,6 +36075,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34759,6 +36120,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -34782,6 +36165,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34826,6 +36210,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -34849,6 +36255,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34893,6 +36300,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -34916,6 +36345,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34960,6 +36390,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -34999,6 +36451,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35043,6 +36496,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -35066,6 +36541,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35110,6 +36586,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -35133,6 +36631,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35177,6 +36676,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -35200,6 +36721,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35244,6 +36766,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -35283,6 +36827,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35327,6 +36872,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -35350,6 +36917,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35394,6 +36962,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -35417,6 +37007,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35461,6 +37052,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -35484,6 +37097,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35528,6 +37142,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -35567,6 +37203,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35611,6 +37248,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -35634,6 +37293,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35678,6 +37338,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -35701,6 +37383,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35745,6 +37428,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -35768,6 +37473,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35812,6 +37518,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -35851,6 +37579,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35895,6 +37624,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -35918,6 +37669,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35962,6 +37714,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -35985,6 +37759,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -36029,6 +37804,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -36052,6 +37849,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -36096,6 +37894,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -36204,6 +38024,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -36248,6 +38069,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -36271,6 +38114,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -36315,6 +38159,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -36633,6 +38499,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -36677,6 +38544,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -36700,6 +38589,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -36744,6 +38634,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -36890,6 +38802,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -36934,6 +38847,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -36957,6 +38892,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -37001,6 +38937,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -37271,6 +39229,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -37315,6 +39274,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -37338,6 +39319,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -37382,6 +39364,28 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
@@ -37451,6 +39455,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -37495,6 +39500,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -37518,6 +39545,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -37562,6 +39590,28 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
@@ -37612,6 +39662,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -37625,6 +39677,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -37652,6 +39706,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -37665,6 +39721,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -37912,6 +39970,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -38275,6 +40335,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -38287,6 +40349,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -38299,6 +40363,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
