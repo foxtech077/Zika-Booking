@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { api, storeToken } from "@/lib/api";
+import { api } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 import { FormField } from "@/components/ui/FormField";
 import { Button } from "@/components/ui/Button";
 import type { ApiResponse, AuthResponse } from "@zika/types";
@@ -18,6 +19,7 @@ declare global {
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setSession } = useAuthStore();
   const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const [showAppleModal, setShowAppleModal] = useState(false);
@@ -64,10 +66,8 @@ export default function LoginPage() {
       });
       if (!res.data.success) throw res.data;
       const data = res.data.data;
-      storeToken(data.tokens.accessToken);
-      
-      // Redirect based on user type
-      router.replace(data.user.userType === "provider" ? "/listings" : "/traveller");
+      setSession(data.tokens.accessToken, data.user as any);
+      router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
     } catch (err: any) {
       const msg = err.response?.data?.error?.message ?? "Sign in with Google failed. Please try again.";
       setError(msg);
@@ -104,9 +104,8 @@ export default function LoginPage() {
       return res.data.data;
     },
     onSuccess: (data) => {
-      storeToken(data.tokens.accessToken);
-      // Redirect based on user type
-      router.replace(data.user.userType === "provider" ? "/listings" : "/traveller");
+      setSession(data.tokens.accessToken, data.user as any);
+      router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
     },
     onError: (err: any) => {
       const e = err.response?.data?.error;
