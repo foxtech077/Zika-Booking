@@ -43,6 +43,7 @@ enum FuelType {
   diesel
   electric
   hybrid
+  lpg
 }
 
 enum MileagePolicy {
@@ -73,6 +74,7 @@ enum DocumentType {
   tourism_certificate
   insurance_certificate
   roadworthiness_certificate
+  vehicle_registration
   hotel_operating_permit
   tourism_authority_certificate
 }
@@ -498,17 +500,19 @@ model VoucherRedemption {
 // ── E13 — iCal Sync ───────────────────────────────────────────────────────────
 
 model IcalFeed {
-  id           String    @id @default(uuid())
-  listingId    String    @map("listing_id")
-  platform     String    @db.VarChar(50)
-  feedUrl      String    @map("feed_url") @db.VarChar(1000)
-  lastSyncedAt DateTime? @map("last_synced_at")
-  lastError    String?   @map("last_error") @db.Text
-  isActive     Boolean   @default(true) @map("is_active")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                  String    @id @default(uuid())
+  listingId           String    @map("listing_id")
+  platform            String    @db.VarChar(50)
+  feedUrl             String    @map("feed_url") @db.VarChar(1000)
+  lastSyncedAt        DateTime? @map("last_synced_at")
+  lastError           String?   @map("last_error") @db.Text
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  nextRetryAt         DateTime? @map("next_retry_at")
+  isActive            Boolean   @default(true) @map("is_active")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  listing     Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing      Listing         @relation(fields: [listingId], references: [id], onDelete: Cascade)
   blockedDates IcalBlockedDate[]
 
   @@map("ical_feeds")
@@ -566,5 +570,3 @@ model Message {
 
   @@map("messages")
 }
-
-

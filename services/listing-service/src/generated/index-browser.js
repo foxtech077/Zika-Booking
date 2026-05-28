@@ -130,6 +130,7 @@ exports.Prisma.ListingScalarFieldEnum = {
   unitCount: 'unitCount',
   description: 'description',
   pricePerNight: 'pricePerNight',
+  pricePerDay: 'pricePerDay',
   currency: 'currency',
   minStayNights: 'minStayNights',
   checkinTime: 'checkinTime',
@@ -174,6 +175,28 @@ exports.Prisma.ListingScalarFieldEnum = {
   doors: 'doors',
   mileagePolicy: 'mileagePolicy',
   mileageLimitKm: 'mileageLimitKm',
+  carCategory: 'carCategory',
+  driveType: 'driveType',
+  airConditioning: 'airConditioning',
+  odometerReading: 'odometerReading',
+  licencePlate: 'licencePlate',
+  engineSize: 'engineSize',
+  colour: 'colour',
+  securityDeposit: 'securityDeposit',
+  minimumDriverAge: 'minimumDriverAge',
+  minimumRentalDays: 'minimumRentalDays',
+  fuelPolicy: 'fuelPolicy',
+  extraKmRate: 'extraKmRate',
+  roadsideAssistance: 'roadsideAssistance',
+  crossBorderAllowed: 'crossBorderAllowed',
+  airportPickup: 'airportPickup',
+  deliveryEnabled: 'deliveryEnabled',
+  deliveryRadiusKm: 'deliveryRadiusKm',
+  deliveryFee: 'deliveryFee',
+  pickupHoursFrom: 'pickupHoursFrom',
+  pickupHoursTo: 'pickupHoursTo',
+  returnSameLocation: 'returnSameLocation',
+  insuranceType: 'insuranceType',
   updatedAt: 'updatedAt',
   createdAt: 'createdAt',
   deletedAt: 'deletedAt'
@@ -375,6 +398,8 @@ exports.Prisma.IcalFeedScalarFieldEnum = {
   feedUrl: 'feedUrl',
   lastSyncedAt: 'lastSyncedAt',
   lastError: 'lastError',
+  consecutiveFailures: 'consecutiveFailures',
+  nextRetryAt: 'nextRetryAt',
   isActive: 'isActive',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
@@ -479,19 +504,55 @@ exports.LongStayDiscountType = exports.$Enums.LongStayDiscountType = {
 
 exports.Transmission = exports.$Enums.Transmission = {
   manual: 'manual',
-  automatic: 'automatic'
+  automatic: 'automatic',
+  semi_auto: 'semi_auto'
 };
 
 exports.FuelType = exports.$Enums.FuelType = {
   petrol: 'petrol',
   diesel: 'diesel',
   electric: 'electric',
-  hybrid: 'hybrid'
+  hybrid: 'hybrid',
+  lpg: 'lpg'
 };
 
 exports.MileagePolicy = exports.$Enums.MileagePolicy = {
   unlimited: 'unlimited',
   limited: 'limited'
+};
+
+exports.CarCategory = exports.$Enums.CarCategory = {
+  Economy: 'Economy',
+  Compact: 'Compact',
+  SUV: 'SUV',
+  Minivan: 'Minivan',
+  Pickup: 'Pickup',
+  Luxury: 'Luxury',
+  Electric: 'Electric',
+  Convertible: 'Convertible'
+};
+
+exports.DriveType = exports.$Enums.DriveType = {
+  TWO_WD: 'TWO_WD',
+  FOUR_WD: 'FOUR_WD',
+  AWD: 'AWD'
+};
+
+exports.FuelPolicy = exports.$Enums.FuelPolicy = {
+  full_to_full: 'full_to_full',
+  same_to_same: 'same_to_same',
+  free_tank: 'free_tank',
+  full_to_empty: 'full_to_empty',
+  pre_purchase: 'pre_purchase'
+};
+
+exports.InsuranceType = exports.$Enums.InsuranceType = {
+  basic: 'basic',
+  standard: 'standard',
+  premium: 'premium',
+  comprehensive: 'comprehensive',
+  basic_third_party: 'basic_third_party',
+  premium_zero_excess: 'premium_zero_excess'
 };
 
 exports.ReviewTaskStatus = exports.$Enums.ReviewTaskStatus = {
@@ -504,7 +565,12 @@ exports.ReviewTaskStatus = exports.$Enums.ReviewTaskStatus = {
 exports.DocumentType = exports.$Enums.DocumentType = {
   business_licence: 'business_licence',
   operating_permit: 'operating_permit',
-  tourism_certificate: 'tourism_certificate'
+  tourism_certificate: 'tourism_certificate',
+  insurance_certificate: 'insurance_certificate',
+  roadworthiness_certificate: 'roadworthiness_certificate',
+  vehicle_registration: 'vehicle_registration',
+  hotel_operating_permit: 'hotel_operating_permit',
+  tourism_authority_certificate: 'tourism_authority_certificate'
 };
 
 exports.BookingStatus = exports.$Enums.BookingStatus = {

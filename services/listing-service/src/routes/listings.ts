@@ -112,7 +112,7 @@ const patchListingSchema = z.object({
     if (val === "semi-auto") return "semi_auto";
     return val;
   }, z.enum(["manual", "automatic", "semi_auto"])).optional().nullable(),
-  fuelType: z.enum(["petrol", "diesel", "electric", "hybrid"]).optional().nullable(),
+  fuelType: z.enum(["petrol", "diesel", "electric", "hybrid", "lpg"]).optional().nullable(),
   seats: z.number().int().min(1).optional().nullable(),
   doors: z.number().int().min(2).optional().nullable(),
   mileagePolicy: z.enum(["unlimited", "limited"]).optional().nullable(),
@@ -604,7 +604,13 @@ export async function listingRoutes(app: FastifyInstance) {
       if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
       if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
 
+      if (!listing.fuelType) failures.push("Fuel type is required.");
+      if (!listing.insuranceType) failures.push("Insurance type is required.");
+
       const docTypes = listing.documents.map((d) => d.documentType);
+      if (!docTypes.includes("vehicle_registration")) {
+        failures.push("Vehicle registration document is required.");
+      }
       if (!docTypes.includes("insurance_certificate")) {
         failures.push("Insurance certificate document is required.");
       }
@@ -733,7 +739,13 @@ export async function listingRoutes(app: FastifyInstance) {
         if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
         if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
 
+        if (!listing.fuelType) failures.push("Fuel type is required.");
+        if (!listing.insuranceType) failures.push("Insurance type is required.");
+
         const docTypes = listing.documents.map((d) => d.documentType);
+        if (!docTypes.includes("vehicle_registration")) {
+          failures.push("Vehicle registration document is required.");
+        }
         if (!docTypes.includes("insurance_certificate")) {
           failures.push("Insurance certificate document is required.");
         }
@@ -997,6 +1009,3 @@ export async function listingRoutes(app: FastifyInstance) {
     return sendError(reply, 422, "MISSING_PARAMS", "Provide either address, placeId, or lat+lng.");
   });
 }
-
-
-
