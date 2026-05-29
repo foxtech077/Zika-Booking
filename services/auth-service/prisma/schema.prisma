@@ -11,6 +11,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["auth"]
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,16 +23,22 @@ enum UserStatus {
   active
   suspended
   banned
+
+  @@schema("auth")
 }
 
 enum UserType {
   guest
   provider
+
+  @@schema("auth")
 }
 
 enum OAuthProvider {
   google
   apple
+
+  @@schema("auth")
 }
 
 enum LoyaltyTier {
@@ -39,11 +46,15 @@ enum LoyaltyTier {
   silver
   gold
   diamond
+
+  @@schema("auth")
 }
 
 enum TokenType {
   email_verification
   password_reset
+
+  @@schema("auth")
 }
 
 enum EmailLogType {
@@ -54,12 +65,16 @@ enum EmailLogType {
   account_suspended
   account_reinstated
   account_banned
+
+  @@schema("auth")
 }
 
 enum EmailLogStatus {
   sent
   failed
   bounced
+
+  @@schema("auth")
 }
 
 enum AdminRole {
@@ -69,6 +84,8 @@ enum AdminRole {
   sales
   support
   finance
+
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,6 +120,7 @@ model User {
   @@unique([oauthProvider, oauthSub])
   @@index([email])
   @@index([status])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -123,6 +141,7 @@ model VerificationToken {
 
   @@index([userId, tokenType])
   @@index([expiresAt])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -140,6 +159,7 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,6 +179,7 @@ model EmailLog {
 
   @@index([userId])
   @@index([recipient])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +207,7 @@ model AdminUser {
 
   @@index([email])
   @@index([role])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,6 +226,7 @@ model AdminSession {
   expiresAt    DateTime
 
   @@index([adminUserId])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,6 +242,7 @@ model AdminRecoveryCode {
   createdAt   DateTime  @default(now())
 
   @@index([adminUserId])
+  @@schema("auth")
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,4 +265,5 @@ model AuditLog {
   @@index([adminId])
   @@index([targetId])
   @@index([timestamp])
+  @@schema("auth")
 }
