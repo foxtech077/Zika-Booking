@@ -322,6 +322,40 @@ export async function listingRoutes(app: FastifyInstance) {
       },
       body: {
         type: "object",
+        properties: {
+          listingTitle: { type: "string", maxLength: 200 },
+          roomType: {
+            type: "string",
+            enum: ["standard", "superior", "deluxe", "suite", "junior_suite", "studio", "family_room", "presidential_suite"],
+          },
+          unitCount: { type: "integer", minimum: 1 },
+          claimedStarRating: { type: "integer", minimum: 1, maximum: 5 },
+          description: { type: "string", maxLength: 1000 },
+          pricePerNight: { type: "number", minimum: 0 },
+          pricePerDay: { type: "number", minimum: 0 },
+          currency: { type: "string", minLength: 3, maxLength: 3 },
+          minStayNights: { type: "integer", minimum: 1 },
+          checkinTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" },
+          checkoutTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" },
+          cancellationPolicy: { type: "string", enum: ["flexible", "moderate", "strict"] },
+          smokingAllowed: { type: "boolean" },
+          petsAllowed: { type: "boolean" },
+          address: { type: "string" },
+          town: { type: "string", maxLength: 100 },
+          country: { type: "string", minLength: 2, maxLength: 2 },
+          amenities: {
+            type: "object",
+            properties: {
+              Connectivity: { type: "array", items: { type: "string" } },
+              "Food & Drink": { type: "array", items: { type: "string" } },
+              Wellness: { type: "array", items: { type: "string" } },
+              Comfort: { type: "array", items: { type: "string" } },
+              Services: { type: "array", items: { type: "string" } },
+            },
+            additionalProperties: true,
+          },
+          customAmenities: { type: "array", items: { type: "string", maxLength: 60 } },
+        },
         additionalProperties: true,
       }
     }

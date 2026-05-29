@@ -1,9 +1,12 @@
 import sgMail from "@sendgrid/mail";
 
-const FROM = process.env["SENDGRID_FROM_EMAIL"] ?? "noreply@zikabooking.com";
+const rawEmail = process.env["SENDGRID_FROM_EMAIL"] ?? "noreply@zikabooking.com";
+const FROM = rawEmail.replace(/^["']|["']$/g, "");
 const WEB_BASE = process.env["WEB_BASE_URL"] ?? "http://localhost:3000";
 
-sgMail.setApiKey(process.env["SENDGRID_API_KEY"] ?? "");
+const rawKey = process.env["SENDGRID_API_KEY"] ?? "";
+const cleanKey = rawKey.replace(/^["']|["']$/g, "");
+sgMail.setApiKey(cleanKey);
 
 async function sendWithRetry(msg: sgMail.MailDataRequired, attempt = 1): Promise<void> {
   try {
