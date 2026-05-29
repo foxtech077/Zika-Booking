@@ -1,64 +1,64 @@
 -- CreateSchema
-CREATE SCHEMA IF NOT EXISTS "listing";
+CREATE SCHEMA IF NOT EXISTS "listings";
 
 -- CreateEnum
-CREATE TYPE "listing"."ListingCategory" AS ENUM ('hotel', 'apartment', 'car');
+CREATE TYPE "listings"."ListingCategory" AS ENUM ('hotel', 'apartment', 'car');
 
 -- CreateEnum
-CREATE TYPE "listing"."ListingStatus" AS ENUM ('draft', 'pending_review', 'approved', 'rejected', 'active', 'deactivated', 'suspended', 'auto_suspended', 'permanently_banned');
+CREATE TYPE "listings"."ListingStatus" AS ENUM ('draft', 'pending_review', 'approved', 'rejected', 'active', 'deactivated', 'suspended', 'auto_suspended', 'permanently_banned');
 
 -- CreateEnum
-CREATE TYPE "listing"."LongStayDiscountType" AS ENUM ('percentage', 'fixed');
+CREATE TYPE "listings"."LongStayDiscountType" AS ENUM ('percentage', 'fixed');
 
 -- CreateEnum
-CREATE TYPE "listing"."Transmission" AS ENUM ('manual', 'automatic', 'semi_auto');
+CREATE TYPE "listings"."Transmission" AS ENUM ('manual', 'automatic', 'semi_auto');
 
 -- CreateEnum
-CREATE TYPE "listing"."FuelType" AS ENUM ('petrol', 'diesel', 'electric', 'hybrid', 'lpg');
+CREATE TYPE "listings"."FuelType" AS ENUM ('petrol', 'diesel', 'electric', 'hybrid', 'lpg');
 
 -- CreateEnum
-CREATE TYPE "listing"."MileagePolicy" AS ENUM ('unlimited', 'limited');
+CREATE TYPE "listings"."MileagePolicy" AS ENUM ('unlimited', 'limited');
 
 -- CreateEnum
-CREATE TYPE "listing"."RoomType" AS ENUM ('standard', 'superior', 'deluxe', 'suite', 'junior_suite', 'studio', 'family_room', 'presidential_suite');
+CREATE TYPE "listings"."RoomType" AS ENUM ('standard', 'superior', 'deluxe', 'suite', 'junior_suite', 'studio', 'family_room', 'presidential_suite');
 
 -- CreateEnum
-CREATE TYPE "listing"."CancellationPolicy" AS ENUM ('flexible', 'moderate', 'strict');
+CREATE TYPE "listings"."CancellationPolicy" AS ENUM ('flexible', 'moderate', 'strict');
 
 -- CreateEnum
-CREATE TYPE "listing"."DocumentType" AS ENUM ('business_licence', 'operating_permit', 'tourism_certificate', 'insurance_certificate', 'roadworthiness_certificate', 'vehicle_registration', 'hotel_operating_permit', 'tourism_authority_certificate');
+CREATE TYPE "listings"."DocumentType" AS ENUM ('business_licence', 'operating_permit', 'tourism_certificate', 'insurance_certificate', 'roadworthiness_certificate', 'vehicle_registration', 'hotel_operating_permit', 'tourism_authority_certificate');
 
 -- CreateEnum
-CREATE TYPE "listing"."CarCategory" AS ENUM ('Economy', 'Compact', 'SUV', 'Minivan', 'Pickup', 'Luxury', 'Electric', 'Convertible');
+CREATE TYPE "listings"."CarCategory" AS ENUM ('Economy', 'Compact', 'SUV', 'Minivan', 'Pickup', 'Luxury', 'Electric', 'Convertible');
 
 -- CreateEnum
-CREATE TYPE "listing"."DriveType" AS ENUM ('2WD', '4WD', 'AWD');
+CREATE TYPE "listings"."DriveType" AS ENUM ('2WD', '4WD', 'AWD');
 
 -- CreateEnum
-CREATE TYPE "listing"."InsuranceType" AS ENUM ('basic', 'standard', 'premium', 'comprehensive', 'basic_third_party', 'premium_zero_excess');
+CREATE TYPE "listings"."InsuranceType" AS ENUM ('basic', 'standard', 'premium', 'comprehensive', 'basic_third_party', 'premium_zero_excess');
 
 -- CreateEnum
-CREATE TYPE "listing"."FuelPolicy" AS ENUM ('full_to_full', 'same_to_same', 'free_tank', 'full_to_empty', 'pre_purchase');
+CREATE TYPE "listings"."FuelPolicy" AS ENUM ('full_to_full', 'same_to_same', 'free_tank', 'full_to_empty', 'pre_purchase');
 
 -- CreateEnum
-CREATE TYPE "listing"."ReviewTaskStatus" AS ENUM ('open', 'awaiting_provider_response', 'resolved', 'escalated');
+CREATE TYPE "listings"."ReviewTaskStatus" AS ENUM ('open', 'awaiting_provider_response', 'resolved', 'escalated');
 
 -- CreateEnum
-CREATE TYPE "listing"."BookingStatus" AS ENUM ('pending_payment', 'confirmed', 'completed', 'cancelled_by_guest', 'cancelled_by_provider', 'cancelled_by_system');
+CREATE TYPE "listings"."BookingStatus" AS ENUM ('pending_payment', 'confirmed', 'completed', 'cancelled_by_guest', 'cancelled_by_provider', 'cancelled_by_system');
 
 -- CreateEnum
-CREATE TYPE "listing"."VoucherDiscountType" AS ENUM ('percentage', 'fixed');
+CREATE TYPE "listings"."VoucherDiscountType" AS ENUM ('percentage', 'fixed');
 
 -- CreateEnum
-CREATE TYPE "listing"."ConversationStatus" AS ENUM ('open', 'closed');
+CREATE TYPE "listings"."ConversationStatus" AS ENUM ('open', 'closed');
 
 -- CreateTable
-CREATE TABLE "listing"."listings" (
+CREATE TABLE "listings"."listings" (
     "id" TEXT NOT NULL,
     "provider_id" TEXT NOT NULL,
-    "category" "listing"."ListingCategory" NOT NULL,
+    "category" "listings"."ListingCategory" NOT NULL,
     "name" VARCHAR(200),
-    "room_type" "listing"."RoomType",
+    "room_type" "listings"."RoomType",
     "unit_count" INTEGER,
     "description" TEXT,
     "price_per_night" DECIMAL(10,2),
@@ -67,7 +67,7 @@ CREATE TABLE "listing"."listings" (
     "min_stay_nights" INTEGER NOT NULL DEFAULT 1,
     "checkin_time" VARCHAR(5),
     "checkout_time" VARCHAR(5),
-    "cancellation_policy" "listing"."CancellationPolicy",
+    "cancellation_policy" "listings"."CancellationPolicy",
     "smoking_allowed" BOOLEAN NOT NULL DEFAULT false,
     "pets_allowed" BOOLEAN NOT NULL DEFAULT false,
     "address" TEXT,
@@ -77,7 +77,7 @@ CREATE TABLE "listing"."listings" (
     "country" CHAR(2),
     "claimed_star_rating" INTEGER,
     "star_rating" INTEGER,
-    "status" "listing"."ListingStatus" NOT NULL DEFAULT 'draft',
+    "status" "listings"."ListingStatus" NOT NULL DEFAULT 'draft',
     "submission_count" INTEGER NOT NULL DEFAULT 0,
     "submitted_at" TIMESTAMP(3),
     "approved_at" TIMESTAMP(3),
@@ -95,20 +95,20 @@ CREATE TABLE "listing"."listings" (
     "max_guests" INTEGER,
     "long_stay_discount_enabled" BOOLEAN NOT NULL DEFAULT false,
     "long_stay_min_nights" INTEGER,
-    "long_stay_discount_type" "listing"."LongStayDiscountType",
+    "long_stay_discount_type" "listings"."LongStayDiscountType",
     "long_stay_discount_value" DECIMAL(10,2),
     "activated_at" TIMESTAMP(3),
     "car_make" VARCHAR(80),
     "car_model" VARCHAR(80),
     "car_year" INTEGER,
-    "transmission" "listing"."Transmission",
-    "fuel_type" "listing"."FuelType",
+    "transmission" "listings"."Transmission",
+    "fuel_type" "listings"."FuelType",
     "seats" INTEGER,
     "doors" INTEGER DEFAULT 4,
-    "mileage_policy" "listing"."MileagePolicy",
+    "mileage_policy" "listings"."MileagePolicy",
     "mileage_limit_km" INTEGER,
-    "car_category" "listing"."CarCategory",
-    "drive_type" "listing"."DriveType",
+    "car_category" "listings"."CarCategory",
+    "drive_type" "listings"."DriveType",
     "air_conditioning" BOOLEAN,
     "odometer_reading" INTEGER,
     "licence_plate" VARCHAR(20),
@@ -117,7 +117,7 @@ CREATE TABLE "listing"."listings" (
     "security_deposit" DECIMAL(10,2),
     "minimum_driver_age" INTEGER,
     "minimum_rental_days" INTEGER,
-    "fuel_policy" "listing"."FuelPolicy",
+    "fuel_policy" "listings"."FuelPolicy",
     "extra_km_rate" DECIMAL(10,2),
     "roadside_assistance" BOOLEAN NOT NULL DEFAULT false,
     "cross_border_allowed" BOOLEAN NOT NULL DEFAULT false,
@@ -128,7 +128,7 @@ CREATE TABLE "listing"."listings" (
     "pickup_hours_from" VARCHAR(5),
     "pickup_hours_to" VARCHAR(5),
     "return_same_location" BOOLEAN NOT NULL DEFAULT true,
-    "insurance_type" "listing"."InsuranceType",
+    "insurance_type" "listings"."InsuranceType",
     "updated_at" TIMESTAMP(3) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "deleted_at" TIMESTAMP(3),
@@ -137,12 +137,12 @@ CREATE TABLE "listing"."listings" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."listing_review_tasks" (
+CREATE TABLE "listings"."listing_review_tasks" (
     "id" TEXT NOT NULL,
     "listing_id" TEXT NOT NULL,
     "submission_number" INTEGER NOT NULL,
     "assigned_to" TEXT,
-    "status" "listing"."ReviewTaskStatus" NOT NULL DEFAULT 'open',
+    "status" "listings"."ReviewTaskStatus" NOT NULL DEFAULT 'open',
     "outcome" TEXT,
     "admin_note" TEXT,
     "sla_deadline" TIMESTAMP(3) NOT NULL,
@@ -153,7 +153,7 @@ CREATE TABLE "listing"."listing_review_tasks" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."listing_photos" (
+CREATE TABLE "listings"."listing_photos" (
     "id" TEXT NOT NULL,
     "listing_id" TEXT NOT NULL,
     "s3_key" VARCHAR(500) NOT NULL,
@@ -166,10 +166,10 @@ CREATE TABLE "listing"."listing_photos" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."listing_documents" (
+CREATE TABLE "listings"."listing_documents" (
     "id" TEXT NOT NULL,
     "listing_id" TEXT NOT NULL,
-    "document_type" "listing"."DocumentType" NOT NULL,
+    "document_type" "listings"."DocumentType" NOT NULL,
     "s3_key" VARCHAR(500) NOT NULL,
     "file_type" VARCHAR(10) NOT NULL,
     "uploaded_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -179,7 +179,7 @@ CREATE TABLE "listing"."listing_documents" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."listing_amenities" (
+CREATE TABLE "listings"."listing_amenities" (
     "listing_id" TEXT NOT NULL,
     "amenity_key" VARCHAR(100) NOT NULL,
 
@@ -187,7 +187,7 @@ CREATE TABLE "listing"."listing_amenities" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."listing_custom_amenities" (
+CREATE TABLE "listings"."listing_custom_amenities" (
     "id" TEXT NOT NULL,
     "listing_id" TEXT NOT NULL,
     "label" VARCHAR(60) NOT NULL,
@@ -197,7 +197,7 @@ CREATE TABLE "listing"."listing_custom_amenities" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."user_favourites" (
+CREATE TABLE "listings"."user_favourites" (
     "user_id" TEXT NOT NULL,
     "listing_id" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -206,7 +206,7 @@ CREATE TABLE "listing"."user_favourites" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."user_recently_viewed" (
+CREATE TABLE "listings"."user_recently_viewed" (
     "user_id" TEXT NOT NULL,
     "listing_id" TEXT NOT NULL,
     "viewed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -215,7 +215,7 @@ CREATE TABLE "listing"."user_recently_viewed" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."search_logs" (
+CREATE TABLE "listings"."search_logs" (
     "id" TEXT NOT NULL,
     "user_id" TEXT,
     "category" VARCHAR(20) NOT NULL,
@@ -237,14 +237,14 @@ CREATE TABLE "listing"."search_logs" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."bookings" (
+CREATE TABLE "listings"."bookings" (
     "id" TEXT NOT NULL,
     "reference" VARCHAR(25) NOT NULL,
     "listing_id" TEXT NOT NULL,
     "guest_id" TEXT NOT NULL,
     "provider_id" TEXT NOT NULL,
     "listing_type" VARCHAR(20) NOT NULL,
-    "status" "listing"."BookingStatus" NOT NULL DEFAULT 'pending_payment',
+    "status" "listings"."BookingStatus" NOT NULL DEFAULT 'pending_payment',
     "check_in" DATE,
     "check_out" DATE,
     "pickup_datetime" TIMESTAMP(3),
@@ -290,7 +290,7 @@ CREATE TABLE "listing"."bookings" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."booking_status_log" (
+CREATE TABLE "listings"."booking_status_log" (
     "id" TEXT NOT NULL,
     "booking_id" TEXT NOT NULL,
     "from_status" VARCHAR(30),
@@ -304,7 +304,7 @@ CREATE TABLE "listing"."booking_status_log" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."listing_reviews" (
+CREATE TABLE "listings"."listing_reviews" (
     "id" TEXT NOT NULL,
     "booking_id" TEXT NOT NULL,
     "listing_id" TEXT NOT NULL,
@@ -325,7 +325,7 @@ CREATE TABLE "listing"."listing_reviews" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."commission_rates" (
+CREATE TABLE "listings"."commission_rates" (
     "id" TEXT NOT NULL,
     "country" CHAR(2) NOT NULL,
     "rate" DECIMAL(6,4) NOT NULL,
@@ -337,10 +337,10 @@ CREATE TABLE "listing"."commission_rates" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."vouchers" (
+CREATE TABLE "listings"."vouchers" (
     "id" TEXT NOT NULL,
     "code" VARCHAR(30) NOT NULL,
-    "discount_type" "listing"."VoucherDiscountType" NOT NULL,
+    "discount_type" "listings"."VoucherDiscountType" NOT NULL,
     "discount_value" DECIMAL(10,2) NOT NULL,
     "min_order_value" DECIMAL(10,2),
     "max_discount" DECIMAL(10,2),
@@ -356,7 +356,7 @@ CREATE TABLE "listing"."vouchers" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."voucher_redemptions" (
+CREATE TABLE "listings"."voucher_redemptions" (
     "id" TEXT NOT NULL,
     "voucher_id" TEXT NOT NULL,
     "booking_id" TEXT NOT NULL,
@@ -368,7 +368,7 @@ CREATE TABLE "listing"."voucher_redemptions" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."ical_feeds" (
+CREATE TABLE "listings"."ical_feeds" (
     "id" TEXT NOT NULL,
     "listing_id" TEXT NOT NULL,
     "platform" VARCHAR(50) NOT NULL,
@@ -385,7 +385,7 @@ CREATE TABLE "listing"."ical_feeds" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."ical_blocked_dates" (
+CREATE TABLE "listings"."ical_blocked_dates" (
     "id" TEXT NOT NULL,
     "feed_id" TEXT NOT NULL,
     "listing_id" TEXT NOT NULL,
@@ -399,13 +399,13 @@ CREATE TABLE "listing"."ical_blocked_dates" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."conversations" (
+CREATE TABLE "listings"."conversations" (
     "id" TEXT NOT NULL,
     "booking_id" TEXT,
     "listing_id" TEXT NOT NULL,
     "guest_id" TEXT NOT NULL,
     "provider_id" TEXT NOT NULL,
-    "status" "listing"."ConversationStatus" NOT NULL DEFAULT 'open',
+    "status" "listings"."ConversationStatus" NOT NULL DEFAULT 'open',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -413,7 +413,7 @@ CREATE TABLE "listing"."conversations" (
 );
 
 -- CreateTable
-CREATE TABLE "listing"."messages" (
+CREATE TABLE "listings"."messages" (
     "id" TEXT NOT NULL,
     "conversation_id" TEXT NOT NULL,
     "sender_id" TEXT NOT NULL,
@@ -427,67 +427,67 @@ CREATE TABLE "listing"."messages" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "bookings_reference_key" ON "listing"."bookings"("reference");
+CREATE UNIQUE INDEX "bookings_reference_key" ON "listings"."bookings"("reference");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "listing_reviews_booking_id_key" ON "listing"."listing_reviews"("booking_id");
+CREATE UNIQUE INDEX "listing_reviews_booking_id_key" ON "listings"."listing_reviews"("booking_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "commission_rates_country_key" ON "listing"."commission_rates"("country");
+CREATE UNIQUE INDEX "commission_rates_country_key" ON "listings"."commission_rates"("country");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "vouchers_code_key" ON "listing"."vouchers"("code");
+CREATE UNIQUE INDEX "vouchers_code_key" ON "listings"."vouchers"("code");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "voucher_redemptions_booking_id_key" ON "listing"."voucher_redemptions"("booking_id");
+CREATE UNIQUE INDEX "voucher_redemptions_booking_id_key" ON "listings"."voucher_redemptions"("booking_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "ical_blocked_dates_feed_id_uid_key" ON "listing"."ical_blocked_dates"("feed_id", "uid");
+CREATE UNIQUE INDEX "ical_blocked_dates_feed_id_uid_key" ON "listings"."ical_blocked_dates"("feed_id", "uid");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "conversations_booking_id_key" ON "listing"."conversations"("booking_id");
+CREATE UNIQUE INDEX "conversations_booking_id_key" ON "listings"."conversations"("booking_id");
 
 -- AddForeignKey
-ALTER TABLE "listing"."listing_review_tasks" ADD CONSTRAINT "listing_review_tasks_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "listings"."listing_review_tasks" ADD CONSTRAINT "listing_review_tasks_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."listing_photos" ADD CONSTRAINT "listing_photos_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "listings"."listing_photos" ADD CONSTRAINT "listing_photos_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."listing_documents" ADD CONSTRAINT "listing_documents_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "listings"."listing_documents" ADD CONSTRAINT "listing_documents_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."listing_amenities" ADD CONSTRAINT "listing_amenities_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "listings"."listing_amenities" ADD CONSTRAINT "listing_amenities_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."listing_custom_amenities" ADD CONSTRAINT "listing_custom_amenities_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "listings"."listing_custom_amenities" ADD CONSTRAINT "listing_custom_amenities_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."user_favourites" ADD CONSTRAINT "user_favourites_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "listings"."user_favourites" ADD CONSTRAINT "user_favourites_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."user_recently_viewed" ADD CONSTRAINT "user_recently_viewed_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "listings"."user_recently_viewed" ADD CONSTRAINT "user_recently_viewed_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."bookings" ADD CONSTRAINT "bookings_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "listings"."bookings" ADD CONSTRAINT "bookings_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."booking_status_log" ADD CONSTRAINT "booking_status_log_booking_id_fkey" FOREIGN KEY ("booking_id") REFERENCES "listing"."bookings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "listings"."booking_status_log" ADD CONSTRAINT "booking_status_log_booking_id_fkey" FOREIGN KEY ("booking_id") REFERENCES "listings"."bookings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."listing_reviews" ADD CONSTRAINT "listing_reviews_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "listings"."listing_reviews" ADD CONSTRAINT "listing_reviews_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."listing_reviews" ADD CONSTRAINT "listing_reviews_booking_id_fkey" FOREIGN KEY ("booking_id") REFERENCES "listing"."bookings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "listings"."listing_reviews" ADD CONSTRAINT "listing_reviews_booking_id_fkey" FOREIGN KEY ("booking_id") REFERENCES "listings"."bookings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."voucher_redemptions" ADD CONSTRAINT "voucher_redemptions_voucher_id_fkey" FOREIGN KEY ("voucher_id") REFERENCES "listing"."vouchers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "listings"."voucher_redemptions" ADD CONSTRAINT "voucher_redemptions_voucher_id_fkey" FOREIGN KEY ("voucher_id") REFERENCES "listings"."vouchers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."ical_feeds" ADD CONSTRAINT "ical_feeds_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listing"."listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "listings"."ical_feeds" ADD CONSTRAINT "ical_feeds_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"."listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."ical_blocked_dates" ADD CONSTRAINT "ical_blocked_dates_feed_id_fkey" FOREIGN KEY ("feed_id") REFERENCES "listing"."ical_feeds"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "listings"."ical_blocked_dates" ADD CONSTRAINT "ical_blocked_dates_feed_id_fkey" FOREIGN KEY ("feed_id") REFERENCES "listings"."ical_feeds"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "listing"."messages" ADD CONSTRAINT "messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "listing"."conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "listings"."messages" ADD CONSTRAINT "messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "listings"."conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
