@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -8,48 +8,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum PaymentProvider {
-  stripe
-  tara
-}
-
-enum PaymentStatus {
-  initiated
-  pending
-  captured
-  failed
-  timed_out
-  refunded
-}
-
-enum RefundStatus {
-  pending
-  submitted
-  succeeded
-  failed
-}
-
 model Payment {
-  id                  String          @id @default(uuid())
-  bookingId           String
-  paymentProvider     PaymentProvider
-  status              PaymentStatus   @default(initiated)
-  attemptNumber       Int             @default(1)
-  idempotencyKey      String          @unique
-  providerPaymentId   String?
-  providerPmId        String?
-  amount              Decimal         @db.Decimal(12, 2)
-  currency            String          @db.Char(3)
-  paymentMethodType   String?
-  cardBrand           String?
-  cardLast4           String?         @db.Char(4)
-  mobileNumberMasked  String?
-  failureCode         String?
-  failureMessage      String?
-  capturedAt          DateTime?
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  refund              Refund?
+  id                 String          @id @default(uuid())
+  bookingId          String
+  paymentProvider    PaymentProvider
+  status             PaymentStatus   @default(initiated)
+  attemptNumber      Int             @default(1)
+  idempotencyKey     String          @unique
+  providerPaymentId  String?
+  providerPmId       String?
+  amount             Decimal         @db.Decimal(12, 2)
+  currency           String          @db.Char(3)
+  paymentMethodType  String?
+  cardBrand          String?
+  cardLast4          String?         @db.Char(4)
+  mobileNumberMasked String?
+  failureCode        String?
+  failureMessage     String?
+  capturedAt         DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  refund             Refund?
 
   @@index([bookingId, attemptNumber(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
@@ -75,19 +54,40 @@ model Refund {
 }
 
 model PaymentMethod {
-  id                    String          @id @default(uuid())
-  userId                String
-  paymentProvider       PaymentProvider
-  type                  String
-  providerPmId          String?
-  cardBrand             String?
-  cardLast4             String?         @db.Char(4)
-  cardExpMonth          Int?
-  cardExpYear           Int?
-  mobileNumberMasked    String?
-  isDefault             Boolean         @default(false)
-  isDeleted             Boolean         @default(false)
-  createdAt             DateTime        @default(now())
+  id                 String          @id @default(uuid())
+  userId             String
+  paymentProvider    PaymentProvider
+  type               String
+  providerPmId       String?
+  cardBrand          String?
+  cardLast4          String?         @db.Char(4)
+  cardExpMonth       Int?
+  cardExpYear        Int?
+  mobileNumberMasked String?
+  isDefault          Boolean         @default(false)
+  isDeleted          Boolean         @default(false)
+  createdAt          DateTime        @default(now())
 
   @@index([userId, isDeleted])
+}
+
+enum PaymentProvider {
+  stripe
+  tara
+}
+
+enum PaymentStatus {
+  initiated
+  pending
+  captured
+  failed
+  timed_out
+  refunded
+}
+
+enum RefundStatus {
+  pending
+  submitted
+  succeeded
+  failed
 }

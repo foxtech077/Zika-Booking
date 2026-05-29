@@ -3,6 +3,8 @@ import cors from "@fastify/cors";
 import { paymentRoutes } from "./routes/payments.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { paymentMethodRoutes } from "./routes/payment-methods.js";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 
 const PORT = Number(process.env["PORT"] ?? 3004);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
@@ -11,6 +13,46 @@ async function build() {
   const app = Fastify({
     logger: { level: process.env["NODE_ENV"] === "production" ? "warn" : "info" },
     trustProxy: true,
+  });
+
+  // Register Swagger API documentation
+  await app.register(swagger, {
+    openapi: {
+      info: {
+        title: "Zika Booking Payment Service API",
+        description: "API documentation for Zika Booking payment Service",
+        version: "0.0.1",
+      },
+      servers: [
+        {
+          url: `http://localhost:${PORT}`,
+          description: "Local development server",
+        },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "Enter your Bearer Access Token (without 'Bearer ' prefix)",
+          },
+        },
+      },
+      security: [
+        {
+          bearerAuth: [],
+        },
+      ],
+    },
+  });
+
+  await app.register(swaggerUi, {
+    routePrefix: "/docs",
+    uiConfig: {
+      docExpansion: "list",
+      deepLinking: false,
+    },
   });
 
   // ── CORS ──────────────────────────────────────────────────────────────────
@@ -87,3 +129,5 @@ async function main() {
 }
 
 main();
+
+console.log("DATABASE_URL =", process.env.DATABASE_URL);

@@ -1613,15 +1613,15 @@ export namespace Prisma {
    */
 
   export type UserCountOutputType = {
-    verificationTokens: number
-    sessions: number
     emailLogs: number
+    sessions: number
+    verificationTokens: number
   }
 
   export type UserCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    verificationTokens?: boolean | UserCountOutputTypeCountVerificationTokensArgs
-    sessions?: boolean | UserCountOutputTypeCountSessionsArgs
     emailLogs?: boolean | UserCountOutputTypeCountEmailLogsArgs
+    sessions?: boolean | UserCountOutputTypeCountSessionsArgs
+    verificationTokens?: boolean | UserCountOutputTypeCountVerificationTokensArgs
   }
 
   // Custom InputTypes
@@ -1638,8 +1638,8 @@ export namespace Prisma {
   /**
    * UserCountOutputType without action
    */
-  export type UserCountOutputTypeCountVerificationTokensArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    where?: VerificationTokenWhereInput
+  export type UserCountOutputTypeCountEmailLogsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: EmailLogWhereInput
   }
 
   /**
@@ -1652,8 +1652,8 @@ export namespace Prisma {
   /**
    * UserCountOutputType without action
    */
-  export type UserCountOutputTypeCountEmailLogsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    where?: EmailLogWhereInput
+  export type UserCountOutputTypeCountVerificationTokensArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: VerificationTokenWhereInput
   }
 
 
@@ -1662,14 +1662,14 @@ export namespace Prisma {
    */
 
   export type AdminUserCountOutputType = {
-    adminSessions: number
     recoveryCodes: number
+    adminSessions: number
     auditLogs: number
   }
 
   export type AdminUserCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    adminSessions?: boolean | AdminUserCountOutputTypeCountAdminSessionsArgs
     recoveryCodes?: boolean | AdminUserCountOutputTypeCountRecoveryCodesArgs
+    adminSessions?: boolean | AdminUserCountOutputTypeCountAdminSessionsArgs
     auditLogs?: boolean | AdminUserCountOutputTypeCountAuditLogsArgs
   }
 
@@ -1687,15 +1687,15 @@ export namespace Prisma {
   /**
    * AdminUserCountOutputType without action
    */
-  export type AdminUserCountOutputTypeCountAdminSessionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    where?: AdminSessionWhereInput
+  export type AdminUserCountOutputTypeCountRecoveryCodesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: AdminRecoveryCodeWhereInput
   }
 
   /**
    * AdminUserCountOutputType without action
    */
-  export type AdminUserCountOutputTypeCountRecoveryCodesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    where?: AdminRecoveryCodeWhereInput
+  export type AdminUserCountOutputTypeCountAdminSessionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: AdminSessionWhereInput
   }
 
   /**
@@ -2012,9 +2012,9 @@ export namespace Prisma {
     loyaltyPoints?: boolean
     createdAt?: boolean
     updatedAt?: boolean
-    verificationTokens?: boolean | User$verificationTokensArgs<ExtArgs>
-    sessions?: boolean | User$sessionsArgs<ExtArgs>
     emailLogs?: boolean | User$emailLogsArgs<ExtArgs>
+    sessions?: boolean | User$sessionsArgs<ExtArgs>
+    verificationTokens?: boolean | User$verificationTokensArgs<ExtArgs>
     _count?: boolean | UserCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["user"]>
 
@@ -2083,9 +2083,9 @@ export namespace Prisma {
 
   export type UserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "firstName" | "lastName" | "email" | "passwordHash" | "status" | "userType" | "businessName" | "country" | "emailVerified" | "emailVerifiedAt" | "oauthProvider" | "oauthSub" | "oauthRevoked" | "currentTier" | "loyaltyPoints" | "createdAt" | "updatedAt", ExtArgs["result"]["user"]>
   export type UserInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    verificationTokens?: boolean | User$verificationTokensArgs<ExtArgs>
-    sessions?: boolean | User$sessionsArgs<ExtArgs>
     emailLogs?: boolean | User$emailLogsArgs<ExtArgs>
+    sessions?: boolean | User$sessionsArgs<ExtArgs>
+    verificationTokens?: boolean | User$verificationTokensArgs<ExtArgs>
     _count?: boolean | UserCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type UserIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
@@ -2094,9 +2094,9 @@ export namespace Prisma {
   export type $UserPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "User"
     objects: {
-      verificationTokens: Prisma.$VerificationTokenPayload<ExtArgs>[]
-      sessions: Prisma.$SessionPayload<ExtArgs>[]
       emailLogs: Prisma.$EmailLogPayload<ExtArgs>[]
+      sessions: Prisma.$SessionPayload<ExtArgs>[]
+      verificationTokens: Prisma.$VerificationTokenPayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
       id: string
@@ -2511,9 +2511,9 @@ export namespace Prisma {
    */
   export interface Prisma__UserClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
-    verificationTokens<T extends User$verificationTokensArgs<ExtArgs> = {}>(args?: Subset<T, User$verificationTokensArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$VerificationTokenPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
-    sessions<T extends User$sessionsArgs<ExtArgs> = {}>(args?: Subset<T, User$sessionsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     emailLogs<T extends User$emailLogsArgs<ExtArgs> = {}>(args?: Subset<T, User$emailLogsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$EmailLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    sessions<T extends User$sessionsArgs<ExtArgs> = {}>(args?: Subset<T, User$sessionsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$SessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    verificationTokens<T extends User$verificationTokensArgs<ExtArgs> = {}>(args?: Subset<T, User$verificationTokensArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$VerificationTokenPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -2949,27 +2949,27 @@ export namespace Prisma {
   }
 
   /**
-   * User.verificationTokens
+   * User.emailLogs
    */
-  export type User$verificationTokensArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+  export type User$emailLogsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     /**
-     * Select specific fields to fetch from the VerificationToken
+     * Select specific fields to fetch from the EmailLog
      */
-    select?: VerificationTokenSelect<ExtArgs> | null
+    select?: EmailLogSelect<ExtArgs> | null
     /**
-     * Omit specific fields from the VerificationToken
+     * Omit specific fields from the EmailLog
      */
-    omit?: VerificationTokenOmit<ExtArgs> | null
+    omit?: EmailLogOmit<ExtArgs> | null
     /**
      * Choose, which related nodes to fetch as well
      */
-    include?: VerificationTokenInclude<ExtArgs> | null
-    where?: VerificationTokenWhereInput
-    orderBy?: VerificationTokenOrderByWithRelationInput | VerificationTokenOrderByWithRelationInput[]
-    cursor?: VerificationTokenWhereUniqueInput
+    include?: EmailLogInclude<ExtArgs> | null
+    where?: EmailLogWhereInput
+    orderBy?: EmailLogOrderByWithRelationInput | EmailLogOrderByWithRelationInput[]
+    cursor?: EmailLogWhereUniqueInput
     take?: number
     skip?: number
-    distinct?: VerificationTokenScalarFieldEnum | VerificationTokenScalarFieldEnum[]
+    distinct?: EmailLogScalarFieldEnum | EmailLogScalarFieldEnum[]
   }
 
   /**
@@ -2997,27 +2997,27 @@ export namespace Prisma {
   }
 
   /**
-   * User.emailLogs
+   * User.verificationTokens
    */
-  export type User$emailLogsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+  export type User$verificationTokensArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     /**
-     * Select specific fields to fetch from the EmailLog
+     * Select specific fields to fetch from the VerificationToken
      */
-    select?: EmailLogSelect<ExtArgs> | null
+    select?: VerificationTokenSelect<ExtArgs> | null
     /**
-     * Omit specific fields from the EmailLog
+     * Omit specific fields from the VerificationToken
      */
-    omit?: EmailLogOmit<ExtArgs> | null
+    omit?: VerificationTokenOmit<ExtArgs> | null
     /**
      * Choose, which related nodes to fetch as well
      */
-    include?: EmailLogInclude<ExtArgs> | null
-    where?: EmailLogWhereInput
-    orderBy?: EmailLogOrderByWithRelationInput | EmailLogOrderByWithRelationInput[]
-    cursor?: EmailLogWhereUniqueInput
+    include?: VerificationTokenInclude<ExtArgs> | null
+    where?: VerificationTokenWhereInput
+    orderBy?: VerificationTokenOrderByWithRelationInput | VerificationTokenOrderByWithRelationInput[]
+    cursor?: VerificationTokenWhereUniqueInput
     take?: number
     skip?: number
-    distinct?: EmailLogScalarFieldEnum | EmailLogScalarFieldEnum[]
+    distinct?: VerificationTokenScalarFieldEnum | VerificationTokenScalarFieldEnum[]
   }
 
   /**
@@ -6582,8 +6582,8 @@ export namespace Prisma {
     createdAt?: boolean
     updatedAt?: boolean
     cancellationCount?: boolean
-    adminSessions?: boolean | AdminUser$adminSessionsArgs<ExtArgs>
     recoveryCodes?: boolean | AdminUser$recoveryCodesArgs<ExtArgs>
+    adminSessions?: boolean | AdminUser$adminSessionsArgs<ExtArgs>
     auditLogs?: boolean | AdminUser$auditLogsArgs<ExtArgs>
     _count?: boolean | AdminUserCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["adminUser"]>
@@ -6635,8 +6635,8 @@ export namespace Prisma {
 
   export type AdminUserOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "name" | "email" | "passwordHash" | "role" | "countryScope" | "totpEnabled" | "totpSecretEncrypted" | "fido2Credential" | "createdAt" | "updatedAt" | "cancellationCount", ExtArgs["result"]["adminUser"]>
   export type AdminUserInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    adminSessions?: boolean | AdminUser$adminSessionsArgs<ExtArgs>
     recoveryCodes?: boolean | AdminUser$recoveryCodesArgs<ExtArgs>
+    adminSessions?: boolean | AdminUser$adminSessionsArgs<ExtArgs>
     auditLogs?: boolean | AdminUser$auditLogsArgs<ExtArgs>
     _count?: boolean | AdminUserCountOutputTypeDefaultArgs<ExtArgs>
   }
@@ -6646,8 +6646,8 @@ export namespace Prisma {
   export type $AdminUserPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "AdminUser"
     objects: {
-      adminSessions: Prisma.$AdminSessionPayload<ExtArgs>[]
       recoveryCodes: Prisma.$AdminRecoveryCodePayload<ExtArgs>[]
+      adminSessions: Prisma.$AdminSessionPayload<ExtArgs>[]
       auditLogs: Prisma.$AuditLogPayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
@@ -7057,8 +7057,8 @@ export namespace Prisma {
    */
   export interface Prisma__AdminUserClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
     readonly [Symbol.toStringTag]: "PrismaPromise"
-    adminSessions<T extends AdminUser$adminSessionsArgs<ExtArgs> = {}>(args?: Subset<T, AdminUser$adminSessionsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$AdminSessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     recoveryCodes<T extends AdminUser$recoveryCodesArgs<ExtArgs> = {}>(args?: Subset<T, AdminUser$recoveryCodesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$AdminRecoveryCodePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    adminSessions<T extends AdminUser$adminSessionsArgs<ExtArgs> = {}>(args?: Subset<T, AdminUser$adminSessionsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$AdminSessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     auditLogs<T extends AdminUser$auditLogsArgs<ExtArgs> = {}>(args?: Subset<T, AdminUser$auditLogsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$AuditLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
@@ -7489,30 +7489,6 @@ export namespace Prisma {
   }
 
   /**
-   * AdminUser.adminSessions
-   */
-  export type AdminUser$adminSessionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
-    /**
-     * Select specific fields to fetch from the AdminSession
-     */
-    select?: AdminSessionSelect<ExtArgs> | null
-    /**
-     * Omit specific fields from the AdminSession
-     */
-    omit?: AdminSessionOmit<ExtArgs> | null
-    /**
-     * Choose, which related nodes to fetch as well
-     */
-    include?: AdminSessionInclude<ExtArgs> | null
-    where?: AdminSessionWhereInput
-    orderBy?: AdminSessionOrderByWithRelationInput | AdminSessionOrderByWithRelationInput[]
-    cursor?: AdminSessionWhereUniqueInput
-    take?: number
-    skip?: number
-    distinct?: AdminSessionScalarFieldEnum | AdminSessionScalarFieldEnum[]
-  }
-
-  /**
    * AdminUser.recoveryCodes
    */
   export type AdminUser$recoveryCodesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -7534,6 +7510,30 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: AdminRecoveryCodeScalarFieldEnum | AdminRecoveryCodeScalarFieldEnum[]
+  }
+
+  /**
+   * AdminUser.adminSessions
+   */
+  export type AdminUser$adminSessionsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the AdminSession
+     */
+    select?: AdminSessionSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the AdminSession
+     */
+    omit?: AdminSessionOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: AdminSessionInclude<ExtArgs> | null
+    where?: AdminSessionWhereInput
+    orderBy?: AdminSessionOrderByWithRelationInput | AdminSessionOrderByWithRelationInput[]
+    cursor?: AdminSessionWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: AdminSessionScalarFieldEnum | AdminSessionScalarFieldEnum[]
   }
 
   /**
@@ -11241,9 +11241,9 @@ export namespace Prisma {
     loyaltyPoints?: IntFilter<"User"> | number
     createdAt?: DateTimeFilter<"User"> | Date | string
     updatedAt?: DateTimeFilter<"User"> | Date | string
-    verificationTokens?: VerificationTokenListRelationFilter
-    sessions?: SessionListRelationFilter
     emailLogs?: EmailLogListRelationFilter
+    sessions?: SessionListRelationFilter
+    verificationTokens?: VerificationTokenListRelationFilter
   }
 
   export type UserOrderByWithRelationInput = {
@@ -11265,9 +11265,9 @@ export namespace Prisma {
     loyaltyPoints?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
-    verificationTokens?: VerificationTokenOrderByRelationAggregateInput
-    sessions?: SessionOrderByRelationAggregateInput
     emailLogs?: EmailLogOrderByRelationAggregateInput
+    sessions?: SessionOrderByRelationAggregateInput
+    verificationTokens?: VerificationTokenOrderByRelationAggregateInput
   }
 
   export type UserWhereUniqueInput = Prisma.AtLeast<{
@@ -11293,9 +11293,9 @@ export namespace Prisma {
     loyaltyPoints?: IntFilter<"User"> | number
     createdAt?: DateTimeFilter<"User"> | Date | string
     updatedAt?: DateTimeFilter<"User"> | Date | string
-    verificationTokens?: VerificationTokenListRelationFilter
-    sessions?: SessionListRelationFilter
     emailLogs?: EmailLogListRelationFilter
+    sessions?: SessionListRelationFilter
+    verificationTokens?: VerificationTokenListRelationFilter
   }, "id" | "email" | "oauthProvider_oauthSub">
 
   export type UserOrderByWithAggregationInput = {
@@ -11569,8 +11569,8 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"AdminUser"> | Date | string
     updatedAt?: DateTimeFilter<"AdminUser"> | Date | string
     cancellationCount?: IntFilter<"AdminUser"> | number
-    adminSessions?: AdminSessionListRelationFilter
     recoveryCodes?: AdminRecoveryCodeListRelationFilter
+    adminSessions?: AdminSessionListRelationFilter
     auditLogs?: AuditLogListRelationFilter
   }
 
@@ -11587,8 +11587,8 @@ export namespace Prisma {
     createdAt?: SortOrder
     updatedAt?: SortOrder
     cancellationCount?: SortOrder
-    adminSessions?: AdminSessionOrderByRelationAggregateInput
     recoveryCodes?: AdminRecoveryCodeOrderByRelationAggregateInput
+    adminSessions?: AdminSessionOrderByRelationAggregateInput
     auditLogs?: AuditLogOrderByRelationAggregateInput
   }
 
@@ -11608,8 +11608,8 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"AdminUser"> | Date | string
     updatedAt?: DateTimeFilter<"AdminUser"> | Date | string
     cancellationCount?: IntFilter<"AdminUser"> | number
-    adminSessions?: AdminSessionListRelationFilter
     recoveryCodes?: AdminRecoveryCodeListRelationFilter
+    adminSessions?: AdminSessionListRelationFilter
     auditLogs?: AuditLogListRelationFilter
   }, "id" | "email">
 
@@ -11870,9 +11870,9 @@ export namespace Prisma {
     loyaltyPoints?: number
     createdAt?: Date | string
     updatedAt?: Date | string
-    verificationTokens?: VerificationTokenCreateNestedManyWithoutUserInput
-    sessions?: SessionCreateNestedManyWithoutUserInput
     emailLogs?: EmailLogCreateNestedManyWithoutUserInput
+    sessions?: SessionCreateNestedManyWithoutUserInput
+    verificationTokens?: VerificationTokenCreateNestedManyWithoutUserInput
   }
 
   export type UserUncheckedCreateInput = {
@@ -11894,9 +11894,9 @@ export namespace Prisma {
     loyaltyPoints?: number
     createdAt?: Date | string
     updatedAt?: Date | string
-    verificationTokens?: VerificationTokenUncheckedCreateNestedManyWithoutUserInput
-    sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
     emailLogs?: EmailLogUncheckedCreateNestedManyWithoutUserInput
+    sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
+    verificationTokens?: VerificationTokenUncheckedCreateNestedManyWithoutUserInput
   }
 
   export type UserUpdateInput = {
@@ -11918,9 +11918,9 @@ export namespace Prisma {
     loyaltyPoints?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    verificationTokens?: VerificationTokenUpdateManyWithoutUserNestedInput
-    sessions?: SessionUpdateManyWithoutUserNestedInput
     emailLogs?: EmailLogUpdateManyWithoutUserNestedInput
+    sessions?: SessionUpdateManyWithoutUserNestedInput
+    verificationTokens?: VerificationTokenUpdateManyWithoutUserNestedInput
   }
 
   export type UserUncheckedUpdateInput = {
@@ -11942,9 +11942,9 @@ export namespace Prisma {
     loyaltyPoints?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    verificationTokens?: VerificationTokenUncheckedUpdateManyWithoutUserNestedInput
-    sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
     emailLogs?: EmailLogUncheckedUpdateManyWithoutUserNestedInput
+    sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
+    verificationTokens?: VerificationTokenUncheckedUpdateManyWithoutUserNestedInput
   }
 
   export type UserCreateManyInput = {
@@ -12244,8 +12244,8 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     cancellationCount?: number
-    adminSessions?: AdminSessionCreateNestedManyWithoutAdminUserInput
     recoveryCodes?: AdminRecoveryCodeCreateNestedManyWithoutAdminUserInput
+    adminSessions?: AdminSessionCreateNestedManyWithoutAdminUserInput
     auditLogs?: AuditLogCreateNestedManyWithoutAdminInput
   }
 
@@ -12262,8 +12262,8 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     cancellationCount?: number
-    adminSessions?: AdminSessionUncheckedCreateNestedManyWithoutAdminUserInput
     recoveryCodes?: AdminRecoveryCodeUncheckedCreateNestedManyWithoutAdminUserInput
+    adminSessions?: AdminSessionUncheckedCreateNestedManyWithoutAdminUserInput
     auditLogs?: AuditLogUncheckedCreateNestedManyWithoutAdminInput
   }
 
@@ -12280,8 +12280,8 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     cancellationCount?: IntFieldUpdateOperationsInput | number
-    adminSessions?: AdminSessionUpdateManyWithoutAdminUserNestedInput
     recoveryCodes?: AdminRecoveryCodeUpdateManyWithoutAdminUserNestedInput
+    adminSessions?: AdminSessionUpdateManyWithoutAdminUserNestedInput
     auditLogs?: AuditLogUpdateManyWithoutAdminNestedInput
   }
 
@@ -12298,8 +12298,8 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     cancellationCount?: IntFieldUpdateOperationsInput | number
-    adminSessions?: AdminSessionUncheckedUpdateManyWithoutAdminUserNestedInput
     recoveryCodes?: AdminRecoveryCodeUncheckedUpdateManyWithoutAdminUserNestedInput
+    adminSessions?: AdminSessionUncheckedUpdateManyWithoutAdminUserNestedInput
     auditLogs?: AuditLogUncheckedUpdateManyWithoutAdminNestedInput
   }
 
@@ -12658,10 +12658,10 @@ export namespace Prisma {
     not?: NestedDateTimeFilter<$PrismaModel> | Date | string
   }
 
-  export type VerificationTokenListRelationFilter = {
-    every?: VerificationTokenWhereInput
-    some?: VerificationTokenWhereInput
-    none?: VerificationTokenWhereInput
+  export type EmailLogListRelationFilter = {
+    every?: EmailLogWhereInput
+    some?: EmailLogWhereInput
+    none?: EmailLogWhereInput
   }
 
   export type SessionListRelationFilter = {
@@ -12670,10 +12670,10 @@ export namespace Prisma {
     none?: SessionWhereInput
   }
 
-  export type EmailLogListRelationFilter = {
-    every?: EmailLogWhereInput
-    some?: EmailLogWhereInput
-    none?: EmailLogWhereInput
+  export type VerificationTokenListRelationFilter = {
+    every?: VerificationTokenWhereInput
+    some?: VerificationTokenWhereInput
+    none?: VerificationTokenWhereInput
   }
 
   export type SortOrderInput = {
@@ -12681,7 +12681,7 @@ export namespace Prisma {
     nulls?: NullsOrder
   }
 
-  export type VerificationTokenOrderByRelationAggregateInput = {
+  export type EmailLogOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -12689,7 +12689,7 @@ export namespace Prisma {
     _count?: SortOrder
   }
 
-  export type EmailLogOrderByRelationAggregateInput = {
+  export type VerificationTokenOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -13092,16 +13092,16 @@ export namespace Prisma {
     not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
   }
 
-  export type AdminSessionListRelationFilter = {
-    every?: AdminSessionWhereInput
-    some?: AdminSessionWhereInput
-    none?: AdminSessionWhereInput
-  }
-
   export type AdminRecoveryCodeListRelationFilter = {
     every?: AdminRecoveryCodeWhereInput
     some?: AdminRecoveryCodeWhereInput
     none?: AdminRecoveryCodeWhereInput
+  }
+
+  export type AdminSessionListRelationFilter = {
+    every?: AdminSessionWhereInput
+    some?: AdminSessionWhereInput
+    none?: AdminSessionWhereInput
   }
 
   export type AuditLogListRelationFilter = {
@@ -13110,11 +13110,11 @@ export namespace Prisma {
     none?: AuditLogWhereInput
   }
 
-  export type AdminSessionOrderByRelationAggregateInput = {
+  export type AdminRecoveryCodeOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
-  export type AdminRecoveryCodeOrderByRelationAggregateInput = {
+  export type AdminSessionOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
 
@@ -13305,11 +13305,11 @@ export namespace Prisma {
     timestamp?: SortOrder
   }
 
-  export type VerificationTokenCreateNestedManyWithoutUserInput = {
-    create?: XOR<VerificationTokenCreateWithoutUserInput, VerificationTokenUncheckedCreateWithoutUserInput> | VerificationTokenCreateWithoutUserInput[] | VerificationTokenUncheckedCreateWithoutUserInput[]
-    connectOrCreate?: VerificationTokenCreateOrConnectWithoutUserInput | VerificationTokenCreateOrConnectWithoutUserInput[]
-    createMany?: VerificationTokenCreateManyUserInputEnvelope
-    connect?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
+  export type EmailLogCreateNestedManyWithoutUserInput = {
+    create?: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput> | EmailLogCreateWithoutUserInput[] | EmailLogUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: EmailLogCreateOrConnectWithoutUserInput | EmailLogCreateOrConnectWithoutUserInput[]
+    createMany?: EmailLogCreateManyUserInputEnvelope
+    connect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
   }
 
   export type SessionCreateNestedManyWithoutUserInput = {
@@ -13319,18 +13319,18 @@ export namespace Prisma {
     connect?: SessionWhereUniqueInput | SessionWhereUniqueInput[]
   }
 
-  export type EmailLogCreateNestedManyWithoutUserInput = {
-    create?: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput> | EmailLogCreateWithoutUserInput[] | EmailLogUncheckedCreateWithoutUserInput[]
-    connectOrCreate?: EmailLogCreateOrConnectWithoutUserInput | EmailLogCreateOrConnectWithoutUserInput[]
-    createMany?: EmailLogCreateManyUserInputEnvelope
-    connect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
-  }
-
-  export type VerificationTokenUncheckedCreateNestedManyWithoutUserInput = {
+  export type VerificationTokenCreateNestedManyWithoutUserInput = {
     create?: XOR<VerificationTokenCreateWithoutUserInput, VerificationTokenUncheckedCreateWithoutUserInput> | VerificationTokenCreateWithoutUserInput[] | VerificationTokenUncheckedCreateWithoutUserInput[]
     connectOrCreate?: VerificationTokenCreateOrConnectWithoutUserInput | VerificationTokenCreateOrConnectWithoutUserInput[]
     createMany?: VerificationTokenCreateManyUserInputEnvelope
     connect?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
+  }
+
+  export type EmailLogUncheckedCreateNestedManyWithoutUserInput = {
+    create?: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput> | EmailLogCreateWithoutUserInput[] | EmailLogUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: EmailLogCreateOrConnectWithoutUserInput | EmailLogCreateOrConnectWithoutUserInput[]
+    createMany?: EmailLogCreateManyUserInputEnvelope
+    connect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
   }
 
   export type SessionUncheckedCreateNestedManyWithoutUserInput = {
@@ -13340,11 +13340,11 @@ export namespace Prisma {
     connect?: SessionWhereUniqueInput | SessionWhereUniqueInput[]
   }
 
-  export type EmailLogUncheckedCreateNestedManyWithoutUserInput = {
-    create?: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput> | EmailLogCreateWithoutUserInput[] | EmailLogUncheckedCreateWithoutUserInput[]
-    connectOrCreate?: EmailLogCreateOrConnectWithoutUserInput | EmailLogCreateOrConnectWithoutUserInput[]
-    createMany?: EmailLogCreateManyUserInputEnvelope
-    connect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
+  export type VerificationTokenUncheckedCreateNestedManyWithoutUserInput = {
+    create?: XOR<VerificationTokenCreateWithoutUserInput, VerificationTokenUncheckedCreateWithoutUserInput> | VerificationTokenCreateWithoutUserInput[] | VerificationTokenUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: VerificationTokenCreateOrConnectWithoutUserInput | VerificationTokenCreateOrConnectWithoutUserInput[]
+    createMany?: VerificationTokenCreateManyUserInputEnvelope
+    connect?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
   }
 
   export type StringFieldUpdateOperationsInput = {
@@ -13391,18 +13391,18 @@ export namespace Prisma {
     set?: Date | string
   }
 
-  export type VerificationTokenUpdateManyWithoutUserNestedInput = {
-    create?: XOR<VerificationTokenCreateWithoutUserInput, VerificationTokenUncheckedCreateWithoutUserInput> | VerificationTokenCreateWithoutUserInput[] | VerificationTokenUncheckedCreateWithoutUserInput[]
-    connectOrCreate?: VerificationTokenCreateOrConnectWithoutUserInput | VerificationTokenCreateOrConnectWithoutUserInput[]
-    upsert?: VerificationTokenUpsertWithWhereUniqueWithoutUserInput | VerificationTokenUpsertWithWhereUniqueWithoutUserInput[]
-    createMany?: VerificationTokenCreateManyUserInputEnvelope
-    set?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
-    disconnect?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
-    delete?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
-    connect?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
-    update?: VerificationTokenUpdateWithWhereUniqueWithoutUserInput | VerificationTokenUpdateWithWhereUniqueWithoutUserInput[]
-    updateMany?: VerificationTokenUpdateManyWithWhereWithoutUserInput | VerificationTokenUpdateManyWithWhereWithoutUserInput[]
-    deleteMany?: VerificationTokenScalarWhereInput | VerificationTokenScalarWhereInput[]
+  export type EmailLogUpdateManyWithoutUserNestedInput = {
+    create?: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput> | EmailLogCreateWithoutUserInput[] | EmailLogUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: EmailLogCreateOrConnectWithoutUserInput | EmailLogCreateOrConnectWithoutUserInput[]
+    upsert?: EmailLogUpsertWithWhereUniqueWithoutUserInput | EmailLogUpsertWithWhereUniqueWithoutUserInput[]
+    createMany?: EmailLogCreateManyUserInputEnvelope
+    set?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
+    disconnect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
+    delete?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
+    connect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
+    update?: EmailLogUpdateWithWhereUniqueWithoutUserInput | EmailLogUpdateWithWhereUniqueWithoutUserInput[]
+    updateMany?: EmailLogUpdateManyWithWhereWithoutUserInput | EmailLogUpdateManyWithWhereWithoutUserInput[]
+    deleteMany?: EmailLogScalarWhereInput | EmailLogScalarWhereInput[]
   }
 
   export type SessionUpdateManyWithoutUserNestedInput = {
@@ -13419,21 +13419,7 @@ export namespace Prisma {
     deleteMany?: SessionScalarWhereInput | SessionScalarWhereInput[]
   }
 
-  export type EmailLogUpdateManyWithoutUserNestedInput = {
-    create?: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput> | EmailLogCreateWithoutUserInput[] | EmailLogUncheckedCreateWithoutUserInput[]
-    connectOrCreate?: EmailLogCreateOrConnectWithoutUserInput | EmailLogCreateOrConnectWithoutUserInput[]
-    upsert?: EmailLogUpsertWithWhereUniqueWithoutUserInput | EmailLogUpsertWithWhereUniqueWithoutUserInput[]
-    createMany?: EmailLogCreateManyUserInputEnvelope
-    set?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
-    disconnect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
-    delete?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
-    connect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
-    update?: EmailLogUpdateWithWhereUniqueWithoutUserInput | EmailLogUpdateWithWhereUniqueWithoutUserInput[]
-    updateMany?: EmailLogUpdateManyWithWhereWithoutUserInput | EmailLogUpdateManyWithWhereWithoutUserInput[]
-    deleteMany?: EmailLogScalarWhereInput | EmailLogScalarWhereInput[]
-  }
-
-  export type VerificationTokenUncheckedUpdateManyWithoutUserNestedInput = {
+  export type VerificationTokenUpdateManyWithoutUserNestedInput = {
     create?: XOR<VerificationTokenCreateWithoutUserInput, VerificationTokenUncheckedCreateWithoutUserInput> | VerificationTokenCreateWithoutUserInput[] | VerificationTokenUncheckedCreateWithoutUserInput[]
     connectOrCreate?: VerificationTokenCreateOrConnectWithoutUserInput | VerificationTokenCreateOrConnectWithoutUserInput[]
     upsert?: VerificationTokenUpsertWithWhereUniqueWithoutUserInput | VerificationTokenUpsertWithWhereUniqueWithoutUserInput[]
@@ -13445,6 +13431,20 @@ export namespace Prisma {
     update?: VerificationTokenUpdateWithWhereUniqueWithoutUserInput | VerificationTokenUpdateWithWhereUniqueWithoutUserInput[]
     updateMany?: VerificationTokenUpdateManyWithWhereWithoutUserInput | VerificationTokenUpdateManyWithWhereWithoutUserInput[]
     deleteMany?: VerificationTokenScalarWhereInput | VerificationTokenScalarWhereInput[]
+  }
+
+  export type EmailLogUncheckedUpdateManyWithoutUserNestedInput = {
+    create?: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput> | EmailLogCreateWithoutUserInput[] | EmailLogUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: EmailLogCreateOrConnectWithoutUserInput | EmailLogCreateOrConnectWithoutUserInput[]
+    upsert?: EmailLogUpsertWithWhereUniqueWithoutUserInput | EmailLogUpsertWithWhereUniqueWithoutUserInput[]
+    createMany?: EmailLogCreateManyUserInputEnvelope
+    set?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
+    disconnect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
+    delete?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
+    connect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
+    update?: EmailLogUpdateWithWhereUniqueWithoutUserInput | EmailLogUpdateWithWhereUniqueWithoutUserInput[]
+    updateMany?: EmailLogUpdateManyWithWhereWithoutUserInput | EmailLogUpdateManyWithWhereWithoutUserInput[]
+    deleteMany?: EmailLogScalarWhereInput | EmailLogScalarWhereInput[]
   }
 
   export type SessionUncheckedUpdateManyWithoutUserNestedInput = {
@@ -13461,18 +13461,18 @@ export namespace Prisma {
     deleteMany?: SessionScalarWhereInput | SessionScalarWhereInput[]
   }
 
-  export type EmailLogUncheckedUpdateManyWithoutUserNestedInput = {
-    create?: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput> | EmailLogCreateWithoutUserInput[] | EmailLogUncheckedCreateWithoutUserInput[]
-    connectOrCreate?: EmailLogCreateOrConnectWithoutUserInput | EmailLogCreateOrConnectWithoutUserInput[]
-    upsert?: EmailLogUpsertWithWhereUniqueWithoutUserInput | EmailLogUpsertWithWhereUniqueWithoutUserInput[]
-    createMany?: EmailLogCreateManyUserInputEnvelope
-    set?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
-    disconnect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
-    delete?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
-    connect?: EmailLogWhereUniqueInput | EmailLogWhereUniqueInput[]
-    update?: EmailLogUpdateWithWhereUniqueWithoutUserInput | EmailLogUpdateWithWhereUniqueWithoutUserInput[]
-    updateMany?: EmailLogUpdateManyWithWhereWithoutUserInput | EmailLogUpdateManyWithWhereWithoutUserInput[]
-    deleteMany?: EmailLogScalarWhereInput | EmailLogScalarWhereInput[]
+  export type VerificationTokenUncheckedUpdateManyWithoutUserNestedInput = {
+    create?: XOR<VerificationTokenCreateWithoutUserInput, VerificationTokenUncheckedCreateWithoutUserInput> | VerificationTokenCreateWithoutUserInput[] | VerificationTokenUncheckedCreateWithoutUserInput[]
+    connectOrCreate?: VerificationTokenCreateOrConnectWithoutUserInput | VerificationTokenCreateOrConnectWithoutUserInput[]
+    upsert?: VerificationTokenUpsertWithWhereUniqueWithoutUserInput | VerificationTokenUpsertWithWhereUniqueWithoutUserInput[]
+    createMany?: VerificationTokenCreateManyUserInputEnvelope
+    set?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
+    disconnect?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
+    delete?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
+    connect?: VerificationTokenWhereUniqueInput | VerificationTokenWhereUniqueInput[]
+    update?: VerificationTokenUpdateWithWhereUniqueWithoutUserInput | VerificationTokenUpdateWithWhereUniqueWithoutUserInput[]
+    updateMany?: VerificationTokenUpdateManyWithWhereWithoutUserInput | VerificationTokenUpdateManyWithWhereWithoutUserInput[]
+    deleteMany?: VerificationTokenScalarWhereInput | VerificationTokenScalarWhereInput[]
   }
 
   export type UserCreateNestedOneWithoutVerificationTokensInput = {
@@ -13535,18 +13535,18 @@ export namespace Prisma {
     set: string[]
   }
 
-  export type AdminSessionCreateNestedManyWithoutAdminUserInput = {
-    create?: XOR<AdminSessionCreateWithoutAdminUserInput, AdminSessionUncheckedCreateWithoutAdminUserInput> | AdminSessionCreateWithoutAdminUserInput[] | AdminSessionUncheckedCreateWithoutAdminUserInput[]
-    connectOrCreate?: AdminSessionCreateOrConnectWithoutAdminUserInput | AdminSessionCreateOrConnectWithoutAdminUserInput[]
-    createMany?: AdminSessionCreateManyAdminUserInputEnvelope
-    connect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-  }
-
   export type AdminRecoveryCodeCreateNestedManyWithoutAdminUserInput = {
     create?: XOR<AdminRecoveryCodeCreateWithoutAdminUserInput, AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput> | AdminRecoveryCodeCreateWithoutAdminUserInput[] | AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput[]
     connectOrCreate?: AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput | AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput[]
     createMany?: AdminRecoveryCodeCreateManyAdminUserInputEnvelope
     connect?: AdminRecoveryCodeWhereUniqueInput | AdminRecoveryCodeWhereUniqueInput[]
+  }
+
+  export type AdminSessionCreateNestedManyWithoutAdminUserInput = {
+    create?: XOR<AdminSessionCreateWithoutAdminUserInput, AdminSessionUncheckedCreateWithoutAdminUserInput> | AdminSessionCreateWithoutAdminUserInput[] | AdminSessionUncheckedCreateWithoutAdminUserInput[]
+    connectOrCreate?: AdminSessionCreateOrConnectWithoutAdminUserInput | AdminSessionCreateOrConnectWithoutAdminUserInput[]
+    createMany?: AdminSessionCreateManyAdminUserInputEnvelope
+    connect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
   }
 
   export type AuditLogCreateNestedManyWithoutAdminInput = {
@@ -13556,18 +13556,18 @@ export namespace Prisma {
     connect?: AuditLogWhereUniqueInput | AuditLogWhereUniqueInput[]
   }
 
-  export type AdminSessionUncheckedCreateNestedManyWithoutAdminUserInput = {
-    create?: XOR<AdminSessionCreateWithoutAdminUserInput, AdminSessionUncheckedCreateWithoutAdminUserInput> | AdminSessionCreateWithoutAdminUserInput[] | AdminSessionUncheckedCreateWithoutAdminUserInput[]
-    connectOrCreate?: AdminSessionCreateOrConnectWithoutAdminUserInput | AdminSessionCreateOrConnectWithoutAdminUserInput[]
-    createMany?: AdminSessionCreateManyAdminUserInputEnvelope
-    connect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-  }
-
   export type AdminRecoveryCodeUncheckedCreateNestedManyWithoutAdminUserInput = {
     create?: XOR<AdminRecoveryCodeCreateWithoutAdminUserInput, AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput> | AdminRecoveryCodeCreateWithoutAdminUserInput[] | AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput[]
     connectOrCreate?: AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput | AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput[]
     createMany?: AdminRecoveryCodeCreateManyAdminUserInputEnvelope
     connect?: AdminRecoveryCodeWhereUniqueInput | AdminRecoveryCodeWhereUniqueInput[]
+  }
+
+  export type AdminSessionUncheckedCreateNestedManyWithoutAdminUserInput = {
+    create?: XOR<AdminSessionCreateWithoutAdminUserInput, AdminSessionUncheckedCreateWithoutAdminUserInput> | AdminSessionCreateWithoutAdminUserInput[] | AdminSessionUncheckedCreateWithoutAdminUserInput[]
+    connectOrCreate?: AdminSessionCreateOrConnectWithoutAdminUserInput | AdminSessionCreateOrConnectWithoutAdminUserInput[]
+    createMany?: AdminSessionCreateManyAdminUserInputEnvelope
+    connect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
   }
 
   export type AuditLogUncheckedCreateNestedManyWithoutAdminInput = {
@@ -13586,20 +13586,6 @@ export namespace Prisma {
     push?: string | string[]
   }
 
-  export type AdminSessionUpdateManyWithoutAdminUserNestedInput = {
-    create?: XOR<AdminSessionCreateWithoutAdminUserInput, AdminSessionUncheckedCreateWithoutAdminUserInput> | AdminSessionCreateWithoutAdminUserInput[] | AdminSessionUncheckedCreateWithoutAdminUserInput[]
-    connectOrCreate?: AdminSessionCreateOrConnectWithoutAdminUserInput | AdminSessionCreateOrConnectWithoutAdminUserInput[]
-    upsert?: AdminSessionUpsertWithWhereUniqueWithoutAdminUserInput | AdminSessionUpsertWithWhereUniqueWithoutAdminUserInput[]
-    createMany?: AdminSessionCreateManyAdminUserInputEnvelope
-    set?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-    disconnect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-    delete?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-    connect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-    update?: AdminSessionUpdateWithWhereUniqueWithoutAdminUserInput | AdminSessionUpdateWithWhereUniqueWithoutAdminUserInput[]
-    updateMany?: AdminSessionUpdateManyWithWhereWithoutAdminUserInput | AdminSessionUpdateManyWithWhereWithoutAdminUserInput[]
-    deleteMany?: AdminSessionScalarWhereInput | AdminSessionScalarWhereInput[]
-  }
-
   export type AdminRecoveryCodeUpdateManyWithoutAdminUserNestedInput = {
     create?: XOR<AdminRecoveryCodeCreateWithoutAdminUserInput, AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput> | AdminRecoveryCodeCreateWithoutAdminUserInput[] | AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput[]
     connectOrCreate?: AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput | AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput[]
@@ -13612,6 +13598,20 @@ export namespace Prisma {
     update?: AdminRecoveryCodeUpdateWithWhereUniqueWithoutAdminUserInput | AdminRecoveryCodeUpdateWithWhereUniqueWithoutAdminUserInput[]
     updateMany?: AdminRecoveryCodeUpdateManyWithWhereWithoutAdminUserInput | AdminRecoveryCodeUpdateManyWithWhereWithoutAdminUserInput[]
     deleteMany?: AdminRecoveryCodeScalarWhereInput | AdminRecoveryCodeScalarWhereInput[]
+  }
+
+  export type AdminSessionUpdateManyWithoutAdminUserNestedInput = {
+    create?: XOR<AdminSessionCreateWithoutAdminUserInput, AdminSessionUncheckedCreateWithoutAdminUserInput> | AdminSessionCreateWithoutAdminUserInput[] | AdminSessionUncheckedCreateWithoutAdminUserInput[]
+    connectOrCreate?: AdminSessionCreateOrConnectWithoutAdminUserInput | AdminSessionCreateOrConnectWithoutAdminUserInput[]
+    upsert?: AdminSessionUpsertWithWhereUniqueWithoutAdminUserInput | AdminSessionUpsertWithWhereUniqueWithoutAdminUserInput[]
+    createMany?: AdminSessionCreateManyAdminUserInputEnvelope
+    set?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
+    disconnect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
+    delete?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
+    connect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
+    update?: AdminSessionUpdateWithWhereUniqueWithoutAdminUserInput | AdminSessionUpdateWithWhereUniqueWithoutAdminUserInput[]
+    updateMany?: AdminSessionUpdateManyWithWhereWithoutAdminUserInput | AdminSessionUpdateManyWithWhereWithoutAdminUserInput[]
+    deleteMany?: AdminSessionScalarWhereInput | AdminSessionScalarWhereInput[]
   }
 
   export type AuditLogUpdateManyWithoutAdminNestedInput = {
@@ -13628,20 +13628,6 @@ export namespace Prisma {
     deleteMany?: AuditLogScalarWhereInput | AuditLogScalarWhereInput[]
   }
 
-  export type AdminSessionUncheckedUpdateManyWithoutAdminUserNestedInput = {
-    create?: XOR<AdminSessionCreateWithoutAdminUserInput, AdminSessionUncheckedCreateWithoutAdminUserInput> | AdminSessionCreateWithoutAdminUserInput[] | AdminSessionUncheckedCreateWithoutAdminUserInput[]
-    connectOrCreate?: AdminSessionCreateOrConnectWithoutAdminUserInput | AdminSessionCreateOrConnectWithoutAdminUserInput[]
-    upsert?: AdminSessionUpsertWithWhereUniqueWithoutAdminUserInput | AdminSessionUpsertWithWhereUniqueWithoutAdminUserInput[]
-    createMany?: AdminSessionCreateManyAdminUserInputEnvelope
-    set?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-    disconnect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-    delete?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-    connect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
-    update?: AdminSessionUpdateWithWhereUniqueWithoutAdminUserInput | AdminSessionUpdateWithWhereUniqueWithoutAdminUserInput[]
-    updateMany?: AdminSessionUpdateManyWithWhereWithoutAdminUserInput | AdminSessionUpdateManyWithWhereWithoutAdminUserInput[]
-    deleteMany?: AdminSessionScalarWhereInput | AdminSessionScalarWhereInput[]
-  }
-
   export type AdminRecoveryCodeUncheckedUpdateManyWithoutAdminUserNestedInput = {
     create?: XOR<AdminRecoveryCodeCreateWithoutAdminUserInput, AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput> | AdminRecoveryCodeCreateWithoutAdminUserInput[] | AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput[]
     connectOrCreate?: AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput | AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput[]
@@ -13654,6 +13640,20 @@ export namespace Prisma {
     update?: AdminRecoveryCodeUpdateWithWhereUniqueWithoutAdminUserInput | AdminRecoveryCodeUpdateWithWhereUniqueWithoutAdminUserInput[]
     updateMany?: AdminRecoveryCodeUpdateManyWithWhereWithoutAdminUserInput | AdminRecoveryCodeUpdateManyWithWhereWithoutAdminUserInput[]
     deleteMany?: AdminRecoveryCodeScalarWhereInput | AdminRecoveryCodeScalarWhereInput[]
+  }
+
+  export type AdminSessionUncheckedUpdateManyWithoutAdminUserNestedInput = {
+    create?: XOR<AdminSessionCreateWithoutAdminUserInput, AdminSessionUncheckedCreateWithoutAdminUserInput> | AdminSessionCreateWithoutAdminUserInput[] | AdminSessionUncheckedCreateWithoutAdminUserInput[]
+    connectOrCreate?: AdminSessionCreateOrConnectWithoutAdminUserInput | AdminSessionCreateOrConnectWithoutAdminUserInput[]
+    upsert?: AdminSessionUpsertWithWhereUniqueWithoutAdminUserInput | AdminSessionUpsertWithWhereUniqueWithoutAdminUserInput[]
+    createMany?: AdminSessionCreateManyAdminUserInputEnvelope
+    set?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
+    disconnect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
+    delete?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
+    connect?: AdminSessionWhereUniqueInput | AdminSessionWhereUniqueInput[]
+    update?: AdminSessionUpdateWithWhereUniqueWithoutAdminUserInput | AdminSessionUpdateWithWhereUniqueWithoutAdminUserInput[]
+    updateMany?: AdminSessionUpdateManyWithWhereWithoutAdminUserInput | AdminSessionUpdateManyWithWhereWithoutAdminUserInput[]
+    deleteMany?: AdminSessionScalarWhereInput | AdminSessionScalarWhereInput[]
   }
 
   export type AuditLogUncheckedUpdateManyWithoutAdminNestedInput = {
@@ -14045,6 +14045,62 @@ export namespace Prisma {
     not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
   }
 
+  export type EmailLogCreateWithoutUserInput = {
+    id?: string
+    type: $Enums.EmailLogType
+    recipient: string
+    status?: $Enums.EmailLogStatus
+    sendgridMsgId?: string | null
+    sentAt?: Date | string | null
+    createdAt?: Date | string
+  }
+
+  export type EmailLogUncheckedCreateWithoutUserInput = {
+    id?: string
+    type: $Enums.EmailLogType
+    recipient: string
+    status?: $Enums.EmailLogStatus
+    sendgridMsgId?: string | null
+    sentAt?: Date | string | null
+    createdAt?: Date | string
+  }
+
+  export type EmailLogCreateOrConnectWithoutUserInput = {
+    where: EmailLogWhereUniqueInput
+    create: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput>
+  }
+
+  export type EmailLogCreateManyUserInputEnvelope = {
+    data: EmailLogCreateManyUserInput | EmailLogCreateManyUserInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type SessionCreateWithoutUserInput = {
+    id?: string
+    tokenHash: string
+    revoked?: boolean
+    createdAt?: Date | string
+    expiresAt: Date | string
+  }
+
+  export type SessionUncheckedCreateWithoutUserInput = {
+    id?: string
+    tokenHash: string
+    revoked?: boolean
+    createdAt?: Date | string
+    expiresAt: Date | string
+  }
+
+  export type SessionCreateOrConnectWithoutUserInput = {
+    where: SessionWhereUniqueInput
+    create: XOR<SessionCreateWithoutUserInput, SessionUncheckedCreateWithoutUserInput>
+  }
+
+  export type SessionCreateManyUserInputEnvelope = {
+    data: SessionCreateManyUserInput | SessionCreateManyUserInput[]
+    skipDuplicates?: boolean
+  }
+
   export type VerificationTokenCreateWithoutUserInput = {
     id?: string
     tokenHash: string
@@ -14077,60 +14133,62 @@ export namespace Prisma {
     skipDuplicates?: boolean
   }
 
-  export type SessionCreateWithoutUserInput = {
-    id?: string
-    tokenHash: string
-    revoked?: boolean
-    createdAt?: Date | string
-    expiresAt: Date | string
-  }
-
-  export type SessionUncheckedCreateWithoutUserInput = {
-    id?: string
-    tokenHash: string
-    revoked?: boolean
-    createdAt?: Date | string
-    expiresAt: Date | string
-  }
-
-  export type SessionCreateOrConnectWithoutUserInput = {
-    where: SessionWhereUniqueInput
-    create: XOR<SessionCreateWithoutUserInput, SessionUncheckedCreateWithoutUserInput>
-  }
-
-  export type SessionCreateManyUserInputEnvelope = {
-    data: SessionCreateManyUserInput | SessionCreateManyUserInput[]
-    skipDuplicates?: boolean
-  }
-
-  export type EmailLogCreateWithoutUserInput = {
-    id?: string
-    type: $Enums.EmailLogType
-    recipient: string
-    status?: $Enums.EmailLogStatus
-    sendgridMsgId?: string | null
-    sentAt?: Date | string | null
-    createdAt?: Date | string
-  }
-
-  export type EmailLogUncheckedCreateWithoutUserInput = {
-    id?: string
-    type: $Enums.EmailLogType
-    recipient: string
-    status?: $Enums.EmailLogStatus
-    sendgridMsgId?: string | null
-    sentAt?: Date | string | null
-    createdAt?: Date | string
-  }
-
-  export type EmailLogCreateOrConnectWithoutUserInput = {
+  export type EmailLogUpsertWithWhereUniqueWithoutUserInput = {
     where: EmailLogWhereUniqueInput
+    update: XOR<EmailLogUpdateWithoutUserInput, EmailLogUncheckedUpdateWithoutUserInput>
     create: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput>
   }
 
-  export type EmailLogCreateManyUserInputEnvelope = {
-    data: EmailLogCreateManyUserInput | EmailLogCreateManyUserInput[]
-    skipDuplicates?: boolean
+  export type EmailLogUpdateWithWhereUniqueWithoutUserInput = {
+    where: EmailLogWhereUniqueInput
+    data: XOR<EmailLogUpdateWithoutUserInput, EmailLogUncheckedUpdateWithoutUserInput>
+  }
+
+  export type EmailLogUpdateManyWithWhereWithoutUserInput = {
+    where: EmailLogScalarWhereInput
+    data: XOR<EmailLogUpdateManyMutationInput, EmailLogUncheckedUpdateManyWithoutUserInput>
+  }
+
+  export type EmailLogScalarWhereInput = {
+    AND?: EmailLogScalarWhereInput | EmailLogScalarWhereInput[]
+    OR?: EmailLogScalarWhereInput[]
+    NOT?: EmailLogScalarWhereInput | EmailLogScalarWhereInput[]
+    id?: StringFilter<"EmailLog"> | string
+    userId?: StringNullableFilter<"EmailLog"> | string | null
+    type?: EnumEmailLogTypeFilter<"EmailLog"> | $Enums.EmailLogType
+    recipient?: StringFilter<"EmailLog"> | string
+    status?: EnumEmailLogStatusFilter<"EmailLog"> | $Enums.EmailLogStatus
+    sendgridMsgId?: StringNullableFilter<"EmailLog"> | string | null
+    sentAt?: DateTimeNullableFilter<"EmailLog"> | Date | string | null
+    createdAt?: DateTimeFilter<"EmailLog"> | Date | string
+  }
+
+  export type SessionUpsertWithWhereUniqueWithoutUserInput = {
+    where: SessionWhereUniqueInput
+    update: XOR<SessionUpdateWithoutUserInput, SessionUncheckedUpdateWithoutUserInput>
+    create: XOR<SessionCreateWithoutUserInput, SessionUncheckedCreateWithoutUserInput>
+  }
+
+  export type SessionUpdateWithWhereUniqueWithoutUserInput = {
+    where: SessionWhereUniqueInput
+    data: XOR<SessionUpdateWithoutUserInput, SessionUncheckedUpdateWithoutUserInput>
+  }
+
+  export type SessionUpdateManyWithWhereWithoutUserInput = {
+    where: SessionScalarWhereInput
+    data: XOR<SessionUpdateManyMutationInput, SessionUncheckedUpdateManyWithoutUserInput>
+  }
+
+  export type SessionScalarWhereInput = {
+    AND?: SessionScalarWhereInput | SessionScalarWhereInput[]
+    OR?: SessionScalarWhereInput[]
+    NOT?: SessionScalarWhereInput | SessionScalarWhereInput[]
+    id?: StringFilter<"Session"> | string
+    userId?: StringFilter<"Session"> | string
+    tokenHash?: StringFilter<"Session"> | string
+    revoked?: BoolFilter<"Session"> | boolean
+    createdAt?: DateTimeFilter<"Session"> | Date | string
+    expiresAt?: DateTimeFilter<"Session"> | Date | string
   }
 
   export type VerificationTokenUpsertWithWhereUniqueWithoutUserInput = {
@@ -14164,64 +14222,6 @@ export namespace Prisma {
     createdAt?: DateTimeFilter<"VerificationToken"> | Date | string
   }
 
-  export type SessionUpsertWithWhereUniqueWithoutUserInput = {
-    where: SessionWhereUniqueInput
-    update: XOR<SessionUpdateWithoutUserInput, SessionUncheckedUpdateWithoutUserInput>
-    create: XOR<SessionCreateWithoutUserInput, SessionUncheckedCreateWithoutUserInput>
-  }
-
-  export type SessionUpdateWithWhereUniqueWithoutUserInput = {
-    where: SessionWhereUniqueInput
-    data: XOR<SessionUpdateWithoutUserInput, SessionUncheckedUpdateWithoutUserInput>
-  }
-
-  export type SessionUpdateManyWithWhereWithoutUserInput = {
-    where: SessionScalarWhereInput
-    data: XOR<SessionUpdateManyMutationInput, SessionUncheckedUpdateManyWithoutUserInput>
-  }
-
-  export type SessionScalarWhereInput = {
-    AND?: SessionScalarWhereInput | SessionScalarWhereInput[]
-    OR?: SessionScalarWhereInput[]
-    NOT?: SessionScalarWhereInput | SessionScalarWhereInput[]
-    id?: StringFilter<"Session"> | string
-    userId?: StringFilter<"Session"> | string
-    tokenHash?: StringFilter<"Session"> | string
-    revoked?: BoolFilter<"Session"> | boolean
-    createdAt?: DateTimeFilter<"Session"> | Date | string
-    expiresAt?: DateTimeFilter<"Session"> | Date | string
-  }
-
-  export type EmailLogUpsertWithWhereUniqueWithoutUserInput = {
-    where: EmailLogWhereUniqueInput
-    update: XOR<EmailLogUpdateWithoutUserInput, EmailLogUncheckedUpdateWithoutUserInput>
-    create: XOR<EmailLogCreateWithoutUserInput, EmailLogUncheckedCreateWithoutUserInput>
-  }
-
-  export type EmailLogUpdateWithWhereUniqueWithoutUserInput = {
-    where: EmailLogWhereUniqueInput
-    data: XOR<EmailLogUpdateWithoutUserInput, EmailLogUncheckedUpdateWithoutUserInput>
-  }
-
-  export type EmailLogUpdateManyWithWhereWithoutUserInput = {
-    where: EmailLogScalarWhereInput
-    data: XOR<EmailLogUpdateManyMutationInput, EmailLogUncheckedUpdateManyWithoutUserInput>
-  }
-
-  export type EmailLogScalarWhereInput = {
-    AND?: EmailLogScalarWhereInput | EmailLogScalarWhereInput[]
-    OR?: EmailLogScalarWhereInput[]
-    NOT?: EmailLogScalarWhereInput | EmailLogScalarWhereInput[]
-    id?: StringFilter<"EmailLog"> | string
-    userId?: StringNullableFilter<"EmailLog"> | string | null
-    type?: EnumEmailLogTypeFilter<"EmailLog"> | $Enums.EmailLogType
-    recipient?: StringFilter<"EmailLog"> | string
-    status?: EnumEmailLogStatusFilter<"EmailLog"> | $Enums.EmailLogStatus
-    sendgridMsgId?: StringNullableFilter<"EmailLog"> | string | null
-    sentAt?: DateTimeNullableFilter<"EmailLog"> | Date | string | null
-    createdAt?: DateTimeFilter<"EmailLog"> | Date | string
-  }
-
   export type UserCreateWithoutVerificationTokensInput = {
     id?: string
     firstName: string
@@ -14241,8 +14241,8 @@ export namespace Prisma {
     loyaltyPoints?: number
     createdAt?: Date | string
     updatedAt?: Date | string
-    sessions?: SessionCreateNestedManyWithoutUserInput
     emailLogs?: EmailLogCreateNestedManyWithoutUserInput
+    sessions?: SessionCreateNestedManyWithoutUserInput
   }
 
   export type UserUncheckedCreateWithoutVerificationTokensInput = {
@@ -14264,8 +14264,8 @@ export namespace Prisma {
     loyaltyPoints?: number
     createdAt?: Date | string
     updatedAt?: Date | string
-    sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
     emailLogs?: EmailLogUncheckedCreateNestedManyWithoutUserInput
+    sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
   }
 
   export type UserCreateOrConnectWithoutVerificationTokensInput = {
@@ -14303,8 +14303,8 @@ export namespace Prisma {
     loyaltyPoints?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    sessions?: SessionUpdateManyWithoutUserNestedInput
     emailLogs?: EmailLogUpdateManyWithoutUserNestedInput
+    sessions?: SessionUpdateManyWithoutUserNestedInput
   }
 
   export type UserUncheckedUpdateWithoutVerificationTokensInput = {
@@ -14326,8 +14326,8 @@ export namespace Prisma {
     loyaltyPoints?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
     emailLogs?: EmailLogUncheckedUpdateManyWithoutUserNestedInput
+    sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
   }
 
   export type UserCreateWithoutSessionsInput = {
@@ -14349,8 +14349,8 @@ export namespace Prisma {
     loyaltyPoints?: number
     createdAt?: Date | string
     updatedAt?: Date | string
-    verificationTokens?: VerificationTokenCreateNestedManyWithoutUserInput
     emailLogs?: EmailLogCreateNestedManyWithoutUserInput
+    verificationTokens?: VerificationTokenCreateNestedManyWithoutUserInput
   }
 
   export type UserUncheckedCreateWithoutSessionsInput = {
@@ -14372,8 +14372,8 @@ export namespace Prisma {
     loyaltyPoints?: number
     createdAt?: Date | string
     updatedAt?: Date | string
-    verificationTokens?: VerificationTokenUncheckedCreateNestedManyWithoutUserInput
     emailLogs?: EmailLogUncheckedCreateNestedManyWithoutUserInput
+    verificationTokens?: VerificationTokenUncheckedCreateNestedManyWithoutUserInput
   }
 
   export type UserCreateOrConnectWithoutSessionsInput = {
@@ -14411,8 +14411,8 @@ export namespace Prisma {
     loyaltyPoints?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    verificationTokens?: VerificationTokenUpdateManyWithoutUserNestedInput
     emailLogs?: EmailLogUpdateManyWithoutUserNestedInput
+    verificationTokens?: VerificationTokenUpdateManyWithoutUserNestedInput
   }
 
   export type UserUncheckedUpdateWithoutSessionsInput = {
@@ -14434,8 +14434,8 @@ export namespace Prisma {
     loyaltyPoints?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    verificationTokens?: VerificationTokenUncheckedUpdateManyWithoutUserNestedInput
     emailLogs?: EmailLogUncheckedUpdateManyWithoutUserNestedInput
+    verificationTokens?: VerificationTokenUncheckedUpdateManyWithoutUserNestedInput
   }
 
   export type UserCreateWithoutEmailLogsInput = {
@@ -14457,8 +14457,8 @@ export namespace Prisma {
     loyaltyPoints?: number
     createdAt?: Date | string
     updatedAt?: Date | string
-    verificationTokens?: VerificationTokenCreateNestedManyWithoutUserInput
     sessions?: SessionCreateNestedManyWithoutUserInput
+    verificationTokens?: VerificationTokenCreateNestedManyWithoutUserInput
   }
 
   export type UserUncheckedCreateWithoutEmailLogsInput = {
@@ -14480,8 +14480,8 @@ export namespace Prisma {
     loyaltyPoints?: number
     createdAt?: Date | string
     updatedAt?: Date | string
-    verificationTokens?: VerificationTokenUncheckedCreateNestedManyWithoutUserInput
     sessions?: SessionUncheckedCreateNestedManyWithoutUserInput
+    verificationTokens?: VerificationTokenUncheckedCreateNestedManyWithoutUserInput
   }
 
   export type UserCreateOrConnectWithoutEmailLogsInput = {
@@ -14519,8 +14519,8 @@ export namespace Prisma {
     loyaltyPoints?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    verificationTokens?: VerificationTokenUpdateManyWithoutUserNestedInput
     sessions?: SessionUpdateManyWithoutUserNestedInput
+    verificationTokens?: VerificationTokenUpdateManyWithoutUserNestedInput
   }
 
   export type UserUncheckedUpdateWithoutEmailLogsInput = {
@@ -14542,8 +14542,32 @@ export namespace Prisma {
     loyaltyPoints?: IntFieldUpdateOperationsInput | number
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    verificationTokens?: VerificationTokenUncheckedUpdateManyWithoutUserNestedInput
     sessions?: SessionUncheckedUpdateManyWithoutUserNestedInput
+    verificationTokens?: VerificationTokenUncheckedUpdateManyWithoutUserNestedInput
+  }
+
+  export type AdminRecoveryCodeCreateWithoutAdminUserInput = {
+    id?: string
+    codeHash: string
+    usedAt?: Date | string | null
+    createdAt?: Date | string
+  }
+
+  export type AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput = {
+    id?: string
+    codeHash: string
+    usedAt?: Date | string | null
+    createdAt?: Date | string
+  }
+
+  export type AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput = {
+    where: AdminRecoveryCodeWhereUniqueInput
+    create: XOR<AdminRecoveryCodeCreateWithoutAdminUserInput, AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput>
+  }
+
+  export type AdminRecoveryCodeCreateManyAdminUserInputEnvelope = {
+    data: AdminRecoveryCodeCreateManyAdminUserInput | AdminRecoveryCodeCreateManyAdminUserInput[]
+    skipDuplicates?: boolean
   }
 
   export type AdminSessionCreateWithoutAdminUserInput = {
@@ -14571,30 +14595,6 @@ export namespace Prisma {
 
   export type AdminSessionCreateManyAdminUserInputEnvelope = {
     data: AdminSessionCreateManyAdminUserInput | AdminSessionCreateManyAdminUserInput[]
-    skipDuplicates?: boolean
-  }
-
-  export type AdminRecoveryCodeCreateWithoutAdminUserInput = {
-    id?: string
-    codeHash: string
-    usedAt?: Date | string | null
-    createdAt?: Date | string
-  }
-
-  export type AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput = {
-    id?: string
-    codeHash: string
-    usedAt?: Date | string | null
-    createdAt?: Date | string
-  }
-
-  export type AdminRecoveryCodeCreateOrConnectWithoutAdminUserInput = {
-    where: AdminRecoveryCodeWhereUniqueInput
-    create: XOR<AdminRecoveryCodeCreateWithoutAdminUserInput, AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput>
-  }
-
-  export type AdminRecoveryCodeCreateManyAdminUserInputEnvelope = {
-    data: AdminRecoveryCodeCreateManyAdminUserInput | AdminRecoveryCodeCreateManyAdminUserInput[]
     skipDuplicates?: boolean
   }
 
@@ -14632,6 +14632,33 @@ export namespace Prisma {
     skipDuplicates?: boolean
   }
 
+  export type AdminRecoveryCodeUpsertWithWhereUniqueWithoutAdminUserInput = {
+    where: AdminRecoveryCodeWhereUniqueInput
+    update: XOR<AdminRecoveryCodeUpdateWithoutAdminUserInput, AdminRecoveryCodeUncheckedUpdateWithoutAdminUserInput>
+    create: XOR<AdminRecoveryCodeCreateWithoutAdminUserInput, AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput>
+  }
+
+  export type AdminRecoveryCodeUpdateWithWhereUniqueWithoutAdminUserInput = {
+    where: AdminRecoveryCodeWhereUniqueInput
+    data: XOR<AdminRecoveryCodeUpdateWithoutAdminUserInput, AdminRecoveryCodeUncheckedUpdateWithoutAdminUserInput>
+  }
+
+  export type AdminRecoveryCodeUpdateManyWithWhereWithoutAdminUserInput = {
+    where: AdminRecoveryCodeScalarWhereInput
+    data: XOR<AdminRecoveryCodeUpdateManyMutationInput, AdminRecoveryCodeUncheckedUpdateManyWithoutAdminUserInput>
+  }
+
+  export type AdminRecoveryCodeScalarWhereInput = {
+    AND?: AdminRecoveryCodeScalarWhereInput | AdminRecoveryCodeScalarWhereInput[]
+    OR?: AdminRecoveryCodeScalarWhereInput[]
+    NOT?: AdminRecoveryCodeScalarWhereInput | AdminRecoveryCodeScalarWhereInput[]
+    id?: StringFilter<"AdminRecoveryCode"> | string
+    adminUserId?: StringFilter<"AdminRecoveryCode"> | string
+    codeHash?: StringFilter<"AdminRecoveryCode"> | string
+    usedAt?: DateTimeNullableFilter<"AdminRecoveryCode"> | Date | string | null
+    createdAt?: DateTimeFilter<"AdminRecoveryCode"> | Date | string
+  }
+
   export type AdminSessionUpsertWithWhereUniqueWithoutAdminUserInput = {
     where: AdminSessionWhereUniqueInput
     update: XOR<AdminSessionUpdateWithoutAdminUserInput, AdminSessionUncheckedUpdateWithoutAdminUserInput>
@@ -14659,33 +14686,6 @@ export namespace Prisma {
     lastActiveAt?: DateTimeFilter<"AdminSession"> | Date | string
     createdAt?: DateTimeFilter<"AdminSession"> | Date | string
     expiresAt?: DateTimeFilter<"AdminSession"> | Date | string
-  }
-
-  export type AdminRecoveryCodeUpsertWithWhereUniqueWithoutAdminUserInput = {
-    where: AdminRecoveryCodeWhereUniqueInput
-    update: XOR<AdminRecoveryCodeUpdateWithoutAdminUserInput, AdminRecoveryCodeUncheckedUpdateWithoutAdminUserInput>
-    create: XOR<AdminRecoveryCodeCreateWithoutAdminUserInput, AdminRecoveryCodeUncheckedCreateWithoutAdminUserInput>
-  }
-
-  export type AdminRecoveryCodeUpdateWithWhereUniqueWithoutAdminUserInput = {
-    where: AdminRecoveryCodeWhereUniqueInput
-    data: XOR<AdminRecoveryCodeUpdateWithoutAdminUserInput, AdminRecoveryCodeUncheckedUpdateWithoutAdminUserInput>
-  }
-
-  export type AdminRecoveryCodeUpdateManyWithWhereWithoutAdminUserInput = {
-    where: AdminRecoveryCodeScalarWhereInput
-    data: XOR<AdminRecoveryCodeUpdateManyMutationInput, AdminRecoveryCodeUncheckedUpdateManyWithoutAdminUserInput>
-  }
-
-  export type AdminRecoveryCodeScalarWhereInput = {
-    AND?: AdminRecoveryCodeScalarWhereInput | AdminRecoveryCodeScalarWhereInput[]
-    OR?: AdminRecoveryCodeScalarWhereInput[]
-    NOT?: AdminRecoveryCodeScalarWhereInput | AdminRecoveryCodeScalarWhereInput[]
-    id?: StringFilter<"AdminRecoveryCode"> | string
-    adminUserId?: StringFilter<"AdminRecoveryCode"> | string
-    codeHash?: StringFilter<"AdminRecoveryCode"> | string
-    usedAt?: DateTimeNullableFilter<"AdminRecoveryCode"> | Date | string | null
-    createdAt?: DateTimeFilter<"AdminRecoveryCode"> | Date | string
   }
 
   export type AuditLogUpsertWithWhereUniqueWithoutAdminInput = {
@@ -14901,8 +14901,8 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     cancellationCount?: number
-    adminSessions?: AdminSessionCreateNestedManyWithoutAdminUserInput
     recoveryCodes?: AdminRecoveryCodeCreateNestedManyWithoutAdminUserInput
+    adminSessions?: AdminSessionCreateNestedManyWithoutAdminUserInput
   }
 
   export type AdminUserUncheckedCreateWithoutAuditLogsInput = {
@@ -14918,8 +14918,8 @@ export namespace Prisma {
     createdAt?: Date | string
     updatedAt?: Date | string
     cancellationCount?: number
-    adminSessions?: AdminSessionUncheckedCreateNestedManyWithoutAdminUserInput
     recoveryCodes?: AdminRecoveryCodeUncheckedCreateNestedManyWithoutAdminUserInput
+    adminSessions?: AdminSessionUncheckedCreateNestedManyWithoutAdminUserInput
   }
 
   export type AdminUserCreateOrConnectWithoutAuditLogsInput = {
@@ -14951,8 +14951,8 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     cancellationCount?: IntFieldUpdateOperationsInput | number
-    adminSessions?: AdminSessionUpdateManyWithoutAdminUserNestedInput
     recoveryCodes?: AdminRecoveryCodeUpdateManyWithoutAdminUserNestedInput
+    adminSessions?: AdminSessionUpdateManyWithoutAdminUserNestedInput
   }
 
   export type AdminUserUncheckedUpdateWithoutAuditLogsInput = {
@@ -14968,8 +14968,26 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     cancellationCount?: IntFieldUpdateOperationsInput | number
-    adminSessions?: AdminSessionUncheckedUpdateManyWithoutAdminUserNestedInput
     recoveryCodes?: AdminRecoveryCodeUncheckedUpdateManyWithoutAdminUserNestedInput
+    adminSessions?: AdminSessionUncheckedUpdateManyWithoutAdminUserNestedInput
+  }
+
+  export type EmailLogCreateManyUserInput = {
+    id?: string
+    type: $Enums.EmailLogType
+    recipient: string
+    status?: $Enums.EmailLogStatus
+    sendgridMsgId?: string | null
+    sentAt?: Date | string | null
+    createdAt?: Date | string
+  }
+
+  export type SessionCreateManyUserInput = {
+    id?: string
+    tokenHash: string
+    revoked?: boolean
+    createdAt?: Date | string
+    expiresAt: Date | string
   }
 
   export type VerificationTokenCreateManyUserInput = {
@@ -14983,22 +15001,58 @@ export namespace Prisma {
     createdAt?: Date | string
   }
 
-  export type SessionCreateManyUserInput = {
-    id?: string
-    tokenHash: string
-    revoked?: boolean
-    createdAt?: Date | string
-    expiresAt: Date | string
+  export type EmailLogUpdateWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    type?: EnumEmailLogTypeFieldUpdateOperationsInput | $Enums.EmailLogType
+    recipient?: StringFieldUpdateOperationsInput | string
+    status?: EnumEmailLogStatusFieldUpdateOperationsInput | $Enums.EmailLogStatus
+    sendgridMsgId?: NullableStringFieldUpdateOperationsInput | string | null
+    sentAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
-  export type EmailLogCreateManyUserInput = {
-    id?: string
-    type: $Enums.EmailLogType
-    recipient: string
-    status?: $Enums.EmailLogStatus
-    sendgridMsgId?: string | null
-    sentAt?: Date | string | null
-    createdAt?: Date | string
+  export type EmailLogUncheckedUpdateWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    type?: EnumEmailLogTypeFieldUpdateOperationsInput | $Enums.EmailLogType
+    recipient?: StringFieldUpdateOperationsInput | string
+    status?: EnumEmailLogStatusFieldUpdateOperationsInput | $Enums.EmailLogStatus
+    sendgridMsgId?: NullableStringFieldUpdateOperationsInput | string | null
+    sentAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type EmailLogUncheckedUpdateManyWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    type?: EnumEmailLogTypeFieldUpdateOperationsInput | $Enums.EmailLogType
+    recipient?: StringFieldUpdateOperationsInput | string
+    status?: EnumEmailLogStatusFieldUpdateOperationsInput | $Enums.EmailLogStatus
+    sendgridMsgId?: NullableStringFieldUpdateOperationsInput | string | null
+    sentAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type SessionUpdateWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    tokenHash?: StringFieldUpdateOperationsInput | string
+    revoked?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    expiresAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type SessionUncheckedUpdateWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    tokenHash?: StringFieldUpdateOperationsInput | string
+    revoked?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    expiresAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type SessionUncheckedUpdateManyWithoutUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    tokenHash?: StringFieldUpdateOperationsInput | string
+    revoked?: BoolFieldUpdateOperationsInput | boolean
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    expiresAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type VerificationTokenUpdateWithoutUserInput = {
@@ -15034,58 +15088,11 @@ export namespace Prisma {
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
-  export type SessionUpdateWithoutUserInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    tokenHash?: StringFieldUpdateOperationsInput | string
-    revoked?: BoolFieldUpdateOperationsInput | boolean
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    expiresAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type SessionUncheckedUpdateWithoutUserInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    tokenHash?: StringFieldUpdateOperationsInput | string
-    revoked?: BoolFieldUpdateOperationsInput | boolean
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    expiresAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type SessionUncheckedUpdateManyWithoutUserInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    tokenHash?: StringFieldUpdateOperationsInput | string
-    revoked?: BoolFieldUpdateOperationsInput | boolean
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-    expiresAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type EmailLogUpdateWithoutUserInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    type?: EnumEmailLogTypeFieldUpdateOperationsInput | $Enums.EmailLogType
-    recipient?: StringFieldUpdateOperationsInput | string
-    status?: EnumEmailLogStatusFieldUpdateOperationsInput | $Enums.EmailLogStatus
-    sendgridMsgId?: NullableStringFieldUpdateOperationsInput | string | null
-    sentAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type EmailLogUncheckedUpdateWithoutUserInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    type?: EnumEmailLogTypeFieldUpdateOperationsInput | $Enums.EmailLogType
-    recipient?: StringFieldUpdateOperationsInput | string
-    status?: EnumEmailLogStatusFieldUpdateOperationsInput | $Enums.EmailLogStatus
-    sendgridMsgId?: NullableStringFieldUpdateOperationsInput | string | null
-    sentAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type EmailLogUncheckedUpdateManyWithoutUserInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    type?: EnumEmailLogTypeFieldUpdateOperationsInput | $Enums.EmailLogType
-    recipient?: StringFieldUpdateOperationsInput | string
-    status?: EnumEmailLogStatusFieldUpdateOperationsInput | $Enums.EmailLogStatus
-    sendgridMsgId?: NullableStringFieldUpdateOperationsInput | string | null
-    sentAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  export type AdminRecoveryCodeCreateManyAdminUserInput = {
+    id?: string
+    codeHash: string
+    usedAt?: Date | string | null
+    createdAt?: Date | string
   }
 
   export type AdminSessionCreateManyAdminUserInput = {
@@ -15095,13 +15102,6 @@ export namespace Prisma {
     lastActiveAt?: Date | string
     createdAt?: Date | string
     expiresAt: Date | string
-  }
-
-  export type AdminRecoveryCodeCreateManyAdminUserInput = {
-    id?: string
-    codeHash: string
-    usedAt?: Date | string | null
-    createdAt?: Date | string
   }
 
   export type AuditLogCreateManyAdminInput = {
@@ -15114,6 +15114,27 @@ export namespace Prisma {
     newValue?: string | null
     ipAddress: string
     timestamp?: Date | string
+  }
+
+  export type AdminRecoveryCodeUpdateWithoutAdminUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    codeHash?: StringFieldUpdateOperationsInput | string
+    usedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type AdminRecoveryCodeUncheckedUpdateWithoutAdminUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    codeHash?: StringFieldUpdateOperationsInput | string
+    usedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type AdminRecoveryCodeUncheckedUpdateManyWithoutAdminUserInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    codeHash?: StringFieldUpdateOperationsInput | string
+    usedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type AdminSessionUpdateWithoutAdminUserInput = {
@@ -15141,27 +15162,6 @@ export namespace Prisma {
     lastActiveAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     expiresAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type AdminRecoveryCodeUpdateWithoutAdminUserInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    codeHash?: StringFieldUpdateOperationsInput | string
-    usedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type AdminRecoveryCodeUncheckedUpdateWithoutAdminUserInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    codeHash?: StringFieldUpdateOperationsInput | string
-    usedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
-  }
-
-  export type AdminRecoveryCodeUncheckedUpdateManyWithoutAdminUserInput = {
-    id?: StringFieldUpdateOperationsInput | string
-    codeHash?: StringFieldUpdateOperationsInput | string
-    usedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
-    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type AuditLogUpdateWithoutAdminInput = {
