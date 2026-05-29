@@ -124,6 +124,18 @@ const patchListingSchema = z.object({
   longStayMinNights: z.number().int().min(1).optional().nullable(),
   longStayDiscountType: z.enum(["percentage", "fixed"]).optional().nullable(),
   longStayDiscountValue: z.number().positive().optional().nullable(),
+  instantBooking: z.boolean().optional(),
+  selfCheckin: z.boolean().optional(),
+  selfCheckinDetails: z.string().max(500).optional().nullable(),
+  apartmentType: z.enum(["entire_place", "private_room", "shared_room", "studio", "loft", "villa", "townhouse"]).optional().nullable(),
+  cleaningFee: z.number().nonnegative().optional().nullable(),
+  extraGuestFee: z.number().nonnegative().optional().nullable(),
+  extraGuestAfter: z.number().int().min(1).optional().nullable(),
+  weeklyDiscount: z.number().nonnegative().optional().nullable(),
+  monthlyDiscount: z.number().nonnegative().optional().nullable(),
+  floorNumber: z.number().int().optional().nullable(),
+  propertySizeM2: z.number().positive().optional().nullable(),
+  securityDepositDue: z.string().max(30).optional().nullable(),
   // car-specific
   carMake: z.string().max(80).optional().nullable(),
   make: z.string().max(80).optional().nullable(),
@@ -378,6 +390,18 @@ export async function listingRoutes(app: FastifyInstance) {
             additionalProperties: true,
           },
           customAmenities: { type: "array", items: { type: "string", maxLength: 60 } },
+          instantBooking: { type: "boolean" },
+          selfCheckin: { type: "boolean" },
+          selfCheckinDetails: { type: "string", maxLength: 500 },
+          apartmentType: { type: "string", enum: ["entire_place", "private_room", "shared_room", "studio", "loft", "villa", "townhouse"] },
+          cleaningFee: { type: "number", minimum: 0 },
+          extraGuestFee: { type: "number", minimum: 0 },
+          extraGuestAfter: { type: "integer", minimum: 1 },
+          weeklyDiscount: { type: "number", minimum: 0 },
+          monthlyDiscount: { type: "number", minimum: 0 },
+          floorNumber: { type: "integer" },
+          propertySizeM2: { type: "number", minimum: 0 },
+          securityDepositDue: { type: "string", maxLength: 30 },
         },
         additionalProperties: true,
       }
@@ -687,9 +711,6 @@ export async function listingRoutes(app: FastifyInstance) {
       if (!docTypes.includes("insurance_certificate")) {
         failures.push("Insurance certificate document is required.");
       }
-      if (!docTypes.includes("vehicle_registration")) {
-        failures.push("Vehicle registration document is required.");
-      }
 
       if (listing.photos.length < 3 || listing.photos.length > 30) {
         failures.push(`Photos count must be between 3 and 30. You have ${listing.photos.length}.`);
@@ -838,9 +859,6 @@ export async function listingRoutes(app: FastifyInstance) {
         }
         if (!docTypes.includes("insurance_certificate")) {
           failures.push("Insurance certificate document is required.");
-        }
-        if (!docTypes.includes("vehicle_registration")) {
-          failures.push("Vehicle registration document is required.");
         }
 
         if (listing.photos.length < 3 || listing.photos.length > 30) {
