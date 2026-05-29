@@ -415,6 +415,8 @@ export async function icalRoutes(app: FastifyInstance) {
 
 export function startIcalPoller() {
   const POLL_INTERVAL_MS = 15 * 60 * 1000;
+  // Track consecutive failures per feed
+  const failureCounts = new Map<string, number>();
 
   async function poll() {
     try {
@@ -422,6 +424,7 @@ export function startIcalPoller() {
         where: { isActive: true },
         select: { id: true, consecutiveFailures: true, nextRetryAt: true }
       });
+
       const now = new Date();
       for (const feed of feeds) {
         // Respect progressive backoff — skip if nextRetryAt is still in the future
@@ -429,10 +432,9 @@ export function startIcalPoller() {
           console.log(`[iCal Poller] Skipping feed ${feed.id} — next retry at ${feed.nextRetryAt.toISOString()}`);
           continue;
         }
-        await syncFeed(feed.id).catch(() => null);
       }
     } catch (error) {
-      console.warn('[iCal Poller] Database connection error (will retry):', error instanceof Error ? error.message : error);
+      console.warn("[iCal Poller] DB error (will retry):", error instanceof Error ? error.message : error);
     }
   }
 

@@ -199,7 +199,30 @@ exports.Prisma.ListingScalarFieldEnum = {
   insuranceType: 'insuranceType',
   updatedAt: 'updatedAt',
   createdAt: 'createdAt',
-  deletedAt: 'deletedAt'
+  deletedAt: 'deletedAt',
+  featuredPhotoId: 'featuredPhotoId',
+  maxAdults: 'maxAdults',
+  maxChildren: 'maxChildren',
+  childrenAllowed: 'childrenAllowed',
+  childPriceType: 'childPriceType',
+  childPriceValue: 'childPriceValue',
+  childFreeUnderAge: 'childFreeUnderAge',
+  checkinRules: 'checkinRules',
+  checkoutRules: 'checkoutRules',
+  earlyCheckinFee: 'earlyCheckinFee',
+  lateCheckoutFee: 'lateCheckoutFee',
+  cleaningFee: 'cleaningFee',
+  extraGuestFee: 'extraGuestFee',
+  extraGuestAfter: 'extraGuestAfter',
+  weeklyDiscount: 'weeklyDiscount',
+  monthlyDiscount: 'monthlyDiscount',
+  instantBooking: 'instantBooking',
+  selfCheckin: 'selfCheckin',
+  selfCheckinDetails: 'selfCheckinDetails',
+  apartmentType: 'apartmentType',
+  floorNumber: 'floorNumber',
+  propertySizeM2: 'propertySizeM2',
+  securityDepositDue: 'securityDepositDue'
 };
 
 exports.Prisma.ListingReviewTaskScalarFieldEnum = {
@@ -213,6 +236,60 @@ exports.Prisma.ListingReviewTaskScalarFieldEnum = {
   slaDeadline: 'slaDeadline',
   createdAt: 'createdAt',
   resolvedAt: 'resolvedAt'
+};
+
+exports.Prisma.ListingModerationLogScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  action: 'action',
+  actorId: 'actorId',
+  actorRole: 'actorRole',
+  metadata: 'metadata',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ListingBedConfigScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  bedType: 'bedType',
+  quantity: 'quantity',
+  roomLabel: 'roomLabel'
+};
+
+exports.Prisma.ListingBlockedDateScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  date: 'date',
+  source: 'source',
+  note: 'note',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ListingSeasonalPriceScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  startDate: 'startDate',
+  endDate: 'endDate',
+  pricePerNight: 'pricePerNight',
+  pricePerDay: 'pricePerDay',
+  label: 'label',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ListingNearbyLandmarkScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  name: 'name',
+  category: 'category',
+  distanceKm: 'distanceKm',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ListingHouseRuleScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  rule: 'rule',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.ListingPhotoScalarFieldEnum = {
@@ -555,11 +632,34 @@ exports.InsuranceType = exports.$Enums.InsuranceType = {
   premium_zero_excess: 'premium_zero_excess'
 };
 
+exports.ApartmentType = exports.$Enums.ApartmentType = {
+  entire_place: 'entire_place',
+  private_room: 'private_room',
+  shared_room: 'shared_room',
+  studio: 'studio',
+  loft: 'loft',
+  villa: 'villa',
+  townhouse: 'townhouse'
+};
+
 exports.ReviewTaskStatus = exports.$Enums.ReviewTaskStatus = {
   open: 'open',
   awaiting_provider_response: 'awaiting_provider_response',
   resolved: 'resolved',
   escalated: 'escalated'
+};
+
+exports.BedType = exports.$Enums.BedType = {
+  single: 'single',
+  double: 'double',
+  queen: 'queen',
+  king: 'king',
+  twin: 'twin'
+};
+
+exports.BlockedDateSource = exports.$Enums.BlockedDateSource = {
+  manual: 'manual',
+  ical: 'ical'
 };
 
 exports.DocumentType = exports.$Enums.DocumentType = {
@@ -568,9 +668,9 @@ exports.DocumentType = exports.$Enums.DocumentType = {
   tourism_certificate: 'tourism_certificate',
   insurance_certificate: 'insurance_certificate',
   roadworthiness_certificate: 'roadworthiness_certificate',
-  vehicle_registration: 'vehicle_registration',
   hotel_operating_permit: 'hotel_operating_permit',
-  tourism_authority_certificate: 'tourism_authority_certificate'
+  tourism_authority_certificate: 'tourism_authority_certificate',
+  vehicle_registration: 'vehicle_registration'
 };
 
 exports.BookingStatus = exports.$Enums.BookingStatus = {
@@ -595,6 +695,12 @@ exports.ConversationStatus = exports.$Enums.ConversationStatus = {
 exports.Prisma.ModelName = {
   Listing: 'Listing',
   ListingReviewTask: 'ListingReviewTask',
+  ListingModerationLog: 'ListingModerationLog',
+  ListingBedConfig: 'ListingBedConfig',
+  ListingBlockedDate: 'ListingBlockedDate',
+  ListingSeasonalPrice: 'ListingSeasonalPrice',
+  ListingNearbyLandmark: 'ListingNearbyLandmark',
+  ListingHouseRule: 'ListingHouseRule',
   ListingPhoto: 'ListingPhoto',
   ListingDocument: 'ListingDocument',
   ListingAmenity: 'ListingAmenity',

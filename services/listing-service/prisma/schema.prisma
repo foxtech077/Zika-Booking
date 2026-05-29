@@ -7,15 +7,12 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["listing"]
 }
 
 enum ListingCategory {
   hotel
   apartment
   car
-
-  @@schema("listing")
 }
 
 enum ListingStatus {
@@ -28,23 +25,17 @@ enum ListingStatus {
   suspended
   auto_suspended
   permanently_banned
-
-  @@schema("listing")
 }
 
 enum LongStayDiscountType {
   percentage
   fixed
-
-  @@schema("listing")
 }
 
 enum Transmission {
   manual
   automatic
   semi_auto
-
-  @@schema("listing")
 }
 
 enum FuelType {
@@ -53,15 +44,11 @@ enum FuelType {
   electric
   hybrid
   lpg
-
-  @@schema("listing")
 }
 
 enum MileagePolicy {
   unlimited
   limited
-
-  @@schema("listing")
 }
 
 enum RoomType {
@@ -73,16 +60,12 @@ enum RoomType {
   studio
   family_room
   presidential_suite
-
-  @@schema("listing")
 }
 
 enum CancellationPolicy {
   flexible
   moderate
   strict
-
-  @@schema("listing")
 }
 
 enum DocumentType {
@@ -91,11 +74,9 @@ enum DocumentType {
   tourism_certificate
   insurance_certificate
   roadworthiness_certificate
-  vehicle_registration
   hotel_operating_permit
   tourism_authority_certificate
-
-  @@schema("listing")
+  vehicle_registration
 }
 
 enum CarCategory {
@@ -107,16 +88,12 @@ enum CarCategory {
   Luxury
   Electric
   Convertible
-
-  @@schema("listing")
 }
 
 enum DriveType {
   TWO_WD   @map("2WD")
   FOUR_WD  @map("4WD")
   AWD      @map("AWD")
-
-  @@schema("listing")
 }
 
 enum InsuranceType {
@@ -126,8 +103,6 @@ enum InsuranceType {
   comprehensive
   basic_third_party
   premium_zero_excess
-
-  @@schema("listing")
 }
 
 enum FuelPolicy {
@@ -136,8 +111,6 @@ enum FuelPolicy {
   free_tank
   full_to_empty
   pre_purchase
-
-  @@schema("listing")
 }
 
 enum ReviewTaskStatus {
@@ -145,8 +118,29 @@ enum ReviewTaskStatus {
   awaiting_provider_response
   resolved
   escalated
+}
 
-  @@schema("listing")
+enum BedType {
+  single
+  double
+  queen
+  king
+  twin
+}
+
+enum ApartmentType {
+  entire_place
+  private_room
+  shared_room
+  studio
+  loft
+  villa
+  townhouse
+}
+
+enum BlockedDateSource {
+  manual
+  ical
 }
 
 model Listing {
@@ -231,19 +225,52 @@ model Listing {
   createdAt             DateTime           @default(now()) @map("created_at")
   deletedAt             DateTime?          @map("deleted_at")
 
-  photos          ListingPhoto[]
-  documents       ListingDocument[]
-  amenities       ListingAmenity[]
-  customAmenities ListingCustomAmenity[]
-  reviewTasks     ListingReviewTask[]
-  favourites      UserFavourite[]
-  recentViews     UserRecentlyViewed[]
-  bookings        Booking[]
-  reviews         ListingReview[]
-  icalFeeds       IcalFeed[]
+  // ── Hotel extended fields ──────────────────────────────────────────────────
+  featuredPhotoId    String?       @map("featured_photo_id")
+  maxAdults          Int?          @map("max_adults")
+  maxChildren        Int?          @map("max_children")
+  childrenAllowed    Boolean       @default(true) @map("children_allowed")
+  childPriceType     String?       @map("child_price_type") @db.VarChar(20)
+  childPriceValue    Decimal?      @map("child_price_value") @db.Decimal(10, 2)
+  childFreeUnderAge  Int?          @map("child_free_under_age")
+  checkinRules       String?       @map("checkin_rules") @db.Text
+  checkoutRules      String?       @map("checkout_rules") @db.Text
+  earlyCheckinFee    Decimal?      @map("early_checkin_fee") @db.Decimal(10, 2)
+  lateCheckoutFee    Decimal?      @map("late_checkout_fee") @db.Decimal(10, 2)
+  // ── Apartment extended fields ──────────────────────────────────────────────
+  cleaningFee        Decimal?      @map("cleaning_fee") @db.Decimal(10, 2)
+  extraGuestFee      Decimal?      @map("extra_guest_fee") @db.Decimal(10, 2)
+  extraGuestAfter    Int?          @map("extra_guest_after")
+  weeklyDiscount     Decimal?      @map("weekly_discount") @db.Decimal(5, 2)
+  monthlyDiscount    Decimal?      @map("monthly_discount") @db.Decimal(5, 2)
+  instantBooking     Boolean       @default(false) @map("instant_booking")
+  selfCheckin        Boolean       @default(false) @map("self_checkin")
+  selfCheckinDetails String?       @map("self_checkin_details") @db.Text
+  apartmentType      ApartmentType? @map("apartment_type")
+  floorNumber        Int?          @map("floor_number")
+  propertySizeM2     Decimal?      @map("property_size_m2") @db.Decimal(8, 2)
+  securityDepositDue String?       @map("security_deposit_due") @db.VarChar(30)
 
+  photos           ListingPhoto[]
+  documents        ListingDocument[]
+  amenities        ListingAmenity[]
+  customAmenities  ListingCustomAmenity[]
+  reviewTasks      ListingReviewTask[]
+  moderationLog    ListingModerationLog[]
+  favourites       UserFavourite[]
+  recentViews      UserRecentlyViewed[]
+  bookings         Booking[]
+  reviews          ListingReview[]
+  icalFeeds        IcalFeed[]
+  bedConfigs       ListingBedConfig[]
+  blockedDates     ListingBlockedDate[]
+  seasonalPrices   ListingSeasonalPrice[]
+  landmarks        ListingNearbyLandmark[]
+  houseRules       ListingHouseRule[]
+
+  @@index([status, category])
+  @@index([providerId, status])
   @@map("listings")
-  @@schema("listing")
 }
 
 model ListingReviewTask {
@@ -260,8 +287,105 @@ model ListingReviewTask {
 
   listing Listing @relation(fields: [listingId], references: [id])
 
+  @@index([listingId, createdAt(sort: Desc)])
   @@map("listing_review_tasks")
-  @@schema("listing")
+}
+
+model ListingModerationLog {
+  id        String   @id @default(uuid())
+  listingId String   @map("listing_id")
+  /// approved | rejected | star_rating_updated | suspended | reinstated | escalated
+  action    String   @db.VarChar(50)
+  actorId   String   @map("actor_id")
+  actorRole String   @map("actor_role") @db.VarChar(30)
+  /// Action-specific payload, e.g. { oldRating, newRating, reason, reasons, note }
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  listing Listing @relation(fields: [listingId], references: [id])
+
+  @@index([listingId, createdAt(sort: Desc)])
+  @@map("listing_moderation_log")
+}
+
+// ── E2 Extended — Bed Configuration ───────────────────────────────────────────
+
+model ListingBedConfig {
+  id        String  @id @default(uuid())
+  listingId String  @map("listing_id")
+  bedType   BedType @map("bed_type")
+  quantity  Int
+  roomLabel String? @map("room_label") @db.VarChar(80)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_bed_configs")
+}
+
+// ── E2 Extended — Availability Calendar ───────────────────────────────────────
+
+model ListingBlockedDate {
+  id        String            @id @default(uuid())
+  listingId String            @map("listing_id")
+  date      DateTime          @db.Date
+  source    BlockedDateSource @default(manual)
+  note      String?           @db.VarChar(200)
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, date])
+  @@index([listingId, date])
+  @@map("listing_blocked_dates")
+}
+
+// ── E2 Extended — Seasonal Pricing ────────────────────────────────────────────
+
+model ListingSeasonalPrice {
+  id            String   @id @default(uuid())
+  listingId     String   @map("listing_id")
+  startDate     DateTime @map("start_date") @db.Date
+  endDate       DateTime @map("end_date") @db.Date
+  pricePerNight Decimal? @map("price_per_night") @db.Decimal(10, 2)
+  pricePerDay   Decimal? @map("price_per_day") @db.Decimal(10, 2)
+  label         String?  @db.VarChar(100)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, startDate, endDate])
+  @@map("listing_seasonal_prices")
+}
+
+// ── E2 Extended — Nearby Landmarks ────────────────────────────────────────────
+
+model ListingNearbyLandmark {
+  id         String   @id @default(uuid())
+  listingId  String   @map("listing_id")
+  name       String   @db.VarChar(200)
+  category   String?  @db.VarChar(50)
+  distanceKm Decimal? @map("distance_km") @db.Decimal(6, 2)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_nearby_landmarks")
+}
+
+// ── E3 Extended — House Rules (Apartment) ─────────────────────────────────────
+
+model ListingHouseRule {
+  id        String   @id @default(uuid())
+  listingId String   @map("listing_id")
+  rule      String   @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_house_rules")
 }
 
 model ListingPhoto {
@@ -276,7 +400,6 @@ model ListingPhoto {
   listing Listing @relation(fields: [listingId], references: [id])
 
   @@map("listing_photos")
-  @@schema("listing")
 }
 
 model ListingDocument {
@@ -291,7 +414,6 @@ model ListingDocument {
   listing Listing @relation(fields: [listingId], references: [id])
 
   @@map("listing_documents")
-  @@schema("listing")
 }
 
 model ListingAmenity {
@@ -302,7 +424,6 @@ model ListingAmenity {
 
   @@id([listingId, amenityKey])
   @@map("listing_amenities")
-  @@schema("listing")
 }
 
 model ListingCustomAmenity {
@@ -314,7 +435,6 @@ model ListingCustomAmenity {
   listing Listing @relation(fields: [listingId], references: [id])
 
   @@map("listing_custom_amenities")
-  @@schema("listing")
 }
 
 // ── E5 — Search & Discovery ───────────────────────────────────────────────────
@@ -328,7 +448,6 @@ model UserFavourite {
 
   @@id([userId, listingId])
   @@map("user_favourites")
-  @@schema("listing")
 }
 
 model UserRecentlyViewed {
@@ -340,7 +459,6 @@ model UserRecentlyViewed {
 
   @@id([userId, listingId])
   @@map("user_recently_viewed")
-  @@schema("listing")
 }
 
 model SearchLog {
@@ -362,7 +480,6 @@ model SearchLog {
   createdAt      DateTime  @default(now()) @map("created_at")
 
   @@map("search_logs")
-  @@schema("listing")
 }
 
 // ── E6 — Booking Engine ───────────────────────────────────────────────────────
@@ -374,8 +491,6 @@ enum BookingStatus {
   cancelled_by_guest
   cancelled_by_provider
   cancelled_by_system
-
-  @@schema("listing")
 }
 
 model Booking {
@@ -442,7 +557,6 @@ model Booking {
   review    ListingReview?
 
   @@map("bookings")
-  @@schema("listing")
 }
 
 model BookingStatusLog {
@@ -458,7 +572,6 @@ model BookingStatusLog {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("booking_status_log")
-  @@schema("listing")
 }
 
 // ── E14 — Reviews ─────────────────────────────────────────────────────────────
@@ -484,7 +597,6 @@ model ListingReview {
   booking Booking @relation(fields: [bookingId], references: [id])
 
   @@map("listing_reviews")
-  @@schema("listing")
 }
 
 // ── E11 — Commission Management ───────────────────────────────────────────────
@@ -498,7 +610,6 @@ model CommissionRate {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("commission_rates")
-  @@schema("listing")
 }
 
 // ── E15 — Vouchers & Promotions ───────────────────────────────────────────────
@@ -506,8 +617,6 @@ model CommissionRate {
 enum VoucherDiscountType {
   percentage
   fixed
-
-  @@schema("listing")
 }
 
 model Voucher {
@@ -528,7 +637,6 @@ model Voucher {
   redemptions VoucherRedemption[]
 
   @@map("vouchers")
-  @@schema("listing")
 }
 
 model VoucherRedemption {
@@ -542,16 +650,15 @@ model VoucherRedemption {
   voucher Voucher @relation(fields: [voucherId], references: [id])
 
   @@map("voucher_redemptions")
-  @@schema("listing")
 }
 
 // ── E13 — iCal Sync ───────────────────────────────────────────────────────────
 
 model IcalFeed {
-  id                  String    @id @default(uuid())
-  listingId           String    @map("listing_id")
-  platform            String    @db.VarChar(50)
-  feedUrl             String    @map("feed_url") @db.VarChar(1000)
+  id           String    @id @default(uuid())
+  listingId    String    @map("listing_id")
+  platform     String    @db.VarChar(50)
+  feedUrl      String    @map("feed_url") @db.VarChar(1000)
   lastSyncedAt        DateTime? @map("last_synced_at")
   lastError           String?   @map("last_error") @db.Text
   consecutiveFailures Int       @default(0) @map("consecutive_failures")
@@ -560,11 +667,10 @@ model IcalFeed {
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
 
-  listing      Listing          @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listing     Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
   blockedDates IcalBlockedDate[]
 
   @@map("ical_feeds")
-  @@schema("listing")
 }
 
 model IcalBlockedDate {
@@ -581,7 +687,6 @@ model IcalBlockedDate {
 
   @@unique([feedId, uid])
   @@map("ical_blocked_dates")
-  @@schema("listing")
 }
 
 // ── E17 — In-App Messaging ────────────────────────────────────────────────────
@@ -589,8 +694,6 @@ model IcalBlockedDate {
 enum ConversationStatus {
   open
   closed
-
-  @@schema("listing")
 }
 
 model Conversation {
@@ -606,21 +709,21 @@ model Conversation {
   messages Message[]
 
   @@map("conversations")
-  @@schema("listing")
 }
 
 model Message {
-  id             String    @id @default(uuid())
-  conversationId String    @map("conversation_id")
-  senderId       String    @map("sender_id")
-  senderType     String    @map("sender_type") @db.VarChar(20)
-  body           String    @db.Text
-  isFiltered     Boolean   @default(false) @map("is_filtered")
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  senderId       String   @map("sender_id")
+  senderType     String   @map("sender_type") @db.VarChar(20)
+  body           String   @db.Text
+  isFiltered     Boolean  @default(false) @map("is_filtered")
   readAt         DateTime? @map("read_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@map("messages")
-  @@schema("listing")
 }
+
+
