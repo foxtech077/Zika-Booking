@@ -44,6 +44,9 @@ enum FuelType {
   electric
   hybrid
   lpg
+  lpg
+
+  @@schema("listing")
 }
 
 enum MileagePolicy {

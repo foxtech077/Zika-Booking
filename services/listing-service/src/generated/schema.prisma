@@ -7,12 +7,15 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["listing"]
 }
 
 enum ListingCategory {
   hotel
   apartment
   car
+
+  @@schema("listing")
 }
 
 enum ListingStatus {
@@ -25,17 +28,26 @@ enum ListingStatus {
   suspended
   auto_suspended
   permanently_banned
+
+  @@schema("listing")
 }
 
 enum LongStayDiscountType {
   percentage
   fixed
+
+  @@schema("listing")
 }
 
 enum Transmission {
   manual
   automatic
   semi_auto
+<<<<<<< HEAD
+=======
+
+  @@schema("listing")
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 }
 
 enum FuelType {
@@ -44,11 +56,18 @@ enum FuelType {
   electric
   hybrid
   lpg
+<<<<<<< HEAD
+=======
+
+  @@schema("listing")
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 }
 
 enum MileagePolicy {
   unlimited
   limited
+
+  @@schema("listing")
 }
 
 enum RoomType {
@@ -60,12 +79,16 @@ enum RoomType {
   studio
   family_room
   presidential_suite
+
+  @@schema("listing")
 }
 
 enum CancellationPolicy {
   flexible
   moderate
   strict
+
+  @@schema("listing")
 }
 
 enum DocumentType {
@@ -74,9 +97,17 @@ enum DocumentType {
   tourism_certificate
   insurance_certificate
   roadworthiness_certificate
+<<<<<<< HEAD
   hotel_operating_permit
   tourism_authority_certificate
   vehicle_registration
+=======
+  vehicle_registration
+  hotel_operating_permit
+  tourism_authority_certificate
+
+  @@schema("listing")
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 }
 
 enum CarCategory {
@@ -88,12 +119,22 @@ enum CarCategory {
   Luxury
   Electric
   Convertible
+<<<<<<< HEAD
+=======
+
+  @@schema("listing")
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 }
 
 enum DriveType {
   TWO_WD  @map("2WD")
   FOUR_WD @map("4WD")
   AWD     @map("AWD")
+<<<<<<< HEAD
+=======
+
+  @@schema("listing")
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 }
 
 enum InsuranceType {
@@ -103,6 +144,11 @@ enum InsuranceType {
   comprehensive
   basic_third_party
   premium_zero_excess
+<<<<<<< HEAD
+=======
+
+  @@schema("listing")
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 }
 
 enum FuelPolicy {
@@ -111,6 +157,11 @@ enum FuelPolicy {
   free_tank
   full_to_empty
   pre_purchase
+<<<<<<< HEAD
+=======
+
+  @@schema("listing")
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 }
 
 enum ReviewTaskStatus {
@@ -118,6 +169,8 @@ enum ReviewTaskStatus {
   awaiting_provider_response
   resolved
   escalated
+
+  @@schema("listing")
 }
 
 enum BedType {
@@ -271,6 +324,7 @@ model Listing {
   @@index([status, category])
   @@index([providerId, status])
   @@map("listings")
+  @@schema("listing")
 }
 
 model ListingReviewTask {
@@ -289,6 +343,7 @@ model ListingReviewTask {
 
   @@index([listingId, createdAt(sort: Desc)])
   @@map("listing_review_tasks")
+  @@schema("listing")
 }
 
 model ListingModerationLog {
@@ -400,6 +455,7 @@ model ListingPhoto {
   listing Listing @relation(fields: [listingId], references: [id])
 
   @@map("listing_photos")
+  @@schema("listing")
 }
 
 model ListingDocument {
@@ -414,6 +470,7 @@ model ListingDocument {
   listing Listing @relation(fields: [listingId], references: [id])
 
   @@map("listing_documents")
+  @@schema("listing")
 }
 
 model ListingAmenity {
@@ -424,6 +481,7 @@ model ListingAmenity {
 
   @@id([listingId, amenityKey])
   @@map("listing_amenities")
+  @@schema("listing")
 }
 
 model ListingCustomAmenity {
@@ -435,6 +493,7 @@ model ListingCustomAmenity {
   listing Listing @relation(fields: [listingId], references: [id])
 
   @@map("listing_custom_amenities")
+  @@schema("listing")
 }
 
 // ── E5 — Search & Discovery ───────────────────────────────────────────────────
@@ -448,6 +507,7 @@ model UserFavourite {
 
   @@id([userId, listingId])
   @@map("user_favourites")
+  @@schema("listing")
 }
 
 model UserRecentlyViewed {
@@ -459,6 +519,7 @@ model UserRecentlyViewed {
 
   @@id([userId, listingId])
   @@map("user_recently_viewed")
+  @@schema("listing")
 }
 
 model SearchLog {
@@ -480,6 +541,7 @@ model SearchLog {
   createdAt      DateTime  @default(now()) @map("created_at")
 
   @@map("search_logs")
+  @@schema("listing")
 }
 
 // ── E6 — Booking Engine ───────────────────────────────────────────────────────
@@ -491,6 +553,8 @@ enum BookingStatus {
   cancelled_by_guest
   cancelled_by_provider
   cancelled_by_system
+
+  @@schema("listing")
 }
 
 model Booking {
@@ -557,6 +621,7 @@ model Booking {
   review    ListingReview?
 
   @@map("bookings")
+  @@schema("listing")
 }
 
 model BookingStatusLog {
@@ -572,6 +637,7 @@ model BookingStatusLog {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("booking_status_log")
+  @@schema("listing")
 }
 
 // ── E14 — Reviews ─────────────────────────────────────────────────────────────
@@ -597,6 +663,7 @@ model ListingReview {
   booking Booking @relation(fields: [bookingId], references: [id])
 
   @@map("listing_reviews")
+  @@schema("listing")
 }
 
 // ── E11 — Commission Management ───────────────────────────────────────────────
@@ -610,6 +677,7 @@ model CommissionRate {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("commission_rates")
+  @@schema("listing")
 }
 
 // ── E15 — Vouchers & Promotions ───────────────────────────────────────────────
@@ -617,6 +685,8 @@ model CommissionRate {
 enum VoucherDiscountType {
   percentage
   fixed
+
+  @@schema("listing")
 }
 
 model Voucher {
@@ -637,6 +707,7 @@ model Voucher {
   redemptions VoucherRedemption[]
 
   @@map("vouchers")
+  @@schema("listing")
 }
 
 model VoucherRedemption {
@@ -650,25 +721,29 @@ model VoucherRedemption {
   voucher Voucher @relation(fields: [voucherId], references: [id])
 
   @@map("voucher_redemptions")
+  @@schema("listing")
 }
 
 // ── E13 — iCal Sync ───────────────────────────────────────────────────────────
 
 model IcalFeed {
-  id           String    @id @default(uuid())
-  listingId    String    @map("listing_id")
-  platform     String    @db.VarChar(50)
-  feedUrl      String    @map("feed_url") @db.VarChar(1000)
-  lastSyncedAt DateTime? @map("last_synced_at")
-  lastError    String?   @map("last_error") @db.Text
-  isActive     Boolean   @default(true) @map("is_active")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                  String    @id @default(uuid())
+  listingId           String    @map("listing_id")
+  platform            String    @db.VarChar(50)
+  feedUrl             String    @map("feed_url") @db.VarChar(1000)
+  lastSyncedAt        DateTime? @map("last_synced_at")
+  lastError           String?   @map("last_error") @db.Text
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  nextRetryAt         DateTime? @map("next_retry_at")
+  isActive            Boolean   @default(true) @map("is_active")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   listing      Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
   blockedDates IcalBlockedDate[]
 
   @@map("ical_feeds")
+  @@schema("listing")
 }
 
 model IcalBlockedDate {
@@ -685,6 +760,7 @@ model IcalBlockedDate {
 
   @@unique([feedId, uid])
   @@map("ical_blocked_dates")
+  @@schema("listing")
 }
 
 // ── E17 — In-App Messaging ────────────────────────────────────────────────────
@@ -692,6 +768,8 @@ model IcalBlockedDate {
 enum ConversationStatus {
   open
   closed
+
+  @@schema("listing")
 }
 
 model Conversation {
@@ -707,6 +785,7 @@ model Conversation {
   messages Message[]
 
   @@map("conversations")
+  @@schema("listing")
 }
 
 model Message {
@@ -722,4 +801,5 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@map("messages")
+  @@schema("listing")
 }

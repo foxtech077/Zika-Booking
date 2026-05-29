@@ -232,9 +232,15 @@ export const DocumentType: {
   tourism_certificate: 'tourism_certificate',
   insurance_certificate: 'insurance_certificate',
   roadworthiness_certificate: 'roadworthiness_certificate',
+<<<<<<< HEAD
   hotel_operating_permit: 'hotel_operating_permit',
   tourism_authority_certificate: 'tourism_authority_certificate',
   vehicle_registration: 'vehicle_registration'
+=======
+  vehicle_registration: 'vehicle_registration',
+  hotel_operating_permit: 'hotel_operating_permit',
+  tourism_authority_certificate: 'tourism_authority_certificate'
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 };
 
 export type DocumentType = (typeof DocumentType)[keyof typeof DocumentType]
@@ -3671,6 +3677,7 @@ export namespace Prisma {
     extraKmRate: Decimal | null
     deliveryRadiusKm: number | null
     deliveryFee: Decimal | null
+<<<<<<< HEAD
     maxAdults: number | null
     maxChildren: number | null
     childPriceValue: Decimal | null
@@ -3684,6 +3691,8 @@ export namespace Prisma {
     monthlyDiscount: Decimal | null
     floorNumber: number | null
     propertySizeM2: Decimal | null
+=======
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingSumAggregateOutputType = {
@@ -3713,6 +3722,7 @@ export namespace Prisma {
     extraKmRate: Decimal | null
     deliveryRadiusKm: number | null
     deliveryFee: Decimal | null
+<<<<<<< HEAD
     maxAdults: number | null
     maxChildren: number | null
     childPriceValue: Decimal | null
@@ -3726,6 +3736,8 @@ export namespace Prisma {
     monthlyDiscount: Decimal | null
     floorNumber: number | null
     propertySizeM2: Decimal | null
+=======
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingMinAggregateOutputType = {
@@ -4067,6 +4079,7 @@ export namespace Prisma {
     extraKmRate?: true
     deliveryRadiusKm?: true
     deliveryFee?: true
+<<<<<<< HEAD
     maxAdults?: true
     maxChildren?: true
     childPriceValue?: true
@@ -4080,6 +4093,8 @@ export namespace Prisma {
     monthlyDiscount?: true
     floorNumber?: true
     propertySizeM2?: true
+=======
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingSumAggregateInputType = {
@@ -4109,6 +4124,7 @@ export namespace Prisma {
     extraKmRate?: true
     deliveryRadiusKm?: true
     deliveryFee?: true
+<<<<<<< HEAD
     maxAdults?: true
     maxChildren?: true
     childPriceValue?: true
@@ -4122,6 +4138,8 @@ export namespace Prisma {
     monthlyDiscount?: true
     floorNumber?: true
     propertySizeM2?: true
+=======
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingMinAggregateInputType = {
@@ -5077,7 +5095,11 @@ export namespace Prisma {
     securityDepositDue?: boolean
   }
 
+<<<<<<< HEAD
   export type ListingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "providerId" | "category" | "name" | "roomType" | "unitCount" | "description" | "pricePerNight" | "pricePerDay" | "currency" | "minStayNights" | "checkinTime" | "checkoutTime" | "cancellationPolicy" | "smokingAllowed" | "petsAllowed" | "address" | "lat" | "lng" | "town" | "country" | "claimedStarRating" | "starRating" | "status" | "submissionCount" | "submittedAt" | "approvedAt" | "approvedBy" | "rejectedAt" | "rejectedBy" | "rejectionReasons" | "rejectionNote" | "suspendedAt" | "suspendedBy" | "suspensionReason" | "consecutiveNegative" | "bedrooms" | "bathrooms" | "maxGuests" | "longStayEnabled" | "longStayMinNights" | "longStayDiscountType" | "longStayDiscountValue" | "activatedAt" | "carMake" | "carModel" | "carYear" | "transmission" | "fuelType" | "seats" | "doors" | "mileagePolicy" | "mileageLimitKm" | "carCategory" | "driveType" | "airConditioning" | "odometerReading" | "licencePlate" | "engineSize" | "colour" | "securityDeposit" | "minimumDriverAge" | "minimumRentalDays" | "fuelPolicy" | "extraKmRate" | "roadsideAssistance" | "crossBorderAllowed" | "airportPickup" | "deliveryEnabled" | "deliveryRadiusKm" | "deliveryFee" | "pickupHoursFrom" | "pickupHoursTo" | "returnSameLocation" | "insuranceType" | "updatedAt" | "createdAt" | "deletedAt" | "featuredPhotoId" | "maxAdults" | "maxChildren" | "childrenAllowed" | "childPriceType" | "childPriceValue" | "childFreeUnderAge" | "checkinRules" | "checkoutRules" | "earlyCheckinFee" | "lateCheckoutFee" | "cleaningFee" | "extraGuestFee" | "extraGuestAfter" | "weeklyDiscount" | "monthlyDiscount" | "instantBooking" | "selfCheckin" | "selfCheckinDetails" | "apartmentType" | "floorNumber" | "propertySizeM2" | "securityDepositDue", ExtArgs["result"]["listing"]>
+=======
+  export type ListingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "providerId" | "category" | "name" | "roomType" | "unitCount" | "description" | "pricePerNight" | "pricePerDay" | "currency" | "minStayNights" | "checkinTime" | "checkoutTime" | "cancellationPolicy" | "smokingAllowed" | "petsAllowed" | "address" | "lat" | "lng" | "town" | "country" | "claimedStarRating" | "starRating" | "status" | "submissionCount" | "submittedAt" | "approvedAt" | "approvedBy" | "rejectedAt" | "rejectedBy" | "rejectionReasons" | "rejectionNote" | "suspendedAt" | "suspendedBy" | "suspensionReason" | "consecutiveNegative" | "bedrooms" | "bathrooms" | "maxGuests" | "longStayEnabled" | "longStayMinNights" | "longStayDiscountType" | "longStayDiscountValue" | "activatedAt" | "carMake" | "carModel" | "carYear" | "transmission" | "fuelType" | "seats" | "doors" | "mileagePolicy" | "mileageLimitKm" | "carCategory" | "driveType" | "airConditioning" | "odometerReading" | "licencePlate" | "engineSize" | "colour" | "securityDeposit" | "minimumDriverAge" | "minimumRentalDays" | "fuelPolicy" | "extraKmRate" | "roadsideAssistance" | "crossBorderAllowed" | "airportPickup" | "deliveryEnabled" | "deliveryRadiusKm" | "deliveryFee" | "pickupHoursFrom" | "pickupHoursTo" | "returnSameLocation" | "insuranceType" | "updatedAt" | "createdAt" | "deletedAt", ExtArgs["result"]["listing"]>
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   export type ListingInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     photos?: boolean | Listing$photosArgs<ExtArgs>
     documents?: boolean | Listing$documentsArgs<ExtArgs>
@@ -29212,8 +29234,18 @@ export namespace Prisma {
 
   export type AggregateIcalFeed = {
     _count: IcalFeedCountAggregateOutputType | null
+    _avg: IcalFeedAvgAggregateOutputType | null
+    _sum: IcalFeedSumAggregateOutputType | null
     _min: IcalFeedMinAggregateOutputType | null
     _max: IcalFeedMaxAggregateOutputType | null
+  }
+
+  export type IcalFeedAvgAggregateOutputType = {
+    consecutiveFailures: number | null
+  }
+
+  export type IcalFeedSumAggregateOutputType = {
+    consecutiveFailures: number | null
   }
 
   export type IcalFeedMinAggregateOutputType = {
@@ -29223,6 +29255,8 @@ export namespace Prisma {
     feedUrl: string | null
     lastSyncedAt: Date | null
     lastError: string | null
+    consecutiveFailures: number | null
+    nextRetryAt: Date | null
     isActive: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -29235,6 +29269,8 @@ export namespace Prisma {
     feedUrl: string | null
     lastSyncedAt: Date | null
     lastError: string | null
+    consecutiveFailures: number | null
+    nextRetryAt: Date | null
     isActive: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -29247,12 +29283,22 @@ export namespace Prisma {
     feedUrl: number
     lastSyncedAt: number
     lastError: number
+    consecutiveFailures: number
+    nextRetryAt: number
     isActive: number
     createdAt: number
     updatedAt: number
     _all: number
   }
 
+
+  export type IcalFeedAvgAggregateInputType = {
+    consecutiveFailures?: true
+  }
+
+  export type IcalFeedSumAggregateInputType = {
+    consecutiveFailures?: true
+  }
 
   export type IcalFeedMinAggregateInputType = {
     id?: true
@@ -29261,6 +29307,8 @@ export namespace Prisma {
     feedUrl?: true
     lastSyncedAt?: true
     lastError?: true
+    consecutiveFailures?: true
+    nextRetryAt?: true
     isActive?: true
     createdAt?: true
     updatedAt?: true
@@ -29273,6 +29321,8 @@ export namespace Prisma {
     feedUrl?: true
     lastSyncedAt?: true
     lastError?: true
+    consecutiveFailures?: true
+    nextRetryAt?: true
     isActive?: true
     createdAt?: true
     updatedAt?: true
@@ -29285,6 +29335,8 @@ export namespace Prisma {
     feedUrl?: true
     lastSyncedAt?: true
     lastError?: true
+    consecutiveFailures?: true
+    nextRetryAt?: true
     isActive?: true
     createdAt?: true
     updatedAt?: true
@@ -29329,6 +29381,18 @@ export namespace Prisma {
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
+     * Select which fields to average
+    **/
+    _avg?: IcalFeedAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: IcalFeedSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
      * Select which fields to find the minimum value
     **/
     _min?: IcalFeedMinAggregateInputType
@@ -29359,6 +29423,8 @@ export namespace Prisma {
     take?: number
     skip?: number
     _count?: IcalFeedCountAggregateInputType | true
+    _avg?: IcalFeedAvgAggregateInputType
+    _sum?: IcalFeedSumAggregateInputType
     _min?: IcalFeedMinAggregateInputType
     _max?: IcalFeedMaxAggregateInputType
   }
@@ -29370,10 +29436,14 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt: Date | null
     lastError: string | null
+    consecutiveFailures: number
+    nextRetryAt: Date | null
     isActive: boolean
     createdAt: Date
     updatedAt: Date
     _count: IcalFeedCountAggregateOutputType | null
+    _avg: IcalFeedAvgAggregateOutputType | null
+    _sum: IcalFeedSumAggregateOutputType | null
     _min: IcalFeedMinAggregateOutputType | null
     _max: IcalFeedMaxAggregateOutputType | null
   }
@@ -29399,6 +29469,8 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -29414,6 +29486,8 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -29427,6 +29501,8 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -29440,12 +29516,14 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type IcalFeedOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "platform" | "feedUrl" | "lastSyncedAt" | "lastError" | "isActive" | "createdAt" | "updatedAt", ExtArgs["result"]["icalFeed"]>
+  export type IcalFeedOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "platform" | "feedUrl" | "lastSyncedAt" | "lastError" | "consecutiveFailures" | "nextRetryAt" | "isActive" | "createdAt" | "updatedAt", ExtArgs["result"]["icalFeed"]>
   export type IcalFeedInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     listing?: boolean | ListingDefaultArgs<ExtArgs>
     blockedDates?: boolean | IcalFeed$blockedDatesArgs<ExtArgs>
@@ -29471,6 +29549,8 @@ export namespace Prisma {
       feedUrl: string
       lastSyncedAt: Date | null
       lastError: string | null
+      consecutiveFailures: number
+      nextRetryAt: Date | null
       isActive: boolean
       createdAt: Date
       updatedAt: Date
@@ -29905,6 +29985,8 @@ export namespace Prisma {
     readonly feedUrl: FieldRef<"IcalFeed", 'String'>
     readonly lastSyncedAt: FieldRef<"IcalFeed", 'DateTime'>
     readonly lastError: FieldRef<"IcalFeed", 'String'>
+    readonly consecutiveFailures: FieldRef<"IcalFeed", 'Int'>
+    readonly nextRetryAt: FieldRef<"IcalFeed", 'DateTime'>
     readonly isActive: FieldRef<"IcalFeed", 'Boolean'>
     readonly createdAt: FieldRef<"IcalFeed", 'DateTime'>
     readonly updatedAt: FieldRef<"IcalFeed", 'DateTime'>
@@ -34080,6 +34162,8 @@ export namespace Prisma {
     feedUrl: 'feedUrl',
     lastSyncedAt: 'lastSyncedAt',
     lastError: 'lastError',
+    consecutiveFailures: 'consecutiveFailures',
+    nextRetryAt: 'nextRetryAt',
     isActive: 'isActive',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -34407,6 +34491,7 @@ export namespace Prisma {
 
 
   /**
+<<<<<<< HEAD
    * Reference to a field of type 'ApartmentType'
    */
   export type EnumApartmentTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ApartmentType'>
@@ -34421,6 +34506,8 @@ export namespace Prisma {
 
 
   /**
+=======
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
    * Reference to a field of type 'ReviewTaskStatus'
    */
   export type EnumReviewTaskStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ReviewTaskStatus'>
@@ -36685,6 +36772,8 @@ export namespace Prisma {
     feedUrl?: StringFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeFilter<"IcalFeed"> | Date | string
@@ -36699,6 +36788,8 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrderInput | SortOrder
     lastError?: SortOrderInput | SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrderInput | SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -36716,6 +36807,8 @@ export namespace Prisma {
     feedUrl?: StringFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeFilter<"IcalFeed"> | Date | string
@@ -36730,12 +36823,16 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrderInput | SortOrder
     lastError?: SortOrderInput | SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrderInput | SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: IcalFeedCountOrderByAggregateInput
+    _avg?: IcalFeedAvgOrderByAggregateInput
     _max?: IcalFeedMaxOrderByAggregateInput
     _min?: IcalFeedMinOrderByAggregateInput
+    _sum?: IcalFeedSumOrderByAggregateInput
   }
 
   export type IcalFeedScalarWhereWithAggregatesInput = {
@@ -36748,6 +36845,8 @@ export namespace Prisma {
     feedUrl?: StringWithAggregatesFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableWithAggregatesFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableWithAggregatesFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntWithAggregatesFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableWithAggregatesFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolWithAggregatesFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeWithAggregatesFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"IcalFeed"> | Date | string
@@ -39457,6 +39556,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -39471,6 +39572,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -39483,6 +39586,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -39497,6 +39602,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -39510,6 +39617,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -39521,6 +39630,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -39533,6 +39644,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -40261,6 +40374,7 @@ export namespace Prisma {
     extraKmRate?: SortOrder
     deliveryRadiusKm?: SortOrder
     deliveryFee?: SortOrder
+<<<<<<< HEAD
     maxAdults?: SortOrder
     maxChildren?: SortOrder
     childPriceValue?: SortOrder
@@ -40274,6 +40388,8 @@ export namespace Prisma {
     monthlyDiscount?: SortOrder
     floorNumber?: SortOrder
     propertySizeM2?: SortOrder
+=======
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingMaxOrderByAggregateInput = {
@@ -40509,6 +40625,7 @@ export namespace Prisma {
     extraKmRate?: SortOrder
     deliveryRadiusKm?: SortOrder
     deliveryFee?: SortOrder
+<<<<<<< HEAD
     maxAdults?: SortOrder
     maxChildren?: SortOrder
     childPriceValue?: SortOrder
@@ -40522,6 +40639,8 @@ export namespace Prisma {
     monthlyDiscount?: SortOrder
     floorNumber?: SortOrder
     propertySizeM2?: SortOrder
+=======
+>>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type StringWithAggregatesFilter<$PrismaModel = never> = {
@@ -41898,9 +42017,15 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrder
     lastError?: SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type IcalFeedAvgOrderByAggregateInput = {
+    consecutiveFailures?: SortOrder
   }
 
   export type IcalFeedMaxOrderByAggregateInput = {
@@ -41910,6 +42035,8 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrder
     lastError?: SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -41922,9 +42049,15 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrder
     lastError?: SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type IcalFeedSumOrderByAggregateInput = {
+    consecutiveFailures?: SortOrder
   }
 
   export type IcalFeedScalarRelationFilter = {
@@ -44370,6 +44503,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -44382,6 +44517,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -44877,6 +45014,8 @@ export namespace Prisma {
     feedUrl?: StringFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeFilter<"IcalFeed"> | Date | string
@@ -53677,6 +53816,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -53690,6 +53831,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -53717,6 +53860,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -53730,6 +53875,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -53986,6 +54133,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -54415,6 +54564,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -54427,6 +54578,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -54439,6 +54592,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string

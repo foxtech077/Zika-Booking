@@ -94,7 +94,25 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
     text = await res.text();
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Fetch failed";
-    await prisma.icalFeed.update({ where: { id: feedId }, data: { lastError: msg, updatedAt: new Date() } });
+    const failures = feed.consecutiveFailures + 1;
+
+    // Progressive backoff: 1min → 5min → 15min (PRD §3.6)
+    const backoffMs = failures === 1 ? 60_000 : failures === 2 ? 5 * 60_000 : 15 * 60_000;
+    const nextRetryAt = new Date(Date.now() + backoffMs);
+
+    await prisma.icalFeed.update({
+      where: { id: feedId },
+      data: { lastError: msg, consecutiveFailures: failures, nextRetryAt, updatedAt: new Date() },
+    });
+
+    // Alert after 3 consecutive failures (PRD §3.6)
+    if (failures >= 3) {
+      console.error(
+        `[iCal Poller] ⚠️  ALERT: Feed ${feedId} (${feed.platform}) has failed ${failures} consecutive times. ` +
+        `Last error: ${msg}. Manual intervention may be required.`
+      );
+    }
+
     return { synced: 0, error: msg };
   }
 
@@ -103,7 +121,19 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
     events = parseIcal(text);
   } catch {
     const msg = "Failed to parse iCal data";
-    await prisma.icalFeed.update({ where: { id: feedId }, data: { lastError: msg, updatedAt: new Date() } });
+    const failures = feed.consecutiveFailures + 1;
+    const backoffMs = failures === 1 ? 60_000 : failures === 2 ? 5 * 60_000 : 15 * 60_000;
+    const nextRetryAt = new Date(Date.now() + backoffMs);
+    await prisma.icalFeed.update({
+      where: { id: feedId },
+      data: { lastError: msg, consecutiveFailures: failures, nextRetryAt, updatedAt: new Date() },
+    });
+    if (failures >= 3) {
+      console.error(
+        `[iCal Poller] ⚠️  ALERT: Feed ${feedId} (${feed.platform}) has failed ${failures} consecutive times. ` +
+        `Last error: ${msg}. Manual intervention may be required.`
+      );
+    }
     return { synced: 0, error: msg };
   }
 
@@ -125,9 +155,10 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
     synced++;
   }
 
+  // Reset failure counters on success
   await prisma.icalFeed.update({
     where: { id: feedId },
-    data: { lastSyncedAt: new Date(), lastError: null, updatedAt: new Date() },
+    data: { lastSyncedAt: new Date(), lastError: null, consecutiveFailures: 0, nextRetryAt: null, updatedAt: new Date() },
   });
 
   return { synced };
@@ -391,32 +422,15 @@ export function startIcalPoller() {
     try {
       const feeds = await prisma.icalFeed.findMany({
         where: { isActive: true },
-        select: { id: true, lastError: true, updatedAt: true },
+        select: { id: true, consecutiveFailures: true, nextRetryAt: true }
       });
 
       const now = new Date();
       for (const feed of feeds) {
-        const failures = failureCounts.get(feed.id) ?? 0;
-
-        if (feed.lastError && feed.updatedAt) {
-          const ageMinutes = (now.getTime() - feed.updatedAt.getTime()) / 60_000;
-          // Backoff: 1 failure = wait 1min, 2 = wait 5min, 3+ = wait 15min + alert
-          const backoffMinutes = failures === 1 ? 1 : failures === 2 ? 5 : 15;
-          if (ageMinutes < backoffMinutes) {
-            console.log(`[iCal Poller] Backoff feed ${feed.id} (failure #${failures}, wait ${backoffMinutes}min)`);
-            continue;
-          }
-          if (failures >= 3) {
-            console.error(`[iCal Poller] ALERT: feed ${feed.id} has failed ${failures} consecutive times`);
-            // TODO: wire to alerting system (PagerDuty / Slack)
-          }
-        }
-
-        const result = await syncFeed(feed.id).catch((e) => ({ synced: 0, error: String(e) }));
-        if (result.error) {
-          failureCounts.set(feed.id, failures + 1);
-        } else {
-          failureCounts.set(feed.id, 0); // reset on success
+        // Respect progressive backoff — skip if nextRetryAt is still in the future
+        if (feed.nextRetryAt && feed.nextRetryAt > now) {
+          console.log(`[iCal Poller] Skipping feed ${feed.id} — next retry at ${feed.nextRetryAt.toISOString()}`);
+          continue;
         }
       }
     } catch (error) {
@@ -425,5 +439,9 @@ export function startIcalPoller() {
   }
 
   setInterval(() => { poll().catch(() => null); }, POLL_INTERVAL_MS);
-  setTimeout(() => { poll().catch(() => null); }, 5000);
+
+  // Start polling with a small delay to avoid connection errors on startup
+  setTimeout(() => {
+    poll().catch(() => null);
+  }, 5000);
 }

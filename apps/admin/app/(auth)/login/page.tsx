@@ -8,7 +8,6 @@ import {
   Lock,
   Mail,
   ShieldCheck,
-  Zap,
   AlertCircle,
   Copy,
   Check,
@@ -183,13 +182,13 @@ export default function LoginPage() {
   };
 
   const downloadRecoveryCodes = () => {
-    const text = `ZikaBooking Admin Backup Recovery Codes\nDownloaded: ${new Date().toLocaleString()}\n\n${recoveryCodes.join(
+    const text = `Kainook Admin Backup Recovery Codes\nDownloaded: ${new Date().toLocaleString()}\n\n${recoveryCodes.join(
       "\n"
     )}\n\nKeep these single-use codes in a highly secure place.`;
     const element = document.createElement("a");
     const file = new Blob([text], { type: "text/plain" });
     element.href = URL.createObjectURL(file);
-    element.download = "zikabooking-recovery-codes.txt";
+    element.download = "kainook-recovery-codes.txt";
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
@@ -206,11 +205,11 @@ export default function LoginPage() {
         <div className="relative flex flex-col flex-1 p-12 justify-between">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-              <Zap className="h-5 w-5 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm overflow-hidden">
+              <img src="/admin/kainook-logo.png" alt="Kainook" className="h-9 w-9 object-contain" />
             </div>
             <div>
-              <p className="text-white font-bold text-lg leading-none">ZikaBooking</p>
+              <p className="text-white font-bold text-lg leading-none">Kainook</p>
               <p className="text-white/60 text-xs mt-0.5">Administration</p>
             </div>
           </div>
@@ -248,10 +247,10 @@ export default function LoginPage() {
       <div className="flex-1 flex items-center justify-center p-6 bg-slate-50 lg:bg-white overflow-y-auto">
         <div className="w-full max-w-md py-8">
           <div className="flex lg:hidden items-center gap-2 mb-8">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Zap className="h-4 w-4 text-white" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white overflow-hidden shadow">
+              <img src="/admin/kainook-logo.png" alt="Kainook" className="h-7 w-7 object-contain" />
             </div>
-            <span className="font-bold text-slate-900">ZikaBooking Admin</span>
+            <span className="font-bold text-slate-900">Kainook Admin</span>
           </div>
 
           {/* ────────────────── Step 1: Credentials ────────────────── */}
@@ -557,7 +556,7 @@ export default function LoginPage() {
           )}
 
           <p className="mt-8 text-center text-xs text-slate-400">
-            ZikaBooking Admin Panel · Restricted access
+            Kainook Admin Panel · Restricted access
           </p>
         </div>
       </div>

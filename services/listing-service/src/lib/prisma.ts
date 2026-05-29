@@ -1,4 +1,3 @@
-// Import from the locally generated client (output = "../src/generated" in schema.prisma)
 import { PrismaClient } from "../generated/index.js";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
