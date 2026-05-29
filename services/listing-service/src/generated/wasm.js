@@ -702,7 +702,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\HP\\Zika-Booking\\services\\listing-service\\src\\generated",
+      "value": "/home/akza/Projects/Zika-Booking/services/listing-service/src/generated",
       "fromEnvVar": null
     },
     "config": {
@@ -711,7 +711,7 @@ const config = {
     "binaryTargets": [
       {
         "fromEnvVar": null,
-        "value": "windows",
+        "value": "debian-openssl-3.0.x",
         "native": true
       },
       {
@@ -720,7 +720,7 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\HP\\Zika-Booking\\services\\listing-service\\prisma\\schema.prisma",
+    "sourceFilePath": "/home/akza/Projects/Zika-Booking/services/listing-service/prisma/schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
