@@ -44,9 +44,6 @@ enum FuelType {
   electric
   hybrid
   lpg
-  lpg
-
-  @@schema("listing")
 }
 
 enum MileagePolicy {
@@ -662,11 +659,13 @@ model IcalFeed {
   listingId    String    @map("listing_id")
   platform     String    @db.VarChar(50)
   feedUrl      String    @map("feed_url") @db.VarChar(1000)
-  lastSyncedAt DateTime? @map("last_synced_at")
-  lastError    String?   @map("last_error") @db.Text
-  isActive     Boolean   @default(true) @map("is_active")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  lastSyncedAt        DateTime? @map("last_synced_at")
+  lastError           String?   @map("last_error") @db.Text
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  nextRetryAt         DateTime? @map("next_retry_at")
+  isActive            Boolean   @default(true) @map("is_active")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   listing     Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
   blockedDates IcalBlockedDate[]

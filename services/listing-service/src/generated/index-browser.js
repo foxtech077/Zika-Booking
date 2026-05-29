@@ -632,7 +632,6 @@ exports.InsuranceType = exports.$Enums.InsuranceType = {
   premium_zero_excess: 'premium_zero_excess'
 };
 
-<<<<<<< HEAD
 exports.ApartmentType = exports.$Enums.ApartmentType = {
   entire_place: 'entire_place',
   private_room: 'private_room',
@@ -643,8 +642,6 @@ exports.ApartmentType = exports.$Enums.ApartmentType = {
   townhouse: 'townhouse'
 };
 
-=======
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 exports.ReviewTaskStatus = exports.$Enums.ReviewTaskStatus = {
   open: 'open',
   awaiting_provider_response: 'awaiting_provider_response',
@@ -671,15 +668,9 @@ exports.DocumentType = exports.$Enums.DocumentType = {
   tourism_certificate: 'tourism_certificate',
   insurance_certificate: 'insurance_certificate',
   roadworthiness_certificate: 'roadworthiness_certificate',
-<<<<<<< HEAD
   hotel_operating_permit: 'hotel_operating_permit',
   tourism_authority_certificate: 'tourism_authority_certificate',
   vehicle_registration: 'vehicle_registration'
-=======
-  vehicle_registration: 'vehicle_registration',
-  hotel_operating_permit: 'hotel_operating_permit',
-  tourism_authority_certificate: 'tourism_authority_certificate'
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 };
 
 exports.BookingStatus = exports.$Enums.BookingStatus = {

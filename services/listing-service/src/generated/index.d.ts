@@ -232,15 +232,9 @@ export const DocumentType: {
   tourism_certificate: 'tourism_certificate',
   insurance_certificate: 'insurance_certificate',
   roadworthiness_certificate: 'roadworthiness_certificate',
-<<<<<<< HEAD
   hotel_operating_permit: 'hotel_operating_permit',
   tourism_authority_certificate: 'tourism_authority_certificate',
   vehicle_registration: 'vehicle_registration'
-=======
-  vehicle_registration: 'vehicle_registration',
-  hotel_operating_permit: 'hotel_operating_permit',
-  tourism_authority_certificate: 'tourism_authority_certificate'
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
 };
 
 export type DocumentType = (typeof DocumentType)[keyof typeof DocumentType]
@@ -3677,7 +3671,6 @@ export namespace Prisma {
     extraKmRate: Decimal | null
     deliveryRadiusKm: number | null
     deliveryFee: Decimal | null
-<<<<<<< HEAD
     maxAdults: number | null
     maxChildren: number | null
     childPriceValue: Decimal | null
@@ -3691,8 +3684,6 @@ export namespace Prisma {
     monthlyDiscount: Decimal | null
     floorNumber: number | null
     propertySizeM2: Decimal | null
-=======
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingSumAggregateOutputType = {
@@ -3722,7 +3713,6 @@ export namespace Prisma {
     extraKmRate: Decimal | null
     deliveryRadiusKm: number | null
     deliveryFee: Decimal | null
-<<<<<<< HEAD
     maxAdults: number | null
     maxChildren: number | null
     childPriceValue: Decimal | null
@@ -3736,8 +3726,6 @@ export namespace Prisma {
     monthlyDiscount: Decimal | null
     floorNumber: number | null
     propertySizeM2: Decimal | null
-=======
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingMinAggregateOutputType = {
@@ -4079,7 +4067,6 @@ export namespace Prisma {
     extraKmRate?: true
     deliveryRadiusKm?: true
     deliveryFee?: true
-<<<<<<< HEAD
     maxAdults?: true
     maxChildren?: true
     childPriceValue?: true
@@ -4093,8 +4080,6 @@ export namespace Prisma {
     monthlyDiscount?: true
     floorNumber?: true
     propertySizeM2?: true
-=======
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingSumAggregateInputType = {
@@ -4124,7 +4109,6 @@ export namespace Prisma {
     extraKmRate?: true
     deliveryRadiusKm?: true
     deliveryFee?: true
-<<<<<<< HEAD
     maxAdults?: true
     maxChildren?: true
     childPriceValue?: true
@@ -4138,8 +4122,6 @@ export namespace Prisma {
     monthlyDiscount?: true
     floorNumber?: true
     propertySizeM2?: true
-=======
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingMinAggregateInputType = {
@@ -5095,11 +5077,7 @@ export namespace Prisma {
     securityDepositDue?: boolean
   }
 
-<<<<<<< HEAD
   export type ListingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "providerId" | "category" | "name" | "roomType" | "unitCount" | "description" | "pricePerNight" | "pricePerDay" | "currency" | "minStayNights" | "checkinTime" | "checkoutTime" | "cancellationPolicy" | "smokingAllowed" | "petsAllowed" | "address" | "lat" | "lng" | "town" | "country" | "claimedStarRating" | "starRating" | "status" | "submissionCount" | "submittedAt" | "approvedAt" | "approvedBy" | "rejectedAt" | "rejectedBy" | "rejectionReasons" | "rejectionNote" | "suspendedAt" | "suspendedBy" | "suspensionReason" | "consecutiveNegative" | "bedrooms" | "bathrooms" | "maxGuests" | "longStayEnabled" | "longStayMinNights" | "longStayDiscountType" | "longStayDiscountValue" | "activatedAt" | "carMake" | "carModel" | "carYear" | "transmission" | "fuelType" | "seats" | "doors" | "mileagePolicy" | "mileageLimitKm" | "carCategory" | "driveType" | "airConditioning" | "odometerReading" | "licencePlate" | "engineSize" | "colour" | "securityDeposit" | "minimumDriverAge" | "minimumRentalDays" | "fuelPolicy" | "extraKmRate" | "roadsideAssistance" | "crossBorderAllowed" | "airportPickup" | "deliveryEnabled" | "deliveryRadiusKm" | "deliveryFee" | "pickupHoursFrom" | "pickupHoursTo" | "returnSameLocation" | "insuranceType" | "updatedAt" | "createdAt" | "deletedAt" | "featuredPhotoId" | "maxAdults" | "maxChildren" | "childrenAllowed" | "childPriceType" | "childPriceValue" | "childFreeUnderAge" | "checkinRules" | "checkoutRules" | "earlyCheckinFee" | "lateCheckoutFee" | "cleaningFee" | "extraGuestFee" | "extraGuestAfter" | "weeklyDiscount" | "monthlyDiscount" | "instantBooking" | "selfCheckin" | "selfCheckinDetails" | "apartmentType" | "floorNumber" | "propertySizeM2" | "securityDepositDue", ExtArgs["result"]["listing"]>
-=======
-  export type ListingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "providerId" | "category" | "name" | "roomType" | "unitCount" | "description" | "pricePerNight" | "pricePerDay" | "currency" | "minStayNights" | "checkinTime" | "checkoutTime" | "cancellationPolicy" | "smokingAllowed" | "petsAllowed" | "address" | "lat" | "lng" | "town" | "country" | "claimedStarRating" | "starRating" | "status" | "submissionCount" | "submittedAt" | "approvedAt" | "approvedBy" | "rejectedAt" | "rejectedBy" | "rejectionReasons" | "rejectionNote" | "suspendedAt" | "suspendedBy" | "suspensionReason" | "consecutiveNegative" | "bedrooms" | "bathrooms" | "maxGuests" | "longStayEnabled" | "longStayMinNights" | "longStayDiscountType" | "longStayDiscountValue" | "activatedAt" | "carMake" | "carModel" | "carYear" | "transmission" | "fuelType" | "seats" | "doors" | "mileagePolicy" | "mileageLimitKm" | "carCategory" | "driveType" | "airConditioning" | "odometerReading" | "licencePlate" | "engineSize" | "colour" | "securityDeposit" | "minimumDriverAge" | "minimumRentalDays" | "fuelPolicy" | "extraKmRate" | "roadsideAssistance" | "crossBorderAllowed" | "airportPickup" | "deliveryEnabled" | "deliveryRadiusKm" | "deliveryFee" | "pickupHoursFrom" | "pickupHoursTo" | "returnSameLocation" | "insuranceType" | "updatedAt" | "createdAt" | "deletedAt", ExtArgs["result"]["listing"]>
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   export type ListingInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     photos?: boolean | Listing$photosArgs<ExtArgs>
     documents?: boolean | Listing$documentsArgs<ExtArgs>
@@ -34491,7 +34469,6 @@ export namespace Prisma {
 
 
   /**
-<<<<<<< HEAD
    * Reference to a field of type 'ApartmentType'
    */
   export type EnumApartmentTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ApartmentType'>
@@ -34506,8 +34483,6 @@ export namespace Prisma {
 
 
   /**
-=======
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
    * Reference to a field of type 'ReviewTaskStatus'
    */
   export type EnumReviewTaskStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ReviewTaskStatus'>
@@ -40374,7 +40349,6 @@ export namespace Prisma {
     extraKmRate?: SortOrder
     deliveryRadiusKm?: SortOrder
     deliveryFee?: SortOrder
-<<<<<<< HEAD
     maxAdults?: SortOrder
     maxChildren?: SortOrder
     childPriceValue?: SortOrder
@@ -40388,8 +40362,6 @@ export namespace Prisma {
     monthlyDiscount?: SortOrder
     floorNumber?: SortOrder
     propertySizeM2?: SortOrder
-=======
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type ListingMaxOrderByAggregateInput = {
@@ -40625,7 +40597,6 @@ export namespace Prisma {
     extraKmRate?: SortOrder
     deliveryRadiusKm?: SortOrder
     deliveryFee?: SortOrder
-<<<<<<< HEAD
     maxAdults?: SortOrder
     maxChildren?: SortOrder
     childPriceValue?: SortOrder
@@ -40639,8 +40610,6 @@ export namespace Prisma {
     monthlyDiscount?: SortOrder
     floorNumber?: SortOrder
     propertySizeM2?: SortOrder
-=======
->>>>>>> a3d6eb372026a8e86404cd2c083ad77d2602e240
   }
 
   export type StringWithAggregatesFilter<$PrismaModel = never> = {
