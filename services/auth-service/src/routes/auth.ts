@@ -110,6 +110,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     const passwordHash = await hashPassword(password);
     const isDev = process.env["NODE_ENV"] !== "production";
+   
     const user = await prisma.user.create({
       data: {
         firstName, lastName, email, passwordHash,
