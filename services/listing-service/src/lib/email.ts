@@ -83,6 +83,15 @@ export async function sendListingSuspendedEmail(to: string, listingName: string)
   });
 }
 
+export async function sendListingReinstatedEmail(to: string, listingName: string): Promise<void> {
+  await sendWithRetry({
+    to,
+    from: FROM,
+    subject: `Your listing "${listingName}" has been reinstated`,
+    html: `<p>Good news! Your listing <strong>${listingName}</strong> has been reinstated and is now live on ZikaBooking again.</p><p><a href="${WEB_BASE}/listings">View your listings</a></p>`,
+  });
+}
+
 export async function sendStarRatingUpdatedEmail(
   to: string,
   listingName: string,

@@ -384,33 +384,46 @@ export async function icalRoutes(app: FastifyInstance) {
 
 export function startIcalPoller() {
   const POLL_INTERVAL_MS = 15 * 60 * 1000;
+  // Track consecutive failures per feed
+  const failureCounts = new Map<string, number>();
 
   async function poll() {
     try {
       const feeds = await prisma.icalFeed.findMany({
         where: { isActive: true },
-        select: { id: true, lastError: true, updatedAt: true }
+        select: { id: true, lastError: true, updatedAt: true },
       });
+
       const now = new Date();
       for (const feed of feeds) {
+        const failures = failureCounts.get(feed.id) ?? 0;
+
         if (feed.lastError && feed.updatedAt) {
-          const errorAgeMinutes = (now.getTime() - feed.updatedAt.getTime()) / (60 * 1000);
-          if (errorAgeMinutes < 60) {
-            console.log(`[iCal Poller] Skipping feed ${feed.id} due to recent error (backoff)`);
+          const ageMinutes = (now.getTime() - feed.updatedAt.getTime()) / 60_000;
+          // Backoff: 1 failure = wait 1min, 2 = wait 5min, 3+ = wait 15min + alert
+          const backoffMinutes = failures === 1 ? 1 : failures === 2 ? 5 : 15;
+          if (ageMinutes < backoffMinutes) {
+            console.log(`[iCal Poller] Backoff feed ${feed.id} (failure #${failures}, wait ${backoffMinutes}min)`);
             continue;
           }
+          if (failures >= 3) {
+            console.error(`[iCal Poller] ALERT: feed ${feed.id} has failed ${failures} consecutive times`);
+            // TODO: wire to alerting system (PagerDuty / Slack)
+          }
         }
-        await syncFeed(feed.id).catch(() => null);
+
+        const result = await syncFeed(feed.id).catch((e) => ({ synced: 0, error: String(e) }));
+        if (result.error) {
+          failureCounts.set(feed.id, failures + 1);
+        } else {
+          failureCounts.set(feed.id, 0); // reset on success
+        }
       }
     } catch (error) {
-      console.warn('[iCal Poller] Database connection error (will retry):', error instanceof Error ? error.message : error);
+      console.warn("[iCal Poller] DB error (will retry):", error instanceof Error ? error.message : error);
     }
   }
 
   setInterval(() => { poll().catch(() => null); }, POLL_INTERVAL_MS);
-  
-  // Start polling with a small delay to avoid connection errors on startup
-  setTimeout(() => {
-    poll().catch(() => null);
-  }, 5000);
+  setTimeout(() => { poll().catch(() => null); }, 5000);
 }

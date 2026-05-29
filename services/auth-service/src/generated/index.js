@@ -293,7 +293,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\nicho\\Desktop\\Zika-Booking\\services\\auth-service\\src\\generated",
+      "value": "C:\\Users\\HP\\Zika-Booking\\services\\auth-service\\src\\generated",
       "fromEnvVar": null
     },
     "config": {
@@ -311,11 +311,11 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\nicho\\Desktop\\Zika-Booking\\services\\auth-service\\prisma\\schema.prisma",
+    "sourceFilePath": "C:\\Users\\HP\\Zika-Booking\\services\\auth-service\\prisma\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
-    "rootEnvPath": "../../.env",
+    "rootEnvPath": null,
     "schemaEnvPath": "../../.env"
   },
   "relativePath": "../../prisma",

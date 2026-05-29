@@ -20,11 +20,27 @@ import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/ema
 
 const MAX_PHOTOS = 30;
 
+// All valid DocumentType enum values (mirrors schema.prisma DocumentType enum).
+// Used by both document presign and document confirm endpoints to reject unknown types.
+const ALLOWED_DOC_TYPES = new Set([
+  "business_licence",
+  "operating_permit",
+  "tourism_certificate",
+  "insurance_certificate",
+  "roadworthiness_certificate",
+  "hotel_operating_permit",
+  "tourism_authority_certificate",
+   "vehicle_registration",
+]);
+
 // ── legacy amenity mapping for backward compatibility ───────────────────────
 const legacyAmenityCategoryMap: Record<string, string> = {
   wifi: "Connectivity",
   high_speed_wifi: "Connectivity",
   ethernet: "Connectivity",
+  smart_tv: "Connectivity",
+  work_desk: "Connectivity",
+  printer: "Connectivity",
   pool: "Wellness",
   spa: "Wellness",
   gym: "Wellness",
@@ -37,18 +53,25 @@ const legacyAmenityCategoryMap: Record<string, string> = {
   mini_bar: "Food & Drink",
   breakfast: "Food & Drink",
   kitchen: "Food & Drink",
+  coffee_machine: "Food & Drink",
   air_conditioning: "Comfort",
   heating: "Comfort",
   fireplace: "Comfort",
   balcony: "Comfort",
+  laundry: "Comfort",
+  parking: "Comfort",
+  elevator: "Comfort",
+  accessible: "Comfort",
   concierge: "Services",
-  parking: "Services",
+  reception_24h: "Services",
   security: "Services",
-  laundry: "Services",
-  dry_cleaning: "Services",
+  security_24h: "Services",
   housekeeping: "Services",
+  dry_cleaning: "Services",
   luggage_storage: "Services",
   airport_shuttle: "Services",
+  shop_on_site: "Services",
+  pet_friendly: "Services",
   tv: "Services",
   workspace: "Services",
   washing_machine: "Services",
@@ -112,7 +135,7 @@ const patchListingSchema = z.object({
     if (val === "semi-auto") return "semi_auto";
     return val;
   }, z.enum(["manual", "automatic", "semi_auto"])).optional().nullable(),
-  fuelType: z.enum(["petrol", "diesel", "electric", "hybrid"]).optional().nullable(),
+  fuelType: z.enum(["petrol", "diesel", "electric", "hybrid", "lpg"]).optional().nullable(),
   seats: z.number().int().min(1).optional().nullable(),
   doors: z.number().int().min(2).optional().nullable(),
   mileagePolicy: z.enum(["unlimited", "limited"]).optional().nullable(),
@@ -464,7 +487,9 @@ export async function listingRoutes(app: FastifyInstance) {
     if (!listing.address || !listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
     if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
     if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
-    
+    if (!listing.checkinTime) failures.push("Check-in time is required.");
+    if (!listing.checkoutTime) failures.push("Check-out time is required.");
+    if (!listing.minStayNights || listing.minStayNights < 1) failures.push("Minimum stay must be at least 1 night.")
     // Description validation
     if (!listing.description?.trim()) failures.push("Description is required.");
     if (listing.description && listing.description.length > 1000) failures.push("Description cannot exceed 1000 characters.");
@@ -586,13 +611,21 @@ export async function listingRoutes(app: FastifyInstance) {
         failures.push(`Vehicle year must be between 1990 and ${currentYear}.`);
       }
       if (!listing.carCategory) failures.push("Vehicle category is required.");
+      if (!listing.unitCount || listing.unitCount < 1) failures.push("Number of units (fleet count) is required.");
+      if (!listing.licencePlate?.trim()) failures.push("Licence plate is required.");
+      if (listing.odometerReading === null || listing.odometerReading === undefined) failures.push("Odometer reading is required.");
       if (!listing.transmission) failures.push("Transmission type is required.");
+      if (!listing.fuelType) failures.push("Fuel type is required.");
       if (listing.seats === null || listing.seats === undefined || listing.seats < 1) failures.push("Number of seats is required.");
       if (listing.doors === null || listing.doors === undefined || listing.doors < 2) failures.push("Number of doors is required.");
+      if (listing.airConditioning === null || listing.airConditioning === undefined) failures.push("Air conditioning is required.");
       if (!listing.driveType) failures.push("Drive type is required.");
       if (!listing.pricePerDay || Number(listing.pricePerDay) <= 0) failures.push("Price per day must be greater than 0.");
       if (!listing.currency) failures.push("Currency is required.");
-      
+      if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
+      if (!listing.fuelPolicy) failures.push("Fuel policy is required.");
+      if (!listing.insuranceType) failures.push("Insurance type is required.");
+
       // Mileage policy
       if (!listing.mileagePolicy) {
         failures.push("Mileage policy is required.");
@@ -601,12 +634,21 @@ export async function listingRoutes(app: FastifyInstance) {
         if (listing.extraKmRate === null || listing.extraKmRate === undefined || Number(listing.extraKmRate) < 0) failures.push("Extra km rate is required when mileage policy is limited.");
       }
 
+      // Delivery: if enabled, radius and fee must be set
+      if (listing.deliveryEnabled) {
+        if (!listing.deliveryRadiusKm || listing.deliveryRadiusKm < 1) failures.push("Delivery radius is required when delivery is enabled.");
+        if (listing.deliveryFee === null || listing.deliveryFee === undefined || Number(listing.deliveryFee) < 0) failures.push("Delivery fee is required when delivery is enabled.");
+      }
+
       if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
       if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
 
       const docTypes = listing.documents.map((d) => d.documentType);
       if (!docTypes.includes("insurance_certificate")) {
         failures.push("Insurance certificate document is required.");
+      }
+      if (!docTypes.includes("vehicle_registration")) {
+        failures.push("Vehicle registration document is required.");
       }
 
       if (listing.photos.length < 3 || listing.photos.length > 30) {
@@ -715,12 +757,20 @@ export async function listingRoutes(app: FastifyInstance) {
           failures.push(`Vehicle year must be between 1990 and ${currentYear}.`);
         }
         if (!listing.carCategory) failures.push("Vehicle category is required.");
+        if (!listing.unitCount || listing.unitCount < 1) failures.push("Number of units (fleet count) is required.");
+        if (!listing.licencePlate?.trim()) failures.push("Licence plate is required.");
+        if (listing.odometerReading === null || listing.odometerReading === undefined) failures.push("Odometer reading is required.");
         if (!listing.transmission) failures.push("Transmission type is required.");
+        if (!listing.fuelType) failures.push("Fuel type is required.");
         if (listing.seats === null || listing.seats === undefined || listing.seats < 1) failures.push("Number of seats is required.");
         if (listing.doors === null || listing.doors === undefined || listing.doors < 2) failures.push("Number of doors is required.");
+        if (listing.airConditioning === null || listing.airConditioning === undefined) failures.push("Air conditioning is required.");
         if (!listing.driveType) failures.push("Drive type is required.");
         if (!listing.pricePerDay || Number(listing.pricePerDay) <= 0) failures.push("Price per day must be greater than 0.");
         if (!listing.currency) failures.push("Currency is required.");
+        if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
+        if (!listing.fuelPolicy) failures.push("Fuel policy is required.");
+        if (!listing.insuranceType) failures.push("Insurance type is required.");
         
         // Mileage policy
         if (!listing.mileagePolicy) {
@@ -730,12 +780,21 @@ export async function listingRoutes(app: FastifyInstance) {
           if (listing.extraKmRate === null || listing.extraKmRate === undefined || Number(listing.extraKmRate) < 0) failures.push("Extra km rate is required when mileage policy is limited.");
         }
 
+        // Delivery: if enabled, radius and fee must be set
+        if (listing.deliveryEnabled) {
+          if (!listing.deliveryRadiusKm || listing.deliveryRadiusKm < 1) failures.push("Delivery radius is required when delivery is enabled.");
+          if (listing.deliveryFee === null || listing.deliveryFee === undefined || Number(listing.deliveryFee) < 0) failures.push("Delivery fee is required when delivery is enabled.");
+        }
+
         if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
         if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
 
         const docTypes = listing.documents.map((d) => d.documentType);
         if (!docTypes.includes("insurance_certificate")) {
           failures.push("Insurance certificate document is required.");
+        }
+        if (!docTypes.includes("vehicle_registration")) {
+          failures.push("Vehicle registration document is required.");
         }
 
         if (listing.photos.length < 3 || listing.photos.length > 30) {
@@ -886,7 +945,7 @@ export async function listingRoutes(app: FastifyInstance) {
     if (!isValidDocumentType(contentType)) {
       return sendError(reply, 422, "INVALID_TYPE", "Only PDF, JPEG, PNG, and WEBP files are accepted.");
     }
-    if (!["business_licence", "operating_permit", "tourism_certificate", "insurance_certificate", "roadworthiness_certificate"].includes(documentType)) {
+    if (!ALLOWED_DOC_TYPES.has(documentType)) {
       return sendError(reply, 422, "INVALID_DOC_TYPE", "Invalid document type.");
     }
 
@@ -905,7 +964,7 @@ export async function listingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { s3Key, documentType, contentType } = req.body as { s3Key: string; documentType: string; contentType: string };
 
-    if (!["business_licence", "operating_permit", "tourism_certificate", "insurance_certificate", "roadworthiness_certificate"].includes(documentType)) {
+    if (!ALLOWED_DOC_TYPES.has(documentType)) {
       return sendError(reply, 422, "INVALID_DOC_TYPE", "Invalid document type.");
     }
 
@@ -966,7 +1025,7 @@ export async function listingRoutes(app: FastifyInstance) {
     });
     if (!doc) return sendError(reply, 404, "NOT_FOUND", "Document not found.");
     if (!["draft", "rejected"].includes(listing.status)) {
-      return sendError(reply, 409, "CANNOT_DELETE", "Documents can only be removed from draft listings.");
+      return sendError(reply, 409, "CANNOT_DELETE", "Documents can only be removed from draft or rejected listings.");
     }
 
     await prisma.listingDocument.update({ where: { id: docId }, data: { replacedAt: new Date() } });
@@ -997,6 +1056,3 @@ export async function listingRoutes(app: FastifyInstance) {
     return sendError(reply, 422, "MISSING_PARAMS", "Provide either address, placeId, or lat+lng.");
   });
 }
-
-
-
