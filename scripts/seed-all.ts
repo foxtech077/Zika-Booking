@@ -1,16 +1,6 @@
-/**
- * seed-all.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * Idempotent seed script — safe to run multiple times.
- *
- * What it seeds:
- *   auth schema    → AdminUser (devadmin), User (guest1 + testprovider99)
- *   listings schema → everything in ../../seed.sql
- *
- * Run from project root:
- *   pnpm db:seed:all
- */
-import { PrismaClient } from "../src/generated/index.js";
+import { PrismaClient as AuthPrismaClient } from "../services/auth-service/src/generated/index.js"
+import { PrismaClient as ListingPrismaClient } from "../services/listing-service/src/generated/index.js";
+
 import bcrypt from "bcryptjs";
 import fs from "fs";
 import path from "path";
@@ -23,18 +13,18 @@ const __dirname = path.dirname(__filename);
 const authDbUrl = process.env.DATABASE_URL;
 if (!authDbUrl) throw new Error("DATABASE_URL env variable is not set!");
 
-const authPrisma = new PrismaClient({
+const authPrisma = new AuthPrismaClient({
   datasources: { db: { url: authDbUrl } },
 });
 
 // ── Listings schema client (raw SQL only — no generated types for this schema)
 const listingsDbUrl = process.env.DATABASE_URL?.replace(
   "schema=auth",
-  "schema=listings"
+  "schema=listing"
 );
 if (!listingsDbUrl) throw new Error("DATABASE_URL env variable is not set!");
 
-const listingsPrisma = new PrismaClient({
+const listingsPrisma = new ListingPrismaClient({
   datasources: { db: { url: listingsDbUrl } },
 });
 
@@ -135,7 +125,7 @@ async function main() {
   // ── 4. listings schema — execute seed.sql ──────────────────────────────────
   console.log("\nExecuting seed.sql into listings schema...");
 
-  const seedSqlPath = path.join(__dirname, "../../../seed.sql");
+  const seedSqlPath = path.join(__dirname, "./seed.sql");
   const rawSql = fs.readFileSync(seedSqlPath, "utf8");
 
   // Route the loyalty-point UPDATE to the auth schema where "User" lives
@@ -144,7 +134,7 @@ async function main() {
   // Photos use gen_random_uuid() so they can't upsert — clear them first to keep
   // the seed idempotent when run multiple times.
   console.log("  Clearing listing_photos for idempotent re-seed...");
-  await listingsPrisma.$executeRawUnsafe("DELETE FROM listing_photos");
+  await listingsPrisma.$executeRawUnsafe("DELETE FROM listing.listing_photos");
 
   const statements = splitSql(modifiedSql);
   console.log(`  Parsed ${statements.length} SQL statements.`);

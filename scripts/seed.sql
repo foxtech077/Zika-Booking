@@ -3,13 +3,13 @@
 -- Guest:    guest1@test.com          (cmosebuyd000ej9kcyqnm3ha3)
 
 -- Commission rate for Kenya
-INSERT INTO commission_rates (id, country, rate, set_by, created_at, updated_at)
+INSERT INTO listing.commission_rates (id, country, rate, set_by, created_at, updated_at)
 VALUES (gen_random_uuid(), 'KE', 0.10, 'system', NOW(), NOW())
 ON CONFLICT (country) DO UPDATE SET rate = 0.10, updated_at = NOW();
 
 -- ── Hotels (status = 'approved' so they show in search) ──────────────────────
 
-INSERT INTO listings (
+INSERT INTO listing.listings (
   id, provider_id, category, name, room_type, unit_count, description,
   price_per_night, currency, min_stay_nights, checkin_time, checkout_time,
   cancellation_policy, address, lat, lng, town, country,
@@ -80,7 +80,7 @@ INSERT INTO listings (
 
 -- ── Apartments (status = 'active') ───────────────────────────────────────────
 
-INSERT INTO listings (
+INSERT INTO listing.listings (
   id, provider_id, category, name, bedrooms, bathrooms, max_guests, description,
   price_per_night, currency, min_stay_nights, checkin_time, checkout_time,
   cancellation_policy, address, lat, lng, town, country,
@@ -124,7 +124,7 @@ INSERT INTO listings (
 
 -- ── Car Rentals (status = 'active') ──────────────────────────────────────────
 
-INSERT INTO listings (
+INSERT INTO listing.listings (
   id, provider_id, category, name, car_make, car_model, car_year,
   transmission, fuel_type, seats, doors, mileage_policy, mileage_limit_km,
   description, price_per_night, currency, checkin_time, checkout_time,
@@ -171,7 +171,7 @@ INSERT INTO listings (
 
 -- ── Photos ────────────────────────────────────────────────────────────────────
 
-INSERT INTO listing_photos (id, listing_id, s3_key, cdn_url, position, uploaded_at) VALUES
+INSERT INTO listing.listing_photos (id, listing_id, s3_key, cdn_url, position, uploaded_at) VALUES
 -- Hotel 1 - Serena (warm luxury hotel photos)
 (gen_random_uuid(), 'lst-hotel-001', 'photos/h001-1.jpg', 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1200&q=80', 1, NOW()),
 (gen_random_uuid(), 'lst-hotel-001', 'photos/h001-2.jpg', 'https://images.unsplash.com/photo-1582719508461-905c673771fd?w=1200&q=80', 2, NOW()),
@@ -236,7 +236,7 @@ INSERT INTO listing_photos (id, listing_id, s3_key, cdn_url, position, uploaded_
 
 -- ── Amenities ─────────────────────────────────────────────────────────────────
 
-INSERT INTO listing_amenities (listing_id, amenity_key) VALUES
+INSERT INTO listing.listing_amenities (listing_id, amenity_key) VALUES
 -- Serena Hotel
 ('lst-hotel-001', 'wifi'), ('lst-hotel-001', 'pool'), ('lst-hotel-001', 'spa'),
 ('lst-hotel-001', 'gym'), ('lst-hotel-001', 'restaurant'), ('lst-hotel-001', 'bar'),
@@ -275,7 +275,7 @@ INSERT INTO listing_amenities (listing_id, amenity_key) VALUES
 
 -- ── Bookings ──────────────────────────────────────────────────────────────────
 
-INSERT INTO bookings (
+INSERT INTO listing.bookings (
   id, reference, listing_id, guest_id, provider_id, listing_type,
   status, check_in, check_out, nights_or_days,
   guest_first_name, guest_last_name, guest_email, adults, children, special_requests,
@@ -326,7 +326,7 @@ INSERT INTO bookings (
 );
 
 -- Booking status log entries
-INSERT INTO booking_status_log (id, booking_id, from_status, to_status, changed_by, actor_type, created_at) VALUES
+INSERT INTO listing.booking_status_log (id, booking_id, from_status, to_status, changed_by, actor_type, created_at) VALUES
 (gen_random_uuid(), 'bkg-001', 'pending_payment', 'confirmed', 'system', 'system', NOW() - INTERVAL '5 days'),
 (gen_random_uuid(), 'bkg-002', 'pending_payment', 'confirmed', 'system', 'system', NOW() - INTERVAL '2 days'),
 (gen_random_uuid(), 'bkg-003', 'pending_payment', 'confirmed', 'system', 'system', NOW() - INTERVAL '42 days'),
@@ -336,7 +336,7 @@ INSERT INTO booking_status_log (id, booking_id, from_status, to_status, changed_
 
 -- ── Reviews (for completed bookings) ─────────────────────────────────────────
 
-INSERT INTO listing_reviews (
+INSERT INTO listing.listing_reviews (
   id, booking_id, listing_id, guest_id, rating, title, body,
   provider_reply, provider_replied_at, created_at, updated_at
 ) VALUES
@@ -359,8 +359,8 @@ SET "loyaltyPoints" = 1555, "currentTier" = 'silver'
 WHERE id = 'cmosebuyd000ej9kcyqnm3ha3';
 
 -- Confirm row counts
-SELECT 'listings' AS tbl, COUNT(*) FROM listings
-UNION ALL SELECT 'listing_photos', COUNT(*) FROM listing_photos
-UNION ALL SELECT 'listing_amenities', COUNT(*) FROM listing_amenities
-UNION ALL SELECT 'bookings', COUNT(*) FROM bookings
-UNION ALL SELECT 'listing_reviews', COUNT(*) FROM listing_reviews;
+SELECT 'listings' AS tbl, COUNT(*) FROM listing.listings
+UNION ALL SELECT 'listing_photos', COUNT(*) FROM listing.listing_photos
+UNION ALL SELECT 'listing_amenities', COUNT(*) FROM listing.listing_amenities
+UNION ALL SELECT 'bookings', COUNT(*) FROM listing.bookings
+UNION ALL SELECT 'listing_reviews', COUNT(*) FROM listing.listing_reviews;
