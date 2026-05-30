@@ -57,7 +57,7 @@ function calcHotelApartmentPricing(listing: any, checkIn: string, checkOut: stri
 function calcCarPricing(listing: any, pickupDatetime: string, returnDatetime: string, deliveryRequested: boolean, commissionRate: number = DEFAULT_COMMISSION_RATE) {
   const rentalMs = new Date(returnDatetime).getTime() - new Date(pickupDatetime).getTime();
   const days = Math.ceil(rentalMs / 86_400_000);
-  const rate = Number(listing.pricePerNight ?? 0);
+  const rate = Number(listing.pricePerDay ?? 0);
   const subtotal = rate * days;
   const deliveryFee = deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0;
   const totalAmount = subtotal + deliveryFee;
@@ -77,7 +77,8 @@ function calcRefund(booking: any): number {
 
   const hoursUntil = (new Date(refDate).getTime() - Date.now()) / 3_600_000;
 
-  if (policy === "free") return hoursUntil >= 48 ? total : 0;
+  // FIX: was "free" — correct enum value is "flexible"
+  if (policy === "flexible") return hoursUntil >= 48 ? total : 0;
   if (policy === "moderate") {
     if (hoursUntil >= 168) return total; // 7 days
     if (hoursUntil >= 48) return total * 0.5;
@@ -96,7 +97,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   const redis = getRedis();
 
   // ── POST /bookings/initiate — acquire reservation lock ─────────────────
-  app.post("/bookings/initiate", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/bookings/initiate", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const body = req.body as {
       listingId: string;
@@ -188,7 +189,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /bookings/lock/renew ──────────────────────────────────────────
-  app.post("/bookings/lock/renew", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/bookings/lock/renew", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const { lockToken } = req.body as { lockToken: string };
 
@@ -209,7 +210,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── DELETE /bookings/lock/:lockToken — explicit abandon ───────────────
-  app.delete("/bookings/lock/:lockToken", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/bookings/lock/:lockToken", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const { lockToken } = req.params as { lockToken: string };
 
@@ -225,7 +226,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /bookings — create pending_payment booking ───────────────────
-  app.post("/bookings", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/bookings", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const body = req.body as {
       lockToken: string;
@@ -400,7 +401,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /bookings/:id/confirm — internal payment callback ───────────
-  app.patch("/bookings/:id/confirm", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/bookings/:id/confirm", { schema: { tags: ["Bookings"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const { paymentId } = req.body as { paymentId?: string };
 
@@ -441,7 +442,6 @@ export async function bookingRoutes(app: FastifyInstance) {
     // E16: Award loyalty points (1 point per USD equivalent)
     const points = Math.floor(Number(booking.totalAmount));
     if (points > 0) {
-      // Update User table in shared DB using raw SQL
       await prisma.$executeRaw`
         UPDATE "User"
         SET
@@ -467,7 +467,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /bookings/:id/fail — internal payment failure ───────────────
-  app.patch("/bookings/:id/fail", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/bookings/:id/fail", { schema: { tags: ["Bookings"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const { failureReason } = req.body as { failureReason?: string };
 
@@ -487,7 +487,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /bookings/:id/cancel — guest cancellation ────────────────────
-  app.post("/bookings/:id/cancel", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/bookings/:id/cancel", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const { id } = req.params as { id: string };
     const { reason } = req.body as { reason?: string };
@@ -526,7 +526,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /provider/bookings/:id/cancel — provider cancellation ────────
-  app.post("/provider/bookings/:id/cancel", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/provider/bookings/:id/cancel", { schema: { tags: ["Bookings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const providerId = (req as ProviderRequest).providerId;
     const { id } = req.params as { id: string };
     const { reasonCode, reasonText } = req.body as { reasonCode: string; reasonText?: string };
@@ -555,7 +555,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /guests/me/bookings — guest booking history ───────────────────
-  app.get("/guests/me/bookings", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/guests/me/bookings", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const q = req.query as Record<string, string>;
     const status = q["status"];
@@ -610,7 +610,7 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── GET /guests/me/bookings/:id — booking detail ──────────────────────
-  app.get("/guests/me/bookings/:id", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/guests/me/bookings/:id", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const { id } = req.params as { id: string };
 

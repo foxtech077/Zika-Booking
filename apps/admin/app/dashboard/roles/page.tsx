@@ -399,7 +399,7 @@ export default function RolesPage() {
               type="email"
               value={form.email}
               onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              placeholder="jane@zikabooking.com"
+              placeholder="jane@kainook.com"
               required
             />
             <Input

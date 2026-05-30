@@ -5,7 +5,7 @@ import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
 
 export async function voucherRoutes(app: FastifyInstance) {
   // ── POST /vouchers/validate — validate a voucher code ────────────────
-  app.post("/vouchers/validate", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/vouchers/validate", { schema: { tags: ["Vouchers"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as { code: string; totalAmount: number; currency?: string };
 
     if (!body.code || body.totalAmount === undefined) {
@@ -65,7 +65,7 @@ export async function voucherRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/vouchers — create a voucher ───────────────────────────
-  app.post("/admin/vouchers", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as {
       code: string;
       discountType: "percentage" | "fixed";
@@ -135,7 +135,7 @@ export async function voucherRoutes(app: FastifyInstance) {
   });
 
   // ── GET /admin/vouchers — list all vouchers ───────────────────────────
-  app.get("/admin/vouchers", async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] } }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const vouchers = await prisma.voucher.findMany({
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { redemptions: true } } },

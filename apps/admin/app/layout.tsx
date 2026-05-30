@@ -3,9 +3,10 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: { default: "ZikaBooking Admin", template: "%s | ZikaBooking Admin" },
-  description: "ZikaBooking internal administration panel.",
+  title: { default: "Kainook Admin", template: "%s | Kainook Admin" },
+  description: "Kainook internal administration panel.",
   robots: { index: false, follow: false },
+  icons: { icon: "/admin/kainook-logo.png" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

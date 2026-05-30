@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, BadgeCheck, Building2, CalendarDays,
   Star, MessageSquare, Cable, DollarSign, Percent, Ticket,
   ShieldCheck, ClipboardList, BarChart3, Settings,
-  ChevronLeft, ChevronRight, LogOut, Zap,
+  ChevronLeft, ChevronRight, LogOut,
 } from "lucide-react";
 import { cn, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -57,12 +57,12 @@ export function Sidebar() {
         "flex items-center h-[60px] flex-shrink-0 border-b border-white/10",
         collapsed ? "justify-center px-2" : "px-5 gap-3"
       )}>
-        <div className="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-lg bg-primary shadow">
-          <Zap className="h-4 w-4 text-white" />
+        <div className="flex-shrink-0 flex items-center justify-center h-8 w-8 rounded-lg overflow-hidden bg-white shadow">
+          <img src="/admin/kainook-logo.png" alt="Kainook" className="h-8 w-8 object-contain" />
         </div>
         {!collapsed && (
           <div>
-            <p className="text-white font-bold text-sm leading-none">ZikaBooking</p>
+            <p className="text-white font-bold text-sm leading-none">Kainook</p>
             <p className="text-white/50 text-xs mt-0.5">Admin Panel</p>
           </div>
         )}

@@ -1,9 +1,12 @@
 import sgMail from "@sendgrid/mail";
 
-const FROM = process.env["SENDGRID_FROM_EMAIL"] ?? "noreply@zikabooking.com";
+const rawEmail = process.env["SENDGRID_FROM_EMAIL"] ?? "noreply@zikabooking.com";
+const FROM = rawEmail.replace(/^["']|["']$/g, "");
 const WEB_BASE = process.env["WEB_BASE_URL"] ?? "http://localhost:3000";
 
-sgMail.setApiKey(process.env["SENDGRID_API_KEY"] ?? "");
+const rawKey = process.env["SENDGRID_API_KEY"] ?? "";
+const cleanKey = rawKey.replace(/^["']|["']$/g, "");
+sgMail.setApiKey(cleanKey);
 
 async function sendWithRetry(msg: sgMail.MailDataRequired, attempt = 1): Promise<void> {
   try {
@@ -80,6 +83,15 @@ export async function sendListingSuspendedEmail(to: string, listingName: string)
     from: FROM,
     subject: `Your listing "${listingName}" has been suspended`,
     html: `<p>Your listing <strong>${listingName}</strong> has been suspended by our team. Please contact support for more information.</p>`,
+  });
+}
+
+export async function sendListingReinstatedEmail(to: string, listingName: string): Promise<void> {
+  await sendWithRetry({
+    to,
+    from: FROM,
+    subject: `Your listing "${listingName}" has been reinstated`,
+    html: `<p>Good news! Your listing <strong>${listingName}</strong> has been reinstated and is now live on ZikaBooking again.</p><p><a href="${WEB_BASE}/listings">View your listings</a></p>`,
   });
 }
 

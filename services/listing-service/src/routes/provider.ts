@@ -17,7 +17,7 @@ const blockDatesSchema = z.object({
 export async function providerRoutes(app: FastifyInstance) {
 
   // ── GET /provider/dashboard ───────────────────────────────────────────
-  app.get("/provider/dashboard", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/provider/dashboard", { schema: { tags: ["Provider Portal"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const providerId = (req as ProviderRequest).providerId;
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -143,7 +143,7 @@ export async function providerRoutes(app: FastifyInstance) {
   });
 
   // ── GET /provider/listings/summary ────────────────────────────────────
-  app.get("/provider/listings/summary", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/provider/listings/summary", { schema: { tags: ["Provider Portal"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const providerId = (req as ProviderRequest).providerId;
 
     const listings = await prisma.listing.findMany({
@@ -186,7 +186,7 @@ export async function providerRoutes(app: FastifyInstance) {
   });
 
   // ── GET /provider/bookings — paginated provider bookings ──────────────
-  app.get("/provider/bookings", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/provider/bookings", { schema: { tags: ["Provider Portal"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const providerId = (req as ProviderRequest).providerId;
     const q = req.query as Record<string, string>;
     const offset   = Math.max(0, parseInt(q["offset"] ?? "0", 10));
@@ -252,7 +252,7 @@ export async function providerRoutes(app: FastifyInstance) {
   });
 
   // ── GET /provider/reviews — paginated provider reviews ────────────────
-  app.get("/provider/reviews", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/provider/reviews", { schema: { tags: ["Provider Portal"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const providerId = (req as ProviderRequest).providerId;
     const q = req.query as Record<string, string>;
     const offset   = Math.max(0, parseInt(q["offset"] ?? "0", 10));
@@ -319,7 +319,7 @@ export async function providerRoutes(app: FastifyInstance) {
   });
 
   // ── GET /provider/earnings — earnings summary ─────────────────────────
-  app.get("/provider/earnings", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/provider/earnings", { schema: { tags: ["Provider Portal"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const providerId = (req as ProviderRequest).providerId;
     const now        = new Date();
 
@@ -394,7 +394,7 @@ export async function providerRoutes(app: FastifyInstance) {
   });
 
   // ── GET /provider/availability/:listingId — booked + blocked dates ────
-  app.get("/provider/availability/:listingId", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/provider/availability/:listingId", { schema: { tags: ["Provider Portal"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const providerId  = (req as ProviderRequest).providerId;
     const { listingId } = req.params as { listingId: string };
     const { from, to } = req.query as { from?: string; to?: string };

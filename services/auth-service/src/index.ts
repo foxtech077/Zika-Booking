@@ -9,6 +9,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import { getRedis } from "./lib/redis";
 import { authRoutes } from "./routes/auth";
 import { adminAuthRoutes, adminUserRoutes, adminOperatorRoutes } from "./routes/admin-auth";
+import { startTokenPurger } from "./lib/tokenPurger.js";
 
 const PORT = Number(process.env["AUTH_SERVICE_PORT"] ?? 3001);
 const HOST = process.env["AUTH_SERVICE_HOST"] ?? "0.0.0.0";
@@ -26,11 +27,19 @@ async function build() {
       },
       servers: [
         {
-          url: process.env["NODE_ENV"] === "production"
-            ? "https://kainook.duckdns.org/api/auth"
-            : `http://localhost:${PORT}`,
-          description: process.env["NODE_ENV"] === "production" ? "Production server" : "Local development server",
+          url: `http://localhost:${PORT}`,
+          description: "Local development server",
         },
+        {
+          url: "https://kainook.duckdns.org/api",
+          description: "Production server",
+        },
+      ],
+      tags: [
+        { name: "User Auth", description: "User registration, login, email verification, OAuth and password management" },
+        { name: "Admin Auth", description: "Admin login, TOTP 2FA setup/verify and WebAuthn hardware key management" },
+        { name: "Admin Users", description: "Admin management of platform users — suspend, reinstate, ban and audit logs" },
+        { name: "Admin Operators", description: "Super-admin management of admin operator accounts and roles" },
       ],
       components: {
         securitySchemes: {
@@ -116,6 +125,7 @@ async function main() {
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Auth Service] listening on ${HOST}:${PORT}`);
+    startTokenPurger();
   } catch (err) {
     app.log.error(err);
     process.exit(1);

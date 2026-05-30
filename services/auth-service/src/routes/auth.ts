@@ -78,6 +78,7 @@ export async function authRoutes(app: FastifyInstance) {
   // ── POST /auth/register  (UC-1.1, UC-1.2) ──────────────────────────────────
   app.post("/auth/register", {
     schema: {
+      tags: ["User Auth"],
       body: {
         type: "object",
         required: ["firstName", "lastName", "email", "password", "confirmPassword", "userType"],
@@ -109,19 +110,22 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const passwordHash = await hashPassword(password);
-    const isDev = process.env["NODE_ENV"] !== "production";
-   
+    const skipVerification = process.env["SKIP_EMAIL_VERIFICATION"] === "true";
+    const status = (skipVerification && userType !== "provider") ? "active" : "pending_verification";
     const user = await prisma.user.create({
       data: {
         firstName, lastName, email, passwordHash,
         userType: userType as "guest" | "provider",
         businessName: businessName ?? null,
         country: country ?? null,
-        ...(isDev ? { status: "active", emailVerified: true, emailVerifiedAt: new Date() } : {}),
+        ...(skipVerification ? { status, emailVerified: true, emailVerifiedAt: new Date() } : {}),
       },
     });
 
-    if (isDev) {
+    if (skipVerification) {
+      if (userType === "provider") {
+        return sendSuccess(reply, 201, { user: publicUser(user), message: "Registration successful. Account is pending admin approval." });
+      }
       const tokens = await issueTokens(reply, user.id, user.userType, "active");
       return sendSuccess(reply, 201, { user: publicUser(user), tokens });
     }
@@ -132,16 +136,24 @@ export async function authRoutes(app: FastifyInstance) {
       data: { userId: user.id, tokenHash: hashToken(plainToken), tokenType: "email_verification", expiresAt },
     });
 
-    await sendVerificationEmail(email, plainToken).catch(() => null);
-    await prisma.emailLog.create({
-      data: { userId: user.id, type: "verification", recipient: email, status: "sent", sentAt: new Date() },
-    });
+    try {
+      await sendVerificationEmail(email, plainToken);
+      await prisma.emailLog.create({
+        data: { userId: user.id, type: "verification", recipient: email, status: "sent", sentAt: new Date() },
+      });
+    } catch (error) {
+      console.error("[Auth] Verification email delivery failed", error);
+      await prisma.emailLog.create({
+        data: { userId: user.id, type: "verification", recipient: email, status: "failed", sentAt: new Date() },
+      });
+      return sendError(reply, 503, "EMAIL_DELIVERY_FAILED", "We could not send the verification email. Please try again in a few minutes.");
+    }
 
     return sendSuccess(reply, 201, { message: "Registration successful. Please check your email to verify your account." });
   });
 
   // ── GET /auth/verify  (UC-1.3) ─────────────────────────────────────────────
-  app.get("/auth/verify", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/auth/verify", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { token } = req.query as { token?: string };
     if (!token || token.length !== 64) {
       return sendError(reply, 400, "INVALID_TOKEN", "This verification link is invalid. Please request a new one.");
@@ -170,19 +182,40 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 410, "TOKEN_EXPIRED", "Your verification link has expired.");
     }
 
-    // Already active (A3)
-    if (record.user.status === "active") {
-      const tokens = await issueTokens(reply, record.user.id, record.user.userType, "active");
-      return sendSuccess(reply, 200, { message: "You're already verified. Welcome back!", user: publicUser(record.user), tokens });
+    // Already verified (A3)
+    if (record.user.emailVerified) {
+      if (record.user.userType === "provider" && record.user.status === "pending_verification") {
+        return sendError(reply, 403, "PENDING_ADMIN_APPROVAL", "Your account is pending admin approval.");
+      }
+      if (record.user.status === "active") {
+        const tokens = await issueTokens(reply, record.user.id, record.user.userType, "active");
+        return sendSuccess(reply, 200, { message: "You're already verified. Welcome back!", user: publicUser(record.user), tokens });
+      }
     }
 
+    const isProvider = record.user.userType === "provider";
     // Atomic update
     await prisma.$transaction([
       prisma.verificationToken.update({ where: { id: record.id }, data: { used: true, usedAt: new Date() } }),
-      prisma.user.update({ where: { id: record.userId }, data: { status: "active", emailVerified: true, emailVerifiedAt: new Date() } }),
+      prisma.user.update({
+        where: { id: record.userId },
+        data: {
+          status: isProvider ? "pending_verification" : "active",
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+        },
+      }),
     ]);
 
     const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
+
+    if (isProvider) {
+      return sendSuccess(reply, 200, {
+        message: "Email verified successfully. Your account is pending admin approval.",
+        user: publicUser(updatedUser),
+      });
+    }
+
     const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, "active");
 
     return sendSuccess(reply, 200, { message: "Email verified — welcome to ZikaBooking!", user: publicUser(updatedUser), tokens });
@@ -191,6 +224,7 @@ export async function authRoutes(app: FastifyInstance) {
   // ── POST /auth/resend-verification  (UC-1.4) ───────────────────────────────
   app.post("/auth/resend-verification", {
     schema: {
+      tags: ["User Auth"],
       body: {
         type: "object",
         required: ["email"],
@@ -205,7 +239,7 @@ export async function authRoutes(app: FastifyInstance) {
     const { email } = parsed.data;
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.status !== "pending_verification") {
+    if (!user || user.status !== "pending_verification" || user.emailVerified) {
       // Don't reveal account existence — return same response
       return sendSuccess(reply, 200, { message: "If the email is pending verification, a new link has been sent." });
     }
@@ -237,10 +271,19 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     await setCooldown(cooldownKey, 60);
-    await sendVerificationEmail(email, plainToken).catch(() => null);
-    await prisma.emailLog.create({
-      data: { userId: user.id, type: "verification_resend", recipient: email, status: "sent", sentAt: new Date() },
-    });
+
+    try {
+      await sendVerificationEmail(email, plainToken);
+      await prisma.emailLog.create({
+        data: { userId: user.id, type: "verification_resend", recipient: email, status: "sent", sentAt: new Date() },
+      });
+    } catch (error) {
+      console.error("[Auth] Resend verification email delivery failed", error);
+      await prisma.emailLog.create({
+        data: { userId: user.id, type: "verification_resend", recipient: email, status: "failed", sentAt: new Date() },
+      });
+      return sendError(reply, 503, "EMAIL_DELIVERY_FAILED", "We could not resend the verification email. Please try again in a few minutes.");
+    }
 
     return sendSuccess(reply, 200, { message: "Verification email resent. Please check your inbox." });
   });
@@ -248,6 +291,7 @@ export async function authRoutes(app: FastifyInstance) {
   // ── POST /auth/login  (UC-1.5) ─────────────────────────────────────────────
   app.post("/auth/login", {
     schema: {
+      tags: ["User Auth"],
       body: {
         type: "object",
         required: ["email", "password"],
@@ -274,6 +318,9 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user || !passwordOk) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
 
     if (user.status === "pending_verification") {
+      if (user.emailVerified && user.userType === "provider") {
+        return sendError(reply, 403, "PENDING_ADMIN_APPROVAL", "Your account is pending admin approval.");
+      }
       return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
     }
     if (user.status === "suspended") {
@@ -288,7 +335,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/logout  (UC-1.9) ────────────────────────────────────────────
-  app.post("/auth/logout", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/logout", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const refreshToken = req.cookies["refreshToken"];
     if (refreshToken) {
       const tokenHash = hashToken(refreshToken);
@@ -299,7 +346,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/logout-all  (UC-1.9 A2) ────────────────────────────────────
-  app.post("/auth/logout-all", { preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/logout-all", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const userId = (req as FastifyRequest & { userId: string }).userId;
     await prisma.session.updateMany({ where: { userId }, data: { revoked: true } });
     reply.clearCookie("refreshToken", { path: "/" });
@@ -307,7 +354,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/refresh  (UC-1.5) ───────────────────────────────────────────
-  app.post("/auth/refresh", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/refresh", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const refreshToken = req.cookies["refreshToken"];
     if (!refreshToken) return sendError(reply, 401, "NO_TOKEN", "No refresh token.");
 
@@ -334,6 +381,7 @@ export async function authRoutes(app: FastifyInstance) {
   // ── POST /auth/forgot-password  (UC-1.8) ───────────────────────────────────
   app.post("/auth/forgot-password", {
     schema: {
+      tags: ["User Auth"],
       body: {
         type: "object",
         required: ["email"],
@@ -364,12 +412,14 @@ export async function authRoutes(app: FastifyInstance) {
   // ── POST /auth/reset-password  (UC-1.8) ────────────────────────────────────
   app.post("/auth/reset-password", {
     schema: {
+      tags: ["User Auth"],
       body: {
         type: "object",
-        required: ["token", "password"],
+        required: ["token", "password", "confirmPassword"],
         properties: {
           token: { type: "string" },
           password: { type: "string" },
+          confirmPassword: { type: "string" },
         }
       }
     }
@@ -410,7 +460,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/oauth/google  (UC-1.6) ──────────────────────────────────────
-  app.post("/auth/oauth/google", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/oauth/google", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = googleOAuthSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid payload.");
     const { idToken, userType, businessName, country } = parsed.data;
@@ -444,13 +494,14 @@ export async function authRoutes(app: FastifyInstance) {
     let user = existingByEmail;
 
     if (!user) {
+      const isProvider = userType === "provider";
       // New user
       user = await prisma.user.create({
         data: {
           firstName: firstName ?? "User",
           lastName: lastName ?? "",
           email,
-          status: "active",
+          status: isProvider ? "pending_verification" : "active",
           emailVerified: true,
           emailVerifiedAt: new Date(),
           oauthProvider: "google",
@@ -461,12 +512,21 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
       await sendWelcomeEmail(email, user.firstName).catch(() => null);
+      if (isProvider) {
+        return sendSuccess(reply, 201, { user: publicUser(user), message: "Account created successfully. Pending admin approval." });
+      }
       const tokens = await issueTokens(reply, user.id, user.userType, user.status);
       const needsAccountType = !userType;
       return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType });
     }
 
     // Returning user
+    if (user.status === "pending_verification") {
+      if (user.emailVerified && user.userType === "provider") {
+        return sendError(reply, 403, "PENDING_ADMIN_APPROVAL", "Your account is pending admin approval.");
+      }
+      return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
+    }
     if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
     if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from ZikaBooking.");
 
@@ -475,7 +535,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/oauth/apple  (UC-1.7) ───────────────────────────────────────
-  app.post("/auth/oauth/apple", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/oauth/apple", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = appleOAuthSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid payload.");
     const { identityToken, userType, businessName, country } = parsed.data;
@@ -502,12 +562,13 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     if (!user) {
+      const isProvider = userType === "provider";
       user = await prisma.user.create({
         data: {
           firstName: "User",
           lastName: "",
           email: appleEmail,
-          status: "active",
+          status: isProvider ? "pending_verification" : "active",
           emailVerified: true,
           emailVerifiedAt: new Date(),
           oauthProvider: "apple",
@@ -518,10 +579,19 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
       await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
+      if (isProvider) {
+        return sendSuccess(reply, 201, { user: publicUser(user), message: "Account created successfully. Pending admin approval." });
+      }
       const tokens = await issueTokens(reply, user.id, user.userType, user.status);
       return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: !userType });
     }
 
+    if (user.status === "pending_verification") {
+      if (user.emailVerified && user.userType === "provider") {
+        return sendError(reply, 403, "PENDING_ADMIN_APPROVAL", "Your account is pending admin approval.");
+      }
+      return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
+    }
     if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
     if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from ZikaBooking.");
 
@@ -530,7 +600,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/account-type  (post-OAuth account type selection) ───────────
-  app.post("/auth/account-type", { preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/account-type", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = accountTypeSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(reply, 422, "VALIDATION_ERROR", "Validation failed",
@@ -538,15 +608,30 @@ export async function authRoutes(app: FastifyInstance) {
     }
     const userId = (req as FastifyRequest & { userId: string }).userId;
     const { userType, businessName, country } = parsed.data;
+    const isProvider = userType === "provider";
     const updated = await prisma.user.update({
       where: { id: userId },
-      data: { userType: userType as "guest" | "provider", businessName: businessName ?? null, country: country ?? null },
+      data: {
+        userType: userType as "guest" | "provider",
+        businessName: businessName ?? null,
+        country: country ?? null,
+        status: isProvider ? "pending_verification" : undefined,
+      },
     });
+
+    if (isProvider) {
+      await prisma.session.updateMany({
+        where: { userId },
+        data: { revoked: true },
+      });
+      reply.clearCookie("refreshToken", { path: "/" });
+    }
+
     return sendSuccess(reply, 200, { user: publicUser(updated) });
   });
 
   // ── GET /auth/oauth/google/redirect (Web OAuth Start) ──────────────────────
-  app.get("/auth/oauth/google/redirect", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/auth/oauth/google/redirect", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const redirectUri = `${process.env["WEB_BASE_URL"] ?? "http://localhost:3000"}/api/auth/oauth/google/callback`;
     const client = new OAuth2Client({
       clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
@@ -567,7 +652,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── GET /auth/oauth/google/callback (Web OAuth Callback) ──────────────────
-  app.get("/auth/oauth/google/callback", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/auth/oauth/google/callback", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { code, error } = req.query as { code?: string; error?: string };
 
     const webBaseUrl = process.env["WEB_BASE_URL"] ?? "http://localhost:3000";

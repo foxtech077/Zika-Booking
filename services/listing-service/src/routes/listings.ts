@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
+import { requireProvider } from "../middleware/auth.js";
 import {
   createPresignedUploadUrl,
   createPresignedDownloadUrl,
@@ -19,15 +20,88 @@ import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/ema
 
 const MAX_PHOTOS = 30;
 
+// All valid DocumentType enum values (mirrors schema.prisma DocumentType enum).
+// Used by both document presign and document confirm endpoints to reject unknown types.
+const ALLOWED_DOC_TYPES = new Set([
+  "business_licence",
+  "operating_permit",
+  "tourism_certificate",
+  "insurance_certificate",
+  "roadworthiness_certificate",
+  "hotel_operating_permit",
+  "tourism_authority_certificate",
+   "vehicle_registration",
+]);
+
+// ── legacy amenity mapping for backward compatibility ───────────────────────
+const legacyAmenityCategoryMap: Record<string, string> = {
+  wifi: "Connectivity",
+  high_speed_wifi: "Connectivity",
+  ethernet: "Connectivity",
+  smart_tv: "Connectivity",
+  work_desk: "Connectivity",
+  printer: "Connectivity",
+  pool: "Wellness",
+  spa: "Wellness",
+  gym: "Wellness",
+  sauna: "Wellness",
+  massage: "Wellness",
+  hot_tub: "Wellness",
+  restaurant: "Food & Drink",
+  bar: "Food & Drink",
+  room_service: "Food & Drink",
+  mini_bar: "Food & Drink",
+  breakfast: "Food & Drink",
+  kitchen: "Food & Drink",
+  coffee_machine: "Food & Drink",
+  air_conditioning: "Comfort",
+  heating: "Comfort",
+  fireplace: "Comfort",
+  balcony: "Comfort",
+  laundry: "Comfort",
+  parking: "Comfort",
+  elevator: "Comfort",
+  accessible: "Comfort",
+  concierge: "Services",
+  reception_24h: "Services",
+  security: "Services",
+  security_24h: "Services",
+  housekeeping: "Services",
+  dry_cleaning: "Services",
+  luggage_storage: "Services",
+  airport_shuttle: "Services",
+  shop_on_site: "Services",
+  pet_friendly: "Services",
+  tv: "Services",
+  workspace: "Services",
+  washing_machine: "Services",
+  garden: "Services",
+};
+
 // ── Zod schemas ───────────────────────────────────────────────────────────────
+
+const currentYear = new Date().getFullYear();
+
+const amenitiesGroupedSchema = z.object({
+  Connectivity: z.array(z.string().max(100)).optional(),
+  "Food & Drink": z.array(z.string().max(100)).optional(),
+  Wellness: z.array(z.string().max(100)).optional(),
+  Comfort: z.array(z.string().max(100)).optional(),
+  Services: z.array(z.string().max(100)).optional(),
+});
 
 const patchListingSchema = z.object({
   name: z.string().max(200).optional(),
-  roomType: z.enum(["standard", "superior", "deluxe", "suite", "junior_suite", "studio", "family_room", "presidential_suite"]).optional(),
+  listingTitle: z.string().max(200).optional(),
+  roomType: z.preprocess((val) => {
+    if (typeof val !== "string") return val;
+    return val.toLowerCase().replace(/\s+/g, "_");
+  }, z.enum(["standard", "superior", "deluxe", "suite", "junior_suite", "studio", "family_room", "presidential_suite"])).optional(),
   unitCount: z.number().int().min(1).optional(),
   claimedStarRating: z.number().int().min(1).max(5).optional().nullable(),
   description: z.string().max(1000).optional().nullable(),
   pricePerNight: z.number().positive().optional(),
+  pricePerDay: z.number().positive().optional(),
   currency: z.string().length(3).optional(),
   minStayNights: z.number().int().min(1).optional(),
   checkinTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
@@ -40,7 +114,7 @@ const patchListingSchema = z.object({
   lng: z.number().optional().nullable(),
   town: z.string().max(100).optional().nullable(),
   country: z.string().length(2).optional().nullable(),
-  amenities: z.array(z.string().max(100)).optional(),
+  amenities: amenitiesGroupedSchema.optional(),
   customAmenities: z.array(z.string().max(60)).optional(),
   // apartment-specific
   bedrooms: z.number().int().min(0).optional().nullable(),
@@ -50,16 +124,79 @@ const patchListingSchema = z.object({
   longStayMinNights: z.number().int().min(1).optional().nullable(),
   longStayDiscountType: z.enum(["percentage", "fixed"]).optional().nullable(),
   longStayDiscountValue: z.number().positive().optional().nullable(),
+  instantBooking: z.boolean().optional(),
+  selfCheckin: z.boolean().optional(),
+  selfCheckinDetails: z.string().max(500).optional().nullable(),
+  apartmentType: z.enum(["entire_place", "private_room", "shared_room", "studio", "loft", "villa", "townhouse"]).optional().nullable(),
+  cleaningFee: z.number().nonnegative().optional().nullable(),
+  extraGuestFee: z.number().nonnegative().optional().nullable(),
+  extraGuestAfter: z.number().int().min(1).optional().nullable(),
+  weeklyDiscount: z.number().nonnegative().optional().nullable(),
+  monthlyDiscount: z.number().nonnegative().optional().nullable(),
+  floorNumber: z.number().int().optional().nullable(),
+  propertySizeM2: z.number().positive().optional().nullable(),
+  securityDepositDue: z.string().max(30).optional().nullable(),
   // car-specific
   carMake: z.string().max(80).optional().nullable(),
+  make: z.string().max(80).optional().nullable(),
   carModel: z.string().max(80).optional().nullable(),
-  carYear: z.number().int().min(1900).max(2100).optional().nullable(),
-  transmission: z.enum(["manual", "automatic"]).optional().nullable(),
-  fuelType: z.enum(["petrol", "diesel", "electric", "hybrid"]).optional().nullable(),
+  model: z.string().max(80).optional().nullable(),
+  carYear: z.number().int().min(1990).max(currentYear).optional().nullable(),
+  year: z.number().int().min(1990).max(currentYear).optional().nullable(),
+  transmission: z.preprocess((val) => {
+    if (val === "semi-auto") return "semi_auto";
+    return val;
+  }, z.enum(["manual", "automatic", "semi_auto"])).optional().nullable(),
+  fuelType: z.enum(["petrol", "diesel", "electric", "hybrid", "lpg"]).optional().nullable(),
   seats: z.number().int().min(1).optional().nullable(),
   doors: z.number().int().min(2).optional().nullable(),
   mileagePolicy: z.enum(["unlimited", "limited"]).optional().nullable(),
   mileageLimitKm: z.number().int().min(1).optional().nullable(),
+  carCategory: z.enum(["Economy", "Compact", "SUV", "Minivan", "Pickup", "Luxury", "Electric", "Convertible"]).optional().nullable(),
+  category: z.enum(["Economy", "Compact", "SUV", "Minivan", "Pickup", "Luxury", "Electric", "Convertible"]).optional(),
+  driveType: z.enum(["2WD", "4WD", "AWD"]).optional().nullable(),
+  airConditioning: z.boolean().optional().nullable(),
+  odometerReading: z.number().int().nonnegative().optional().nullable(),
+  licencePlate: z.string().max(20).optional().nullable(),
+  engineSize: z.string().max(20).optional().nullable(),
+  colour: z.string().max(30).optional().nullable(),
+  securityDeposit: z.number().nonnegative().optional().nullable(),
+  minimumDriverAge: z.number().int().min(16).max(100).optional().nullable(),
+  minimumRentalDays: z.number().int().min(1).optional().nullable(),
+  fuelPolicy: z.preprocess((val) => {
+    if (typeof val !== "string") return val;
+    return val.toLowerCase().replace(/-/g, "_").replace(/\s+/g, "_");
+  }, z.enum(["full_to_full", "same_to_same", "free_tank", "full_to_empty", "pre_purchase"])).optional().nullable(),
+  extraKmRate: z.number().nonnegative().optional().nullable(),
+  roadsideAssistance: z.boolean().optional().nullable(),
+  crossBorderAllowed: z.boolean().optional().nullable(),
+  airportPickup: z.boolean().optional().nullable(),
+  deliveryEnabled: z.boolean().optional().nullable(),
+  deliveryRadiusKm: z.number().int().nonnegative().optional().nullable(),
+  deliveryFee: z.number().nonnegative().optional().nullable(),
+  pickupHoursFrom: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  pickupHoursTo: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  returnSameLocation: z.boolean().optional().nullable(),
+  insuranceType: z.preprocess((val) => {
+    if (typeof val !== "string") return val;
+    return val.toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/-/g, "_")
+      .replace("3rd", "third");
+  }, z.enum(["basic", "standard", "premium", "comprehensive", "basic_third_party", "premium_zero_excess"])).optional().nullable(),
+}).refine((data) => {
+  if (data.longStayEnabled) {
+    return (
+      data.longStayMinNights !== undefined && data.longStayMinNights !== null && data.longStayMinNights >= 1 &&
+      data.longStayDiscountType !== undefined && data.longStayDiscountType !== null &&
+      data.longStayDiscountValue !== undefined && data.longStayDiscountValue !== null && data.longStayDiscountValue > 0 &&
+      (data.longStayDiscountType !== "percentage" || data.longStayDiscountValue <= 100)
+    );
+  }
+  return true;
+}, {
+  message: "If long-stay discount is enabled, min nights must be >= 1, discount type is required, and discount value must be positive (and <= 100 for percentage).",
+  path: ["longStayEnabled"],
 });
 
 // ── Helper: assert listing belongs to provider ────────────────────────────────
@@ -83,6 +220,7 @@ export async function listingRoutes(app: FastifyInstance) {
   app.post("/listings", {
     preHandler: [requireProviderRole],
     schema: {
+      tags: ["Listings"],
       body: {
         type: "object",
         properties: {
@@ -106,7 +244,7 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // GET /listings — My listings (UC-2.6 entry point)
-  app.get("/listings", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { status, page = "1", limit = "20" } = req.query as Record<string, string>;
 
@@ -155,7 +293,7 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // GET /listings/:id — Get listing detail (UC-2.6)
-  app.get("/listings/:id", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings/:id", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
@@ -170,13 +308,46 @@ export async function listingRoutes(app: FastifyInstance) {
     });
 
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    return sendSuccess(reply, 200, listing);
+
+    // Group amenities!
+    const groupedAmenities: Record<string, string[]> = {
+      Connectivity: [],
+      "Food & Drink": [],
+      Wellness: [],
+      Comfort: [],
+      Services: [],
+    };
+    for (const item of listing.amenities) {
+      const key = item.amenityKey;
+      if (key.includes(":")) {
+        const [cat = "Services", val = ""] = key.split(":");
+        if (groupedAmenities[cat]) {
+          groupedAmenities[cat].push(val);
+        } else {
+          groupedAmenities[cat] = [val];
+        }
+      } else {
+        const cat = legacyAmenityCategoryMap[key] || "Services";
+        if (!groupedAmenities[cat]) {
+          groupedAmenities[cat] = [];
+        }
+        groupedAmenities[cat].push(key);
+      }
+    }
+
+    const formattedListing = {
+      ...listing,
+      amenities: groupedAmenities,
+    };
+
+    return sendSuccess(reply, 200, formattedListing);
   });
 
   // PATCH /listings/:id — Update listing fields (UC-2.2 auto-save)
   app.patch("/listings/:id", {
     preHandler: [requireProviderRole],
     schema: {
+      tags: ["Listings"],
       params: {
         type: "object",
         required: ["id"],
@@ -187,45 +358,52 @@ export async function listingRoutes(app: FastifyInstance) {
       body: {
         type: "object",
         properties: {
-          name: { type: "string" },
-          roomType: { type: "string", enum: ["standard", "superior", "deluxe", "suite", "junior_suite", "studio", "family_room", "presidential_suite"] },
+          listingTitle: { type: "string", maxLength: 200 },
+          roomType: {
+            type: "string",
+            enum: ["standard", "superior", "deluxe", "suite", "junior_suite", "studio", "family_room", "presidential_suite"],
+          },
           unitCount: { type: "integer", minimum: 1 },
-          claimedStarRating: { type: "integer", minimum: 1, maximum: 5, nullable: true },
-          description: { type: "string", nullable: true },
-          pricePerNight: { type: "number" },
+          claimedStarRating: { type: "integer", minimum: 1, maximum: 5 },
+          description: { type: "string", maxLength: 1000 },
+          pricePerNight: { type: "number", minimum: 0 },
+          pricePerDay: { type: "number", minimum: 0 },
           currency: { type: "string", minLength: 3, maxLength: 3 },
           minStayNights: { type: "integer", minimum: 1 },
-          checkinTime: { type: "string", nullable: true },
-          checkoutTime: { type: "string", nullable: true },
+          checkinTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" },
+          checkoutTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" },
           cancellationPolicy: { type: "string", enum: ["flexible", "moderate", "strict"] },
           smokingAllowed: { type: "boolean" },
           petsAllowed: { type: "boolean" },
-          address: { type: "string", nullable: true },
-          lat: { type: "number", nullable: true },
-          lng: { type: "number", nullable: true },
-          town: { type: "string", nullable: true },
-          country: { type: "string", minLength: 2, maxLength: 2, nullable: true },
-          amenities: { type: "array", items: { type: "string" } },
-          customAmenities: { type: "array", items: { type: "string" } },
-          // apartment-specific
-          bedrooms: { type: "integer", minimum: 0, nullable: true },
-          bathrooms: { type: "integer", minimum: 0, nullable: true },
-          maxGuests: { type: "integer", minimum: 1, nullable: true },
-          longStayEnabled: { type: "boolean" },
-          longStayMinNights: { type: "integer", minimum: 1, nullable: true },
-          longStayDiscountType: { type: "string", enum: ["percentage", "fixed"], nullable: true },
-          longStayDiscountValue: { type: "number", nullable: true },
-          // car-specific
-          carMake: { type: "string", nullable: true },
-          carModel: { type: "string", nullable: true },
-          carYear: { type: "integer", minimum: 1900, maximum: 2100, nullable: true },
-          transmission: { type: "string", enum: ["manual", "automatic"], nullable: true },
-          fuelType: { type: "string", enum: ["petrol", "diesel", "electric", "hybrid"], nullable: true },
-          seats: { type: "integer", minimum: 1, nullable: true },
-          doors: { type: "integer", minimum: 2, nullable: true },
-          mileagePolicy: { type: "string", enum: ["unlimited", "limited"], nullable: true },
-          mileageLimitKm: { type: "integer", minimum: 1, nullable: true },
-        }
+          address: { type: "string" },
+          town: { type: "string", maxLength: 100 },
+          country: { type: "string", minLength: 2, maxLength: 2 },
+          amenities: {
+            type: "object",
+            properties: {
+              Connectivity: { type: "array", items: { type: "string" } },
+              "Food & Drink": { type: "array", items: { type: "string" } },
+              Wellness: { type: "array", items: { type: "string" } },
+              Comfort: { type: "array", items: { type: "string" } },
+              Services: { type: "array", items: { type: "string" } },
+            },
+            additionalProperties: true,
+          },
+          customAmenities: { type: "array", items: { type: "string", maxLength: 60 } },
+          instantBooking: { type: "boolean" },
+          selfCheckin: { type: "boolean" },
+          selfCheckinDetails: { type: "string", maxLength: 500 },
+          apartmentType: { type: "string", enum: ["entire_place", "private_room", "shared_room", "studio", "loft", "villa", "townhouse"] },
+          cleaningFee: { type: "number", minimum: 0 },
+          extraGuestFee: { type: "number", minimum: 0 },
+          extraGuestAfter: { type: "integer", minimum: 1 },
+          weeklyDiscount: { type: "number", minimum: 0 },
+          monthlyDiscount: { type: "number", minimum: 0 },
+          floorNumber: { type: "integer" },
+          propertySizeM2: { type: "number", minimum: 0 },
+          securityDepositDue: { type: "string", maxLength: 30 },
+        },
+        additionalProperties: true,
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -249,7 +427,41 @@ export async function listingRoutes(app: FastifyInstance) {
       return sendError(reply, 422, "VALIDATION_ERROR", "Invalid listing data.", fields);
     }
 
-    const { amenities, customAmenities, ...fields } = parsed.data;
+    const {
+      amenities,
+      customAmenities,
+      listingTitle,
+      make,
+      model,
+      year,
+      category,
+      pricePerDay,
+      ...fields
+    } = parsed.data;
+
+    // Map aliases to database columns
+    const dbFields: any = { ...fields };
+    if (listingTitle !== undefined) dbFields.name = listingTitle;
+    if (make !== undefined) dbFields.carMake = make;
+    if (model !== undefined) dbFields.carModel = model;
+    if (year !== undefined) dbFields.carYear = year;
+    if (pricePerDay !== undefined) dbFields.pricePerDay = pricePerDay;
+    if (category !== undefined && listing.category === "car") {
+      dbFields.carCategory = category;
+    }
+
+    // Geocoding Rules (Requirement 5)
+    // Address selection MUST auto-fill: lat, lng, town, country.
+    // Manual pin drag updates ONLY lat/lng.
+    if (parsed.data.address && parsed.data.address !== listing.address) {
+      const geo = await geocodeAddress(parsed.data.address);
+      if (geo) {
+        dbFields.lat = geo.lat;
+        dbFields.lng = geo.lng;
+        dbFields.town = geo.town;
+        dbFields.country = geo.country;
+      }
+    }
 
     // Reset to draft if was rejected; active apartments stay active
     const newStatus = listing.status === "rejected" ? "draft" : listing.status;
@@ -257,14 +469,32 @@ export async function listingRoutes(app: FastifyInstance) {
     await prisma.$transaction(async (tx) => {
       await tx.listing.update({
         where: { id },
-        data: { ...fields, status: newStatus },
+        data: {
+          ...dbFields,
+          status: newStatus,
+          // These fields are non-nullable with DB defaults — convert null→undefined
+          // so Prisma leaves the existing value intact rather than throwing a type error.
+          roadsideAssistance: dbFields.roadsideAssistance ?? undefined,
+          crossBorderAllowed: dbFields.crossBorderAllowed ?? undefined,
+          airportPickup: dbFields.airportPickup ?? undefined,
+          deliveryEnabled: dbFields.deliveryEnabled ?? undefined,
+          returnSameLocation: dbFields.returnSameLocation ?? undefined,
+        },
       });
 
       if (amenities !== undefined) {
         await tx.listingAmenity.deleteMany({ where: { listingId: id } });
-        if (amenities.length > 0) {
+        const flatAmenities: string[] = [];
+        for (const [categoryName, keys] of Object.entries(amenities)) {
+          if (Array.isArray(keys)) {
+            for (const k of keys) {
+              flatAmenities.push(`${categoryName}:${k}`);
+            }
+          }
+        }
+        if (flatAmenities.length > 0) {
           await tx.listingAmenity.createMany({
-            data: amenities.map((key) => ({ listingId: id, amenityKey: key })),
+            data: flatAmenities.map((key) => ({ listingId: id, amenityKey: key })),
           });
         }
       }
@@ -283,7 +513,7 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/submit — Submit for review (UC-2.7)
-  app.post("/listings/:id/submit", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/submit", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
@@ -296,25 +526,48 @@ export async function listingRoutes(app: FastifyInstance) {
     });
 
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    
+    if (listing.category !== "hotel") {
+      return sendError(reply, 422, "INVALID_CATEGORY", "Only hotel listings require manual admin review. Please use the activation endpoint for apartments and car rentals.");
+    }
+
     if (!["draft", "rejected"].includes(listing.status)) {
       return sendError(reply, 409, "INVALID_STATUS", "Only draft or rejected listings can be submitted.");
     }
 
-    // Pre-submission validation
+    // Pre-submission validation (Hotel Module)
     const failures: string[] = [];
-    if (!listing.name) failures.push("Property name is required.");
+    if (!listing.name?.trim()) failures.push("Property name is required.");
     if (!listing.roomType) failures.push("Room type is required.");
     if (!listing.unitCount || listing.unitCount < 1) failures.push("Number of units is required.");
-    if (!listing.pricePerNight) failures.push("Price per night is required.");
+    if (!listing.pricePerNight || Number(listing.pricePerNight) <= 0) failures.push("Price per night must be greater than 0.");
     if (!listing.currency) failures.push("Currency is required.");
     if (!listing.address || !listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
+    if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
     if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
-    if (listing.photos.length === 0) failures.push("At least one photo is required.");
+    if (!listing.checkinTime) failures.push("Check-in time is required.");
+    if (!listing.checkoutTime) failures.push("Check-out time is required.");
+    if (!listing.minStayNights || listing.minStayNights < 1) failures.push("Minimum stay must be at least 1 night.")
+    // Description validation
+    if (!listing.description?.trim()) failures.push("Description is required.");
+    if (listing.description && listing.description.length > 1000) failures.push("Description cannot exceed 1000 characters.");
 
+    // Photos check
+    if (listing.photos.length === 0) {
+      failures.push("At least one photo is required.");
+    } else if (listing.photos.length > 30) {
+      failures.push("Maximum of 30 photos is allowed.");
+    }
+
+    // Documents check
     const docTypes = listing.documents.map((d) => d.documentType);
     if (!docTypes.includes("business_licence")) failures.push("Business licence document is required.");
-    if (!docTypes.includes("operating_permit")) failures.push("Hotel operating permit document is required.");
-    if (!docTypes.includes("tourism_certificate")) failures.push("Tourism authority certificate is required.");
+    if (!docTypes.includes("operating_permit") && !docTypes.includes("hotel_operating_permit")) {
+      failures.push("Hotel operating permit document is required.");
+    }
+    if (!docTypes.includes("tourism_certificate") && !docTypes.includes("tourism_authority_certificate")) {
+      failures.push("Tourism authority certificate is required.");
+    }
 
     if (failures.length > 0) {
       return sendError(reply, 422, "VALIDATION_ERROR", failures.join(" "));
@@ -346,43 +599,122 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/activate — Apartment auto-activation (UC-3.5) + Car activation (UC-4.5)
-  app.post("/listings/:id/activate", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/activate", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
+    const currentYear = new Date().getFullYear();
 
     const listing = await prisma.listing.findFirst({
       where: { id, providerId, deletedAt: null },
-      include: { photos: { where: { deletedAt: null } } },
+      include: {
+        photos: { where: { deletedAt: null } },
+        documents: { where: { replacedAt: null } },
+      },
     });
 
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (!["apartment", "car"].includes(listing.category)) {
-      return sendError(reply, 422, "INVALID_CATEGORY", "Only apartment and car listings can be auto-activated. Hotels require admin review.");
+    if (!listing) {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
     }
+
+    if (!["apartment", "car"].includes(listing.category)) {
+      return sendError(
+        reply,
+        422,
+        "INVALID_CATEGORY",
+        "Only apartment and car listings can be auto-activated. Hotels require admin review."
+      );
+    }
+
     if (!["draft", "deactivated"].includes(listing.status)) {
       return sendError(reply, 409, "INVALID_STATUS", "Only draft or deactivated listings can be activated.");
     }
 
     const failures: string[] = [];
-    if (!listing.name?.trim()) failures.push("Listing title is required.");
-    if (!listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
-    if (!listing.pricePerNight || Number(listing.pricePerNight) <= 0) failures.push("Price per night must be greater than 0.");
-    if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
 
+    // apartment rules
     if (listing.category === "apartment") {
-      if (!listing.maxGuests || listing.maxGuests < 1) failures.push("Maximum guests must be at least 1.");
+      if (!listing.name?.trim()) failures.push("Apartment name is required.");
+      if (!listing.description?.trim()) failures.push("Description is required.");
+      if (listing.description && listing.description.length > 1000) failures.push("Description cannot exceed 1000 characters.");
+      if (!listing.address || !listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
+      if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+      if (listing.bedrooms === null || listing.bedrooms === undefined || listing.bedrooms < 0) failures.push("Number of bedrooms is required.");
+      if (listing.bathrooms === null || listing.bathrooms === undefined || listing.bathrooms < 0) failures.push("Number of bathrooms is required.");
+      if (listing.maxGuests === null || listing.maxGuests === undefined || listing.maxGuests < 1) failures.push("Maximum guests must be at least 1.");
+      if (!listing.pricePerNight || Number(listing.pricePerNight) <= 0) failures.push("Price per night must be greater than 0.");
+      if (!listing.currency) failures.push("Currency is required.");
+      if (!listing.checkinTime) failures.push("Check-in time is required.");
+      if (!listing.checkoutTime) failures.push("Check-out time is required.");
+      if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
+      if (listing.minStayNights === null || listing.minStayNights === undefined || listing.minStayNights < 1) failures.push("Minimum stay must be at least 1 night.");
+
+      if (listing.longStayEnabled) {
+        if (!listing.longStayMinNights || listing.longStayMinNights < 1) failures.push("Long-stay minimum nights must be at least 1 when long-stay discount is enabled.");
+        if (!listing.longStayDiscountType) failures.push("Long-stay discount type is required when long-stay discount is enabled.");
+        if (!listing.longStayDiscountValue || Number(listing.longStayDiscountValue) <= 0) failures.push("Long-stay discount value must be greater than 0 when long-stay discount is enabled.");
+        if (listing.longStayDiscountType === "percentage" && Number(listing.longStayDiscountValue) > 100) failures.push("Long-stay discount percentage cannot exceed 100%.");
+      }
+
+      if (listing.photos.length < 3 || listing.photos.length > 30) {
+        failures.push(`Photos count must be between 3 and 30. You have ${listing.photos.length}.`);
+      }
     }
 
+    // car rules
     if (listing.category === "car") {
+      if (!listing.name?.trim()) failures.push("Listing title is required.");
       if (!listing.carMake?.trim()) failures.push("Vehicle make is required.");
       if (!listing.carModel?.trim()) failures.push("Vehicle model is required.");
-      if (!listing.carYear) failures.push("Vehicle year is required.");
+      if (!listing.carYear || listing.carYear < 1990 || listing.carYear > currentYear) {
+        failures.push(`Vehicle year must be between 1990 and ${currentYear}.`);
+      }
+      if (!listing.carCategory) failures.push("Vehicle category is required.");
+      if (!listing.unitCount || listing.unitCount < 1) failures.push("Number of units (fleet count) is required.");
+      if (!listing.licencePlate?.trim()) failures.push("Licence plate is required.");
+      if (listing.odometerReading === null || listing.odometerReading === undefined) failures.push("Odometer reading is required.");
       if (!listing.transmission) failures.push("Transmission type is required.");
-      if (!listing.seats || listing.seats < 1) failures.push("Number of seats is required.");
-    }
+      if (!listing.fuelType) failures.push("Fuel type is required.");
+      if (listing.seats === null || listing.seats === undefined || listing.seats < 1) failures.push("Number of seats is required.");
+      if (listing.doors === null || listing.doors === undefined || listing.doors < 2) failures.push("Number of doors is required.");
+      if (listing.airConditioning === null || listing.airConditioning === undefined) failures.push("Air conditioning is required.");
+      if (!listing.driveType) failures.push("Drive type is required.");
+      if (!listing.pricePerDay || Number(listing.pricePerDay) <= 0) failures.push("Price per day must be greater than 0.");
+      if (!listing.currency) failures.push("Currency is required.");
+      if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
+      if (!listing.fuelPolicy) failures.push("Fuel policy is required.");
+      if (!listing.insuranceType) failures.push("Insurance type is required.");
 
-    if (listing.photos.length < 3) {
-      failures.push(`At least 3 photos are required. You have ${listing.photos.length}.`);
+      // Mileage policy
+      if (!listing.mileagePolicy) {
+        failures.push("Mileage policy is required.");
+      } else if (listing.mileagePolicy === "limited") {
+        if (!listing.mileageLimitKm || listing.mileageLimitKm < 1) failures.push("Mileage limit in km is required and must be positive when mileage policy is limited.");
+        if (listing.extraKmRate === null || listing.extraKmRate === undefined || Number(listing.extraKmRate) < 0) failures.push("Extra km rate is required when mileage policy is limited.");
+      }
+
+      // Delivery: if enabled, radius and fee must be set
+      if (listing.deliveryEnabled) {
+        if (!listing.deliveryRadiusKm || listing.deliveryRadiusKm < 1) failures.push("Delivery radius is required when delivery is enabled.");
+        if (listing.deliveryFee === null || listing.deliveryFee === undefined || Number(listing.deliveryFee) < 0) failures.push("Delivery fee is required when delivery is enabled.");
+      }
+
+      if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
+      if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+
+      if (!listing.fuelType) failures.push("Fuel type is required.");
+      if (!listing.insuranceType) failures.push("Insurance type is required.");
+
+      const docTypes = listing.documents.map((d) => d.documentType);
+      if (!docTypes.includes("vehicle_registration")) {
+        failures.push("Vehicle registration document is required.");
+      }
+      if (!docTypes.includes("insurance_certificate")) {
+        failures.push("Insurance certificate document is required.");
+      }
+
+      if (listing.photos.length < 3 || listing.photos.length > 30) {
+        failures.push(`Photos count must be between 3 and 30. You have ${listing.photos.length}.`);
+      }
     }
 
     if (failures.length > 0) {
@@ -391,17 +723,29 @@ export async function listingRoutes(app: FastifyInstance) {
 
     await prisma.listing.update({
       where: { id },
-      data: { status: "active", activatedAt: listing.activatedAt ?? new Date() },
+      data: {
+        status: "active",
+        activatedAt: listing.activatedAt ?? new Date(),
+      },
     });
 
-    sendListingActivatedEmail(providerId, listing.name!, listing.category as "apartment" | "car").catch(() => null);
+    sendListingActivatedEmail(
+      providerId,
+      listing.name!,
+      listing.category as "apartment" | "car"
+    ).catch(() => null);
 
-    const msg = listing.category === "car" ? "Your car rental is now live!" : "Your apartment is now live!";
-    return sendSuccess(reply, 200, { message: msg, status: "active" });
+    return sendSuccess(reply, 200, {
+      message:
+        listing.category === "car"
+          ? "Your car rental is now live!"
+          : "Your apartment is now live!",
+      status: "active",
+    });
   });
 
   // POST /listings/:id/deactivate — UC-2.13 / UC-3.7
-  app.post("/listings/:id/deactivate", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/deactivate", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
@@ -418,35 +762,110 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/reactivate — UC-2.13 A1 / UC-3.7
-  app.post("/listings/:id/reactivate", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/reactivate", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
+    const currentYear = new Date().getFullYear();
 
     const listing = await prisma.listing.findFirst({
       where: { id, providerId, deletedAt: null },
-      include: { photos: { where: { deletedAt: null } } },
+      include: {
+        photos: { where: { deletedAt: null } },
+        documents: { where: { replacedAt: null } },
+      },
     });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
     if (listing.status !== "deactivated") return sendError(reply, 409, "INVALID_STATUS", "Listing is not deactivated.");
 
     if (listing.category === "apartment" || listing.category === "car") {
-      // Re-run activation validation
       const failures: string[] = [];
-      if (!listing.name?.trim()) failures.push("Listing title is required.");
-      if (!listing.lat || !listing.lng) failures.push("Geocoded address is required.");
-      if (!listing.pricePerNight || Number(listing.pricePerNight) <= 0) failures.push("Price per night must be greater than 0.");
-      if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
+
+      // apartment rules
       if (listing.category === "apartment") {
-        if (!listing.maxGuests || listing.maxGuests < 1) failures.push("Maximum guests must be at least 1.");
+        if (!listing.name?.trim()) failures.push("Apartment name is required.");
+        if (!listing.description?.trim()) failures.push("Description is required.");
+        if (listing.description && listing.description.length > 1000) failures.push("Description cannot exceed 1000 characters.");
+        if (!listing.address || !listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
+        if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+        if (listing.bedrooms === null || listing.bedrooms === undefined || listing.bedrooms < 0) failures.push("Number of bedrooms is required.");
+        if (listing.bathrooms === null || listing.bathrooms === undefined || listing.bathrooms < 0) failures.push("Number of bathrooms is required.");
+        if (listing.maxGuests === null || listing.maxGuests === undefined || listing.maxGuests < 1) failures.push("Maximum guests must be at least 1.");
+        if (!listing.pricePerNight || Number(listing.pricePerNight) <= 0) failures.push("Price per night must be greater than 0.");
+        if (!listing.currency) failures.push("Currency is required.");
+        if (!listing.checkinTime) failures.push("Check-in time is required.");
+        if (!listing.checkoutTime) failures.push("Check-out time is required.");
+        if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
+        if (listing.minStayNights === null || listing.minStayNights === undefined || listing.minStayNights < 1) failures.push("Minimum stay must be at least 1 night.");
+
+        if (listing.longStayEnabled) {
+          if (!listing.longStayMinNights || listing.longStayMinNights < 1) failures.push("Long-stay minimum nights must be at least 1 when long-stay discount is enabled.");
+          if (!listing.longStayDiscountType) failures.push("Long-stay discount type is required when long-stay discount is enabled.");
+          if (!listing.longStayDiscountValue || Number(listing.longStayDiscountValue) <= 0) failures.push("Long-stay discount value must be greater than 0 when long-stay discount is enabled.");
+          if (listing.longStayDiscountType === "percentage" && Number(listing.longStayDiscountValue) > 100) failures.push("Long-stay discount percentage cannot exceed 100%.");
+        }
+
+        if (listing.photos.length < 3 || listing.photos.length > 30) {
+          failures.push(`Photos count must be between 3 and 30. You have ${listing.photos.length}.`);
+        }
       }
+
+      // car rules
       if (listing.category === "car") {
+        if (!listing.name?.trim()) failures.push("Listing title is required.");
         if (!listing.carMake?.trim()) failures.push("Vehicle make is required.");
         if (!listing.carModel?.trim()) failures.push("Vehicle model is required.");
-        if (!listing.carYear) failures.push("Vehicle year is required.");
+        if (!listing.carYear || listing.carYear < 1990 || listing.carYear > currentYear) {
+          failures.push(`Vehicle year must be between 1990 and ${currentYear}.`);
+        }
+        if (!listing.carCategory) failures.push("Vehicle category is required.");
+        if (!listing.unitCount || listing.unitCount < 1) failures.push("Number of units (fleet count) is required.");
+        if (!listing.licencePlate?.trim()) failures.push("Licence plate is required.");
+        if (listing.odometerReading === null || listing.odometerReading === undefined) failures.push("Odometer reading is required.");
         if (!listing.transmission) failures.push("Transmission type is required.");
-        if (!listing.seats || listing.seats < 1) failures.push("Number of seats is required.");
+        if (!listing.fuelType) failures.push("Fuel type is required.");
+        if (listing.seats === null || listing.seats === undefined || listing.seats < 1) failures.push("Number of seats is required.");
+        if (listing.doors === null || listing.doors === undefined || listing.doors < 2) failures.push("Number of doors is required.");
+        if (listing.airConditioning === null || listing.airConditioning === undefined) failures.push("Air conditioning is required.");
+        if (!listing.driveType) failures.push("Drive type is required.");
+        if (!listing.pricePerDay || Number(listing.pricePerDay) <= 0) failures.push("Price per day must be greater than 0.");
+        if (!listing.currency) failures.push("Currency is required.");
+        if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
+        if (!listing.fuelPolicy) failures.push("Fuel policy is required.");
+        if (!listing.insuranceType) failures.push("Insurance type is required.");
+        
+        // Mileage policy
+        if (!listing.mileagePolicy) {
+          failures.push("Mileage policy is required.");
+        } else if (listing.mileagePolicy === "limited") {
+          if (!listing.mileageLimitKm || listing.mileageLimitKm < 1) failures.push("Mileage limit in km is required and must be positive when mileage policy is limited.");
+          if (listing.extraKmRate === null || listing.extraKmRate === undefined || Number(listing.extraKmRate) < 0) failures.push("Extra km rate is required when mileage policy is limited.");
+        }
+
+        // Delivery: if enabled, radius and fee must be set
+        if (listing.deliveryEnabled) {
+          if (!listing.deliveryRadiusKm || listing.deliveryRadiusKm < 1) failures.push("Delivery radius is required when delivery is enabled.");
+          if (listing.deliveryFee === null || listing.deliveryFee === undefined || Number(listing.deliveryFee) < 0) failures.push("Delivery fee is required when delivery is enabled.");
+        }
+
+        if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
+        if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+
+        if (!listing.fuelType) failures.push("Fuel type is required.");
+        if (!listing.insuranceType) failures.push("Insurance type is required.");
+
+        const docTypes = listing.documents.map((d) => d.documentType);
+        if (!docTypes.includes("vehicle_registration")) {
+          failures.push("Vehicle registration document is required.");
+        }
+        if (!docTypes.includes("insurance_certificate")) {
+          failures.push("Insurance certificate document is required.");
+        }
+
+        if (listing.photos.length < 3 || listing.photos.length > 30) {
+          failures.push(`Photos count must be between 3 and 30. You have ${listing.photos.length}.`);
+        }
       }
-      if (listing.photos.length < 3) failures.push(`At least 3 photos required (you have ${listing.photos.length}).`);
+
       if (failures.length > 0) return sendError(reply, 422, "VALIDATION_ERROR", failures.join(" "), { failures });
 
       await prisma.listing.update({ where: { id }, data: { status: "active" } });
@@ -458,7 +877,7 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // DELETE /listings/:id — Soft-delete draft (UC-2.13 A2)
-  app.delete("/listings/:id", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/listings/:id", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
@@ -476,10 +895,14 @@ export async function listingRoutes(app: FastifyInstance) {
   // ── Photo endpoints ────────────────────────────────────────────────────────
 
   // POST /listings/:id/photos/presign — Request presigned S3 upload URL
-  app.post("/listings/:id/photos/presign", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/photos/presign", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
-    const { contentType, filename } = req.body as { contentType: string; filename: string };
+    const { contentType, filename, fileSize } = req.body as { contentType: string; filename: string; fileSize?: number };
+
+    if (fileSize !== undefined && fileSize > 5 * 1024 * 1024) {
+      return sendError(reply, 422, "FILE_TOO_LARGE", "Image size cannot exceed 5 MB.");
+    }
 
     if (!isValidPhotoType(contentType)) {
       return sendError(reply, 422, "INVALID_TYPE", "Only JPEG, PNG, and WEBP photos are accepted.");
@@ -500,7 +923,7 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/photos/confirm — Register photo after S3 upload
-  app.post("/listings/:id/photos/confirm", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/photos/confirm", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { s3Key } = req.body as { s3Key: string };
@@ -526,7 +949,7 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // PATCH /listings/:id/photos/reorder — Update photo positions (UC-2.5 A1, A2)
-  app.patch("/listings/:id/photos/reorder", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/listings/:id/photos/reorder", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { order } = req.body as { order: string[] }; // array of photo IDs in new order
@@ -547,7 +970,7 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // DELETE /listings/:id/photos/:photoId — Remove photo (UC-2.5 A3)
-  app.delete("/listings/:id/photos/:photoId", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/listings/:id/photos/:photoId", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id, photoId } = req.params as { id: string; photoId: string };
 
@@ -578,7 +1001,7 @@ export async function listingRoutes(app: FastifyInstance) {
   // ── Document endpoints ─────────────────────────────────────────────────────
 
   // POST /listings/:id/documents/presign — Request presigned S3 URL for document
-  app.post("/listings/:id/documents/presign", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/documents/presign", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { contentType, documentType } = req.body as { contentType: string; documentType: string };
@@ -586,7 +1009,7 @@ export async function listingRoutes(app: FastifyInstance) {
     if (!isValidDocumentType(contentType)) {
       return sendError(reply, 422, "INVALID_TYPE", "Only PDF, JPEG, PNG, and WEBP files are accepted.");
     }
-    if (!["business_licence", "operating_permit", "tourism_certificate"].includes(documentType)) {
+    if (!ALLOWED_DOC_TYPES.has(documentType)) {
       return sendError(reply, 422, "INVALID_DOC_TYPE", "Invalid document type.");
     }
 
@@ -600,12 +1023,12 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/documents/confirm — Register document after S3 upload
-  app.post("/listings/:id/documents/confirm", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/documents/confirm", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { s3Key, documentType, contentType } = req.body as { s3Key: string; documentType: string; contentType: string };
 
-    if (!["business_licence", "operating_permit", "tourism_certificate"].includes(documentType)) {
+    if (!ALLOWED_DOC_TYPES.has(documentType)) {
       return sendError(reply, 422, "INVALID_DOC_TYPE", "Invalid document type.");
     }
 
@@ -614,7 +1037,7 @@ export async function listingRoutes(app: FastifyInstance) {
 
     // Mark any existing doc of this type as replaced
     await prisma.listingDocument.updateMany({
-      where: { listingId: id, documentType: documentType as "business_licence" | "operating_permit" | "tourism_certificate", replacedAt: null },
+      where: { listingId: id, documentType: documentType as any, replacedAt: null },
       data: { replacedAt: new Date() },
     });
 
@@ -625,7 +1048,7 @@ export async function listingRoutes(app: FastifyInstance) {
         prisma.listingDocument.create({
           data: {
             listingId: id,
-            documentType: documentType as "business_licence" | "operating_permit" | "tourism_certificate",
+            documentType: documentType as any,
             s3Key,
             fileType: fileExtFromContentType(contentType),
           },
@@ -644,7 +1067,7 @@ export async function listingRoutes(app: FastifyInstance) {
     const doc = await prisma.listingDocument.create({
       data: {
         listingId: id,
-        documentType: documentType as "business_licence" | "operating_permit" | "tourism_certificate",
+        documentType: documentType as any,
         s3Key,
         fileType: fileExtFromContentType(contentType),
       },
@@ -654,7 +1077,7 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // DELETE /listings/:id/documents/:docId — Remove document before submission
-  app.delete("/listings/:id/documents/:docId", { preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/listings/:id/documents/:docId", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id, docId } = req.params as { id: string; docId: string };
 
@@ -666,7 +1089,7 @@ export async function listingRoutes(app: FastifyInstance) {
     });
     if (!doc) return sendError(reply, 404, "NOT_FOUND", "Document not found.");
     if (!["draft", "rejected"].includes(listing.status)) {
-      return sendError(reply, 409, "CANNOT_DELETE", "Documents can only be removed from draft listings.");
+      return sendError(reply, 409, "CANNOT_DELETE", "Documents can only be removed from draft or rejected listings.");
     }
 
     await prisma.listingDocument.update({ where: { id: docId }, data: { replacedAt: new Date() } });
@@ -674,7 +1097,7 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // GET /geocode — Geocoding proxy; accepts placeId, address, or lat+lng (UC-2.3)
-  app.get("/geocode", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/geocode", { schema: { tags: ["Listings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { placeId, address, lat, lng } = req.query as { placeId?: string; address?: string; lat?: string; lng?: string };
 
     if (address) {
@@ -697,6 +1120,3 @@ export async function listingRoutes(app: FastifyInstance) {
     return sendError(reply, 422, "MISSING_PARAMS", "Provide either address, placeId, or lat+lng.");
   });
 }
-
-// re-export requireProvider for use in geocode route
-import { requireProvider } from "../middleware/auth.js";
