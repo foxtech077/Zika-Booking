@@ -197,7 +197,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "C:\\Users\\nicho\\Desktop\\Zika-Booking\\services\\payment-service\\src\\generated",
+      "value": "/home/ajin_f_g/projects/Zika-Booking/services/payment-service/src/generated",
       "fromEnvVar": null
     },
     "config": {
@@ -206,7 +206,7 @@ const config = {
     "binaryTargets": [
       {
         "fromEnvVar": null,
-        "value": "windows",
+        "value": "debian-openssl-3.0.x",
         "native": true
       },
       {
@@ -215,12 +215,11 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "C:\\Users\\nicho\\Desktop\\Zika-Booking\\services\\payment-service\\prisma\\schema.prisma",
+    "sourceFilePath": "/home/ajin_f_g/projects/Zika-Booking/services/payment-service/prisma/schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
-    "rootEnvPath": null,
-    "schemaEnvPath": "../../.env"
+    "rootEnvPath": null
   },
   "relativePath": "../../prisma",
   "clientVersion": "6.19.3",
