@@ -15,6 +15,20 @@ interface FieldErrors {
   general?: string;
 }
 
+export function handleRoleAndStatusRedirect(user: PublicUser) {
+  if (user.userType === "provider") {
+    if (user.status === "pending_verification") {
+      router.replace("/pending-approval");
+    } else if (user.status === "suspended" || user.status === "banned") {
+      router.replace("/suspended");
+    } else {
+      router.replace("/(provider)");
+    }
+  } else {
+    router.replace("/(tabs)");
+  }
+}
+
 export default function LoginScreen() {
   const [form, setForm] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -23,9 +37,12 @@ export default function LoginScreen() {
   const set = (key: keyof typeof form) => (val: string) =>
     setForm((prev) => ({ ...prev, [key]: val }));
 
+  const setGeneralError = (msg: string | null) =>
+    setErrors((prev) => ({ ...prev, general: msg ?? undefined }));
+
   const loginMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", { email, password });
+      const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", { email: form.email, password: form.password });
       if (!res.data.success) throw res.data;
       return res.data.data;
     },
@@ -40,7 +57,7 @@ export default function LoginScreen() {
       if (structuredError) {
         const apiErr = (data as { success: false; error: { code: string; message: string } }).error;
         if (apiErr.code === "EMAIL_NOT_VERIFIED") {
-          router.push({ pathname: "/(auth)/verify-pending", params: { email } });
+          router.push({ pathname: "/(auth)/verify-pending", params: { email: form.email } });
           return;
         }
         setGeneralError(apiErr.message);
@@ -54,7 +71,7 @@ export default function LoginScreen() {
   });
 
   function handleSubmit() {
-    if (!email.trim() || !password) {
+    if (!form.email.trim() || !form.password) {
       setGeneralError("Please enter your email and password.");
       return;
     }
@@ -119,7 +136,7 @@ export default function LoginScreen() {
         </View>
 
         {/* OAuth */}
-        <GoogleSignInButton />
+        <GoogleSignInButton onError={(msg) => setErrors({ general: msg })} />
         {Platform.OS === "ios" && <View className="mt-3"><AppleSignInButton /></View>}
 
         <View className="flex-row justify-center mt-8 mb-8">
@@ -139,7 +156,7 @@ function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!GoogleSignin) {
+      if (!_GoogleSignin) {
         // Simulated login for testing purposes in Expo Go / Development
         const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", {
           email: "test@kainook.com",
@@ -148,16 +165,16 @@ function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
         if (!res.data.success) throw res.data;
         return res.data.data;
       }
-      await GoogleSignin.hasPlayServices();
-      const signInResult = await GoogleSignin.signIn();
+      await _GoogleSignin.hasPlayServices();
+      const signInResult = await _GoogleSignin.signIn();
       const idToken = (signInResult as any).data?.idToken ?? (signInResult as any).idToken;
       if (!idToken) throw new Error("No ID token");
       const res = await api.post("/auth/oauth/google", { idToken });
       return (res.data as { data: AuthResponse }).data;
     },
     onSuccess: async (data) => {
-      if (!GoogleSignin) {
-        Alert.alert("Google Sign-In", "Google Sign-In is simulated in Expo Go. Signed in successfully as test@zika.com.");
+      if (!_GoogleSignin) {
+        Alert.alert("Google Sign-In", "Google Sign-In is simulated in Expo Go. Signed in successfully as test@kainook.com.");
       }
       await setAuth(data.user, data.tokens.accessToken);
       handleRoleAndStatusRedirect(data.user);
