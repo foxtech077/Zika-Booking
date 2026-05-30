@@ -1,11 +1,72 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
+import { requireProvider } from "../middleware/auth.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 export async function voucherRoutes(app: FastifyInstance) {
   // ── POST /vouchers/validate — validate a voucher code ────────────────
-  app.post("/vouchers/validate", { schema: { tags: ["Vouchers"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/vouchers/validate", {
+    schema: {
+      tags: ["Vouchers"],
+      body: {
+        type: "object",
+        required: ["code", "totalAmount"],
+        properties: {
+          code: { type: "string" },
+          totalAmount: { type: "number", minimum: 0 },
+          currency: { type: "string", minLength: 3, maxLength: 3 }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                valid: { type: "boolean" },
+                discountAmount: { type: "number" },
+                voucherDiscount: { type: "number" },
+                message: { type: "string" },
+                voucher: {
+                  type: "object",
+                  nullable: true,
+                  properties: {
+                    code: { type: "string" },
+                    discountType: { type: "string", enum: ["percentage", "fixed"] },
+                    discountValue: { type: "number" },
+                    maxDiscount: { type: "number", nullable: true },
+                    validUntil: { type: "string" }
+                  },
+                  required: ["code", "discountType", "discountValue", "maxDiscount", "validUntil"]
+                }
+              },
+              required: ["valid", "discountAmount", "voucherDiscount", "message"]
+            }
+          },
+          required: ["success", "data"]
+        },
+        400: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        }
+      }
+    },
+    preHandler: [requireProvider]
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as { code: string; totalAmount: number; currency?: string };
 
     if (!body.code || body.totalAmount === undefined) {
@@ -16,16 +77,16 @@ export async function voucherRoutes(app: FastifyInstance) {
     const voucher = await prisma.voucher.findUnique({ where: { code: body.code } });
 
     if (!voucher) {
-      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher code not found." });
+      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher code not found.", voucher: null });
     }
     if (!voucher.isActive) {
-      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not active." });
+      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not active.", voucher: null });
     }
     if (now < voucher.validFrom || now > voucher.validUntil) {
-      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher has expired or is not yet valid." });
+      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher has expired or is not yet valid.", voucher: null });
     }
     if (voucher.usageLimit !== null && voucher.usageCount >= voucher.usageLimit) {
-      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher usage limit has been reached." });
+      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher usage limit has been reached.", voucher: null });
     }
     if (voucher.minOrderValue !== null && body.totalAmount < Number(voucher.minOrderValue)) {
       return sendSuccess(reply, 200, {
@@ -33,6 +94,7 @@ export async function voucherRoutes(app: FastifyInstance) {
         discountAmount: 0,
         voucherDiscount: 0,
         message: `Minimum order value of ${Number(voucher.minOrderValue)} required to use this voucher.`,
+        voucher: null
       });
     }
 
@@ -65,7 +127,88 @@ export async function voucherRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/vouchers — create a voucher ───────────────────────────
-  app.post("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/vouchers", {
+    schema: {
+      tags: ["Admin Vouchers"],
+      body: {
+        type: "object",
+        required: ["code", "discountType", "discountValue", "validFrom", "validUntil"],
+        properties: {
+          code: { type: "string" },
+          discountType: { type: "string", enum: ["percentage", "fixed"] },
+          discountValue: { type: "number", minimum: 0.01 },
+          minOrderValue: { type: "number", minimum: 0, nullable: true },
+          maxDiscount: { type: "number", minimum: 0, nullable: true },
+          usageLimit: { type: "integer", minimum: 1, nullable: true },
+          validFrom: { type: "string" },
+          validUntil: { type: "string" }
+        }
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                code: { type: "string" },
+                discountType: { type: "string", enum: ["percentage", "fixed"] },
+                discountValue: { type: "number" },
+                minOrderValue: { type: "number", nullable: true },
+                maxDiscount: { type: "number", nullable: true },
+                usageLimit: { type: "integer", nullable: true },
+                usageCount: { type: "integer" },
+                validFrom: { type: "string" },
+                validUntil: { type: "string" },
+                isActive: { type: "boolean" },
+                createdAt: { type: "string" }
+              },
+              required: [
+                "id", "code", "discountType", "discountValue", "minOrderValue",
+                "maxDiscount", "usageLimit", "usageCount", "validFrom", "validUntil",
+                "isActive", "createdAt"
+              ]
+            }
+          },
+          required: ["success", "data"]
+        },
+        400: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        },
+        409: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        }
+      }
+    },
+    // FIX: requireAdmin added — previously unprotected
+    preHandler: [requireAdmin]
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as {
       code: string;
       discountType: "percentage" | "fixed";
@@ -135,7 +278,55 @@ export async function voucherRoutes(app: FastifyInstance) {
   });
 
   // ── GET /admin/vouchers — list all vouchers ───────────────────────────
-  app.get("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] } }, async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/vouchers", {
+    schema: {
+      tags: ["Admin Vouchers"],
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                vouchers: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      code: { type: "string" },
+                      discountType: { type: "string", enum: ["percentage", "fixed"] },
+                      discountValue: { type: "number" },
+                      minOrderValue: { type: "number", nullable: true },
+                      maxDiscount: { type: "number", nullable: true },
+                      usageLimit: { type: "integer", nullable: true },
+                      usageCount: { type: "integer" },
+                      redemptionCount: { type: "integer" },
+                      validFrom: { type: "string" },
+                      validUntil: { type: "string" },
+                      isActive: { type: "boolean" },
+                      createdBy: { type: "string" },
+                      createdAt: { type: "string" }
+                    },
+                    required: [
+                      "id", "code", "discountType", "discountValue", "minOrderValue",
+                      "maxDiscount", "usageLimit", "usageCount", "redemptionCount",
+                      "validFrom", "validUntil", "isActive", "createdBy", "createdAt"
+                    ]
+                  }
+                }
+              },
+              required: ["vouchers"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    },
+    // FIX: requireAdmin added — previously unprotected
+    preHandler: [requireAdmin]
+  }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const vouchers = await prisma.voucher.findMany({
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { redemptions: true } } },

@@ -8,10 +8,10 @@ CREATE TYPE "ListingStatus" AS ENUM ('draft', 'pending_review', 'approved', 'rej
 CREATE TYPE "LongStayDiscountType" AS ENUM ('percentage', 'fixed');
 
 -- CreateEnum
-CREATE TYPE "Transmission" AS ENUM ('manual', 'automatic');
+CREATE TYPE "Transmission" AS ENUM ('manual', 'automatic', 'semi_auto');
 
 -- CreateEnum
-CREATE TYPE "FuelType" AS ENUM ('petrol', 'diesel', 'electric', 'hybrid');
+CREATE TYPE "FuelType" AS ENUM ('petrol', 'diesel', 'electric', 'hybrid', 'lpg');
 
 -- CreateEnum
 CREATE TYPE "MileagePolicy" AS ENUM ('unlimited', 'limited');
@@ -23,10 +23,31 @@ CREATE TYPE "RoomType" AS ENUM ('standard', 'superior', 'deluxe', 'suite', 'juni
 CREATE TYPE "CancellationPolicy" AS ENUM ('flexible', 'moderate', 'strict');
 
 -- CreateEnum
-CREATE TYPE "DocumentType" AS ENUM ('business_licence', 'operating_permit', 'tourism_certificate');
+CREATE TYPE "DocumentType" AS ENUM ('business_licence', 'operating_permit', 'tourism_certificate', 'insurance_certificate', 'roadworthiness_certificate', 'hotel_operating_permit', 'tourism_authority_certificate', 'vehicle_registration');
+
+-- CreateEnum
+CREATE TYPE "CarCategory" AS ENUM ('Economy', 'Compact', 'SUV', 'Minivan', 'Pickup', 'Luxury', 'Electric', 'Convertible');
+
+-- CreateEnum
+CREATE TYPE "DriveType" AS ENUM ('2WD', '4WD', 'AWD');
+
+-- CreateEnum
+CREATE TYPE "InsuranceType" AS ENUM ('basic', 'standard', 'premium', 'comprehensive', 'basic_third_party', 'premium_zero_excess');
+
+-- CreateEnum
+CREATE TYPE "FuelPolicy" AS ENUM ('full_to_full', 'same_to_same', 'free_tank', 'full_to_empty', 'pre_purchase');
 
 -- CreateEnum
 CREATE TYPE "ReviewTaskStatus" AS ENUM ('open', 'awaiting_provider_response', 'resolved', 'escalated');
+
+-- CreateEnum
+CREATE TYPE "BedType" AS ENUM ('single', 'double', 'queen', 'king', 'twin');
+
+-- CreateEnum
+CREATE TYPE "ApartmentType" AS ENUM ('entire_place', 'private_room', 'shared_room', 'studio', 'loft', 'villa', 'townhouse');
+
+-- CreateEnum
+CREATE TYPE "BlockedDateSource" AS ENUM ('manual', 'ical');
 
 -- CreateEnum
 CREATE TYPE "BookingStatus" AS ENUM ('pending_payment', 'confirmed', 'completed', 'cancelled_by_guest', 'cancelled_by_provider', 'cancelled_by_system');
@@ -47,6 +68,7 @@ CREATE TABLE "listings" (
     "unit_count" INTEGER,
     "description" TEXT,
     "price_per_night" DECIMAL(10,2),
+    "price_per_day" DECIMAL(10,2),
     "currency" CHAR(3),
     "min_stay_nights" INTEGER NOT NULL DEFAULT 1,
     "checkin_time" VARCHAR(5),
@@ -91,9 +113,54 @@ CREATE TABLE "listings" (
     "doors" INTEGER DEFAULT 4,
     "mileage_policy" "MileagePolicy",
     "mileage_limit_km" INTEGER,
+    "car_category" "CarCategory",
+    "drive_type" "DriveType",
+    "air_conditioning" BOOLEAN,
+    "odometer_reading" INTEGER,
+    "licence_plate" VARCHAR(20),
+    "engine_size" VARCHAR(20),
+    "colour" VARCHAR(30),
+    "security_deposit" DECIMAL(10,2),
+    "minimum_driver_age" INTEGER,
+    "minimum_rental_days" INTEGER,
+    "fuel_policy" "FuelPolicy",
+    "extra_km_rate" DECIMAL(10,2),
+    "roadside_assistance" BOOLEAN NOT NULL DEFAULT false,
+    "cross_border_allowed" BOOLEAN NOT NULL DEFAULT false,
+    "airport_pickup" BOOLEAN NOT NULL DEFAULT false,
+    "delivery_enabled" BOOLEAN NOT NULL DEFAULT false,
+    "delivery_radius_km" INTEGER,
+    "delivery_fee" DECIMAL(10,2),
+    "pickup_hours_from" VARCHAR(5),
+    "pickup_hours_to" VARCHAR(5),
+    "return_same_location" BOOLEAN NOT NULL DEFAULT true,
+    "insurance_type" "InsuranceType",
     "updated_at" TIMESTAMP(3) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "deleted_at" TIMESTAMP(3),
+    "featured_photo_id" TEXT,
+    "max_adults" INTEGER,
+    "max_children" INTEGER,
+    "children_allowed" BOOLEAN NOT NULL DEFAULT true,
+    "child_price_type" VARCHAR(20),
+    "child_price_value" DECIMAL(10,2),
+    "child_free_under_age" INTEGER,
+    "checkin_rules" TEXT,
+    "checkout_rules" TEXT,
+    "early_checkin_fee" DECIMAL(10,2),
+    "late_checkout_fee" DECIMAL(10,2),
+    "cleaning_fee" DECIMAL(10,2),
+    "extra_guest_fee" DECIMAL(10,2),
+    "extra_guest_after" INTEGER,
+    "weekly_discount" DECIMAL(5,2),
+    "monthly_discount" DECIMAL(5,2),
+    "instant_booking" BOOLEAN NOT NULL DEFAULT false,
+    "self_checkin" BOOLEAN NOT NULL DEFAULT false,
+    "self_checkin_details" TEXT,
+    "apartment_type" "ApartmentType",
+    "floor_number" INTEGER,
+    "property_size_m2" DECIMAL(8,2),
+    "security_deposit_due" VARCHAR(30),
 
     CONSTRAINT "listings_pkey" PRIMARY KEY ("id")
 );
@@ -112,6 +179,78 @@ CREATE TABLE "listing_review_tasks" (
     "resolved_at" TIMESTAMP(3),
 
     CONSTRAINT "listing_review_tasks_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "listing_moderation_log" (
+    "id" TEXT NOT NULL,
+    "listing_id" TEXT NOT NULL,
+    "action" VARCHAR(50) NOT NULL,
+    "actor_id" TEXT NOT NULL,
+    "actor_role" VARCHAR(30) NOT NULL,
+    "metadata" JSONB NOT NULL DEFAULT '{}',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "listing_moderation_log_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "listing_bed_configs" (
+    "id" TEXT NOT NULL,
+    "listing_id" TEXT NOT NULL,
+    "bed_type" "BedType" NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "room_label" VARCHAR(80),
+
+    CONSTRAINT "listing_bed_configs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "listing_blocked_dates" (
+    "id" TEXT NOT NULL,
+    "listing_id" TEXT NOT NULL,
+    "date" DATE NOT NULL,
+    "source" "BlockedDateSource" NOT NULL DEFAULT 'manual',
+    "note" VARCHAR(200),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "listing_blocked_dates_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "listing_seasonal_prices" (
+    "id" TEXT NOT NULL,
+    "listing_id" TEXT NOT NULL,
+    "start_date" DATE NOT NULL,
+    "end_date" DATE NOT NULL,
+    "price_per_night" DECIMAL(10,2),
+    "price_per_day" DECIMAL(10,2),
+    "label" VARCHAR(100),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "listing_seasonal_prices_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "listing_nearby_landmarks" (
+    "id" TEXT NOT NULL,
+    "listing_id" TEXT NOT NULL,
+    "name" VARCHAR(200) NOT NULL,
+    "category" VARCHAR(50),
+    "distance_km" DECIMAL(6,2),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "listing_nearby_landmarks_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "listing_house_rules" (
+    "id" TEXT NOT NULL,
+    "listing_id" TEXT NOT NULL,
+    "rule" VARCHAR(200) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "listing_house_rules_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -337,6 +476,8 @@ CREATE TABLE "ical_feeds" (
     "feed_url" VARCHAR(1000) NOT NULL,
     "last_synced_at" TIMESTAMP(3),
     "last_error" TEXT,
+    "consecutive_failures" INTEGER NOT NULL DEFAULT 0,
+    "next_retry_at" TIMESTAMP(3),
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
@@ -387,6 +528,36 @@ CREATE TABLE "messages" (
 );
 
 -- CreateIndex
+CREATE INDEX "listings_status_category_idx" ON "listings"("status", "category");
+
+-- CreateIndex
+CREATE INDEX "listings_provider_id_status_idx" ON "listings"("provider_id", "status");
+
+-- CreateIndex
+CREATE INDEX "listing_review_tasks_listing_id_created_at_idx" ON "listing_review_tasks"("listing_id", "created_at" DESC);
+
+-- CreateIndex
+CREATE INDEX "listing_moderation_log_listing_id_created_at_idx" ON "listing_moderation_log"("listing_id", "created_at" DESC);
+
+-- CreateIndex
+CREATE INDEX "listing_bed_configs_listing_id_idx" ON "listing_bed_configs"("listing_id");
+
+-- CreateIndex
+CREATE INDEX "listing_blocked_dates_listing_id_date_idx" ON "listing_blocked_dates"("listing_id", "date");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "listing_blocked_dates_listing_id_date_key" ON "listing_blocked_dates"("listing_id", "date");
+
+-- CreateIndex
+CREATE INDEX "listing_seasonal_prices_listing_id_start_date_end_date_idx" ON "listing_seasonal_prices"("listing_id", "start_date", "end_date");
+
+-- CreateIndex
+CREATE INDEX "listing_nearby_landmarks_listing_id_idx" ON "listing_nearby_landmarks"("listing_id");
+
+-- CreateIndex
+CREATE INDEX "listing_house_rules_listing_id_idx" ON "listing_house_rules"("listing_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "bookings_reference_key" ON "bookings"("reference");
 
 -- CreateIndex
@@ -409,6 +580,24 @@ CREATE UNIQUE INDEX "conversations_booking_id_key" ON "conversations"("booking_i
 
 -- AddForeignKey
 ALTER TABLE "listing_review_tasks" ADD CONSTRAINT "listing_review_tasks_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "listing_moderation_log" ADD CONSTRAINT "listing_moderation_log_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "listing_bed_configs" ADD CONSTRAINT "listing_bed_configs_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "listing_blocked_dates" ADD CONSTRAINT "listing_blocked_dates_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "listing_seasonal_prices" ADD CONSTRAINT "listing_seasonal_prices_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "listing_nearby_landmarks" ADD CONSTRAINT "listing_nearby_landmarks_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "listing_house_rules" ADD CONSTRAINT "listing_house_rules_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "listing_photos" ADD CONSTRAINT "listing_photos_listing_id_fkey" FOREIGN KEY ("listing_id") REFERENCES "listings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

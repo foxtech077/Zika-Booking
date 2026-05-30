@@ -226,6 +226,24 @@ export async function listingRoutes(app: FastifyInstance) {
         properties: {
           category: { type: "string", enum: ["hotel", "apartment", "car"], default: "hotel" }
         }
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                category: { type: "string" },
+                status: { type: "string" }
+              },
+              required: ["id", "category", "status"]
+            }
+          },
+          required: ["success", "data"]
+        }
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -244,7 +262,42 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // GET /listings — My listings (UC-2.6 entry point)
-  app.get("/listings", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      querystring: {
+        type: "object",
+        properties: {
+          status: { type: "string" },
+          page: { type: "string", pattern: "^[0-9]+$" },
+          limit: { type: "string", pattern: "^[0-9]+$" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                listings: {
+                  type: "array",
+                  items: { type: "object", additionalProperties: true }
+                },
+                total: { type: "integer" },
+                page: { type: "integer" },
+                limit: { type: "integer" }
+              },
+              required: ["listings", "total", "page", "limit"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { status, page = "1", limit = "20" } = req.query as Record<string, string>;
 
@@ -293,7 +346,29 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // GET /listings/:id — Get listing detail (UC-2.6)
-  app.get("/listings/:id", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings/:id", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: { type: "object", additionalProperties: true }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
@@ -404,6 +479,22 @@ export async function listingRoutes(app: FastifyInstance) {
           securityDepositDue: { type: "string", maxLength: 30 },
         },
         additionalProperties: true,
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        }
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -513,7 +604,35 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/submit — Submit for review (UC-2.7)
-  app.post("/listings/:id/submit", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/submit", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
@@ -599,7 +718,36 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/activate — Apartment auto-activation (UC-3.5) + Car activation (UC-4.5)
-  app.post("/listings/:id/activate", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/activate", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" },
+                status: { type: "string" }
+              },
+              required: ["message", "status"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const currentYear = new Date().getFullYear();
@@ -745,7 +893,35 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/deactivate — UC-2.13 / UC-3.7
-  app.post("/listings/:id/deactivate", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/deactivate", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
@@ -762,7 +938,35 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/reactivate — UC-2.13 A1 / UC-3.7
-  app.post("/listings/:id/reactivate", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/reactivate", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const currentYear = new Date().getFullYear();
@@ -877,7 +1081,35 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // DELETE /listings/:id — Soft-delete draft (UC-2.13 A2)
-  app.delete("/listings/:id", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/listings/:id", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
@@ -895,7 +1127,45 @@ export async function listingRoutes(app: FastifyInstance) {
   // ── Photo endpoints ────────────────────────────────────────────────────────
 
   // POST /listings/:id/photos/presign — Request presigned S3 upload URL
-  app.post("/listings/:id/photos/presign", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/photos/presign", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["contentType", "filename"],
+        properties: {
+          contentType: { type: "string" },
+          filename: { type: "string" },
+          fileSize: { type: "number" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                uploadUrl: { type: "string" },
+                s3Key: { type: "string" }
+              },
+              required: ["uploadUrl", "s3Key"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { contentType, filename, fileSize } = req.body as { contentType: string; filename: string; fileSize?: number };
@@ -923,7 +1193,44 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/photos/confirm — Register photo after S3 upload
-  app.post("/listings/:id/photos/confirm", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/photos/confirm", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["s3Key"],
+        properties: {
+          s3Key: { type: "string" }
+        }
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                cdnUrl: { type: "string" },
+                position: { type: "integer" }
+              },
+              required: ["id", "cdnUrl", "position"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { s3Key } = req.body as { s3Key: string };
@@ -949,7 +1256,42 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // PATCH /listings/:id/photos/reorder — Update photo positions (UC-2.5 A1, A2)
-  app.patch("/listings/:id/photos/reorder", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.patch("/listings/:id/photos/reorder", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["order"],
+        properties: {
+          order: { type: "array", items: { type: "string" } }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+                }
+              },
+              required: ["success", "data"]
+            }
+          }
+        }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { order } = req.body as { order: string[] }; // array of photo IDs in new order
@@ -970,7 +1312,36 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // DELETE /listings/:id/photos/:photoId — Remove photo (UC-2.5 A3)
-  app.delete("/listings/:id/photos/:photoId", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/listings/:id/photos/:photoId", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id", "photoId"],
+        properties: {
+          id: { type: "string" },
+          photoId: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id, photoId } = req.params as { id: string; photoId: string };
 
@@ -1001,7 +1372,44 @@ export async function listingRoutes(app: FastifyInstance) {
   // ── Document endpoints ─────────────────────────────────────────────────────
 
   // POST /listings/:id/documents/presign — Request presigned S3 URL for document
-  app.post("/listings/:id/documents/presign", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/documents/presign", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["contentType", "documentType"],
+        properties: {
+          contentType: { type: "string" },
+          documentType: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                uploadUrl: { type: "string" },
+                s3Key: { type: "string" }
+              },
+              required: ["uploadUrl", "s3Key"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { contentType, documentType } = req.body as { contentType: string; documentType: string };
@@ -1023,7 +1431,47 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/documents/confirm — Register document after S3 upload
-  app.post("/listings/:id/documents/confirm", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/documents/confirm", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["s3Key", "documentType", "contentType"],
+        properties: {
+          s3Key: { type: "string" },
+          documentType: { type: "string" },
+          contentType: { type: "string" }
+        }
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                documentType: { type: "string" },
+                message: { type: "string" },
+                reReview: { type: "boolean" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
     const { s3Key, documentType, contentType } = req.body as { s3Key: string; documentType: string; contentType: string };
@@ -1077,7 +1525,36 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // DELETE /listings/:id/documents/:docId — Remove document before submission
-  app.delete("/listings/:id/documents/:docId", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.delete("/listings/:id/documents/:docId", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["Listings"],
+      params: {
+        type: "object",
+        required: ["id", "docId"],
+        properties: {
+          id: { type: "string" },
+          docId: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id, docId } = req.params as { id: string; docId: string };
 
@@ -1097,7 +1574,31 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // GET /geocode — Geocoding proxy; accepts placeId, address, or lat+lng (UC-2.3)
-  app.get("/geocode", { schema: { tags: ["Listings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/geocode", {
+    preHandler: [requireProvider],
+    schema: {
+      tags: ["Listings"],
+      querystring: {
+        type: "object",
+        properties: {
+          placeId: { type: "string" },
+          address: { type: "string" },
+          lat: { type: "string" },
+          lng: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: { type: "object", additionalProperties: true }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { placeId, address, lat, lng } = req.query as { placeId?: string; address?: string; lat?: string; lng?: string };
 
     if (address) {

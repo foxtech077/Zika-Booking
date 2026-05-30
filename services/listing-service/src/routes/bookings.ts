@@ -157,7 +157,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       }
       return reply.status(409).send({ success: false, error: { code: "LISTING_UNAVAILABLE", message: "This listing is being reserved by another guest. Please try again in a few minutes." } });
     }
-
+  
     // Store lock context
     const ctx = {
       guestId,
