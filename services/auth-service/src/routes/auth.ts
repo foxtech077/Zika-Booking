@@ -153,7 +153,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── GET /auth/verify  (UC-1.3) ─────────────────────────────────────────────
-  app.get("/auth/verify", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/auth/verify", { schema: { tags: ["User Auth"], querystring: { type: "object", required: ["token"], properties: { token: { type: "string", description: "64-character email verification token from the verification link" } } } } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { token } = req.query as { token?: string };
     if (!token || token.length !== 64) {
       return sendError(reply, 400, "INVALID_TOKEN", "This verification link is invalid. Please request a new one.");
