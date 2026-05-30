@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
-import { createPresignedDownloadUrl } from "../lib/s3.js";
+import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
 import {
   sendListingApprovedEmail,
   sendListingRejectedEmail,
@@ -80,7 +80,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             photos: {
               where: { deletedAt: null },
               orderBy: { position: "asc" },
-              select: { id: true, cdnUrl: true, position: true },
+              select: { id: true, s3Key: true, cdnUrl: true, position: true },
             },
           },
         },
@@ -97,7 +97,13 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     });
 
-    return sendSuccess(reply, 200, { tasks, total, page: parseInt(page, 10), limit: take });
+    const signedTasks = await Promise.all(
+      tasks.map(async (t) => ({
+        ...t,
+        listing: { ...t.listing, photos: await withSignedPhotos(t.listing.photos) },
+      })),
+    );
+    return sendSuccess(reply, 200, { tasks: signedTasks, total, page: parseInt(page, 10), limit: take });
   });
 
   // GET /admin/listings/:id/review — Full listing detail for review (UC-2.9)
@@ -176,6 +182,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, {
       ...listing,
       amenities:    groupedAmenities,
+      photos:       await withSignedPhotos(listing.photos),
       docChecklist,
     });
   });
@@ -662,14 +669,17 @@ export async function adminListingRoutes(app: FastifyInstance) {
           photos: {
             where:   { deletedAt: null },
             orderBy: { position: "asc" },
-            select:  { id: true, cdnUrl: true, position: true },
+            select:  { id: true, s3Key: true, cdnUrl: true, position: true },
           },
         },
         orderBy: { updatedAt: "desc" },
       }),
     ]);
 
-    return sendSuccess(reply, 200, { listings, total, page: parseInt(page, 10), limit: take });
+    const signedListings = await Promise.all(
+      listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
+    );
+    return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
   });
 
   // ── GET /admin/bookings — Admin booking list with filters ─────────────────
