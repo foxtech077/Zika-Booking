@@ -14,6 +14,7 @@ import {
   isValidPhotoType,
   isValidDocumentType,
   fileExtFromContentType,
+  withSignedPhotos,
 } from "../lib/s3.js";
 import { geocodePlaceId, geocodeAddress, reverseGeocode } from "../lib/geocoding.js";
 import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/email.js";
@@ -334,7 +335,7 @@ export async function listingRoutes(app: FastifyInstance) {
           updatedAt: true,
           photos: {
             where: { deletedAt: null, position: 1 },
-            select: { cdnUrl: true },
+            select: { s3Key: true, cdnUrl: true },
             take: 1,
           },
         },
@@ -342,7 +343,10 @@ export async function listingRoutes(app: FastifyInstance) {
       }),
     ]);
 
-    return sendSuccess(reply, 200, { listings, total, page: parseInt(page, 10), limit: take });
+    const signedListings = await Promise.all(
+      listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
+    );
+    return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
   });
 
   // GET /listings/:id — Get listing detail (UC-2.6)
@@ -413,6 +417,7 @@ export async function listingRoutes(app: FastifyInstance) {
     const formattedListing = {
       ...listing,
       amenities: groupedAmenities,
+      photos: await withSignedPhotos(listing.photos),
     };
 
     return sendSuccess(reply, 200, formattedListing);
@@ -1252,7 +1257,8 @@ export async function listingRoutes(app: FastifyInstance) {
       },
     });
 
-    return sendSuccess(reply, 201, { id: photo.id, cdnUrl: photo.cdnUrl, position: photo.position });
+    const signedUrl = await createPresignedDownloadUrl(photo.s3Key);
+    return sendSuccess(reply, 201, { id: photo.id, cdnUrl: signedUrl, position: photo.position });
   });
 
   // PATCH /listings/:id/photos/reorder — Update photo positions (UC-2.5 A1, A2)
