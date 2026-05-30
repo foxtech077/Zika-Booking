@@ -12,7 +12,8 @@ import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
-import { cn } from "@/lib/utils";
+import { cn, getCurrencyForCountry } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
 import type { Listing, ListingCategory } from "@/types/provider";
 import { MediaUploader } from "../../components/MediaUploader";
 import { DocumentUploader } from "../../components/DocumentUploader";
@@ -49,6 +50,7 @@ export default function EditListingPage() {
   const params = useParams();
   const router = useRouter();
   const qc = useQueryClient();
+  const { user } = useAuthStore();
   const listingId = params.id as string;
 
   const [activeTab, setActiveTab] = useState<"basic" | "pricing" | "amenities" | "specs" | "media">("basic");
@@ -117,11 +119,12 @@ export default function EditListingPage() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   if (listing && !isInitialized) {
+    const resolvedCurrency = user?.country ? getCurrencyForCountry(user.country).code : (listing.currency ?? "USD");
     setFields({
       name: listing.name ?? "",
       description: listing.description ?? "",
       pricePerNight: listing.pricePerNight ? String(listing.pricePerNight) : "",
-      currency: listing.currency ?? "USD",
+      currency: resolvedCurrency,
       minStayNights: listing.minStayNights ?? 1,
       checkinTime: listing.checkinTime ?? "14:00",
       checkoutTime: listing.checkoutTime ?? "11:00",
@@ -523,10 +526,13 @@ export default function EditListingPage() {
                       label="Currency"
                       value={fields.currency ?? "USD"}
                       onChange={(e) => handleFieldChange("currency", e.target.value)}
+                      disabled={true}
                       options={[
                         { value: "USD", label: "USD ($)" },
                         { value: "EUR", label: "EUR (€)" },
                         { value: "GBP", label: "GBP (£)" },
+                        { value: "INR", label: "INR (₹)" },
+                        { value: "AED", label: "AED (د.إ)" },
                       ]}
                     />
                   </div>
