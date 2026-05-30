@@ -41,7 +41,7 @@ api.interceptors.response.use(
       // Clear all admin session data then hard-navigate to login
       sessionStorage.removeItem("zika:admin_session");
       sessionStorage.removeItem("zika:admin_auth");
-      window.location.href = "/login";
+      window.location.href = "/admin/login";
     }
 
     return Promise.reject(error);
