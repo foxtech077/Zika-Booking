@@ -35,17 +35,48 @@ const SESSION_TTL_DAYS = 30;
 
 // ── Middleware: verify intermediate token ─────────────────────────────────────
 
-async function requireIntermediate(req: FastifyRequest, reply: FastifyReply) {
-  const token = req.headers["x-intermediate-token"] as string | undefined;
-  if (!token) return sendError(reply, 401, "NO_TOKEN", "Intermediate token required.");
+
+async function requireIntermediate(
+  req: FastifyRequest,
+  reply: FastifyReply
+) {
+  const body = (req.body ?? {}) as {
+    intermediateToken?: string;
+  };
+
+  let token = body.intermediateToken;
+
+  if (!token) {
+    token = req.headers["x-intermediate-token"] as string | undefined;
+  }
+
+  if (!token) {
+    return sendError(
+      reply,
+      401,
+      "NO_TOKEN",
+      "Intermediate token required."
+    );
+  }
+
   try {
     const payload = await verifyIntermediateToken(token);
-    (req as FastifyRequest & { adminIntermediate: typeof payload }).adminIntermediate = payload;
+
+    (req as FastifyRequest & {
+      adminIntermediate: typeof payload;
+    }).adminIntermediate = payload;
   } catch (err) {
     req.log.error(err, "Intermediate token verification failed");
-    return sendError(reply, 401, "INVALID_TOKEN", "Intermediate token invalid or expired.");
+
+    return sendError(
+      reply,
+      401,
+      "INVALID_TOKEN",
+      "Intermediate token invalid or expired."
+    );
   }
 }
+
 
 // ── Middleware: verify admin session ──────────────────────────────────────────
 
@@ -218,11 +249,14 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/totp/verify  (UC-1.11 step 5) ───────────────────────
-  app.post("/admin/auth/totp/verify", { schema: { tags: ["Admin Auth"], body: { type: "object", properties: { code: { type: "string", description: "6-digit TOTP code from authenticator app" }, recoveryCode: { type: "string", description: "Recovery code as alternative to TOTP" } } } }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/verify", { schema: { tags: ["Admin Auth"], body: { type: "object", required: ["intermediateToken"], properties: {  intermediateToken: {
+        type: "string",
+        description: "Intermediate token returned from admin login"
+      }, code: { type: "string", description: "6-digit TOTP code from authenticator app" } } } }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
 
     // Check for recovery code usage
-    const body = req.body as { code?: string; recoveryCode?: string };
+    const body = req.body as { code?: string; recoveryCode?: string; intermediateToken: string };
     if (body.recoveryCode) {
       return handleRecoveryCode(req, reply, adminId, role, body.recoveryCode);
     }
@@ -517,6 +551,40 @@ export async function adminUserRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { message: "Account reinstated." });
   });
 
+  // ── PATCH /admin/users/:id/approve ───────────────────────────────────────
+  // app.patch("/admin/users/:id/approve", { schema: { tags: ["Admin Users"], security: [{ bearerAuth: [] }] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  //   const adminId = (req as FastifyRequest & { adminId: string }).adminId;
+  //   const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
+  //   const { id: targetId } = req.params as { id: string };
+
+  //   const target = await prisma.user.findUnique({ where: { id: targetId } });
+  //   if (!target) return sendError(reply, 404, "NOT_FOUND", "User not found.");
+
+  //   if (target.status !== "pending_verification") {
+  //     return sendError(reply, 409, "INVALID_STATUS", "User is not in pending verification status.");
+  //   }
+  //   if (!target.emailVerified) {
+  //     return sendError(reply, 409, "EMAIL_NOT_VERIFIED", "User email must be verified before approval.");
+  //   }
+  //   if (target.userType !== "provider") {
+  //     return sendError(reply, 409, "INVALID_USER_TYPE", "Only provider accounts require approval.");
+  //   }
+
+  //   await prisma.user.update({ where: { id: targetId }, data: { status: "active" } });
+
+  //   await writeAudit(adminId, adminRole, "account_approved", req, {
+  //     targetType: "user", targetId, oldValue: "pending_verification", newValue: "active",
+  //   });
+
+  //   const { sendWelcomeEmail } = await import("../lib/email");
+  //   await sendWelcomeEmail(target.email, target.firstName).catch(() => null);
+
+
+
+
+  //   return sendSuccess(reply, 200, { message: "Provider account approved successfully." });
+  // });
+
   // ── PATCH /admin/users/:id/ban ────────────────────────────────────────────
   app.patch("/admin/users/:id/ban", { schema: { tags: ["Admin Users"], body: { type: "object", required: ["reason"], properties: { reason: { type: "string", description: "Reason for banning the account" } } } }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
@@ -545,8 +613,6 @@ export async function adminUserRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { message: "Account permanently banned." });
   });
 }
-
-// ── Admin operator management routes (create/list/delete admin users) ─────────
 
 export async function adminOperatorRoutes(app: FastifyInstance) {
 

@@ -111,17 +111,21 @@ export async function authRoutes(app: FastifyInstance) {
 
     const passwordHash = await hashPassword(password);
     const skipVerification = process.env["SKIP_EMAIL_VERIFICATION"] === "true";
+    const status = (skipVerification && userType !== "provider") ? "active" : "pending_verification";
     const user = await prisma.user.create({
       data: {
         firstName, lastName, email, passwordHash,
         userType: userType as "guest" | "provider",
         businessName: businessName ?? null,
         country: country ?? null,
-        ...(skipVerification ? { status: "active", emailVerified: true, emailVerifiedAt: new Date() } : {}),
+        ...(skipVerification ? { status, emailVerified: true, emailVerifiedAt: new Date() } : {}),
       },
     });
 
     if (skipVerification) {
+      if (userType === "provider") {
+        return sendSuccess(reply, 201, { user: publicUser(user), message: "Registration successful. Account is pending admin approval." });
+      }
       const tokens = await issueTokens(reply, user.id, user.userType, "active");
       return sendSuccess(reply, 201, { user: publicUser(user), tokens });
     }
@@ -178,19 +182,40 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 410, "TOKEN_EXPIRED", "Your verification link has expired.");
     }
 
-    // Already active (A3)
-    if (record.user.status === "active") {
-      const tokens = await issueTokens(reply, record.user.id, record.user.userType, "active");
-      return sendSuccess(reply, 200, { message: "You're already verified. Welcome back!", user: publicUser(record.user), tokens });
+    // Already verified (A3)
+    if (record.user.emailVerified) {
+      if (record.user.userType === "provider" && record.user.status === "pending_verification") {
+        return sendError(reply, 403, "PENDING_ADMIN_APPROVAL", "Your account is pending admin approval.");
+      }
+      if (record.user.status === "active") {
+        const tokens = await issueTokens(reply, record.user.id, record.user.userType, "active");
+        return sendSuccess(reply, 200, { message: "You're already verified. Welcome back!", user: publicUser(record.user), tokens });
+      }
     }
 
+    const isProvider = record.user.userType === "provider";
     // Atomic update
     await prisma.$transaction([
       prisma.verificationToken.update({ where: { id: record.id }, data: { used: true, usedAt: new Date() } }),
-      prisma.user.update({ where: { id: record.userId }, data: { status: "active", emailVerified: true, emailVerifiedAt: new Date() } }),
+      prisma.user.update({
+        where: { id: record.userId },
+        data: {
+          status: isProvider ? "pending_verification" : "active",
+          emailVerified: true,
+          emailVerifiedAt: new Date(),
+        },
+      }),
     ]);
 
     const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
+
+    if (isProvider) {
+      return sendSuccess(reply, 200, {
+        message: "Email verified successfully. Your account is pending admin approval.",
+        user: publicUser(updatedUser),
+      });
+    }
+
     const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, "active");
 
     return sendSuccess(reply, 200, { message: "Email verified — welcome to ZikaBooking!", user: publicUser(updatedUser), tokens });
@@ -214,7 +239,7 @@ export async function authRoutes(app: FastifyInstance) {
     const { email } = parsed.data;
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.status !== "pending_verification") {
+    if (!user || user.status !== "pending_verification" || user.emailVerified) {
       // Don't reveal account existence — return same response
       return sendSuccess(reply, 200, { message: "If the email is pending verification, a new link has been sent." });
     }
@@ -293,6 +318,9 @@ export async function authRoutes(app: FastifyInstance) {
     if (!user || !passwordOk) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
 
     if (user.status === "pending_verification") {
+      if (user.emailVerified && user.userType === "provider") {
+        return sendError(reply, 403, "PENDING_ADMIN_APPROVAL", "Your account is pending admin approval.");
+      }
       return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
     }
     if (user.status === "suspended") {
@@ -387,10 +415,11 @@ export async function authRoutes(app: FastifyInstance) {
       tags: ["User Auth"],
       body: {
         type: "object",
-        required: ["token", "password"],
+        required: ["token", "password", "confirmPassword"],
         properties: {
           token: { type: "string" },
           password: { type: "string" },
+          confirmPassword: { type: "string" },
         }
       }
     }
@@ -465,13 +494,14 @@ export async function authRoutes(app: FastifyInstance) {
     let user = existingByEmail;
 
     if (!user) {
+      const isProvider = userType === "provider";
       // New user
       user = await prisma.user.create({
         data: {
           firstName: firstName ?? "User",
           lastName: lastName ?? "",
           email,
-          status: "active",
+          status: isProvider ? "pending_verification" : "active",
           emailVerified: true,
           emailVerifiedAt: new Date(),
           oauthProvider: "google",
@@ -482,12 +512,21 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
       await sendWelcomeEmail(email, user.firstName).catch(() => null);
+      if (isProvider) {
+        return sendSuccess(reply, 201, { user: publicUser(user), message: "Account created successfully. Pending admin approval." });
+      }
       const tokens = await issueTokens(reply, user.id, user.userType, user.status);
       const needsAccountType = !userType;
       return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType });
     }
 
     // Returning user
+    if (user.status === "pending_verification") {
+      if (user.emailVerified && user.userType === "provider") {
+        return sendError(reply, 403, "PENDING_ADMIN_APPROVAL", "Your account is pending admin approval.");
+      }
+      return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
+    }
     if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
     if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from ZikaBooking.");
 
@@ -523,12 +562,13 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     if (!user) {
+      const isProvider = userType === "provider";
       user = await prisma.user.create({
         data: {
           firstName: "User",
           lastName: "",
           email: appleEmail,
-          status: "active",
+          status: isProvider ? "pending_verification" : "active",
           emailVerified: true,
           emailVerifiedAt: new Date(),
           oauthProvider: "apple",
@@ -539,10 +579,19 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
       await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
+      if (isProvider) {
+        return sendSuccess(reply, 201, { user: publicUser(user), message: "Account created successfully. Pending admin approval." });
+      }
       const tokens = await issueTokens(reply, user.id, user.userType, user.status);
       return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: !userType });
     }
 
+    if (user.status === "pending_verification") {
+      if (user.emailVerified && user.userType === "provider") {
+        return sendError(reply, 403, "PENDING_ADMIN_APPROVAL", "Your account is pending admin approval.");
+      }
+      return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
+    }
     if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
     if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from ZikaBooking.");
 
@@ -559,10 +608,25 @@ export async function authRoutes(app: FastifyInstance) {
     }
     const userId = (req as FastifyRequest & { userId: string }).userId;
     const { userType, businessName, country } = parsed.data;
+    const isProvider = userType === "provider";
     const updated = await prisma.user.update({
       where: { id: userId },
-      data: { userType: userType as "guest" | "provider", businessName: businessName ?? null, country: country ?? null },
+      data: {
+        userType: userType as "guest" | "provider",
+        businessName: businessName ?? null,
+        country: country ?? null,
+        status: isProvider ? "pending_verification" : undefined,
+      },
     });
+
+    if (isProvider) {
+      await prisma.session.updateMany({
+        where: { userId },
+        data: { revoked: true },
+      });
+      reply.clearCookie("refreshToken", { path: "/" });
+    }
+
     return sendSuccess(reply, 200, { user: publicUser(updated) });
   });
 
