@@ -1,30 +1,49 @@
 import { useState } from "react";
-import { View, Text, ScrollView, KeyboardAvoidingView, Platform, Alert } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  Alert,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  Image,
+  ActivityIndicator,
+} from "react-native";
 import { Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
-import { FormField } from "../../components/ui/FormField";
-import { Button } from "../../components/ui/Button";
-import type { PublicUser, ApiResponse, AuthResponse } from "@zika/types";
+import type { ApiResponse, AuthResponse } from "@zika/types";
 
-interface FieldErrors {
-  email?: string;
-  password?: string;
-  general?: string;
-}
+// ── Colors ────────────────────────────────────────────────────────────────────
+const GREEN = "#1B5E20";
+const GREEN_MED = "#2E7D32";
+const GREEN_LIGHT = "#F0FFF4";
+const GREEN_BORDER = "#BBF7D0";
+const MUTED = "#4B7860";
+
+// ── Google Sign-In (native — not available in Expo Go) ────────────────────────
+let _GoogleSignin: typeof import("@react-native-google-signin/google-signin")["GoogleSignin"] | null = null;
+try {
+  _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin;
+} catch { /* not available in Expo Go */ }
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function LoginScreen() {
-  const [form, setForm] = useState({ email: "", password: "" });
-  const [errors, setErrors] = useState<FieldErrors>({});
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
   const setAuth = useAuthStore((s) => s.setAuth);
-
-  const set = (key: keyof typeof form) => (val: string) =>
-    setForm((prev) => ({ ...prev, [key]: val }));
 
   const loginMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", form);
+      const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", { email, password });
       if (!res.data.success) throw res.data;
       return res.data.data;
     },
@@ -33,112 +52,169 @@ export default function LoginScreen() {
       router.replace("/(tabs)");
     },
     onError: (err: unknown) => {
-      const axiosErr = err as { message?: string; code?: string; config?: { url?: string; baseURL?: string }; response?: { data?: ApiResponse<unknown> } };
+      const axiosErr = err as {
+        message?: string;
+        code?: string;
+        config?: { url?: string; baseURL?: string };
+        response?: { data?: ApiResponse<unknown> };
+      };
       const data = axiosErr.response?.data;
-      if (data && !data.success) {
-        if (data.error.code === "EMAIL_NOT_VERIFIED") {
-          router.push({ pathname: "/(auth)/verify-pending", params: { email: form.email } });
+      const structuredError = data && !data.success && data.error && typeof data.error === "object";
+      if (structuredError) {
+        const apiErr = (data as { success: false; error: { code: string; message: string } }).error;
+        if (apiErr.code === "EMAIL_NOT_VERIFIED") {
+          router.push({ pathname: "/(auth)/verify-pending", params: { email } });
           return;
         }
-        setErrors({ general: data.error.message });
+        setGeneralError(apiErr.message);
       } else {
         const details = __DEV__
-          ? `\n\n[Dev Details]\nURL: ${axiosErr.config?.baseURL ?? api.defaults.baseURL}${axiosErr.config?.url ?? ""}\nError: ${axiosErr.message ?? "Unknown Network Error"}\nCode: ${axiosErr.code ?? "Unknown Code"}`
+          ? `\n\n[Debug] ${axiosErr.config?.baseURL ?? api.defaults.baseURL}${axiosErr.config?.url ?? ""} — ${axiosErr.message ?? "Unknown"}`
           : "";
-        setErrors({ general: `Unable to connect. Please check your network and try again.${details}` });
+        setGeneralError(`Unable to connect to server. Please try again.${details}`);
       }
     },
   });
 
   function handleSubmit() {
-    if (!form.email || !form.password) {
-      setErrors({ general: "Please enter your email and password." });
+    if (!email.trim() || !password) {
+      setGeneralError("Please enter your email and password.");
       return;
     }
-    setErrors({});
+    setGeneralError(null);
     loginMutation.mutate();
   }
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={styles.flex}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "android" ? 0 : 0}
     >
       <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ padding: 24, paddingTop: 80 }}
+        style={styles.flex}
+        contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        keyboardDismissMode="interactive"
       >
-        {/* Logo / brand */}
-        <Text className="text-4xl font-bold text-primary mb-1">ZikaBooking</Text>
-        <Text className="text-base text-gray-500 mb-8">Sign in to your account</Text>
+        {/* Logo */}
+        <View style={styles.logoWrap}>
+          <Image
+            source={require("../../assets/kainook_logo.png")}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+        </View>
 
-        <FormField
-          label="Email address"
-          value={form.email}
-          onChangeText={(v) => { set("email")(v); setErrors({}); }}
-          error={errors.email}
-          placeholder="you@example.com"
-          keyboardType="email-address"
-          autoComplete="email"
-          returnKeyType="next"
-        />
+        <Text style={styles.heading}>Welcome back</Text>
+        <Text style={styles.subheading}>Sign in to your Kainook account</Text>
 
-        <FormField
-          label="Password"
-          value={form.password}
-          onChangeText={(v) => { set("password")(v); setErrors({}); }}
-          error={errors.password}
-          placeholder="Your password"
-          secureTextEntry
-          returnKeyType="done"
-          onSubmitEditing={handleSubmit}
-        />
+        {/* Google Sign-In — top position, prominent */}
+        <GoogleSignInButton onError={setGeneralError} />
+
+        {/* Divider */}
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>or continue with email</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Email */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Email address</Text>
+          <View style={styles.inputWrap}>
+            <Ionicons name="mail-outline" size={18} color={MUTED} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={(v) => { setEmail(v); setGeneralError(null); }}
+              placeholder="you@example.com"
+              placeholderTextColor="#A7C4B5"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+            />
+          </View>
+        </View>
+
+        {/* Password */}
+        <View style={styles.fieldGroup}>
+          <Text style={styles.fieldLabel}>Password</Text>
+          <View style={styles.inputWrap}>
+            <Ionicons name="lock-closed-outline" size={18} color={MUTED} style={styles.inputIcon} />
+            <TextInput
+              style={[styles.input, { flex: 1 }]}
+              value={password}
+              onChangeText={(v) => { setPassword(v); setGeneralError(null); }}
+              placeholder="Your password"
+              placeholderTextColor="#A7C4B5"
+              secureTextEntry={!showPassword}
+              onSubmitEditing={handleSubmit}
+              returnKeyType="done"
+            />
+            <TouchableOpacity onPress={() => setShowPassword((v) => !v)} style={styles.eyeBtn}>
+              <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={18} color={MUTED} />
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Forgot password */}
-        <Link href="/(auth)/forgot-password" className="text-primary text-sm mb-6 text-right">
-          Forgot password?
+        <Link href="/(auth)/forgot-password" asChild>
+          <TouchableOpacity style={styles.forgotWrap}>
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </TouchableOpacity>
         </Link>
 
-        {errors.general ? (
-          <View className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
-            <Text className="text-red-600 text-sm">{errors.general}</Text>
+        {/* Error */}
+        {generalError ? (
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle-outline" size={16} color="#dc2626" />
+            <Text style={styles.errorText}>{generalError}</Text>
           </View>
         ) : null}
 
-        <Button title="Sign In" onPress={handleSubmit} loading={loginMutation.isPending} />
+        {/* Sign In button */}
+        <TouchableOpacity
+          style={[styles.primaryBtn, loginMutation.isPending && styles.primaryBtnDisabled]}
+          onPress={handleSubmit}
+          disabled={loginMutation.isPending}
+          activeOpacity={0.85}
+        >
+          {loginMutation.isPending ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <>
+              <Ionicons name="log-in-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.primaryBtnText}>Sign In</Text>
+            </>
+          )}
+        </TouchableOpacity>
 
-        {/* Divider */}
-        <View className="flex-row items-center my-6">
-          <View className="flex-1 h-px bg-gray-200" />
-          <Text className="mx-4 text-gray-400 text-sm">or</Text>
-          <View className="flex-1 h-px bg-gray-200" />
-        </View>
-
-        {/* OAuth */}
-        <GoogleSignInButton />
-        {Platform.OS === "ios" && <View className="mt-3"><AppleSignInButton /></View>}
-
-        <View className="flex-row justify-center mt-8 mb-8">
-          <Text className="text-gray-500">Don't have an account? </Text>
-          <Link href="/(auth)/register" className="text-primary font-semibold">Create one</Link>
+        {/* Register link */}
+        <View style={styles.registerRow}>
+          <Text style={styles.registerText}>Don't have an account? </Text>
+          <Link href="/(auth)/register" asChild>
+            <TouchableOpacity>
+              <Text style={styles.registerLink}>Create one</Text>
+            </TouchableOpacity>
+          </Link>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-let _GoogleSignin: typeof import("@react-native-google-signin/google-signin")["GoogleSignin"] | null = null;
-try { _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin; } catch { /* not available in Expo Go */ }
+// ── Google Sign-In Button ─────────────────────────────────────────────────────
 
-function GoogleSignInButton() {
+function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
   const setAuth = useAuthStore((s) => s.setAuth);
   const GoogleSignin = _GoogleSignin;
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!GoogleSignin) {
-        // Simulated login for testing purposes in Expo Go / Development
+        // Expo Go fallback — simulated for dev/testing
         const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", {
           email: "test@zika.com",
           password: "ZikaTest123!",
@@ -147,51 +223,149 @@ function GoogleSignInButton() {
         return res.data.data;
       }
       await GoogleSignin.hasPlayServices();
-      const signInResult = await GoogleSignin.signIn();
-      const idToken = (signInResult as any).data?.idToken ?? (signInResult as any).idToken;
-      if (!idToken) throw new Error("No ID token");
-      const res = await api.post("/auth/oauth/google", { idToken });
-      return (res.data as { data: AuthResponse }).data;
+      const result = await GoogleSignin.signIn();
+      const idToken = (result as any).data?.idToken ?? (result as any).idToken;
+      if (!idToken) throw new Error("No ID token returned from Google.");
+      const res = await api.post<{ data: AuthResponse }>("/auth/oauth/google", { idToken });
+      return res.data.data;
     },
     onSuccess: async (data) => {
       if (!GoogleSignin) {
-        Alert.alert("Google Sign-In", "Google Sign-In is simulated in Expo Go. Signed in successfully as test@zika.com.");
+        Alert.alert("Dev Mode", "Signed in as test@zika.com (Expo Go simulation).");
       }
       await setAuth(data.user, data.tokens.accessToken);
       router.replace("/(tabs)");
     },
-    onError: () => Alert.alert("Error", "Sign in with Google failed. Please try again."),
-  });
-
-  return <Button title="Continue with Google" variant="secondary" onPress={() => mutation.mutate()} loading={mutation.isPending} />;
-}
-
-function AppleSignInButton() {
-  const AppleAuthentication = require("expo-apple-authentication") as typeof import("expo-apple-authentication");
-  const setAuth = useAuthStore((s) => s.setAuth);
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const cred = await AppleAuthentication.signInAsync({
-        requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
-      });
-      const res = await api.post("/auth/oauth/apple", { authorizationCode: cred.authorizationCode, identityToken: cred.identityToken });
-      return (res.data as { data: AuthResponse }).data;
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error?.message ?? err?.message ?? "Google sign-in failed.";
+      onError(msg);
     },
-    onSuccess: async (data) => {
-      await setAuth(data.user, data.tokens.accessToken);
-      router.replace("/(tabs)");
-    },
-    onError: () => Alert.alert("Error", "Sign in with Apple failed. Please try again."),
   });
 
   return (
-    <AppleAuthentication.AppleAuthenticationButton
-      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-      cornerRadius={10}
-      style={{ height: 52 }}
+    <TouchableOpacity
+      style={styles.googleBtn}
       onPress={() => mutation.mutate()}
-    />
+      disabled={mutation.isPending}
+      activeOpacity={0.85}
+    >
+      {mutation.isPending ? (
+        <ActivityIndicator color={GREEN} size="small" />
+      ) : (
+        <>
+          <View style={styles.googleIconWrap}>
+            <Text style={styles.googleG}>G</Text>
+          </View>
+          <Text style={styles.googleBtnText}>Continue with Google</Text>
+        </>
+      )}
+    </TouchableOpacity>
   );
 }
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  flex: { flex: 1, backgroundColor: GREEN_LIGHT },
+  scroll: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 48 },
+
+  logoWrap: { alignItems: "center", marginBottom: 20 },
+  logo: { width: 160, height: 80 },
+
+  heading: { fontSize: 28, fontWeight: "800", color: GREEN, textAlign: "center", marginBottom: 6 },
+  subheading: { fontSize: 15, color: MUTED, textAlign: "center", marginBottom: 28 },
+
+  // Google button
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: GREEN_BORDER,
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  googleIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  googleG: { fontSize: 15, fontWeight: "800", color: "#4285F4" },
+  googleBtnText: { fontSize: 15, fontWeight: "600", color: "#1f2937" },
+
+  // Divider
+  dividerRow: { flexDirection: "row", alignItems: "center", marginBottom: 20, gap: 10 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: GREEN_BORDER },
+  dividerText: { fontSize: 12, color: MUTED, fontWeight: "500" },
+
+  // Fields
+  fieldGroup: { marginBottom: 16 },
+  fieldLabel: { fontSize: 13, fontWeight: "600", color: GREEN_MED, marginBottom: 7 },
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderWidth: 1.5,
+    borderColor: GREEN_BORDER,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 15, color: "#1f2937" },
+  eyeBtn: { padding: 4 },
+
+  // Forgot
+  forgotWrap: { alignSelf: "flex-end", marginBottom: 20 },
+  forgotText: { fontSize: 13, color: GREEN_MED, fontWeight: "600" },
+
+  // Error
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#fef2f2",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#fecaca",
+    gap: 8,
+    marginBottom: 16,
+  },
+  errorText: { fontSize: 13, color: "#dc2626", flex: 1, lineHeight: 18 },
+
+  // Primary button
+  primaryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: GREEN,
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginBottom: 20,
+    shadowColor: GREEN,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  primaryBtnDisabled: { opacity: 0.65 },
+  primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+
+  // Register link
+  registerRow: { flexDirection: "row", justifyContent: "center", alignItems: "center" },
+  registerText: { fontSize: 14, color: MUTED },
+  registerLink: { fontSize: 14, color: GREEN, fontWeight: "700" },
+});
