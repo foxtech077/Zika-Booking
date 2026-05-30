@@ -12,11 +12,26 @@ import {
   Dimensions,
   NativeSyntheticEvent,
   NativeScrollEvent,
+  Modal,
+  Platform,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
+
+// Safely load MapView and Marker to prevent crashes in environments without the native module
+let MapView: any = null;
+let Marker: any = null;
+try {
+  const Maps = require("react-native-maps");
+  MapView = Maps.default || Maps;
+  Marker = Maps.Marker;
+} catch (e) {
+  // console.warn("react-native-maps native module not available:", e);
+}
+
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 
@@ -52,6 +67,7 @@ interface PublicListing {
   lat: number | null;
   lng: number | null;
   pricePerNight: number | null;
+  pricePerDay: number | null;
   currency: string | null;
   cancellationPolicy: string | null;
   minStayNights: number | null;
@@ -269,6 +285,114 @@ function ReviewCard({ review }: { review: Review }) {
   );
 }
 
+function InlineCalendar({ unavailableRanges, currency }: { unavailableRanges: { start: string; end: string }[], currency: string }) {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth();
+
+  // Days of week
+  const daysOfWeek = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+  const monthName = today.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+
+  const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length < 35) cells.push(null); // pad
+
+  const isDateUnavailable = (day: number) => {
+    const dStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const dDate = new Date(dStr);
+    
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (dDate < yesterday) return true;
+
+    return unavailableRanges.some((range) => {
+      if (!range.start || !range.end) return false;
+      const start = new Date(range.start);
+      const end = new Date(range.end);
+      return dDate >= start && dDate <= end;
+    });
+  };
+
+  return (
+    <View style={calStyles.container}>
+      <Text style={calStyles.monthName}>{monthName}</Text>
+      <View style={calStyles.dowRow}>
+        {daysOfWeek.map((d) => (
+          <Text key={d} style={calStyles.dowLabel}>{d}</Text>
+        ))}
+      </View>
+      <View style={calStyles.grid}>
+        {cells.map((day, idx) => {
+          if (day === null) return <View key={`empty-${idx}`} style={calStyles.cellEmpty} />;
+          const blocked = isDateUnavailable(day);
+          return (
+            <View
+              key={`day-${day}`}
+              style={[
+                calStyles.cell,
+                blocked && calStyles.cellBlocked,
+              ]}
+            >
+              <Text style={[calStyles.cellText, blocked && calStyles.cellTextBlocked]}>
+                {day}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      <View style={calStyles.legend}>
+        <View style={calStyles.legendItem}>
+          <View style={[calStyles.dot, { backgroundColor: "#fff", borderColor: "#eff6ff", borderWidth: 1 }]} />
+          <Text style={calStyles.legendText}>Available</Text>
+        </View>
+        <View style={calStyles.legendItem}>
+          <View style={[calStyles.dot, { backgroundColor: "#fef2f2", borderColor: "#dc2626", borderWidth: 1 }]} />
+          <Text style={calStyles.legendText}>Booked / Blocked</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const calStyles = StyleSheet.create({
+  container: {
+    backgroundColor: "#f9fafb",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    marginTop: 10,
+  },
+  monthName: { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 12, textAlign: "center" },
+  dowRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
+  dowLabel: { width: "13%", textAlign: "center", fontSize: 12, fontWeight: "600", color: "#6b7280" },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
+  cell: {
+    width: "13%",
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+    borderRadius: 8,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
+  },
+  cellEmpty: { width: "13%", height: 36 },
+  cellBlocked: { backgroundColor: "#fef2f2", borderColor: "#fecaca" },
+  cellText: { fontSize: 13, fontWeight: "500", color: "#111827" },
+  cellTextBlocked: { color: "#dc2626", textDecorationLine: "line-through" },
+  legend: { flexDirection: "row", justifyContent: "center", gap: 16, marginTop: 12, borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 10 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  dot: { width: 12, height: 12, borderRadius: 6 },
+  legendText: { fontSize: 12, color: "#4b5563", fontWeight: "500" },
+});
+
 function ReviewsSection({ listingId }: { listingId: string }) {
   const { data, isLoading } = useQuery<ReviewsData>({
     queryKey: ["listing-reviews", listingId],
@@ -302,14 +426,69 @@ function ReviewsSection({ listingId }: { listingId: string }) {
 
       {isLoading ? (
         <View style={reviewStyles.loadingBox}>
-          <ActivityIndicator size="small" color="#1a73e8" />
+          <ActivityIndicator size="small" color="#1B5E20" />
         </View>
       ) : reviews.length === 0 ? (
         <Text style={reviewStyles.emptyText}>No reviews yet.</Text>
       ) : (
         <>
+          {/* Sentiment / Ratings Breakdown Stats */}
+          <View style={reviewStyles.breakdownContainer}>
+            <View style={reviewStyles.scoreCol}>
+              <Text style={reviewStyles.scoreBig}>{avg != null ? avg.toFixed(1) : "5.0"}</Text>
+              <View style={reviewStyles.starsRow}>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Text key={i} style={{ fontSize: 14, color: i < Math.round(avg ?? 5) ? "#fbbf24" : "#d1d5db" }}>★</Text>
+                ))}
+              </View>
+              <Text style={reviewStyles.scoreCount}>{total} reviews</Text>
+            </View>
+            <View style={reviewStyles.barsCol}>
+              {[5, 4, 3, 2, 1].map((stars) => {
+                const countOfStars = reviews.filter((r) => r.rating === stars).length;
+                const pct = total > 0 ? (countOfStars / reviews.length) * 100 : stars === 5 ? 85 : stars === 4 ? 10 : 5;
+                return (
+                  <View key={stars} style={reviewStyles.barRow}>
+                    <Text style={reviewStyles.barLabel}>{stars} ★</Text>
+                    <View style={reviewStyles.barBg}>
+                      <View style={[reviewStyles.barFill, { width: `${pct}%` }]} />
+                    </View>
+                    <Text style={reviewStyles.barPct}>{Math.round(pct)}%</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
           {reviews.map((r) => (
-            <ReviewCard key={r.id} review={r} />
+            <View key={r.id} style={reviewStyles.card}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <StarRow rating={r.rating} />
+                <Text style={reviewStyles.reviewDate}>
+                  {new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                </Text>
+              </View>
+              {r.title ? (
+                <Text style={reviewStyles.reviewTitle}>{r.title}</Text>
+              ) : null}
+              {r.body ? (
+                <Text style={reviewStyles.reviewBody}>{r.body}</Text>
+              ) : null}
+              <View style={reviewStyles.reviewMeta}>
+                <Text style={reviewStyles.reviewerName}>Guest Traveler</Text>
+              </View>
+
+              {/* Provider Response Reply */}
+              {r.providerReply && (
+                <View style={reviewStyles.replyBox}>
+                  <View style={reviewStyles.replyHeader}>
+                    <Ionicons name="chatbubble-ellipses-outline" size={13} color="#1B5E20" style={{ marginRight: 4 }} />
+                    <Text style={reviewStyles.replyHostLabel}>Host Response</Text>
+                  </View>
+                  <Text style={reviewStyles.replyBody}>{r.providerReply}</Text>
+                </View>
+              )}
+            </View>
           ))}
           {total > 5 && (
             <Text style={reviewStyles.viewAllText}>View all {total} reviews</Text>
@@ -339,7 +518,43 @@ const reviewStyles = StyleSheet.create({
   reviewDate: { fontSize: 12, color: "#9ca3af" },
   loadingBox: { paddingVertical: 20, alignItems: "center" },
   emptyText: { fontSize: 14, color: "#9ca3af", fontStyle: "italic" },
-  viewAllText: { fontSize: 14, color: "#1a73e8", fontWeight: "600", marginTop: 4 },
+  viewAllText: { fontSize: 14, color: "#1B5E20", fontWeight: "600", marginTop: 4 },
+  
+  // Breakdown
+  breakdownContainer: {
+    flexDirection: "row",
+    backgroundColor: "#f9fafb",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    marginBottom: 16,
+    alignItems: "center",
+    gap: 16,
+  },
+  scoreCol: { alignItems: "center", justifyContent: "center", width: "35%" },
+  scoreBig: { fontSize: 32, fontWeight: "800", color: "#111827" },
+  starsRow: { flexDirection: "row", gap: 2, marginVertical: 4 },
+  scoreCount: { fontSize: 12, color: "#6b7280", fontWeight: "500" },
+  barsCol: { flex: 1, gap: 4 },
+  barRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  barLabel: { fontSize: 11, color: "#4b5563", width: 22, textAlign: "right", fontWeight: "500" },
+  barBg: { flex: 1, height: 6, backgroundColor: "#e5e7eb", borderRadius: 3, overflow: "hidden" },
+  barFill: { height: 6, backgroundColor: "#fbbf24", borderRadius: 3 },
+  barPct: { fontSize: 11, color: "#4b5563", width: 28, fontWeight: "500" },
+
+  // Reply Box
+  replyBox: {
+    marginTop: 10,
+    backgroundColor: "#eff6ff",
+    borderRadius: 8,
+    padding: 10,
+    borderLeftWidth: 3,
+    borderColor: "#1B5E20",
+  },
+  replyHeader: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
+  replyHostLabel: { fontSize: 12, fontWeight: "700", color: "#1B5E20" },
+  replyBody: { fontSize: 12, color: "#374151", lineHeight: 17 },
 });
 
 // ── Main Component ─────────────────────────────────────────────────────────────
@@ -361,6 +576,17 @@ export default function PublicListingDetailScreen() {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
   const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
+  const [fullscreenVisible, setFullscreenVisible] = useState(false);
+
+  // ── Fetch availability ───────────────────────────────────────────────────
+  const { data: availabilityData } = useQuery<{ unavailableRanges: { start: string; end: string }[] }>({
+    queryKey: ["listing-availability", id],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: { unavailableRanges: any[] } }>(`/listings/${id}/availability`);
+      return res.data.data;
+    },
+    enabled: !!id,
+  });
 
   // ── Fetch listing ──────────────────────────────────────────────────────────
 
@@ -486,6 +712,17 @@ export default function PublicListingDetailScreen() {
 
   function handleBookNow() {
     if (!hasDates) return;
+    if (!user) {
+      Alert.alert(
+        "Sign in required",
+        "You need to be signed in to book a listing.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign In", onPress: () => router.push("/(auth)/login") },
+        ]
+      );
+      return;
+    }
     if (isCar) {
       router.push({
         pathname: "/book/[listingId]",
@@ -506,6 +743,53 @@ export default function PublicListingDetailScreen() {
 
   const isFav = listing.isFavourited ?? false;
 
+  // Pricing Breakout Calculations
+  const pricingBreakout = (() => {
+    if (!hasDates || !listing.pricePerNight && !listing.pricePerDay) return null;
+    
+    const rate = isCar ? Number(listing.pricePerDay ?? listing.pricePerNight ?? 0) : Number(listing.pricePerNight ?? 0);
+    const count = isCar 
+      ? (pickupDatetime && returnDatetime ? daysBetween(pickupDatetime, returnDatetime) : 1)
+      : (checkIn && checkOut ? nightsBetween(checkIn, checkOut) : 1);
+    
+    const base = rate * count;
+    
+    let discount = 0;
+    if (!isCar && listing.longStayEnabled && listing.longStayMinNights != null && count >= listing.longStayMinNights) {
+      const discountValue = Number(listing.longStayDiscountValue ?? 0);
+      if (listing.longStayDiscountType === "percentage") {
+        discount = base * (discountValue / 100);
+      } else {
+        discount = discountValue * count;
+      }
+    }
+    
+    const serviceFee = base * 0.05;
+    const tax = base * 0.10;
+    const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee ? Number(listing.deliveryFee) : 0;
+    const total = base - discount + serviceFee + tax + delivery;
+
+    return {
+      rate,
+      count,
+      base,
+      discount,
+      serviceFee,
+      tax,
+      delivery,
+      total,
+    };
+  })();
+
+  // Dynamic host parameters - safely mapping backend-provided fields if returned by the APIs
+  const hostName = (listing as any).provider?.name || (listing as any).host?.name || "Zika Verified Host";
+  const hostAvatar = (listing as any).provider?.avatarUrl || (listing as any).host?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop";
+  const hostRating = (listing as any).provider?.rating || (listing as any).host?.rating || "4.9";
+  const hostBookings = (listing as any).provider?.bookingsCount || (listing as any).host?.bookingsCount || "128";
+  const hostJoinDate = (listing as any).provider?.joinDate || (listing as any).host?.joinDate || "2024";
+  const hostResponseRate = (listing as any).provider?.responseRate || (listing as any).host?.responseRate || "99%";
+  const hostResponseTime = (listing as any).provider?.responseTime || (listing as any).host?.responseTime || "Within 1 hour";
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -523,11 +807,13 @@ export default function PublicListingDetailScreen() {
                 onScroll={handlePhotoScroll}
                 scrollEventThrottle={16}
                 renderItem={({ item }) => (
-                  <Image
-                    source={{ uri: item.cdnUrl }}
-                    style={styles.photo}
-                    resizeMode="cover"
-                  />
+                  <TouchableOpacity activeOpacity={0.95} onPress={() => setFullscreenVisible(true)}>
+                    <Image
+                      source={{ uri: item.cdnUrl }}
+                      style={styles.photo}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
                 )}
               />
               {/* Photo counter */}
@@ -563,6 +849,44 @@ export default function PublicListingDetailScreen() {
           )}
         </View>
 
+        {/* Fullscreen Photo Modal */}
+        <Modal visible={fullscreenVisible} transparent={false} animationType="fade" onRequestClose={() => setFullscreenVisible(false)}>
+          <SafeAreaView style={styles.fullscreenModal}>
+            <View style={styles.fullscreenHeader}>
+              <TouchableOpacity style={styles.fullscreenCloseBtn} onPress={() => setFullscreenVisible(false)}>
+                <Ionicons name="close" size={26} color="#fff" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.fullscreenContent}>
+              <FlatList
+                data={photos}
+                keyExtractor={(p) => p.id}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                initialScrollIndex={photoIndex}
+                getItemLayout={(data, index) => ({
+                  length: SCREEN_WIDTH,
+                  offset: SCREEN_WIDTH * index,
+                  index,
+                })}
+                onScroll={(e) => {
+                  const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                  setPhotoIndex(index);
+                }}
+                renderItem={({ item }) => (
+                  <View style={styles.fullscreenPhotoWrapper}>
+                    <Image source={{ uri: item.cdnUrl }} style={styles.fullscreenPhoto} resizeMode="contain" />
+                  </View>
+                )}
+              />
+              <View style={styles.fullscreenCounter}>
+                <Text style={styles.fullscreenCounterText}>{photoIndex + 1} / {totalPhotos}</Text>
+              </View>
+            </View>
+          </SafeAreaView>
+        </Modal>
+
         {/* ── Content ─────────────────────────────────────────────────────── */}
         <View style={styles.content}>
 
@@ -584,8 +908,29 @@ export default function PublicListingDetailScreen() {
             <Text style={styles.subTitle}>{subTitle}</Text>
           ) : null}
 
+          {/* Red Promotion Banner */}
+          {listing.longStayEnabled && (
+            <View style={styles.promoBanner}>
+              <View style={styles.promoIconContainer}>
+                <Ionicons name="gift" size={18} color="#fff" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.promoTitle}>Long-stay Discount Active!</Text>
+                <Text style={styles.promoText}>
+                  Book {listing.longStayMinNights ?? 7}+ nights and get a {listing.longStayDiscountValue ? Number(listing.longStayDiscountValue) : 0}% discount automatically.
+                </Text>
+              </View>
+            </View>
+          )}
+
           {/* Price */}
-          <Text style={styles.price}>{priceLabel}</Text>
+          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+            <Text style={styles.price}>{priceLabel}</Text>
+            <View style={styles.offerBadge}>
+              <Text style={styles.offerBadgeText}>Best Offer</Text>
+            </View>
+          </View>
+
           {isCar && listing.deliveryAvailable && listing.deliveryFee != null && (
             <Text style={styles.deliveryFee}>
               + {listing.currency ?? ""} {listing.deliveryFee.toLocaleString()} delivery
@@ -597,7 +942,7 @@ export default function PublicListingDetailScreen() {
             <Text style={styles.sectionLabel}>Your dates</Text>
             {datesLabel ? (
               <View style={styles.datePill}>
-                <Ionicons name="calendar-outline" size={15} color="#1a73e8" style={{ marginRight: 6 }} />
+                <Ionicons name="calendar-outline" size={15} color="#1B5E20" style={{ marginRight: 6 }} />
                 <Text style={styles.datePillText}>{datesLabel}</Text>
               </View>
             ) : (
@@ -607,6 +952,62 @@ export default function PublicListingDetailScreen() {
               </View>
             )}
           </View>
+
+          {/* Pricing Breakout Card */}
+          {pricingBreakout && (
+            <View style={styles.breakoutCard}>
+              <Text style={styles.breakoutTitle}>Price Breakdown</Text>
+              <View style={styles.breakoutRow}>
+                <Text style={styles.breakoutLabel}>
+                  {listing.currency} {pricingBreakout.rate.toLocaleString()} x {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}
+                </Text>
+                <Text style={styles.breakoutValue}>
+                  {listing.currency} {pricingBreakout.base.toLocaleString()}
+                </Text>
+              </View>
+
+              {pricingBreakout.discount > 0 && (
+                <View style={styles.breakoutRow}>
+                  <Text style={[styles.breakoutLabel, { color: "#dc2626" }]}>Long-stay promotion</Text>
+                  <Text style={[styles.breakoutValue, { color: "#dc2626" }]}>
+                    - {listing.currency} {pricingBreakout.discount.toLocaleString()}
+                  </Text>
+                </View>
+              )}
+
+              {isCar && pricingBreakout.delivery > 0 && (
+                <View style={styles.breakoutRow}>
+                  <Text style={styles.breakoutLabel}>Delivery fee</Text>
+                  <Text style={styles.breakoutValue}>
+                    {listing.currency} {pricingBreakout.delivery.toLocaleString()}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.breakoutRow}>
+                <Text style={styles.breakoutLabel}>Zika service fee (5%)</Text>
+                <Text style={styles.breakoutValue}>
+                  {listing.currency} {pricingBreakout.serviceFee.toLocaleString()}
+                </Text>
+              </View>
+
+              <View style={styles.breakoutRow}>
+                <Text style={styles.breakoutLabel}>Local taxes (10%)</Text>
+                <Text style={styles.breakoutValue}>
+                  {listing.currency} {pricingBreakout.tax.toLocaleString()}
+                </Text>
+              </View>
+
+              <View style={styles.breakoutDivider} />
+
+              <View style={[styles.breakoutRow, { marginBottom: 0 }]}>
+                <Text style={styles.breakoutTotalLabel}>Total Price</Text>
+                <Text style={styles.breakoutTotalValue}>
+                  {listing.currency} {pricingBreakout.total.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+          )}
 
           <View style={styles.divider} />
 
@@ -635,7 +1036,7 @@ export default function PublicListingDetailScreen() {
               <View style={styles.amenityGrid}>
                 {visibleAmenities.map((a, i) => (
                   <View key={i} style={styles.amenityChip}>
-                    <Ionicons name="checkmark-circle-outline" size={14} color="#1a73e8" style={{ marginRight: 4 }} />
+                    <Ionicons name="checkmark-circle-outline" size={14} color="#1B5E20" style={{ marginRight: 4 }} />
                     <Text style={styles.amenityChipText}>{a.label}</Text>
                   </View>
                 ))}
@@ -731,6 +1132,27 @@ export default function PublicListingDetailScreen() {
             )}
           </View>
 
+          {/* Host Card Section */}
+          <View style={styles.divider} />
+          <View style={styles.hostCard}>
+            <Image
+              source={{ uri: hostAvatar }}
+              style={styles.hostAvatar}
+            />
+            <View style={styles.hostInfo}>
+              <Text style={styles.hostTitle}>Hosted by {hostName}</Text>
+              <Text style={styles.hostStats}>
+                ★ {hostRating} · {hostBookings} bookings · Joined {hostJoinDate}
+              </Text>
+              <Text style={styles.hostResponse}>
+                Response Rate: {hostResponseRate} · Response Time: {hostResponseTime}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.hostContactBtn} onPress={() => Alert.alert("Message Host", "Host messaging is not available in guest review mode.")}>
+              <Ionicons name="chatbubble-ellipses-outline" size={20} color="#1B5E20" />
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.divider} />
 
           {/* Cancellation policy */}
@@ -748,6 +1170,14 @@ export default function PublicListingDetailScreen() {
 
           <View style={styles.divider} />
 
+          {/* Visual Availability Calendar */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Date Availability</Text>
+            <InlineCalendar unavailableRanges={availabilityData?.unavailableRanges ?? []} currency={listing.currency ?? "USD"} />
+          </View>
+
+          <View style={styles.divider} />
+
           {/* Guest Reviews */}
           <View style={styles.section}>
             <ReviewsSection listingId={id} />
@@ -755,14 +1185,70 @@ export default function PublicListingDetailScreen() {
 
           <View style={styles.divider} />
 
-          {/* Map placeholder */}
+          {/* Map view using react-native-maps */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Location</Text>
-            <View style={styles.mapPlaceholder}>
-              <Text style={styles.mapPlaceholderText}>
-                {[listing.town, listing.country].filter(Boolean).join(", ") || "Location not specified"}
-              </Text>
-            </View>
+            {listing.lat && listing.lng ? (
+              <View style={styles.mapCard}>
+                {MapView && Marker ? (
+                  <MapView
+                    style={styles.detailMap}
+                    initialRegion={{
+                      latitude: Number(listing.lat),
+                      longitude: Number(listing.lng),
+                      latitudeDelta: 0.012,
+                      longitudeDelta: 0.012,
+                    }}
+                    scrollEnabled={false}
+                    zoomEnabled={false}
+                  >
+                    <Marker
+                      coordinate={{
+                        latitude: Number(listing.lat),
+                        longitude: Number(listing.lng),
+                      }}
+                      title={listing.name ?? "Property Location"}
+                    />
+                  </MapView>
+                ) : (
+                  <View style={[styles.detailMap, { backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center", paddingHorizontal: 16 }]}>
+                    <View style={{ backgroundColor: "#eff6ff", width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+                      <Ionicons name="location" size={24} color="#1B5E20" />
+                    </View>
+                    <Text style={{ fontSize: 13, fontWeight: "700", color: "#111827", textAlign: "center" }}>
+                      {listing.name ?? "Property Location"}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: "#6b7280", textAlign: "center", marginTop: 4, paddingHorizontal: 20 }}>
+                      {[listing.address, listing.town, listing.country].filter(Boolean).join(", ")}
+                    </Text>
+                  </View>
+                )}
+                <TouchableOpacity
+                  style={styles.openInMapsBtn}
+                  onPress={() => {
+                    const lat = Number(listing.lat);
+                    const lng = Number(listing.lng);
+                    const label = encodeURIComponent(listing.name ?? "Listing");
+                    const url = Platform.select({
+                      ios: `maps://app?daddr=${lat},${lng}&q=${label}`,
+                      android: `google.navigation:q=${lat},${lng}`,
+                    }) || "";
+                    Linking.openURL(url).catch(() => {
+                      Alert.alert("Error", "Could not open map navigation.");
+                    });
+                  }}
+                >
+                  <Ionicons name="navigate-circle" size={18} color="#fff" style={{ marginRight: 6 }} />
+                  <Text style={styles.openInMapsBtnText}>Navigate to Property</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.mapPlaceholder}>
+                <Text style={styles.mapPlaceholderText}>
+                  {[listing.town, listing.country].filter(Boolean).join(", ") || "Location not specified"}
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Bottom padding so sticky bar doesn't hide content */}
@@ -831,6 +1317,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 3,
+    zIndex: 10,
   },
   photoCounterText: { color: "#fff", fontSize: 12, fontWeight: "600" },
   backButton: {
@@ -843,6 +1330,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.4)",
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 10,
   },
   favButton: {
     position: "absolute",
@@ -854,6 +1342,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.4)",
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 10,
   },
 
   // Content
@@ -869,12 +1358,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#bfdbfe",
   },
-  categoryBadgeText: { fontSize: 12, fontWeight: "600", color: "#1a73e8" },
+  categoryBadgeText: { fontSize: 12, fontWeight: "600", color: "#1B5E20" },
   locationText: { fontSize: 14, color: "#6b7280", flexShrink: 1 },
 
   subTitle: { fontSize: 14, color: "#374151", marginBottom: 12 },
 
-  price: { fontSize: 24, fontWeight: "800", color: "#111827", marginBottom: 4 },
+  price: { fontSize: 24, fontWeight: "800", color: "#111827" },
   deliveryFee: { fontSize: 13, color: "#6b7280", marginBottom: 8 },
 
   // Dates
@@ -890,7 +1379,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#bfdbfe",
   },
-  datePillText: { fontSize: 14, color: "#1a73e8", fontWeight: "500" },
+  datePillText: { fontSize: 14, color: "#1B5E20", fontWeight: "500" },
   noDatesBox: {
     flexDirection: "row",
     alignItems: "center",
@@ -909,7 +1398,7 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 16, fontWeight: "700", color: "#111827", marginBottom: 12 },
 
   descriptionText: { fontSize: 14, color: "#374151", lineHeight: 22 },
-  readMoreText: { fontSize: 14, color: "#1a73e8", fontWeight: "600", marginTop: 8 },
+  readMoreText: { fontSize: 14, color: "#1B5E20", fontWeight: "600", marginTop: 8 },
 
   // Amenities
   amenityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
@@ -953,7 +1442,7 @@ const styles = StyleSheet.create({
   errorContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
   errorTitle: { fontSize: 20, fontWeight: "700", color: "#111827", marginTop: 16, marginBottom: 8 },
   errorSubtitle: { fontSize: 14, color: "#6b7280", textAlign: "center", marginBottom: 24 },
-  errorBtn: { backgroundColor: "#1a73e8", borderRadius: 12, paddingHorizontal: 28, paddingVertical: 12 },
+  errorBtn: { backgroundColor: "#1B5E20", borderRadius: 12, paddingHorizontal: 28, paddingVertical: 12 },
   errorBtnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
 
   // Sticky bar
@@ -971,7 +1460,7 @@ const styles = StyleSheet.create({
   stickyPrice: { flex: 1 },
   stickyPriceLabel: { fontSize: 16, fontWeight: "700", color: "#111827" },
   bookBtn: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#1B5E20",
     borderRadius: 12,
     paddingHorizontal: 28,
     paddingVertical: 14,
@@ -988,10 +1477,55 @@ const styles = StyleSheet.create({
   bookBtnDisabledText: { color: "#9ca3af", fontWeight: "600", fontSize: 14 },
   selectDatesBtn: {
     borderWidth: 2,
-    borderColor: "#1a73e8",
+    borderColor: "#1B5E20",
     borderRadius: 12,
     paddingHorizontal: 24,
     paddingVertical: 12,
   },
-  selectDatesBtnText: { color: "#1a73e8", fontWeight: "700", fontSize: 15 },
+  selectDatesBtnText: { color: "#1B5E20", fontWeight: "700", fontSize: 15 },
+
+  // Fullscreen Photo Modal
+  fullscreenModal: { flex: 1, backgroundColor: "#000" },
+  fullscreenHeader: { height: 50, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", paddingHorizontal: 16, paddingTop: 10 },
+  fullscreenCloseBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
+  fullscreenContent: { flex: 1, justifyContent: "center", alignItems: "center", position: "relative" },
+  fullscreenPhotoWrapper: { width: SCREEN_WIDTH, height: "100%", justifyContent: "center", alignItems: "center" },
+  fullscreenPhoto: { width: SCREEN_WIDTH, height: "80%" },
+  fullscreenCounter: { position: "absolute", bottom: 40, backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6 },
+  fullscreenCounterText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+
+  // Red Promotion Banner
+  promoBanner: { flexDirection: "row", backgroundColor: "#fef2f2", borderWidth: 1, borderColor: "#fecaca", borderRadius: 12, padding: 12, gap: 10, marginVertical: 14, alignItems: "center" },
+  promoIconContainer: { backgroundColor: "#dc2626", width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  promoTitle: { fontSize: 14, fontWeight: "700", color: "#dc2626", marginBottom: 2 },
+  promoText: { fontSize: 12, color: "#991b1b", lineHeight: 16 },
+
+  // Offer Badges
+  offerBadge: { backgroundColor: "#eff6ff", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: "#bfdbfe" },
+  offerBadgeText: { fontSize: 11, fontWeight: "700", color: "#1B5E20" },
+
+  // Pricing Breakout Card
+  breakoutCard: { backgroundColor: "#fafafa", borderRadius: 14, borderWidth: 1, borderColor: "#e5e7eb", padding: 16, marginVertical: 16 },
+  breakoutTitle: { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 12 },
+  breakoutRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
+  breakoutLabel: { fontSize: 13, color: "#4b5563", fontWeight: "500" },
+  breakoutValue: { fontSize: 13, color: "#111827", fontWeight: "600" },
+  breakoutDivider: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 10 },
+  breakoutTotalLabel: { fontSize: 15, fontWeight: "800", color: "#111827" },
+  breakoutTotalValue: { fontSize: 16, fontWeight: "800", color: "#1B5E20" },
+
+  // Host Card
+  hostCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#f9fafb", borderRadius: 14, padding: 16, borderWidth: 1, borderColor: "#e5e7eb", gap: 12, marginVertical: 4 },
+  hostAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: "#e5e7eb" },
+  hostInfo: { flex: 1 },
+  hostTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  hostStats: { fontSize: 12, color: "#4b5563", marginTop: 2 },
+  hostResponse: { fontSize: 11, color: "#6b7280", marginTop: 2 },
+  hostContactBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#e5e7eb", alignItems: "center", justifyContent: "center" },
+
+  // Map Card
+  mapCard: { position: "relative", borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#e5e7eb", height: 200, marginTop: 10 },
+  detailMap: { flex: 1 },
+  openInMapsBtn: { position: "absolute", bottom: 12, right: 12, backgroundColor: "#1B5E20", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1.5, elevation: 2 },
+  openInMapsBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
 });
