@@ -663,11 +663,17 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/oauth/google  (UC-1.6) ──────────────────────────────────────
-  app.post("/auth/oauth/google", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/oauth/google", { schema: { tags: ["User Auth"],body: {
+        type: "object",
+        required: ["idToken"],
+        properties: {
+          idToken: {
+            type: "string",
+}}} } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = googleOAuthSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid payload.");
     const { idToken, userType, businessName, country } = parsed.data;
-
+  
     let googlePayload: { email: string; given_name?: string; family_name?: string; sub: string } | null = null;
     try {
       const client = new OAuth2Client();
@@ -789,6 +795,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/account-type  (post-OAuth account type selection) ───────────
+  
   // app.post("/auth/account-type", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
   //   const parsed = accountTypeSchema.safeParse(req.body);
   //   if (!parsed.success) {
@@ -820,10 +827,7 @@ export async function authRoutes(app: FastifyInstance) {
   // });
 
 
-  app.post(
-    "/auth/account-type",
-    {
-      schema: {
+  app.post("/auth/account-type", {schema: {
         tags: ["User Auth"],
         body: {
           type: "object",
