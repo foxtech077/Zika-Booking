@@ -11,7 +11,7 @@ services:
       POSTGRES_DB: zika_booking
       TZ: Asia/Kolkata
     ports:
-      - "5434:5432"
+      - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql
 

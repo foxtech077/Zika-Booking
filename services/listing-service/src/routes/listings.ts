@@ -518,7 +518,60 @@ export async function listingRoutes(app: FastifyInstance) {
   });
 
   // POST /listings/:id/submit — Submit for review (UC-2.7)
-  app.post("/listings/:id/submit", { schema: { tags: ["Listings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/listings/:id/submit", {
+    schema: {
+      tags: ["Listings"],
+      description: [
+        "Submit a hotel listing for admin review. No request body required.",
+        "",
+        "Before submitting, the listing must have all of the following already saved via PUT /listings/:id:",
+        "- **name** (property name)",
+        "- **roomType**",
+        "- **unitCount** (≥ 1)",
+        "- **pricePerNight** (> 0) and **currency**",
+        "- **address**, **lat**, **lng**, **town**, **country** (geocoded via address endpoints)",
+        "- **cancellationPolicy**",
+        "- **checkinTime** and **checkoutTime**",
+        "- **minStayNights** (≥ 1)",
+        "- **description** (max 1000 chars)",
+        "- At least one photo uploaded via POST /listings/:id/photos",
+        "- Documents uploaded via POST /listings/:id/documents:",
+        "  - `business_licence`",
+        "  - `operating_permit` or `hotel_operating_permit`",
+        "  - `tourism_certificate` or `tourism_authority_certificate`",
+        "",
+        "Only `draft` or `rejected` hotel listings can be submitted.",
+      ].join("\n"),
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string", example: "Listing submitted for review." },
+              },
+            },
+          },
+        },
+        422: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: false },
+            error: {
+              type: "object",
+              properties: {
+                code:    { type: "string", example: "VALIDATION_ERROR" },
+                message: { type: "string", example: "Property name is required. At least one photo is required." },
+              },
+            },
+          },
+        },
+      },
+    },
+    preHandler: [requireProviderRole],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
 
