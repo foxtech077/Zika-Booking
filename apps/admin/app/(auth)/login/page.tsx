@@ -46,6 +46,7 @@ export default function LoginPage() {
   // recovery code login option
   const [isRecovery, setIsRecovery] = useState(false);
   const [recoveryCodeInput, setRecoveryCodeInput] = useState("");
+  
 
   // Handle standard credential login
   const handleLogin = async (e: React.FormEvent) => {
@@ -86,7 +87,7 @@ export default function LoginPage() {
     try {
       const { data } = await api.post(
         "/admin/auth/totp/setup",
-        {},
+        { intermediateToken: token },
         {
           headers: { "x-intermediate-token": token },
         }
@@ -107,7 +108,7 @@ export default function LoginPage() {
     try {
       const { data } = await api.post(
         "/admin/auth/totp/confirm",
-        { code: totp.replace(/\s/g, "") },
+        { code: totp.replace(/\s/g, ""), intermediateToken },
         {
           headers: { "x-intermediate-token": intermediateToken },
         }
@@ -131,8 +132,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const payload = isRecovery
-        ? { recoveryCode: recoveryCodeInput.trim() }
-        : { code: totp.replace(/\s/g, "") };
+        ? { recoveryCode: recoveryCodeInput.trim(), intermediateToken }
+        : { code: totp.replace(/\s/g, ""), intermediateToken };
 
       const { data } = await api.post(
         "/admin/auth/totp/verify",

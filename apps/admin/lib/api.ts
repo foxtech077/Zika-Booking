@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: "/admin/api",
+  baseURL: "/api",
   withCredentials: true,
   timeout: 15_000,
 });
