@@ -8,7 +8,13 @@ export default function TabLayout() {
   const user = useAuthStore((s) => s.user);
   if (!user) return <Redirect href="/(auth)/login" />;
 
-  const isProvider = user.userType === "provider";
+  if (user.userType === "provider") {
+    if (user.status === "pending_verification") return <Redirect href="/pending-approval" />;
+    if (user.status === "suspended" || user.status === "banned") return <Redirect href="/suspended" />;
+    return <Redirect href="/(provider)" />;
+  }
+
+  const isProvider = false;
 
   return (
     <Tabs

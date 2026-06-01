@@ -1,12 +1,18 @@
 import axios from "axios";
+import Constants from "expo-constants";
 import { useAuthStore } from "../store/auth";
 
-const HOSTED_API = "https://kainook.duckdns.org/api";
-
 const getBaseUrl = () => {
+  // Prefer explicit env var (hosted or tunnel backend) over auto-detected LAN IP.
   const envUrl = process.env["EXPO_PUBLIC_API_URL"];
   if (envUrl) return envUrl;
-  return HOSTED_API;
+  // Fall back to Expo dev server host for pure local dev (no .env set).
+  const host = Constants.expoConfig?.hostUri?.split(":")[0];
+  const isIP = host && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+  if (isIP && host !== "localhost" && host !== "127.0.0.1") {
+    return `http://${host}:3001`;
+  }
+  return "http://localhost:3001";
 };
 
 const BASE_URL = getBaseUrl();
@@ -24,11 +30,26 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// On 401, try to refresh, then retry once
+const ACCOUNT_CODES = ["ACCOUNT_BANNED", "ACCOUNT_SUSPENDED", "ACCOUNT_INACTIVE", "INVALID_SESSION", "SESSION_EXPIRED"];
+
+function isAccountRevoked(error: unknown): boolean {
+  const res = (error as any)?.response;
+  if (!res) return false;
+  const code: string = res.data?.error?.code ?? "";
+  return res.status === 403 && ACCOUNT_CODES.includes(code);
+}
+
+// On 401, try to refresh then retry once.
+// On 403 with account-revocation codes, clear auth immediately.
 let refreshing: Promise<void> | null = null;
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
+    if (isAccountRevoked(error)) {
+      await useAuthStore.getState().clearAuth();
+      return Promise.reject(error);
+    }
+
     const original = error.config as (typeof error.config) & { _retry?: boolean };
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;

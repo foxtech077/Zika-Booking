@@ -1,67 +1,72 @@
-import { useEffect, useRef, useState } from "react";
-import { View, Text, Image, StyleSheet, Animated } from "react-native";
-import { useRouter } from "expo-router";
+import { useEffect, useRef } from "react";
+import { View, Text, Animated, Image, StyleSheet, Dimensions } from "react-native";
+import { Redirect } from "expo-router";
 import { useAuthStore } from "../store/auth";
+import { K } from "../constants/theme";
+
+const { width } = Dimensions.get("window");
 
 export default function SplashScreen() {
-  const router = useRouter();
   const { user, isHydrated } = useAuthStore();
-  const [splashDone, setSplashDone] = useState(false);
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
-  const taglineFade = useRef(new Animated.Value(0)).current;
+  const logoOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.85)).current;
+  const barWidth = useRef(new Animated.Value(0)).current;
+  const taglineOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.sequence([
       Animated.parallel([
-        Animated.timing(fadeAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
-        Animated.spring(scaleAnim, { toValue: 1, friction: 5, tension: 40, useNativeDriver: true }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.spring(logoScale, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
       ]),
-      Animated.timing(taglineFade, { toValue: 1, duration: 500, delay: 200, useNativeDriver: true }),
+      Animated.timing(taglineOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(barWidth, { toValue: width * 0.55, duration: 1200, useNativeDriver: false }),
     ]).start();
-
-    const timer = setTimeout(() => setSplashDone(true), 2200);
-    return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (!splashDone || !isHydrated) return;
+  if (isHydrated) {
     if (user) {
-      router.replace("/(tabs)");
-    } else {
-      router.replace("/onboarding");
+      if (user.userType === "guest") {
+        return <Redirect href="/(tabs)" />;
+      } else if (user.userType === "provider") {
+        if (user.status === "pending_verification") {
+          return <Redirect href="/pending-approval" />;
+        } else if (user.status === "suspended" || user.status === "banned") {
+          return <Redirect href="/suspended" />;
+        } else {
+          return <Redirect href={"/(provider)" as any} />;
+        }
+      }
     }
-  }, [splashDone, isHydrated, user]);
+    
+    const onboardingCompleted = useAuthStore.getState().hasCompletedOnboarding;
+    if (onboardingCompleted) {
+      return <Redirect href="/(auth)/login" />;
+    }
+    return <Redirect href="/(auth)/onboarding" />;
+  }
 
   return (
     <View style={styles.container}>
-      {/* Logo card */}
-      <Animated.View
-        style={[
-          styles.logoCard,
-          { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
-        ]}
-      >
-        <Image
-          source={require("../assets/kainook_logo.png")}
-          style={styles.logo}
-          resizeMode="contain"
-        />
+      <Animated.View style={[styles.logoBlock, { opacity: logoOpacity, transform: [{ scale: logoScale }] }]}>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require("../assets/logo.png")}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
+        </View>
       </Animated.View>
 
-      {/* Dot indicators */}
-      <View style={styles.dotsRow}>
-        <View style={[styles.dot, styles.dotActive]} />
-        <View style={styles.dot} />
-        <View style={styles.dot} />
+      <Animated.Text style={[styles.tagline, { opacity: taglineOpacity }]}>
+        Travel. Discover. Experience.
+      </Animated.Text>
+
+      <View style={styles.barTrack}>
+        <Animated.View style={[styles.barFill, { width: barWidth }]} />
       </View>
 
-      {/* Tagline */}
-      <Animated.View style={[styles.taglineWrap, { opacity: taglineFade }]}>
-        <Text style={styles.tagline}>TRAVEL. DISCOVER. EXPERIENCE.</Text>
-        <Text style={styles.taglineSub}>Premium concierge at your fingertips</Text>
-      </Animated.View>
+      <Text style={styles.version}>v2.4.0</Text>
     </View>
   );
 }
@@ -69,64 +74,57 @@ export default function SplashScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F0FFF4",
+    backgroundColor: K.colors.darkGreen,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 40,
   },
-  logoCard: {
-    width: 280,
-    height: 180,
+  logoBlock: {
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  logoContainer: {
+    width: 200,
+    height: 200,
+    borderRadius: 28,
     backgroundColor: "#FFFFFF",
-    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#1B5E20",
+    overflow: "hidden",
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.18,
     shadowRadius: 20,
-    elevation: 8,
-    padding: 20,
+    elevation: 10,
   },
-  logo: {
-    width: 220,
-    height: 130,
-  },
-  dotsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 32,
-    alignItems: "center",
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#BBF7D0",
-  },
-  dotActive: {
-    backgroundColor: "#1B5E20",
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  taglineWrap: {
-    position: "absolute",
-    bottom: 60,
-    alignItems: "center",
-    paddingHorizontal: 32,
+  logoImage: {
+    width: 185,
+    height: 185,
   },
   tagline: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#1B5E20",
-    letterSpacing: 2,
-    textAlign: "center",
-    marginBottom: 6,
-  },
-  taglineSub: {
     fontSize: 13,
-    color: "#4B7860",
-    textAlign: "center",
-    fontWeight: "400",
+    color: K.colors.textLightMuted,
+    letterSpacing: 3,
+    textTransform: "uppercase",
+    marginBottom: 48,
+  },
+  barTrack: {
+    width: width * 0.55,
+    height: 3,
+    backgroundColor: K.colors.glassBg,
+    borderRadius: K.radius.full,
+    overflow: "hidden",
+  },
+  barFill: {
+    height: 3,
+    backgroundColor: K.colors.accent,
+    borderRadius: K.radius.full,
+  },
+  version: {
+    position: "absolute",
+    bottom: 40,
+    fontSize: 12,
+    color: K.colors.textLightDim,
+    letterSpacing: 1,
   },
 });
