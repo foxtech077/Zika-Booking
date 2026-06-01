@@ -397,17 +397,40 @@ export async function authRoutes(app: FastifyInstance) {
     const { email } = parsed.data;
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (user && user.status === "active" && user.passwordHash) {
-      const plainToken = generateToken();
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-      await prisma.verificationToken.create({
-        data: { userId: user.id, tokenHash: hashToken(plainToken), tokenType: "password_reset", expiresAt },
-      });
-      await sendPasswordResetEmail(email, plainToken).catch(() => null);
-    }
+    
+  //   if (user && user.status === "active" && user.passwordHash) {
+  //     const plainToken = generateToken();
+  //     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+  //     await prisma.verificationToken.create({
+  //       data: { userId: user.id, tokenHash: hashToken(plainToken), tokenType: "password_reset", expiresAt },
+  //     });
+  //     await sendPasswordResetEmail(email, plainToken).catch(() => null);
+  //   }
 
-    return sendSuccess(reply, 200, { message: "If an account with that email exists, we've sent a password reset link." });
+  //   return sendSuccess(reply, 200, { message: "If an account with that email exists, we've sent a password reset link." });
+  // });
+
+  if (user && user.status === "active" && user.passwordHash) {
+  const plainToken = generateToken();
+
+  await prisma.verificationToken.create({
+    data: {
+      userId: user.id,
+      tokenHash: hashToken(plainToken),
+      tokenType: "password_reset",
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    },
   });
+
+  console.log("RESET TOKEN:", plainToken);
+
+  await sendPasswordResetEmail(email, plainToken).catch(() => null);
+}
+
+return sendSuccess(reply, 200, {
+  message: "If an account with that email exists, we've sent a password reset link."
+});
+
 
   // ── POST /auth/reset-password  (UC-1.8) ────────────────────────────────────
   app.post("/auth/reset-password", {
@@ -424,11 +447,27 @@ export async function authRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    // const parsed = resetPasswordSchema.safeParse(req.body);
+    // if (!parsed.success) {
+    //   return sendError(reply, 422, "VALIDATION_ERROR", "Validation failed",
+    //     zodFieldErrors((parsed.error as ZodError).issues));
+    // }
+
+
     const parsed = resetPasswordSchema.safeParse(req.body);
-    if (!parsed.success) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "Validation failed",
-        zodFieldErrors((parsed.error as ZodError).issues));
-    }
+
+if (!parsed.success) {
+  console.log(JSON.stringify(parsed.error.format(), null, 2));
+
+  return sendError(
+    reply,
+    422,
+    "VALIDATION_ERROR",
+    "Validation failed",
+    zodFieldErrors(parsed.error.issues)
+  );
+}
+    
     const { token, password } = parsed.data;
 
     const tokenHash = hashToken(token);
