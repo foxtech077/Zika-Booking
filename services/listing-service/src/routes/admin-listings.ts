@@ -1213,7 +1213,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           photos: {
             where:   { deletedAt: null },
             orderBy: { position: "asc" },
-            select:  { id: true, cdnUrl: true, position: true },
+            select:  { id: true, s3Key: true, cdnUrl: true, position: true },
           },
         },
         orderBy: { updatedAt: "desc" },
