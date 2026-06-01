@@ -14,7 +14,7 @@ export default function RootPage() {
     // Decode the JWT payload (base64) to get userType without an extra API call
     try {
       const payload = JSON.parse(atob(token.split(".")[1] ?? ""));
-      router.replace(payload.type === "provider" ? "/listings" : "/traveller");
+      router.replace(payload.type === "provider" ? "/dashboard" : "/traveller");
     } catch {
       router.replace("/auth/login");
     }

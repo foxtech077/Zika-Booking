@@ -1,12 +1,14 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 const DEFAULT_RATE = 0.05;
 
 export async function commissionRoutes(app: FastifyInstance) {
   // ── GET /admin/commission-rates — list all country-specific rates ─────
-  app.get("/admin/commission-rates", { schema: { tags: ["Admin Commission"] } }, async (_req: FastifyRequest, reply: FastifyReply) => {
+  // FIX: added requireAdmin middleware
+  app.get("/admin/commission-rates", { schema: { tags: ["Admin Commission"] }, preHandler: [requireAdmin] }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const rates = await prisma.commissionRate.findMany({
       orderBy: { country: "asc" },
     });
@@ -25,7 +27,8 @@ export async function commissionRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/commission-rates — upsert a country rate ─────────────
-  app.post("/admin/commission-rates", { schema: { tags: ["Admin Commission"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // FIX: added requireAdmin middleware
+  app.post("/admin/commission-rates", { schema: { tags: ["Admin Commission"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as { country: string; rate: number };
 
     if (!body.country || typeof body.country !== "string" || body.country.length !== 2) {
@@ -54,7 +57,8 @@ export async function commissionRoutes(app: FastifyInstance) {
   });
 
   // ── DELETE /admin/commission-rates/:country — remove country rate ─────
-  app.delete("/admin/commission-rates/:country", { schema: { tags: ["Admin Commission"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // FIX: added requireAdmin middleware
+  app.delete("/admin/commission-rates/:country", { schema: { tags: ["Admin Commission"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
 

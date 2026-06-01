@@ -1,5 +1,4 @@
-// Import directly from local generated path to avoid pnpm store symlink picking up stale client
-import { PrismaClient } from "../../node_modules/.prisma/client/index.js";
+import { PrismaClient } from "../generated/index.js";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
