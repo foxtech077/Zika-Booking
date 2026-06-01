@@ -404,6 +404,7 @@ const MOCK_RECENTLY_VIEWED: PublicListingDetail[] = [
 export default function TravellerDashboard() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
+  const [hasAuthToken, setHasAuthToken] = useState(false);
   const [recentlyViewed, setRecentlyViewed] = useState<PublicListingDetail[]>([]);
   const [ready, setReady] = useState(false);
   const [activeTab, setActiveTab] = useState<"home" | "search" | "bookings">("home");
@@ -501,6 +502,8 @@ export default function TravellerDashboard() {
       router.replace("/auth/login");
       return;
     }
+
+    setHasAuthToken(true);
 
     try {
       const payload = JSON.parse(atob(token.split(".")[1]!));
@@ -951,13 +954,21 @@ export default function TravellerDashboard() {
           >
             <span className="bg-[#0B1E3F] text-white px-2.5 py-1 rounded-xl shadow-lg shadow-blue-900/10">Zika</span>Booking
           </button>
-          <div className="bg-[#F1F5F9] border border-slate-200 px-3.5 py-1.5 rounded-xl text-xs font-semibold font-mono tracking-wider flex items-center gap-2 text-[#0B1E3F] shadow-sm">
-            <svg className="w-4 h-4 text-[#0B1E3F] animate-pulse" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>
-              {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
-            </span>
+          <div className="flex items-center gap-3">
+            <div className="bg-[#F1F5F9] border border-slate-200 px-3.5 py-1.5 rounded-xl text-xs font-semibold font-mono tracking-wider flex items-center gap-2 text-[#0B1E3F] shadow-sm">
+              <svg className="w-4 h-4 text-[#0B1E3F] animate-pulse" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>
+                {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
+              </span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="rounded-full bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600 transition"
+            >
+              Logout
+            </button>
           </div>
         </header>
       ) : (
@@ -1018,7 +1029,16 @@ export default function TravellerDashboard() {
               <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-orange-500 rounded-full ring-2 ring-white"></span>
             </div>
 
-            {/* User profile avatar details & logout */}
+            {(user || hasAuthToken) && (
+              <button
+                onClick={handleLogout}
+                className="rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 transition"
+              >
+                Logout
+              </button>
+            )}
+
+            {/* User profile avatar details */}
             {user && (
               <div className="flex items-center gap-3 bg-slate-50 border border-slate-200/60 rounded-2xl py-1.5 px-3.5 shadow-sm">
                 <div className="w-8 h-8 rounded-full bg-[#0B1E3F] text-white flex items-center justify-center font-bold uppercase text-xs shadow-md">
@@ -1030,12 +1050,6 @@ export default function TravellerDashboard() {
                   </p>
                   <p className="text-xs font-bold text-[#0B1E3F]">{user.firstName} {user.lastName}</p>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="text-xs font-semibold text-slate-400 hover:text-red-500 transition ml-2 border-l border-slate-200 pl-2 py-0.5"
-                >
-                  Sign out
-                </button>
               </div>
             )}
           </div>
@@ -2094,3 +2108,4 @@ export default function TravellerDashboard() {
     </div>
   );
 }
+
