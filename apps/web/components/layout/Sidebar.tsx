@@ -14,6 +14,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -52,23 +53,19 @@ export function Sidebar() {
       <div className={cn("flex items-center h-16 border-b border-border px-4 shrink-0", collapsed && "justify-center px-0")}>
         {!collapsed ? (
           <Link href="/dashboard" className="flex items-center gap-2.5">
-            <img
-              src="/images/kainook-logo.jpeg"
-              alt="Kainook logo"
-              className="h-14 w-auto max-w-[90px] object-contain"
-            />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+              <Zap className="w-4 h-4 text-white" />
+            </div>
             <div>
-              <p className="text-sm font-bold text-slate-900 leading-none">Kainook</p>
+              <p className="text-sm font-bold text-slate-900 leading-none">ZikaBooking</p>
               <p className="text-xs text-slate-500 mt-0.5">Partner Portal</p>
             </div>
           </Link>
         ) : (
           <Link href="/dashboard">
-            <img
-              src="/images/kainook-logo.jpeg"
-              alt="Kainook logo"
-              className="h-10 w-10 object-contain"
-            />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+              <Zap className="w-4 h-4 text-white" />
+            </div>
           </Link>
         )}
       </div>
