@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { SkeletonCard } from "@/components/ui/Skeleton";
-import { formatCurrency, formatDate, formatMonthLabel } from "@/lib/utils";
+import { formatCurrency, formatDate, formatMonthLabel, getCurrencyForCountry } from "@/lib/utils";
 import type { DashboardData } from "@/types/provider";
 
 const fetchDashboard = () =>
@@ -40,6 +40,7 @@ export default function DashboardPage() {
   });
 
   const firstName = user?.firstName ?? "Partner";
+  const providerCurrency = user?.country ? getCurrencyForCountry(user.country).code : "USD";
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -68,14 +69,14 @@ export default function DashboardPage() {
           <>
             <StatCard
               title="Total Earnings"
-              value={formatCurrency(data?.totalEarnings ?? 0)}
+              value={formatCurrency(data?.totalEarnings ?? 0, providerCurrency)}
               subtitle="All time"
               icon={<DollarSign />}
               color="emerald"
             />
             <StatCard
               title="This Month"
-              value={formatCurrency(data?.thisMonthEarnings ?? 0)}
+              value={formatCurrency(data?.thisMonthEarnings ?? 0, providerCurrency)}
               subtitle="Provider payout"
               icon={<TrendingUp />}
               color="blue"

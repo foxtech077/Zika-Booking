@@ -36,6 +36,47 @@ const SESSION_TTL_DAYS = 30;
 // ── Middleware: verify intermediate token ─────────────────────────────────────
 
 
+// async function requireIntermediate(
+//   req: FastifyRequest,
+//   reply: FastifyReply
+// ) {
+//   const body = (req.body ?? {}) as {
+//     intermediateToken?: string;
+//   };
+
+//   let token = body.intermediateToken;
+
+//   if (!token) {
+//     token = req.headers["x-intermediate-token"] as string | undefined;
+//   }
+
+//   if (!token) {
+//     return sendError(
+//       reply,
+//       401,
+//       "NO_TOKEN",
+//       "Intermediate token required."
+//     );
+//   }
+
+//   try {
+//     const payload = await verifyIntermediateToken(token);
+
+//     (req as FastifyRequest & {
+//       adminIntermediate: typeof payload;
+//     }).adminIntermediate = payload;
+//   } catch (err) {
+//     req.log.error(err, "Intermediate token verification failed");
+
+//     return sendError(
+//       reply,
+//       401,
+//       "INVALID_TOKEN",
+//       "Intermediate token invalid or expired."
+//     );
+//   }
+// }
+
 async function requireIntermediate(
   req: FastifyRequest,
   reply: FastifyReply
@@ -48,6 +89,10 @@ async function requireIntermediate(
 
   if (!token) {
     token = req.headers["x-intermediate-token"] as string | undefined;
+  }
+
+  if (!token && req.headers.authorization?.startsWith("Bearer ")) {
+    token = req.headers.authorization.slice(7);
   }
 
   if (!token) {
@@ -65,9 +110,7 @@ async function requireIntermediate(
     (req as FastifyRequest & {
       adminIntermediate: typeof payload;
     }).adminIntermediate = payload;
-  } catch (err) {
-    req.log.error(err, "Intermediate token verification failed");
-
+  } catch {
     return sendError(
       reply,
       401,
@@ -76,7 +119,6 @@ async function requireIntermediate(
     );
   }
 }
-
 
 // ── Middleware: verify admin session ──────────────────────────────────────────
 
@@ -203,7 +245,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/auth/totp/setup  (UC-1.10 — first login) ─────────────────
-  app.post("/admin/auth/totp/setup", { schema: { tags: ["Admin Auth"] }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/auth/totp/setup", { schema: { tags: ["Admin Auth"], body: { type: "object", required: ["intermediateToken"], properties: { intermediateToken: { type: "string" } } } }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId } = (req as FastifyRequest & { adminIntermediate: { sub: string } }).adminIntermediate;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 

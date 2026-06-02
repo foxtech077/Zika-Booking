@@ -131,8 +131,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const payload = isRecovery
-        ? { recoveryCode: recoveryCodeInput.trim() }
-        : { code: totp.replace(/\s/g, "") };
+        ? { recoveryCode: recoveryCodeInput.trim(), intermediateToken }
+        : { code: totp.replace(/\s/g, ""), intermediateToken };
 
       const { data } = await api.post(
         "/admin/auth/totp/verify",

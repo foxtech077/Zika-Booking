@@ -26,6 +26,8 @@ interface PricingPreview {
   unitLabel: string; // "nights" | "days"
   subtotal: number;
   discountAmount?: number;
+  serviceFee?: number;
+  taxAmount?: number;
   deliveryFee?: number;
   total: number;
   currency: string;
@@ -89,7 +91,8 @@ function StepIndicator({ current }: { current: number }) {
 // ── Countdown Timer Hook ──────────────────────────────────────────────────────
 
 function useCountdown(expiresAt: string | null) {
-  const [msLeft, setMsLeft] = useState<number>(0);
+  // -1 = not yet calculated (prevents false "expired" on first render)
+  const [msLeft, setMsLeft] = useState<number>(-1);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -172,7 +175,8 @@ export default function BookingFlowScreen() {
 
   // ── Countdown ─────────────────────────────────────────────────────────────
   const msLeft = useCountdown(lockState?.expiresAt ?? null);
-  const showExpiringWarning = msLeft > 0 && msLeft <= 30_000;
+  const showExpiringWarning = msLeft > 0 && msLeft <= 120_000; // 2-minute grace period
+  // msLeft === -1 means "not yet calculated" — only treat as expired when it genuinely hits 0
   const isExpired = lockState !== null && msLeft === 0;
 
   useEffect(() => {
@@ -209,6 +213,8 @@ export default function BookingFlowScreen() {
           unitLabel: isCar ? "days" : "nights",
           subtotal: raw.subtotal,
           discountAmount: raw.discountAmount ?? undefined,
+          serviceFee: raw.serviceFee ?? undefined,
+          taxAmount: raw.taxAmount ?? undefined,
           deliveryFee: raw.deliveryFee ?? undefined,
           total: raw.totalAmount,
           currency: raw.currency,
@@ -220,9 +226,12 @@ export default function BookingFlowScreen() {
           pricingPreview: mapped,
         });
       } catch (err: any) {
+        const status = err?.response?.status;
         const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
         if (code === "LISTING_UNAVAILABLE") {
           setLockError("unavailable");
+        } else if (status === 401 || code === "NO_TOKEN" || code === "INVALID_TOKEN") {
+          setLockError("auth");
         } else {
           setLockError("generic");
         }
@@ -421,6 +430,26 @@ export default function BookingFlowScreen() {
     );
   }
 
+  if (lockError === "auth") {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <Ionicons name="lock-closed" size={64} color="#1a73e8" />
+          <Text style={styles.errorTitle}>Sign in to book</Text>
+          <Text style={styles.errorBody}>
+            You need to be signed in to make a reservation.
+          </Text>
+          <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace("/(auth)/login")}>
+            <Text style={styles.primaryBtnText}>Sign In</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.secondaryBtn, { marginTop: 8 }]} onPress={() => router.back()}>
+            <Text style={styles.secondaryBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   if (lockError === "generic") {
     return (
       <SafeAreaView style={styles.container}>
@@ -446,7 +475,7 @@ export default function BookingFlowScreen() {
       <StepIndicator current={step} />
 
       {/* Timer bar (steps 0 and 1) */}
-      {step < 2 && lockState && (
+      {step < 2 && lockState && msLeft >= 0 && (
         <View style={styles.timerBar}>
           <Ionicons name="time-outline" size={14} color={showExpiringWarning ? "#92400e" : "#374151"} />
           <Text style={[styles.timerText, showExpiringWarning && styles.timerTextWarning]}>
@@ -660,11 +689,52 @@ export default function BookingFlowScreen() {
                   </Text>
                 </View>
 
-                {pricing.discountAmount != null && pricing.discountAmount > 0 && (
+                {/* Best discount selection logic */}
+                {(() => {
+                  const promoDiscount = pricing.discountAmount ?? 0;
+                  const voucherAmt = voucherDiscount ?? 0;
+                  if (promoDiscount > 0 || voucherAmt > 0) {
+                    const bestIsVoucher = voucherAmt > 0 && voucherAmt >= promoDiscount;
+                    const bestAmt = bestIsVoucher ? voucherAmt : promoDiscount;
+                    const bothExist = promoDiscount > 0 && voucherAmt > 0;
+                    return (
+                      <View>
+                        <View style={styles.priceRow}>
+                          <Text style={styles.priceLabel}>
+                            {bestIsVoucher ? `Voucher (${voucherCode})` : "Promotion discount"}
+                            {bothExist ? " ✓ Best deal" : ""}
+                          </Text>
+                          <Text style={[styles.priceValue, styles.discountValue]}>
+                            – {formatCurrency(bestAmt, pricing.currency)}
+                          </Text>
+                        </View>
+                        {bothExist && (
+                          <Text style={styles.bestDealNote}>
+                            {bestIsVoucher
+                              ? `Voucher saves more than promo (${formatCurrency(promoDiscount, pricing.currency)})`
+                              : `Promo saves more than voucher (${formatCurrency(voucherAmt, pricing.currency)})`}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {pricing.serviceFee != null && pricing.serviceFee > 0 && (
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Discount</Text>
-                    <Text style={[styles.priceValue, styles.discountValue]}>
-                      – {formatCurrency(pricing.discountAmount, pricing.currency)}
+                    <Text style={styles.priceLabel}>Service fee</Text>
+                    <Text style={styles.priceValue}>
+                      + {formatCurrency(pricing.serviceFee, pricing.currency)}
+                    </Text>
+                  </View>
+                )}
+
+                {pricing.taxAmount != null && pricing.taxAmount > 0 && (
+                  <View style={styles.priceRow}>
+                    <Text style={styles.priceLabel}>Taxes</Text>
+                    <Text style={styles.priceValue}>
+                      + {formatCurrency(pricing.taxAmount, pricing.currency)}
                     </Text>
                   </View>
                 )}
@@ -736,16 +806,11 @@ export default function BookingFlowScreen() {
               </View>
               {voucherMessage && voucherDiscount != null && (
                 <Text style={styles.promoSuccess}>
-                  {voucherMessage} · Discount: -{pricing?.currency ?? ""} {voucherDiscount.toLocaleString()}
+                  {voucherMessage}
                 </Text>
               )}
               {voucherError && (
                 <Text style={styles.promoError}>{voucherError}</Text>
-              )}
-              {voucherCode && (
-                <Text style={styles.promoAppliedTotal}>
-                  New total: {pricing ? formatCurrency(Math.max(0, pricing.total - (voucherDiscount ?? 0)), pricing.currency) : ""}
-                </Text>
               )}
             </View>
 
@@ -1026,7 +1091,7 @@ const styles = StyleSheet.create({
   promoBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
   promoSuccess: { fontSize: 13, color: "#16a34a", fontWeight: "600", marginTop: 8 },
   promoError: { fontSize: 13, color: "#dc2626", marginTop: 8 },
-  promoAppliedTotal: { fontSize: 14, fontWeight: "700", color: "#111827", marginTop: 6 },
+  bestDealNote: { fontSize: 11, color: "#6b7280", marginTop: 2, marginBottom: 2, fontStyle: "italic" },
 
   // Terms
   termsRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 20 },

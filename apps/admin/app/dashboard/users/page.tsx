@@ -26,6 +26,7 @@ export default function UsersPage() {
   const [userType, setUserType] = useState("");
   const [selected, setSelected] = useState<PlatformUser | null>(null);
   const [confirm, setConfirm] = useState<{ action: "suspend" | "reinstate" | "ban"; user: PlatformUser } | null>(null);
+  const [reason, setReason] = useState("");
 
   const params = { q, status, userType, page: String(page), limit: "20" };
   const { data, isLoading } = useQuery({
@@ -37,11 +38,14 @@ export default function UsersPage() {
   const total: number = data?.total ?? 0;
 
   const mutate = useMutation({
-    mutationFn: ({ action, id }: { action: string; id: string }) =>
-      api.patch(`/admin/users/${id}/${action}`),
+    mutationFn: ({ action, id }: { action: string; id: string }) => {
+      const needsReason = action === "ban" || action === "suspend";
+      return api.patch(`/admin/users/${id}/${action}`, needsReason ? { reason } : undefined);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-users"] });
       setConfirm(null);
+      setReason("");
     },
   });
 
@@ -277,16 +281,41 @@ export default function UsersPage() {
       </SlideDrawer>
 
       {/* Confirm action modal */}
-      <ConfirmModal
-        open={!!confirm}
-        onClose={() => setConfirm(null)}
-        onConfirm={() => confirm && mutate.mutate({ action: confirm.action, id: confirm.user.id })}
-        loading={mutate.isPending}
-        title={`${confirm?.action === "ban" ? "Ban" : confirm?.action === "suspend" ? "Suspend" : "Reinstate"} user`}
-        description={`Are you sure you want to ${confirm?.action} ${confirm?.user.firstName} ${confirm?.user.lastName}? This action will take effect immediately.`}
-        variant={confirm?.action === "ban" ? "danger" : confirm?.action === "suspend" ? "warning" : "info"}
-        confirmLabel={confirm?.action === "ban" ? "Ban user" : confirm?.action === "suspend" ? "Suspend" : "Reinstate"}
-      />
+      {(() => {
+        const needsReason = confirm?.action === "ban" || confirm?.action === "suspend";
+        const canSubmit = !needsReason || reason.trim().length > 0;
+        return (
+          <ConfirmModal
+            open={!!confirm}
+            onClose={() => { setConfirm(null); setReason(""); }}
+            onConfirm={() => confirm && canSubmit && mutate.mutate({ action: confirm.action, id: confirm.user.id })}
+            loading={mutate.isPending}
+            title={`${confirm?.action === "ban" ? "Ban" : confirm?.action === "suspend" ? "Suspend" : "Reinstate"} user`}
+            description={`Are you sure you want to ${confirm?.action} ${confirm?.user.firstName} ${confirm?.user.lastName}? This action will take effect immediately.`}
+            variant={confirm?.action === "ban" ? "danger" : confirm?.action === "suspend" ? "warning" : "info"}
+            confirmLabel={confirm?.action === "ban" ? "Ban user" : confirm?.action === "suspend" ? "Suspend" : "Reinstate"}
+          >
+            {needsReason && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Reason <span className="text-danger">*</span>
+                </label>
+                <textarea
+                  className="w-full rounded-lg border border-border bg-surface-subtle px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/40 resize-none"
+                  rows={3}
+                  placeholder={confirm?.action === "ban" ? "State reason for permanent ban…" : "State reason for suspension…"}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  autoFocus
+                />
+                {!canSubmit && (
+                  <p className="mt-1 text-xs text-danger">A reason is required.</p>
+                )}
+              </div>
+            )}
+          </ConfirmModal>
+        );
+      })()}
     </div>
   );
 }
