@@ -1,5 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
+   output        = "../src/generated/client"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -16,7 +17,7 @@ model Payment {
   attemptNumber      Int             @default(1)
   idempotencyKey     String          @unique
   providerPaymentId  String?
-  providerPmId       String?
+  providerPmId       String?  
   amount             Decimal         @db.Decimal(12, 2)
   currency           String          @db.Char(3)
   paymentMethodType  String?

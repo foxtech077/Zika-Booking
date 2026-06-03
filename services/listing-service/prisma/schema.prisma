@@ -1,6 +1,6 @@
 generator client {
   provider      = "prisma-client-js"
-  output        = "../node_modules/.prisma/client"
+   output        = "../src/generated/client"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -10,93 +10,118 @@ datasource db {
 }
 
 model Listing {
-  id                    String                 @id @default(uuid())
-  providerId            String                 @map("provider_id")
-  category              ListingCategory
-  name                  String?                @db.VarChar(200)
-  roomType              RoomType?              @map("room_type")
-  unitCount             Int?                   @map("unit_count")
-  description           String?
-  pricePerNight         Decimal?               @map("price_per_night") @db.Decimal(10, 2)
-  currency              String?                @db.Char(3)
-  minStayNights         Int                    @default(1) @map("min_stay_nights")
-  checkinTime           String?                @map("checkin_time") @db.VarChar(5)
-  checkoutTime          String?                @map("checkout_time") @db.VarChar(5)
-  cancellationPolicy    CancellationPolicy?    @map("cancellation_policy")
-  smokingAllowed        Boolean                @default(false) @map("smoking_allowed")
-  petsAllowed           Boolean                @default(false) @map("pets_allowed")
-  address               String?
-  lat                   Decimal?               @db.Decimal(9, 6)
-  lng                   Decimal?               @db.Decimal(9, 6)
-  town                  String?                @db.VarChar(100)
-  country               String?                @db.Char(2)
-  claimedStarRating     Int?                   @map("claimed_star_rating")
-  starRating            Int?                   @map("star_rating")
-  status                ListingStatus          @default(draft)
-  submissionCount       Int                    @default(0) @map("submission_count")
-  submittedAt           DateTime?              @map("submitted_at")
-  approvedAt            DateTime?              @map("approved_at")
-  approvedBy            String?                @map("approved_by")
-  rejectedAt            DateTime?              @map("rejected_at")
-  rejectedBy            String?                @map("rejected_by")
-  rejectionReasons      String[]               @map("rejection_reasons")
-  rejectionNote         String?                @map("rejection_note")
-  suspendedAt           DateTime?              @map("suspended_at")
-  suspendedBy           String?                @map("suspended_by")
-  suspensionReason      String?                @map("suspension_reason")
-  consecutiveNegative   Int                    @default(0) @map("consecutive_negative_count")
-  bedrooms              Int?
-  bathrooms             Int?
-  maxGuests             Int?                   @map("max_guests")
-  longStayEnabled       Boolean                @default(false) @map("long_stay_discount_enabled")
-  longStayMinNights     Int?                   @map("long_stay_min_nights")
-  longStayDiscountType  LongStayDiscountType?  @map("long_stay_discount_type")
-  longStayDiscountValue Decimal?               @map("long_stay_discount_value") @db.Decimal(10, 2)
-  activatedAt           DateTime?              @map("activated_at")
-  carMake               String?                @map("car_make") @db.VarChar(80)
-  carModel              String?                @map("car_model") @db.VarChar(80)
-  carYear               Int?                   @map("car_year")
-  transmission          Transmission?
-  fuelType              FuelType?              @map("fuel_type")
-  seats                 Int?
-  doors                 Int?                   @default(4)
-  mileagePolicy         MileagePolicy?         @map("mileage_policy")
-  mileageLimitKm        Int?                   @map("mileage_limit_km")
-  updatedAt             DateTime               @updatedAt @map("updated_at")
-  createdAt             DateTime               @default(now()) @map("created_at")
-  deletedAt             DateTime?              @map("deleted_at")
-  air_conditioning      Boolean?
-  airport_pickup        Boolean                @default(false)
-  car_category          CarCategory?
-  colour                String?                @db.VarChar(30)
-  cross_border_allowed  Boolean                @default(false)
-  delivery_enabled      Boolean                @default(false)
-  delivery_fee          Decimal?               @db.Decimal(10, 2)
-  delivery_radius_km    Int?
-  drive_type            DriveType?
-  engine_size           String?                @db.VarChar(20)
-  extra_km_rate         Decimal?               @db.Decimal(10, 2)
-  fuel_policy           FuelPolicy?
-  insurance_type        InsuranceType?
-  licence_plate         String?                @db.VarChar(20)
-  minimum_driver_age    Int?
-  minimum_rental_days   Int?
-  odometer_reading      Int?
-  pickup_hours_from     String?                @db.VarChar(5)
-  pickup_hours_to       String?                @db.VarChar(5)
-  return_same_location  Boolean                @default(true)
-  roadside_assistance   Boolean                @default(false)
-  security_deposit      Decimal?               @db.Decimal(10, 2)
-  bookings              Booking[]
-  icalFeeds             IcalFeed[]
-  amenities             ListingAmenity[]
-  customAmenities       ListingCustomAmenity[]
-  documents             ListingDocument[]
-  photos                ListingPhoto[]
-  reviewTasks           ListingReviewTask[]
-  reviews               ListingReview[]
-  favourites            UserFavourite[]
-  recentViews           UserRecentlyViewed[]
+  id                     String                   @id @default(uuid())
+  providerId             String                   @map("provider_id")
+  category               ListingCategory
+  name                   String?                  @db.VarChar(200)
+  roomType               RoomType?                @map("room_type")
+  unitCount              Int?                     @map("unit_count")
+  description            String?
+  pricePerNight          Decimal?                 @map("price_per_night") @db.Decimal(10, 2)
+  currency               String?                  @db.Char(3)
+  minStayNights          Int                      @default(1) @map("min_stay_nights")
+  checkinTime            String?                  @map("checkin_time") @db.VarChar(5)
+  checkoutTime           String?                  @map("checkout_time") @db.VarChar(5)
+  cancellationPolicy     CancellationPolicy?      @map("cancellation_policy")
+  smokingAllowed         Boolean                  @default(false) @map("smoking_allowed")
+  petsAllowed            Boolean                  @default(false) @map("pets_allowed")
+  address                String?
+  lat                    Decimal?                 @db.Decimal(9, 6)
+  lng                    Decimal?                 @db.Decimal(9, 6)
+  town                   String?                  @db.VarChar(100)
+  country                String?                  @db.Char(2)
+  claimedStarRating      Int?                     @map("claimed_star_rating")
+  starRating             Int?                     @map("star_rating")
+  status                 ListingStatus            @default(draft)
+  submissionCount        Int                      @default(0) @map("submission_count")
+  submittedAt            DateTime?                @map("submitted_at")
+  approvedAt             DateTime?                @map("approved_at")
+  approvedBy             String?                  @map("approved_by")
+  rejectedAt             DateTime?                @map("rejected_at")
+  rejectedBy             String?                  @map("rejected_by")
+  rejectionReasons       String[]                 @map("rejection_reasons")
+  rejectionNote          String?                  @map("rejection_note")
+  suspendedAt            DateTime?                @map("suspended_at")
+  suspendedBy            String?                  @map("suspended_by")
+  suspensionReason       String?                  @map("suspension_reason")
+  consecutiveNegative    Int                      @default(0) @map("consecutive_negative_count")
+  bedrooms               Int?
+  bathrooms              Int?
+  maxGuests              Int?                     @map("max_guests")
+  longStayEnabled        Boolean                  @default(false) @map("long_stay_discount_enabled")
+  longStayMinNights      Int?                     @map("long_stay_min_nights")
+  longStayDiscountType   LongStayDiscountType?    @map("long_stay_discount_type")
+  longStayDiscountValue  Decimal?                 @map("long_stay_discount_value") @db.Decimal(10, 2)
+  activatedAt            DateTime?                @map("activated_at")
+  carMake                String?                  @map("car_make") @db.VarChar(80)
+  carModel               String?                  @map("car_model") @db.VarChar(80)
+  carYear                Int?                     @map("car_year")
+  transmission           Transmission?
+  fuelType               FuelType?                @map("fuel_type")
+  seats                  Int?
+  doors                  Int?                     @default(4)
+  mileagePolicy          MileagePolicy?           @map("mileage_policy")
+  mileageLimitKm         Int?                     @map("mileage_limit_km")
+  updatedAt              DateTime                 @updatedAt @map("updated_at")
+  createdAt              DateTime                 @default(now()) @map("created_at")
+  deletedAt              DateTime?                @map("deleted_at")
+  air_conditioning       Boolean?
+  airport_pickup         Boolean                  @default(false)
+  car_category           CarCategory?
+  colour                 String?                  @db.VarChar(30)
+  cross_border_allowed   Boolean                  @default(false)
+  delivery_enabled       Boolean                  @default(false)
+  delivery_fee           Decimal?                 @db.Decimal(10, 2)
+  delivery_radius_km     Int?
+  drive_type             DriveType?
+  engine_size            String?                  @db.VarChar(20)
+  extra_km_rate          Decimal?                 @db.Decimal(10, 2)
+  fuel_policy            FuelPolicy?
+  insurance_type         InsuranceType?
+  licence_plate          String?                  @db.VarChar(20)
+  minimum_driver_age     Int?
+  minimum_rental_days    Int?
+  odometer_reading       Int?
+  pickup_hours_from      String?                  @db.VarChar(5)
+  pickup_hours_to        String?                  @db.VarChar(5)
+  return_same_location   Boolean                  @default(true)
+  roadside_assistance    Boolean                  @default(false)
+  security_deposit       Decimal?                 @db.Decimal(10, 2)
+  apartment_type         ApartmentType?
+  checkin_rules          String?
+  checkout_rules         String?
+  child_free_under_age   Int?
+  child_price_type       String?                  @db.VarChar(20)
+  child_price_value      Decimal?                 @db.Decimal(10, 2)
+  children_allowed       Boolean                  @default(true)
+  cleaning_fee           Decimal?                 @db.Decimal(10, 2)
+  early_checkin_fee      Decimal?                 @db.Decimal(10, 2)
+  extra_guest_after      Int?
+  extra_guest_fee        Decimal?                 @db.Decimal(10, 2)
+  featured_photo_id      String?
+  floor_number           Int?
+  instant_booking        Boolean                  @default(false)
+  late_checkout_fee      Decimal?                 @db.Decimal(10, 2)
+  max_adults             Int?
+  max_children           Int?
+  monthly_discount       Decimal?                 @db.Decimal(5, 2)
+  price_per_day          Decimal?                 @db.Decimal(10, 2)
+  property_size_m2       Decimal?                 @db.Decimal(8, 2)
+  security_deposit_due   String?                  @db.VarChar(30)
+  self_checkin           Boolean                  @default(false)
+  self_checkin_details   String?
+  weekly_discount        Decimal?                 @db.Decimal(5, 2)
+  bookings               Booking[]
+  icalFeeds              IcalFeed[]
+  amenities              ListingAmenity[]
+  customAmenities        ListingCustomAmenity[]
+  documents              ListingDocument[]
+  listing_moderation_log listing_moderation_log[]
+  photos                 ListingPhoto[]
+  reviewTasks            ListingReviewTask[]
+  reviews                ListingReview[]
+  favourites             UserFavourite[]
+  recentViews            UserRecentlyViewed[]
 
   @@map("listings")
 }
@@ -337,17 +362,19 @@ model VoucherRedemption {
 }
 
 model IcalFeed {
-  id           String            @id @default(uuid())
-  listingId    String            @map("listing_id")
-  platform     String            @db.VarChar(50)
-  feedUrl      String            @map("feed_url") @db.VarChar(1000)
-  lastSyncedAt DateTime?         @map("last_synced_at")
-  lastError    String?           @map("last_error")
-  isActive     Boolean           @default(true) @map("is_active")
-  createdAt    DateTime          @default(now()) @map("created_at")
-  updatedAt    DateTime          @updatedAt @map("updated_at")
-  blockedDates IcalBlockedDate[]
-  listing      Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  id                   String            @id @default(uuid())
+  listingId            String            @map("listing_id")
+  platform             String            @db.VarChar(50)
+  feedUrl              String            @map("feed_url") @db.VarChar(1000)
+  lastSyncedAt         DateTime?         @map("last_synced_at")
+  lastError            String?           @map("last_error")
+  isActive             Boolean           @default(true) @map("is_active")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+  consecutive_failures Int               @default(0)
+  next_retry_at        DateTime?
+  blockedDates         IcalBlockedDate[]
+  listing              Listing           @relation(fields: [listingId], references: [id], onDelete: Cascade)
 
   @@map("ical_feeds")
 }
@@ -395,6 +422,17 @@ model Message {
   @@map("messages")
 }
 
+model listing_moderation_log {
+  id         String   @id
+  listing_id String
+  action     String   @db.VarChar(50)
+  actor_id   String
+  actor_role String   @db.VarChar(50)
+  metadata   Json     @default("{}")
+  created_at DateTime @default(now())
+  listings   Listing  @relation(fields: [listing_id], references: [id])
+}
+
 enum ListingCategory {
   hotel
   apartment
@@ -421,6 +459,7 @@ enum LongStayDiscountType {
 enum Transmission {
   manual
   automatic
+  semi_auto
 }
 
 enum FuelType {
@@ -428,6 +467,7 @@ enum FuelType {
   diesel
   electric
   hybrid
+  lpg
 }
 
 enum MileagePolicy {
@@ -458,6 +498,9 @@ enum DocumentType {
   tourism_certificate
   insurance_certificate
   roadworthiness_certificate
+  hotel_operating_permit
+  tourism_authority_certificate
+  vehicle_registration
 }
 
 enum ReviewTaskStatus {
@@ -498,8 +541,8 @@ enum CarCategory {
 }
 
 enum DriveType {
-  WD  @map("2WD")
-  WD  @map("4WD")
+  WD_2 @map("2WD")
+  WD_4 @map("4WD")
   AWD
 }
 
@@ -507,6 +550,8 @@ enum FuelPolicy {
   full_to_full
   same_to_same
   free_tank
+  full_to_empty
+  pre_purchase
 }
 
 enum InsuranceType {
@@ -514,4 +559,29 @@ enum InsuranceType {
   standard
   premium
   comprehensive
+  basic_third_party
+  premium_zero_excess
+}
+
+enum ApartmentType {
+  entire_place
+  private_room
+  shared_room
+  studio
+  loft
+  villa
+  townhouse
+}
+
+enum BedType {
+  single
+  double
+  queen
+  king
+  twin
+}
+
+enum BlockedDateSource {
+  manual
+  ical
 }

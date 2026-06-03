@@ -143,12 +143,13 @@ export async function webhookRoutes(app: FastifyInstance) {
         });
       }
     }
+    
 
     return reply.status(200).send({ received: true });
   });
 
   // ── POST /payments/tara/webhook ───────────────────────────────────────────
-  app.post("/payments/tara/webhook", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/payments/tara/webhook", {}, async (req: FastifyRequest, reply: FastifyReply) => {
     const signature = req.headers["x-tara-signature"];
     if (!signature || typeof signature !== "string") {
       return sendError(reply, 400, "MISSING_SIGNATURE", "Missing X-Tara-Signature header.");

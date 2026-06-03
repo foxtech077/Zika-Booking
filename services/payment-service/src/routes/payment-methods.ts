@@ -50,7 +50,14 @@ function formatMethod(m: {
 export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── GET /guests/me/payment-methods ───────────────────────────────────────
-  app.get("/guests/me/payment-methods", { preHandler: [requireUser] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/guests/me/payment-methods",  {
+
+    schema: {
+      tags: ["Payment Methods"],
+      summary: "List guest payment methods",
+      security: [{ bearerAuth: [] }],
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req as GuestRequest;
 
     const methods = await prisma.paymentMethod.findMany({
@@ -74,8 +81,11 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── POST /guests/me/payment-methods/stripe/setup ─────────────────────────
   app.post(
-    "/guests/me/payment-methods/stripe/setup",
-    { preHandler: [requireUser] },
+    "/guests/me/payment-methods/stripe/setup", {schema: {
+      tags: ["Payment Methods"],
+      summary: "Create Stripe SetupIntent",
+      security: [{ bearerAuth: [] }],
+    }},
     async (req: FastifyRequest, reply: FastifyReply) => {
       // requireUser sets userId but we don't need it for setup intent creation
       void (req as GuestRequest).userId;
@@ -94,7 +104,20 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   // ── POST /guests/me/payment-methods/stripe/confirm ───────────────────────
   app.post(
     "/guests/me/payment-methods/stripe/confirm",
-    { preHandler: [requireUser] },
+    { schema: {
+      tags: ["Payment Methods"],
+      summary: "Save Stripe card after SetupIntent",
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        required: ["setupIntentId"],
+        properties: {
+          setupIntentId: {
+            type: "string",
+          },
+        },
+      },
+    } },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { userId } = req as GuestRequest;
 
@@ -165,7 +188,23 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   // ── POST /guests/me/payment-methods/tara ─────────────────────────────────
   app.post(
     "/guests/me/payment-methods/tara",
-    { preHandler: [requireUser] },
+    {schema: {
+      tags: ["Payment Methods"],
+      summary: "Add Tara mobile money method",
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        required: ["mobileNumber"],
+        properties: {
+          mobileNumber: {
+            type: "string",
+          },
+          provider: {
+            type: "string",
+          },
+        },
+      },
+    } },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { userId } = req as GuestRequest;
 
@@ -202,7 +241,32 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   // ── PATCH /guests/me/payment-methods/:id ─────────────────────────────────
   app.patch(
     "/guests/me/payment-methods/:id",
-    { preHandler: [requireUser] },
+    { schema: {
+      tags: ["Payment Methods"],
+      summary: "Patch payment method",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: {
+            type: "string",
+          },
+        },
+      },
+    
+      body: {
+        type: "object",
+        properties: {
+          isDefault: {
+            type: "boolean",
+          },
+          nickname: {
+            type: "string",
+          },
+        },
+      },
+    } },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { userId } = req as GuestRequest;
       const { id } = req.params as { id: string };
@@ -245,7 +309,20 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   // ── DELETE /guests/me/payment-methods/:id ────────────────────────────────
   app.delete(
     "/guests/me/payment-methods/:id",
-    { preHandler: [requireUser] },
+    { schema: {
+      tags: ["Payment Methods"],
+      summary: "Delete payment method",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: {
+            type: "string",
+          },
+        },
+      },
+    } },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { userId } = req as GuestRequest;
       const { id } = req.params as { id: string };

@@ -96,7 +96,18 @@ export async function bookingRoutes(app: FastifyInstance) {
   const redis = getRedis();
 
   // ── POST /bookings/initiate — acquire reservation lock ─────────────────
-  app.post("/bookings/initiate", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/bookings/initiate", { preHandler: [requireProvider],schema: {
+    body: {
+      type: "object",
+      required: ["listingId"],
+      properties: {
+        listingId: { type: "string" },
+        checkIn: { type: "string" },
+        checkOut: { type: "string" },
+        guests: { type: "number" }
+      }
+    }
+  } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const body = req.body as {
       listingId: string;
@@ -225,7 +236,30 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /bookings — create pending_payment booking ───────────────────
-  app.post("/bookings", { preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/bookings", { preHandler: [requireProvider], schema: {
+    tags: ["Bookings"],
+    summary: "Create booking",
+    security: [{ bearerAuth: [] }],
+    body: {
+      type: "object",
+      required: [
+        "lockToken",
+        "listingId",
+        "guestFirstName",
+        "guestLastName",
+        "guestEmail"
+      ],
+      properties: {
+        lockToken: { type: "string" },
+        listingId: { type: "string" },
+        checkIn: { type: "string" },
+        checkOut: { type: "string" },
+        guestFirstName: { type: "string" },
+        guestLastName: { type: "string" },
+        guestEmail: { type: "string" }
+      }
+    }
+  } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const body = req.body as {
       lockToken: string;

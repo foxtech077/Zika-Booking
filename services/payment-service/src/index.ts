@@ -18,10 +18,29 @@ async function build() {
   // Register Swagger API documentation
   await app.register(swagger, {
     openapi: {
+      tags: [
+        {
+          name: "Payments",
+          description: "Payment operations",
+        },
+        {
+          name: "Webhooks",
+          description: "Stripe and Tara payment callbacks",
+        },
+        {
+          name: "Payment Methods",
+          description: "Saved payment methods",
+        },
+        {
+          name: "System",
+          description: "Service health and diagnostics",
+        },
+      ],
       info: {
         title: "Zika Booking Payment Service API",
         description: "API documentation for Zika Booking payment Service",
         version: "0.0.1",
+        
       },
       servers: [
         {
@@ -83,7 +102,12 @@ async function build() {
   );
 
   // ── Health check ──────────────────────────────────────────────────────────
-  app.get("/health", async () => ({ status: "ok", service: "payment-service", timestamp: new Date().toISOString() }));
+  app.get("/health",{ 
+    schema: {
+      tags: ["System"],
+      summary: "Health check",
+    },
+  } ,async () => ({ status: "ok", service: "payment-service", timestamp: new Date().toISOString() }));
 
   // ── Route plugins ─────────────────────────────────────────────────────────
   await app.register(paymentRoutes);
