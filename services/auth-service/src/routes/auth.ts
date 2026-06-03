@@ -923,29 +923,29 @@ console.log("========================================");
       redirectUri,
     });
 
-//     const authUrl = client.generateAuthUrl({
-//       access_type: "offline",
-//       scope: [
-//         "https://www.googleapis.com/auth/userinfo.profile",
-//         "https://www.googleapis.com/auth/userinfo.email",
-//       ],
-//       prompt: "select_account",
-//     });
+    const authUrl = client.generateAuthUrl({
+      access_type: "offline",
+      scope: [
+        "https://www.googleapis.com/auth/userinfo.profile",
+        "https://www.googleapis.com/auth/userinfo.email",
+      ],
+      prompt: "select_account",
+    });
 
-//     reply.redirect(authUrl);
-//   });
+    reply.redirect(authUrl);
+  });
 
 
 
 //   //-----sample---
 // //   //app.get("/auth/oauth/google/url", async (req, reply) => {
-  const authUrl = client.generateAuthUrl({
-    access_type: "offline",
-    scope: ["openid", "email", "profile"],
-  });
+//   const authUrl = client.generateAuthUrl({
+//     access_type: "offline",
+//     scope: ["openid", "email", "profile"],
+//   });
 
-  return { authUrl };
-});
+//   return { authUrl };
+// });
 
 
   // ── GET /auth/oauth/google/callback (Web OAuth Callback) ──────────────────
