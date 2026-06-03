@@ -267,10 +267,23 @@ export async function adminListingRoutes(app: FastifyInstance) {
   });
 
   // POST /admin/listings/:id/approve — Approve listing (UC-2.9)
-  app.post("/admin/listings/:id/approve", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/approve", {
+    schema: {
+      tags: ["Admin Listings"],
+      body: {
+        type: "object",
+        required: ["starRating"],
+        properties: {
+          starRating: { type: "integer", minimum: 1, maximum: 5, description: "Verified star rating assigned by admin (1–5)" },
+          adminNote:  { type: "string", description: "Optional internal note for the review log" },
+        },
+      },
+    },
+    preHandler: [requireAdmin],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
-    const { starRating, adminNote } = req.body as { starRating: number; adminNote?: string };
+    const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
 
     // Must be a whole-number integer in [1, 5] — spec: star rating assigned by admin only (1–5)
     if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
