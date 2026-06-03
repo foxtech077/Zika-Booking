@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Settings, CheckCircle, AlertCircle, Server } from "lucide-react";
 import { api } from "@/lib/api";
 import { listingApi } from "@/lib/listing-api";
+import { paymentApi } from "@/lib/payment-api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { useAuthStore } from "@/stores/auth";
@@ -27,9 +28,16 @@ export default function SettingsPage() {
     refetchInterval: 30_000,
   });
 
+  const { data: paymentHealth } = useQuery({
+    queryKey: ["health-payment"],
+    queryFn: () => checkHealth(paymentApi, "Payment Service"),
+    refetchInterval: 30_000,
+  });
+
   const services = [
-    { ...(authHealth ?? { service: "Auth Service", status: "checking" }), port: 3001, description: "Authentication, sessions, admin users, audit logs" },
-    { ...(listingHealth ?? { service: "Listing Service", status: "checking" }), port: 3003, description: "Listings, bookings, commission, vouchers, reviews" },
+    { ...(authHealth ?? { service: "Auth Service", status: "checking" }), endpoint: "https://api.kainook.com/auth", description: "Authentication, sessions, admin users, audit logs" },
+    { ...(listingHealth ?? { service: "Listing Service", status: "checking" }), endpoint: "https://api.kainook.com/listings", description: "Listings, bookings, commission, vouchers, reviews" },
+    { ...(paymentHealth ?? { service: "Payment Service", status: "checking" }), endpoint: "https://api.kainook.com/payments", description: "Payments, saved methods, payment status" },
   ];
 
   const SESSION_SETTINGS = [
@@ -80,7 +88,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-slate-900">{svc.service}</p>
-                <p className="text-xs text-slate-500">Port {svc.port} · {svc.description}</p>
+                <p className="text-xs text-slate-500">{svc.endpoint} - {svc.description}</p>
               </div>
               <Badge
                 label={svc.status === "checking" ? "Checking…" : svc.status === "healthy" ? "Healthy" : "Degraded"}
@@ -138,8 +146,13 @@ export default function SettingsPage() {
           {[
             ["Node Environment", "development"],
             ["Admin Port", "3002"],
-            ["Auth Service", "localhost:3001"],
-            ["Listing Service", "localhost:3003"],
+            ["Main Website", "https://kainook.com"],
+            ["Admin Portal", "https://admin.kainook.com"],
+            ["Provider Portal", "https://provider.kainook.com"],
+            ["API Gateway", "https://api.kainook.com"],
+            ["Auth Service", "https://api.kainook.com/auth"],
+            ["Listing Service", "https://api.kainook.com/listings"],
+            ["Payment Service", "https://api.kainook.com/payments"],
             ["Next.js Version", "14.2.21"],
             ["React Version", "18.3.1"],
           ].map(([k, v]) => (

@@ -234,27 +234,27 @@ export default function ListingsPage() {
               {[
                 ["ID", selected.id],
                 ["Category", selected.category],
-              ["Status", selected.status],
-              ["Country", selected.country ?? "—"],
-              ["Town", selected.town ?? "—"],
-              ["Star Rating", selected.starRating ?? "—"],
-              ["Claimed Stars", selected.claimedStarRating ?? "—"],
-              ["Price/Night", selected.pricePerNight ? formatCurrency(Number(selected.pricePerNight), selected.currency ?? "USD") : "—"],
-              ["Submissions", selected.submissionCount],
-              ["Provider ID", selected.providerId],
-              ["Approved", formatDate(selected.approvedAt)],
-              ["Rejected", formatDate(selected.rejectedAt)],
-              ["Suspended", formatDate(selected.suspendedAt)],
-              ["Created", formatDate(selected.createdAt)],
-            ].map(([k, v]) => (
-              <div key={String(k)} className="flex justify-between gap-4">
-                <dt className="text-slate-500 flex-shrink-0">{k}</dt>
-                <dd className="text-slate-900 font-medium text-right truncate">{String(v)}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
+                ["Status", selected.status],
+                ["Country", selected.country ?? "—"],
+                ["Town", selected.town ?? "—"],
+                ["Star Rating", selected.starRating ?? "—"],
+                ["Claimed Stars", selected.claimedStarRating ?? "—"],
+                ["Price/Night", selected.pricePerNight ? formatCurrency(Number(selected.pricePerNight), selected.currency ?? "USD") : "—"],
+                ["Submissions", selected.submissionCount],
+                ["Provider ID", selected.providerId],
+                ["Approved", formatDate(selected.approvedAt)],
+                ["Rejected", formatDate(selected.rejectedAt)],
+                ["Suspended", formatDate(selected.suspendedAt)],
+                ["Created", formatDate(selected.createdAt)],
+              ].map(([k, v]) => (
+                <div key={String(k)} className="flex justify-between gap-4">
+                  <dt className="text-slate-500 flex-shrink-0">{k}</dt>
+                  <dd className="text-slate-900 font-medium text-right truncate">{String(v)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
       </SlideDrawer>
 
       {/* Suspend modal */}
