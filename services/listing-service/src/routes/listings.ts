@@ -529,7 +529,7 @@ export async function listingRoutes(app: FastifyInstance) {
         "- **roomType**",
         "- **unitCount** (≥ 1)",
         "- **pricePerNight** (> 0) and **currency**",
-        "- **address**, **lat**, **lng**, **town**, **country** (geocoded via address endpoints)",
+        "- **address**, **town**, **country**",
         "- **cancellationPolicy**",
         "- **checkinTime** and **checkoutTime**",
         "- **minStayNights** (≥ 1)",
@@ -600,8 +600,8 @@ export async function listingRoutes(app: FastifyInstance) {
     if (!listing.unitCount || listing.unitCount < 1) failures.push("Number of units is required.");
     if (!listing.pricePerNight || Number(listing.pricePerNight) <= 0) failures.push("Price per night must be greater than 0.");
     if (!listing.currency) failures.push("Currency is required.");
-    if (!listing.address || !listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
-    if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+    if (!listing.address) failures.push("Address is required.");
+    if (!listing.town || !listing.country) failures.push("Town and country are required.");
     if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
     if (!listing.checkinTime) failures.push("Check-in time is required.");
     if (!listing.checkoutTime) failures.push("Check-out time is required.");
@@ -694,8 +694,8 @@ export async function listingRoutes(app: FastifyInstance) {
       if (!listing.name?.trim()) failures.push("Apartment name is required.");
       if (!listing.description?.trim()) failures.push("Description is required.");
       if (listing.description && listing.description.length > 1000) failures.push("Description cannot exceed 1000 characters.");
-      if (!listing.address || !listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
-      if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+      if (!listing.address) failures.push("Address is required.");
+      if (!listing.town || !listing.country) failures.push("Town and country are required.");
       if (listing.bedrooms === null || listing.bedrooms === undefined || listing.bedrooms < 0) failures.push("Number of bedrooms is required.");
       if (listing.bathrooms === null || listing.bathrooms === undefined || listing.bathrooms < 0) failures.push("Number of bathrooms is required.");
       if (listing.maxGuests === null || listing.maxGuests === undefined || listing.maxGuests < 1) failures.push("Maximum guests must be at least 1.");
@@ -756,8 +756,8 @@ export async function listingRoutes(app: FastifyInstance) {
         if (listing.deliveryFee === null || listing.deliveryFee === undefined || Number(listing.deliveryFee) < 0) failures.push("Delivery fee is required when delivery is enabled.");
       }
 
-      if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
-      if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+      if (!listing.address) failures.push("Pickup address is required.");
+      if (!listing.town || !listing.country) failures.push("Town and country are required.");
 
       if (!listing.fuelType) failures.push("Fuel type is required.");
       if (!listing.insuranceType) failures.push("Insurance type is required.");
@@ -905,8 +905,8 @@ export async function listingRoutes(app: FastifyInstance) {
           if (listing.deliveryFee === null || listing.deliveryFee === undefined || Number(listing.deliveryFee) < 0) failures.push("Delivery fee is required when delivery is enabled.");
         }
 
-        if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
-        if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+        if (!listing.address) failures.push("Pickup address is required.");
+        if (!listing.town || !listing.country) failures.push("Town and country are required.");
 
         if (!listing.fuelType) failures.push("Fuel type is required.");
         if (!listing.insuranceType) failures.push("Insurance type is required.");
