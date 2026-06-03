@@ -591,6 +591,12 @@ export default function SearchScreen() {
     }
   }, [geo, placeName, radiusKm]);
 
+  // Reset results and cursor when category changes (tab transition)
+  useEffect(() => {
+    setCursor(null);
+    setAllResults([]);
+  }, [category]);
+
   // Center on user's current GPS location
   const centerOnUserLocation = () => {
     if (typeof navigator !== "undefined" && navigator.geolocation) {
@@ -706,12 +712,13 @@ export default function SearchScreen() {
       const res = await listingApi.get<SearchResponse>(`/search?${qp.toString()}`);
       const incoming = res.data.data;
 
+      const filteredResults = (incoming.results ?? []).filter((r) => r.listingType === category);
       if (!cursor) {
-        setAllResults(incoming.results);
+        setAllResults(filteredResults);
       } else {
         setAllResults((prev) => {
           const existingIds = new Set(prev.map((r) => r.id));
-          const fresh = incoming.results.filter((r) => !existingIds.has(r.id));
+          const fresh = filteredResults.filter((r) => !existingIds.has(r.id));
           return [...prev, ...fresh];
         });
       }

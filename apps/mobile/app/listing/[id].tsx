@@ -668,12 +668,51 @@ export default function PublicListingDetailScreen() {
     return null;
   })();
 
-  // Amenities
-  const standardAmenities = listing.amenities ?? [];
-  const customAmenities = listing.customAmenities ?? [];
+  // Predefined Amenities
+  const standardAmenitiesList: string[] = (() => {
+    if (!listing.amenities) return [];
+    if (Array.isArray(listing.amenities)) {
+      return listing.amenities
+        .map((a: any) => {
+          const key = a?.amenityKey ?? a;
+          if (typeof key === "string") {
+            return key.includes(":") ? key.split(":")[1] : key;
+          }
+          return null;
+        })
+        .filter(Boolean) as string[];
+    } else if (typeof listing.amenities === "object") {
+      return Object.values(listing.amenities)
+        .flat()
+        .map((a: any) => {
+          const key = a?.amenityKey ?? a;
+          if (typeof key === "string") {
+            return key.includes(":") ? key.split(":")[1] : key;
+          }
+          return null;
+        })
+        .filter(Boolean) as string[];
+    }
+    return [];
+  })();
+
+  const customAmenitiesList: string[] = (() => {
+    if (!listing.customAmenities) return [];
+    if (Array.isArray(listing.customAmenities)) {
+      return listing.customAmenities.map((a: any) => a?.label ?? a).filter(Boolean) as string[];
+    }
+    return [];
+  })();
+
   const allAmenities: { label: string; isCustom: boolean }[] = [
-    ...standardAmenities.map((a) => ({ label: AMENITY_LABELS[a.amenityKey] ?? a.amenityKey, isCustom: false })),
-    ...customAmenities.map((a) => ({ label: a.label, isCustom: true })),
+    ...standardAmenitiesList.map((key) => ({
+      label: AMENITY_LABELS[key] ?? key.replace(/_/g, " "),
+      isCustom: false,
+    })),
+    ...customAmenitiesList.map((lbl) => ({
+      label: lbl,
+      isCustom: true,
+    })),
   ];
   const MAX_AMENITIES = 10;
   const visibleAmenities = amenitiesExpanded ? allAmenities : allAmenities.slice(0, MAX_AMENITIES);

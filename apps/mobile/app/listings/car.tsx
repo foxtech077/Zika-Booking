@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -60,9 +61,9 @@ const FUEL_TYPES = [
 ];
 
 const DRIVE_TYPES = [
-  { key: "2wd", label: "2WD" },
-  { key: "4wd", label: "4WD" },
-  { key: "awd", label: "AWD" },
+  { key: "2WD", label: "2WD" },
+  { key: "4WD", label: "4WD" },
+  { key: "AWD", label: "AWD" },
 ];
 
 const MILEAGE_OPTIONS = [
@@ -141,6 +142,8 @@ type CarForm = {
   pickupHours: string;
 };
 
+type FormErrors = Partial<Record<keyof CarForm | "photos", string>>;
+
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function CarListingScreen() {
@@ -153,7 +156,9 @@ export default function CarListingScreen() {
   const [photos, setPhotos] = useState<Array<{ id: string; cdnUrl: string; position: number }>>([]);
   const [documents, setDocuments] = useState<Array<{ id: string; documentType: string }>>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   const [form, setForm] = useState<CarForm>({
     name: "",
@@ -161,7 +166,7 @@ export default function CarListingScreen() {
     carModel: "",
     carYear: "",
     bodyType: "",
-    unitCount: "1",
+    unitCount: "",   // starts empty — no hardcoded default
     colour: "",
     licencePlate: "",
     odometerReading: "",
@@ -215,7 +220,7 @@ export default function CarListingScreen() {
       carModel: listing.carModel ?? "",
       carYear: String(listing.carYear ?? ""),
       bodyType: listing.bodyType ?? "",
-      unitCount: String(listing.unitCount ?? "1"),
+      unitCount: listing.unitCount != null ? String(listing.unitCount) : "",
       colour: listing.colour ?? "",
       licencePlate: listing.licencePlate ?? "",
       odometerReading: String(listing.odometerReading ?? ""),
@@ -254,6 +259,7 @@ export default function CarListingScreen() {
 
   function set<K extends keyof CarForm>(key: K, value: CarForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
   }
 
   function selectCountry(c: CountryData) {
@@ -265,6 +271,48 @@ export default function CarListingScreen() {
       currency: cur.code,
       currencySymbol: cur.symbol,
     }));
+    if (errors.country) setErrors((e) => ({ ...e, country: undefined }));
+  }
+
+  // ── Step validation ────────────────────────────────────────────────────────
+
+  function validateStep(s: number): boolean {
+    const e: FormErrors = {};
+    switch (s) {
+      case 0:
+        if (!form.name.trim()) e.name = "Listing title is required.";
+        if (!form.country) e.country = "Country is required.";
+        if (!form.carMake.trim()) e.carMake = "Make is required.";
+        if (!form.carModel.trim()) e.carModel = "Model is required.";
+        if (!form.carYear.trim()) e.carYear = "Year is required.";
+        if (!form.bodyType) e.bodyType = "Vehicle category is required.";
+        if (!form.unitCount.trim() || parseInt(form.unitCount, 10) < 1)
+          e.unitCount = "Number of units is required (minimum 1).";
+        if (!form.pricePerNight.trim() || parseFloat(form.pricePerNight) <= 0)
+          e.pricePerNight = "Price per day is required.";
+        break;
+      case 1:
+        if (!form.seats.trim() || parseInt(form.seats, 10) < 1) e.seats = "Number of seats is required.";
+        if (!form.transmission) e.transmission = "Transmission type is required.";
+        if (!form.fuelType) e.fuelType = "Fuel type is required.";
+        break;
+      case 2:
+        if (!form.minDriverAge.trim() || parseInt(form.minDriverAge, 10) < 16)
+          e.minDriverAge = "Minimum driver age is required.";
+        if (!form.cancellationPolicy) e.cancellationPolicy = "Cancellation policy is required.";
+        if (form.mileagePolicy === "limited" && (!form.mileageLimitKm.trim() || parseInt(form.mileageLimitKm, 10) < 1))
+          e.mileageLimitKm = "Daily mileage limit is required when policy is 'Limited'.";
+        break;
+      case 4:
+        if (!form.address.trim()) e.address = "Pickup address is required.";
+        if (!form.town.trim()) e.town = "Town / city is required.";
+        break;
+      case 5:
+        if (photos.length < 1) e.photos = "At least 1 photo is required.";
+        break;
+    }
+    setErrors(e);
+    return Object.keys(e).length === 0;
   }
 
   function buildStepPayload(currentStep: number): Record<string, unknown> {
@@ -276,7 +324,7 @@ export default function CarListingScreen() {
           carModel: form.carModel,
           carYear: parseInt(form.carYear, 10) || null,
           bodyType: form.bodyType || null,
-          unitCount: parseInt(form.unitCount, 10) || 1,
+          unitCount: parseInt(form.unitCount, 10) || null,
           colour: form.colour,
           licencePlate: form.licencePlate,
           odometerReading: parseInt(form.odometerReading, 10) || null,
@@ -318,7 +366,6 @@ export default function CarListingScreen() {
         return {
           address: form.address,
           town: form.town,
-          // Geocoding temporarily disabled — lat/lng not sent from manual fields
           pickupHours: form.pickupHours,
         };
       case 5: // Photos & Docs — uploaded via presign/confirm, no PATCH needed
@@ -328,6 +375,7 @@ export default function CarListingScreen() {
   }
 
   async function handleNext() {
+    if (!validateStep(step)) return;
     setSaving(true);
     try {
       const payload = buildStepPayload(step);
@@ -340,7 +388,7 @@ export default function CarListingScreen() {
         await handleComplete();
       }
     } catch {
-      Alert.alert("Save Failed", "Could not save your changes. Please try again.");
+      Alert.alert("Save Failed", "Could not save your changes. Please check your connection and try again.");
     } finally {
       setSaving(false);
     }
@@ -350,19 +398,68 @@ export default function CarListingScreen() {
     qc.invalidateQueries({ queryKey: ["myListings"] });
     Alert.alert(
       "Vehicle Listing Saved",
-      "Your car rental listing has been saved. It will activate automatically once all required fields and at least 1 photo are complete.",
+      "Your vehicle listing has been saved. Would you like to go to the activation screen to publish it now?",
       [
-        {
-          text: "View My Listings",
-          onPress: () => router.replace("/(provider)/listings" as any),
+        { text: "Later", onPress: () => router.replace("/(provider)/listings" as any) },
+        { text: "Go Live", onPress: () => router.replace(`/listings/${id}/submit` as any) },
+      ]
+    );
+  }
+
+  function handleExitWizard() {
+    Alert.alert(
+      "Discard listing changes?",
+      "You can save this listing as a draft or discard it completely.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Save Draft", 
+          onPress: () => {
+            qc.invalidateQueries({ queryKey: ["myListings"] });
+            router.replace("/(provider)/listings" as any);
+          } 
+        },
+        { 
+          text: "Discard", 
+          style: "destructive", 
+          onPress: async () => {
+            if (!id) {
+              router.replace("/(provider)/listings" as any);
+              return;
+            }
+            setSaving(true);
+            try {
+              await listingApi.delete(`/listings/${id}`);
+              qc.invalidateQueries({ queryKey: ["myListings"] });
+              router.replace("/(provider)/listings" as any);
+            } catch {
+              Alert.alert("Error", "Could not delete the draft. Please try again.");
+            } finally {
+              setSaving(false);
+            }
+          } 
         },
       ]
     );
   }
 
+  useEffect(() => {
+    const onBackPress = () => {
+      if (step > 0) {
+        setStep((s) => s - 1);
+        return true;
+      }
+      handleExitWizard();
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => subscription.remove();
+  }, [step, id]);
+
   function handleBack() {
     if (step > 0) setStep((s) => s - 1);
-    else router.back();
+    else handleExitWizard();
   }
 
   async function pickAndUploadPhoto() {
@@ -379,7 +476,10 @@ export default function CarListingScreen() {
         selectionLimit: 30 - photos.length,
       });
       if (result.canceled) return;
-      for (const asset of result.assets) {
+      const total = result.assets.length;
+      for (let i = 0; i < total; i++) {
+        const asset = result.assets[i];
+        setUploadProgress({ current: i + 1, total });
         const contentType = asset.mimeType ?? "image/jpeg";
         const presignRes = await listingApi.post<{ data: { uploadUrl: string; s3Key: string } }>(
           `/listings/${id}/photos/presign`,
@@ -393,10 +493,12 @@ export default function CarListingScreen() {
         );
         setPhotos((p) => [...p, confirmRes.data.data]);
       }
+      if (errors.photos) setErrors((e) => ({ ...e, photos: undefined }));
     } catch {
-      Alert.alert("Upload Failed", "Some photos could not be uploaded. Please try again.");
+      Alert.alert("Upload Failed", "Some photos could not be uploaded. Already uploaded photos have been saved.");
     } finally {
       setUploadingPhoto(false);
+      setUploadProgress(null);
     }
   }
 
@@ -405,7 +507,7 @@ export default function CarListingScreen() {
       await listingApi.delete(`/listings/${id}/photos/${photoId}`);
       setPhotos((p) => p.filter((ph) => ph.id !== photoId));
     } catch {
-      Alert.alert("Error", "Could not remove this photo.");
+      Alert.alert("Error", "Could not delete this photo. Please try again.");
     }
   }
 
@@ -437,6 +539,15 @@ export default function CarListingScreen() {
       Alert.alert("Upload Failed", `Could not upload ${docLabel}. Please try again.`);
     } finally {
       setUploadingDoc(null);
+    }
+  }
+
+  async function deleteDocument(docId: string, docLabel: string) {
+    try {
+      await listingApi.delete(`/listings/${id}/documents/${docId}`);
+      setDocuments((d) => d.filter((doc) => doc.id !== docId));
+    } catch {
+      Alert.alert("Error", `Could not delete ${docLabel}. Please try again.`);
     }
   }
 
@@ -488,6 +599,7 @@ export default function CarListingScreen() {
               onChangeText={(t) => set("name", t)}
               placeholder="e.g. Toyota Land Cruiser 2022 – Nairobi"
               maxLength={200}
+              error={errors.name}
             />
 
             <CountryPickerButton
@@ -495,6 +607,7 @@ export default function CarListingScreen() {
               required
               selectedCountry={selectedCountry}
               onPress={() => setCountryModalOpen(true)}
+              error={errors.country}
             />
             {selectedCountry && (
               <InfoBanner
@@ -511,6 +624,7 @@ export default function CarListingScreen() {
                   value={form.carMake}
                   onChangeText={(t) => set("carMake", t)}
                   placeholder="e.g. Toyota"
+                  error={errors.carMake}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -520,6 +634,7 @@ export default function CarListingScreen() {
                   value={form.carModel}
                   onChangeText={(t) => set("carModel", t)}
                   placeholder="e.g. Land Cruiser"
+                  error={errors.carModel}
                 />
               </View>
             </View>
@@ -534,6 +649,7 @@ export default function CarListingScreen() {
                   placeholder="e.g. 2022"
                   keyboardType="numeric"
                   maxLength={4}
+                  error={errors.carYear}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -552,6 +668,7 @@ export default function CarListingScreen() {
               options={BODY_TYPES}
               selected={form.bodyType}
               onSelect={(k) => set("bodyType", k)}
+              error={errors.bodyType}
             />
 
             <FormField
@@ -559,9 +676,10 @@ export default function CarListingScreen() {
               required
               hint="How many vehicles of this type do you have?"
               value={form.unitCount}
-              onChangeText={(t) => set("unitCount", t.replace(/\D/g, "") || "1")}
+              onChangeText={(t) => set("unitCount", t.replace(/\D/g, ""))}
               placeholder="e.g. 3"
               keyboardType="numeric"
+              error={errors.unitCount}
             />
 
             <FormField
@@ -594,6 +712,7 @@ export default function CarListingScreen() {
                   onChangeText={(t) => set("pricePerNight", t)}
                   placeholder="0.00"
                   keyboardType="decimal-pad"
+                  error={errors.pricePerNight}
                 />
               </View>
               <View style={s.currencyBadgeWrap}>
@@ -616,6 +735,7 @@ export default function CarListingScreen() {
               onChangeText={(t) => set("seats", t.replace(/\D/g, ""))}
               placeholder="e.g. 5"
               keyboardType="numeric"
+              error={errors.seats}
             />
 
             <FormField
@@ -632,6 +752,7 @@ export default function CarListingScreen() {
               options={TRANSMISSION_OPTIONS}
               selected={form.transmission}
               onSelect={(k) => set("transmission", k)}
+              error={errors.transmission}
             />
 
             <ChipSelector
@@ -640,6 +761,7 @@ export default function CarListingScreen() {
               options={FUEL_TYPES}
               selected={form.fuelType}
               onSelect={(k) => set("fuelType", k)}
+              error={errors.fuelType}
             />
 
             <ChipSelector
@@ -701,6 +823,7 @@ export default function CarListingScreen() {
                   onChangeText={(t) => set("minDriverAge", t.replace(/\D/g, ""))}
                   placeholder="21"
                   keyboardType="numeric"
+                  error={errors.minDriverAge}
                 />
               </View>
             </View>
@@ -721,6 +844,7 @@ export default function CarListingScreen() {
                 onChangeText={(t) => set("mileageLimitKm", t.replace(/\D/g, ""))}
                 placeholder="e.g. 200"
                 keyboardType="numeric"
+                error={errors.mileageLimitKm}
               />
             )}
 
@@ -810,7 +934,7 @@ export default function CarListingScreen() {
           <View>
             <SectionHeader
               title="Pickup Location"
-              subtitle="Enter the vehicle's pickup address manually. Geocoding will be enabled in a future update."
+              subtitle="Enter the vehicle's pickup address below."
               icon="map-pin"
             />
 
@@ -820,6 +944,7 @@ export default function CarListingScreen() {
               value={form.address}
               onChangeText={(t) => set("address", t)}
               placeholder="e.g. Jomo Kenyatta International Airport, Gate 3"
+              error={errors.address}
             />
 
             <FormField
@@ -828,6 +953,7 @@ export default function CarListingScreen() {
               value={form.town}
               onChangeText={(t) => set("town", t)}
               placeholder="e.g. Nairobi"
+              error={errors.town}
             />
 
             <View style={s.gap} />
@@ -847,10 +973,12 @@ export default function CarListingScreen() {
             <PhotosSection
               photos={photos}
               uploading={uploadingPhoto}
+              uploadProgress={uploadProgress ?? undefined}
               onAdd={pickAndUploadPhoto}
               onDelete={deletePhoto}
               minPhotos={1}
               maxPhotos={30}
+              error={errors.photos}
             />
 
             <View style={s.gap} />
@@ -860,6 +988,7 @@ export default function CarListingScreen() {
               documents={documents}
               uploadingDoc={uploadingDoc}
               onUpload={pickAndUploadDocument}
+              onDelete={deleteDocument}
               note="Upload valid insurance and roadworthiness documents for your vehicle."
             />
           </View>
@@ -900,7 +1029,6 @@ const s = StyleSheet.create({
   priceRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   currencyBadgeWrap: { paddingBottom: 20, paddingTop: 4, alignItems: "flex-start", minWidth: 90 },
   currencyLabel: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textDark, marginBottom: 8 },
-  currencyNote: { fontSize: 10, color: K.colors.textMuted, marginTop: 6, fontStyle: "italic" },
   deliveryCard: {
     backgroundColor: "#fff",
     borderRadius: K.radius.lg,

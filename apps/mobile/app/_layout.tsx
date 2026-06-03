@@ -11,18 +11,19 @@ const queryClient = new QueryClient({
 });
 
 const screenOptionsByName: Record<string, object> = {
-  "pending-approval":    { headerShown: false },
-  suspended:             { headerShown: false },
-  "(provider)":          { headerShown: false },
-  wallet:                { headerShown: false },
-  notifications:         { headerShown: false },
-  "listings/new":        { headerShown: false },
-  "listings/[id]/index": { headerShown: false },
-  "booking/[id]":        { headerShown: false },
-  search:                { headerShown: true, title: "Search Results", headerBackTitle: "Back" },
-  "book/[listingId]":    { headerShown: true, headerBackTitle: "Back" },
-  "pay/[bookingId]":     { headerShown: true, title: "Complete Payment", headerBackTitle: "Back" },
-  "review/[bookingId]":  { headerShown: true, title: "Leave a Review", headerBackTitle: "Back" },
+  "pending-approval":          { headerShown: false },
+  suspended:                   { headerShown: false },
+  "(provider)":                { headerShown: false },
+  wallet:                      { headerShown: false },
+  notifications:               { headerShown: false },
+  "listings/new":              { headerShown: false },
+  "listings/[id]/index":       { headerShown: false },
+  "booking/[id]":              { headerShown: false },
+  "provider/booking/[id]":     { headerShown: false },
+  search:                      { headerShown: true, title: "Search Results", headerBackTitle: "Back" },
+  "book/[listingId]":          { headerShown: true, headerBackTitle: "Back" },
+  "pay/[bookingId]":           { headerShown: true, title: "Complete Payment", headerBackTitle: "Back" },
+  "review/[bookingId]":        { headerShown: true, title: "Leave a Review", headerBackTitle: "Back" },
 };
 
 // Error codes from the auth service that mean "this account can't continue"
