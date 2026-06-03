@@ -305,7 +305,7 @@ function InlineCalendar({ unavailableRanges, currency }: { unavailableRanges: { 
   const isDateUnavailable = (day: number) => {
     const dStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dDate = new Date(dStr);
-    
+
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     if (dDate < yesterday) return true;
@@ -412,8 +412,8 @@ function ReviewsSection({ listingId }: { listingId: string }) {
   const headerLabel = avg != null && total > 0
     ? `★ ${avg.toFixed(1)} · ${total} ${total === 1 ? "review" : "reviews"}`
     : total > 0
-    ? `${total} ${total === 1 ? "review" : "reviews"}`
-    : "";
+      ? `${total} ${total === 1 ? "review" : "reviews"}`
+      : "";
 
   return (
     <View style={reviewStyles.sectionWrapper}>
@@ -519,7 +519,7 @@ const reviewStyles = StyleSheet.create({
   loadingBox: { paddingVertical: 20, alignItems: "center" },
   emptyText: { fontSize: 14, color: "#9ca3af", fontStyle: "italic" },
   viewAllText: { fontSize: 14, color: "#1B5E20", fontWeight: "600", marginTop: 4 },
-  
+
   // Breakdown
   breakdownContainer: {
     flexDirection: "row",
@@ -572,6 +572,7 @@ export default function PublicListingDetailScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const accessToken = useAuthStore((s) => s.accessToken);
 
   const [photoIndex, setPhotoIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -591,12 +592,25 @@ export default function PublicListingDetailScreen() {
   // ── Fetch listing ──────────────────────────────────────────────────────────
 
   const { data: listing, isLoading, isError } = useQuery<PublicListing>({
-    queryKey: ["public-listing", id],
+    // New key — breaks old stale cache from the /public endpoint version
+    queryKey: ["listing-full", id],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}/public`);
-      return res.data.data;
+      // GET /listings/{id} (same endpoint provider uses) generates fresh S3 presigned URLs.
+      // listingApi automatically sends the Bearer token, so auth'd guests can access it.
+      try {
+        const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}`);
+        if (res.data?.data?.photos?.length) return res.data.data;
+        throw new Error("no photos");
+      } catch {
+        // Fallback: public endpoint
+        const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}/public`);
+        return res.data.data;
+      }
     },
     enabled: !!id,
+    // Presigned S3 URLs expire — always treat listing data as stale so we re-fetch fresh URLs
+    staleTime: 0,
+    gcTime: 5 * 60_000,
   });
 
   // ── Favourite toggle ───────────────────────────────────────────────────────
@@ -785,14 +799,14 @@ export default function PublicListingDetailScreen() {
   // Pricing Breakout Calculations
   const pricingBreakout = (() => {
     if (!hasDates || !listing.pricePerNight && !listing.pricePerDay) return null;
-    
+
     const rate = isCar ? Number(listing.pricePerDay ?? listing.pricePerNight ?? 0) : Number(listing.pricePerNight ?? 0);
-    const count = isCar 
+    const count = isCar
       ? (pickupDatetime && returnDatetime ? daysBetween(pickupDatetime, returnDatetime) : 1)
       : (checkIn && checkOut ? nightsBetween(checkIn, checkOut) : 1);
-    
+
     const base = rate * count;
-    
+
     let discount = 0;
     if (!isCar && listing.longStayEnabled && listing.longStayMinNights != null && count >= listing.longStayMinNights) {
       const discountValue = Number(listing.longStayDiscountValue ?? 0);
@@ -802,7 +816,7 @@ export default function PublicListingDetailScreen() {
         discount = discountValue * count;
       }
     }
-    
+
     const serviceFee = base * 0.05;
     const tax = base * 0.10;
     const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee ? Number(listing.deliveryFee) : 0;
@@ -845,15 +859,20 @@ export default function PublicListingDetailScreen() {
                 showsHorizontalScrollIndicator={false}
                 onScroll={handlePhotoScroll}
                 scrollEventThrottle={16}
-                renderItem={({ item }) => (
-                  <TouchableOpacity activeOpacity={0.95} onPress={() => setFullscreenVisible(true)}>
-                    <Image
-                      source={{ uri: item.cdnUrl }}
-                      style={styles.photo}
-                      resizeMode="cover"
-                    />
-                  </TouchableOpacity>
-                )}
+                renderItem={({ item: photo }) => {
+                  const isApiUrl = photo.cdnUrl?.includes("api.kainook.com") && !photo.cdnUrl?.includes("amazonaws.com");
+                  return (
+                    <TouchableOpacity activeOpacity={0.95} onPress={() => setFullscreenVisible(true)}>
+                      <Image
+                        source={isApiUrl && accessToken
+                          ? { uri: photo.cdnUrl, headers: { Authorization: `Bearer ${accessToken}` } }
+                          : { uri: photo.cdnUrl }}
+                        style={styles.photo}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                  );
+                }}
               />
               {/* Photo counter */}
               <View style={styles.photoCounter}>
@@ -913,11 +932,20 @@ export default function PublicListingDetailScreen() {
                   const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
                   setPhotoIndex(index);
                 }}
-                renderItem={({ item }) => (
-                  <View style={styles.fullscreenPhotoWrapper}>
-                    <Image source={{ uri: item.cdnUrl }} style={styles.fullscreenPhoto} resizeMode="contain" />
-                  </View>
-                )}
+                renderItem={({ item: photo }) => {
+                  const isApiUrl = photo.cdnUrl?.includes("api.kainook.com") && !photo.cdnUrl?.includes("amazonaws.com");
+                  return (
+                    <View style={styles.fullscreenPhotoWrapper}>
+                      <Image
+                        source={isApiUrl && accessToken
+                          ? { uri: photo.cdnUrl, headers: { Authorization: `Bearer ${accessToken}` } }
+                          : { uri: photo.cdnUrl }}
+                        style={styles.fullscreenPhoto}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  );
+                }}
               />
               <View style={styles.fullscreenCounter}>
                 <Text style={styles.fullscreenCounterText}>{photoIndex + 1} / {totalPhotos}</Text>
@@ -1147,8 +1175,8 @@ export default function PublicListingDetailScreen() {
                     listing.mileagePolicy === "unlimited"
                       ? "Unlimited"
                       : listing.mileageLimitKm != null
-                      ? `${listing.mileageLimitKm} km/day`
-                      : "See host"
+                        ? `${listing.mileageLimitKm} km/day`
+                        : "See host"
                   }
                 />
                 {listing.fuelType ? (

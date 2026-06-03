@@ -68,6 +68,9 @@
       ],
       "expo-font"
     ],
+    "updates": {
+      "enabled": false
+    },
     "experiments": {
       "typedRoutes": true
     }

@@ -5,6 +5,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=--no-experimental-require-module expo start",
+    "web": "cross-env NODE_OPTIONS=--no-experimental-require-module expo start --web --port 3000",
     "dev:tunnel": "cross-env NODE_OPTIONS=--no-experimental-require-module expo start --tunnel",
     "android": "expo start --android",
     "ios": "expo start --ios",

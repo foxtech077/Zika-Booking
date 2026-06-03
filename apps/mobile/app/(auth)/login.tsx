@@ -206,7 +206,14 @@ export default function LoginScreen() {
 }
 
 let _GoogleSignin: typeof import("@react-native-google-signin/google-signin")["GoogleSignin"] | null = null;
-try { _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin; } catch { /* not available in Expo Go */ }
+try {
+  _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin;
+  // Must be called once before any sign-in attempt
+  (_GoogleSignin as NonNullable<typeof _GoogleSignin>).configure({
+    webClientId: process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"] ?? "",
+    offlineAccess: true,
+  });
+} catch { /* not available in Expo Go */ }
 
 function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -214,13 +221,7 @@ function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!_GoogleSignin) {
-        // Simulated login for testing purposes in Expo Go / Development
-        const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", {
-          email: "test@kainook.com",
-          password: "KainookTest123!",
-        });
-        if (!res.data.success) throw res.data;
-        return res.data.data;
+        throw Object.assign(new Error("Expo Go"), { code: "EXPO_GO" });
       }
       await _GoogleSignin.hasPlayServices();
       const signInResult = await _GoogleSignin.signIn();
@@ -230,13 +231,22 @@ function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
       return (res.data as { data: AuthResponse }).data;
     },
     onSuccess: async (data) => {
-      if (!_GoogleSignin) {
-        Alert.alert("Google Sign-In", "Google Sign-In is simulated in Expo Go. Signed in successfully as test@kainook.com.");
-      }
       await setAuth(data.user, data.tokens.accessToken);
       handleRoleAndStatusRedirect(data.user);
     },
-    onError: () => Alert.alert("Error", "Sign in with Google failed. Please try again."),
+    onError: (err: unknown) => {
+      const code = String((err as any)?.code ?? "");
+      if (code === "SIGN_IN_CANCELLED" || code === "12501") return;
+      if (code === "EXPO_GO") {
+        Alert.alert("Not supported in Expo Go", "Google Sign-In requires a development build. Please use email & password to sign in.");
+        return;
+      }
+      if (code === "SIGN_IN_FAILED" || code === "12500") {
+        Alert.alert("Google Sign-In Failed", "The app's SHA-1 fingerprint is not registered in Google Cloud Console. Use email & password instead.");
+        return;
+      }
+      Alert.alert("Google Sign-In Failed", (err as any)?.message ?? "Unknown error");
+    },
   });
 
   return (
