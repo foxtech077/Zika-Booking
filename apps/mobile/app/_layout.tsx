@@ -19,6 +19,8 @@ const screenOptionsByName: Record<string, object> = {
   "listings/new":        { headerShown: false },
   "listings/[id]/index": { headerShown: false },
   "booking/[id]":        { headerShown: false },
+  verify:                { headerShown: false },
+  "reset-password":      { headerShown: false },
   search:                { headerShown: true, title: "Search Results", headerBackTitle: "Back" },
   "book/[listingId]":    { headerShown: true, headerBackTitle: "Back" },
   "pay/[bookingId]":     { headerShown: true, title: "Complete Payment", headerBackTitle: "Back" },
@@ -39,7 +41,7 @@ async function verifySession(): Promise<"ok" | "revoked" | "network_error"> {
   const { accessToken, user } = useAuthStore.getState();
   if (!accessToken || !user) return "ok"; // not logged in — nothing to check
 
-  const apiUrl = process.env["EXPO_PUBLIC_API_URL"] ?? "http://localhost:3001";
+  const apiUrl = process.env["EXPO_PUBLIC_API_URL"] ?? "https://api.kainook.com";
   try {
     await axios.post(
       `${apiUrl}/auth/refresh`,
@@ -120,17 +122,17 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!isHydrated) return null;
-
   return (
     <QueryClientProvider client={queryClient}>
       <StatusBar style="auto" />
-      <Stack
-        screenOptions={({ route }) => ({
-          headerShown: false,
-          ...(screenOptionsByName[route.name] ?? {}),
-        })}
-      />
+      {isHydrated ? (
+        <Stack
+          screenOptions={({ route }) => ({
+            headerShown: false,
+            ...(screenOptionsByName[route.name] ?? {}),
+          })}
+        />
+      ) : null}
     </QueryClientProvider>
   );
 }

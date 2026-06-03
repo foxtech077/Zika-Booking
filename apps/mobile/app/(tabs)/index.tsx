@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -10,10 +10,11 @@ import {
   ActivityIndicator,
   Alert,
   Dimensions,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
 import { listingApi } from "../../lib/listing-api";
@@ -53,29 +54,158 @@ interface SearchResponse {
   data: { totalCount: number; nextCursor: string | null; results: SearchResult[] };
 }
 
+const LISTING_BASE = process.env["EXPO_PUBLIC_LISTING_API_URL"] ?? "https://api.kainook.com/listings";
+function resolvePhoto(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return `${LISTING_BASE}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+// S3 presigned URLs already contain auth in query params.
+// Adding an Authorization header breaks them ("only one auth mechanism allowed").
+// Only add Bearer token when the image URL routes through our own API gateway.
+function ListingImage({ uri, style, resizeMode = "cover", onError }: {
+  uri: string | null | undefined;
+  style: any;
+  resizeMode?: "cover" | "contain" | "stretch" | "center";
+  onError?: () => void;
+}) {
+  const token = useAuthStore((s) => s.accessToken);
+  const resolved = resolvePhoto(uri);
+  if (!resolved) return null;
+  const isApiUrl = resolved.includes("api.kainook.com") && !resolved.includes("amazonaws.com");
+  return (
+    <Image
+      source={isApiUrl && token
+        ? { uri: resolved, headers: { Authorization: `Bearer ${token}` } }
+        : { uri: resolved }}
+      style={style}
+      resizeMode={resizeMode}
+      onError={onError}
+    />
+  );
+}
+
 function fmtPrice(n: number | null, currency: string): string {
   if (!n) return "";
   return `${currency} ${n.toLocaleString()}`;
 }
 
+function fmtDate(d: Date | null): string {
+  if (!d) return "Select date";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+// ── Inline Date Picker Modal ──────────────────────────────────────────────────
+
+const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function DatePickerModal({
+  visible, title, minDate, onSelect, onClose,
+}: {
+  visible: boolean; title: string; minDate?: Date;
+  onSelect: (d: Date) => void; onClose: () => void;
+}) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const [yr, setYr] = useState(today.getFullYear());
+  const [mo, setMo] = useState(today.getMonth());
+
+  function prevMonth() { if (mo === 0) { setMo(11); setYr(y => y - 1); } else setMo(m => m - 1); }
+  function nextMonth() { if (mo === 11) { setMo(0); setYr(y => y + 1); } else setMo(m => m + 1); }
+
+  const firstDay = new Date(yr, mo, 1).getDay();
+  const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  function isDisabled(day: number) {
+    const d = new Date(yr, mo, day); d.setHours(0, 0, 0, 0);
+    if (d < today) return true;
+    if (minDate) { const m = new Date(minDate); m.setHours(0, 0, 0, 0); if (d <= m) return true; }
+    return false;
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={dp.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity style={dp.sheet} activeOpacity={1} onPress={() => { }}>
+          <Text style={dp.title}>{title}</Text>
+          <View style={dp.navRow}>
+            <TouchableOpacity onPress={prevMonth} style={dp.navBtn}><Text style={dp.navArrow}>‹</Text></TouchableOpacity>
+            <Text style={dp.monthLabel}>{MONTHS[mo]} {yr}</Text>
+            <TouchableOpacity onPress={nextMonth} style={dp.navBtn}><Text style={dp.navArrow}>›</Text></TouchableOpacity>
+          </View>
+          <View style={dp.dowRow}>
+            {DAYS.map(d => <Text key={d} style={dp.dow}>{d}</Text>)}
+          </View>
+          <View style={dp.grid}>
+            {cells.map((day, i) => {
+              if (!day) return <View key={`e${i}`} style={dp.emptyCell} />;
+              const disabled = isDisabled(day);
+              return (
+                <TouchableOpacity
+                  key={day} style={[dp.cell, disabled && dp.cellDisabled]}
+                  onPress={() => { if (!disabled) { onSelect(new Date(yr, mo, day)); onClose(); } }}
+                  disabled={disabled}
+                >
+                  <Text style={[dp.cellText, disabled && dp.cellTextDisabled]}>{day}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TouchableOpacity style={dp.cancelBtn} onPress={onClose}>
+            <Text style={dp.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const dp = StyleSheet.create({
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  sheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  title: { fontSize: 17, fontWeight: "700", color: "#111827", textAlign: "center", marginBottom: 16 },
+  navRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  navBtn: { padding: 8 },
+  navArrow: { fontSize: 22, color: "#1B5E20", fontWeight: "700" },
+  monthLabel: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  dowRow: { flexDirection: "row", marginBottom: 8 },
+  dow: { width: "14.28%", textAlign: "center", fontSize: 12, fontWeight: "600", color: "#6B7280" },
+  grid: { flexDirection: "row", flexWrap: "wrap" },
+  emptyCell: { width: "14.28%", height: 40 },
+  cell: { width: "14.28%", height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 },
+  cellDisabled: { opacity: 0.3 },
+  cellText: { fontSize: 14, fontWeight: "500", color: "#111827" },
+  cellTextDisabled: { color: "#9CA3AF" },
+  cancelBtn: { marginTop: 16, alignItems: "center", paddingVertical: 12 },
+  cancelText: { fontSize: 15, color: "#6B7280", fontWeight: "600" },
+});
+
 // ── Listing Card ──────────────────────────────────────────────────────────────
 
 function ListingCard({
-  item, onPress, width = 200, badgeLabel, badgeColor,
+  item, onPress, width = 200, badgeLabel, badgeColor, photoUrl,
 }: {
   item: SearchResult; onPress: () => void; width?: number;
-  badgeLabel?: string; badgeColor?: string;
+  badgeLabel?: string; badgeColor?: string; photoUrl?: string | null;
 }) {
   const isCar = item.listingType === "car";
   const rate = isCar ? item.dailyRate : item.nightlyRate;
   const unit = isCar ? "day" : "night";
+  const [imgError, setImgError] = useState(false);
+  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
   return (
     <TouchableOpacity style={[c.card, { width }]} onPress={onPress} activeOpacity={0.85}>
       <View>
-        {item.primaryPhotoUrl ? (
-          <Image source={{ uri: item.primaryPhotoUrl }} style={c.photo} resizeMode="cover" />
+        {!imgError && displayPhoto ? (
+          <ListingImage uri={displayPhoto} style={c.photo} onError={() => setImgError(true)} />
         ) : (
-          <View style={[c.photo, { backgroundColor: "#D1FAE5" }]} />
+          <View style={[c.photo, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+            <Text style={{ fontSize: 28 }}>{isCar ? "🚗" : "🏨"}</Text>
+          </View>
         )}
         {badgeLabel ? (
           <View style={[c.badge, { backgroundColor: badgeColor ?? GREEN }]}>
@@ -135,15 +265,19 @@ const c = StyleSheet.create({
 
 // ── Nearby Row ────────────────────────────────────────────────────────────────
 
-function NearbyCard({ item, onPress }: { item: SearchResult; onPress: () => void }) {
+function NearbyCard({ item, onPress, photoUrl }: { item: SearchResult; onPress: () => void; photoUrl?: string | null }) {
   const isCar = item.listingType === "car";
   const rate = isCar ? item.dailyRate : item.nightlyRate;
+  const [imgError, setImgError] = useState(false);
+  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
   return (
     <TouchableOpacity style={nb.card} onPress={onPress} activeOpacity={0.85}>
-      {item.primaryPhotoUrl ? (
-        <Image source={{ uri: item.primaryPhotoUrl }} style={nb.photo} resizeMode="cover" />
+      {!imgError && displayPhoto ? (
+        <ListingImage uri={displayPhoto} style={nb.photo} onError={() => setImgError(true)} />
       ) : (
-        <View style={[nb.photo, { backgroundColor: "#D1FAE5" }]} />
+        <View style={[nb.photo, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+          <Text style={{ fontSize: 22 }}>{isCar ? "🚗" : "🏨"}</Text>
+        </View>
       )}
       <View style={nb.info}>
         <Text style={nb.title} numberOfLines={1}>{item.title}</Text>
@@ -222,13 +356,17 @@ export default function HomeScreen() {
 
   const [category, setCategory] = useState<Category>("hotels");
   const [location, setLocation] = useState("Nairobi");
+  const [checkIn, setCheckIn] = useState<Date | null>(null);
+  const [checkOut, setCheckOut] = useState<Date | null>(null);
+  const [guests, setGuests] = useState(1);
+  const [datePicker, setDatePicker] = useState<"checkIn" | "checkOut" | null>(null);
 
   // ── API Queries ──────────────────────────────────────────────────────────
   const { data: hotelsData, isLoading: hotelsLoading } = useQuery<SearchResult[]>({
     queryKey: ["home-hotels"],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
-        "/search?category=hotel&lat=-1.2921&lng=36.8219&radius_km=50&limit=30"
+        "/search?category=hotel&lat=0&lng=0&radius_km=20000&sort=recommended&limit=30"
       );
       return res.data.data.results ?? [];
     },
@@ -239,7 +377,7 @@ export default function HomeScreen() {
     queryKey: ["home-apartments"],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
-        "/search?category=apartment&lat=-1.2921&lng=36.8219&radius_km=50&limit=30"
+        "/search?category=apartment&lat=0&lng=0&radius_km=20000&sort=recommended&limit=30"
       );
       return res.data.data.results ?? [];
     },
@@ -250,7 +388,7 @@ export default function HomeScreen() {
     queryKey: ["home-cars"],
     queryFn: async () => {
       const res = await listingApi.get<SearchResponse>(
-        "/search?category=car&lat=-1.2921&lng=36.8219&radius_km=50&limit=30"
+        "/search?category=car&lat=0&lng=0&radius_km=20000&sort=recommended&limit=30"
       );
       return res.data.data.results ?? [];
     },
@@ -284,8 +422,59 @@ export default function HomeScreen() {
     ...(apartmentsData ?? []).slice(0, 2),
   ].slice(0, 4);
 
-  function navToListing(id: string, _isCar?: boolean) {
-    router.push({ pathname: `/listing/${id}` as any });
+  // ── Batch-fetch fresh photo URLs ─────────────────────────────────────────
+  // The /search index returns stale/null primaryPhotoUrl.
+  // GET /listings/{id} generates a fresh presigned S3 URL on every call.
+  // We fetch all displayed listing IDs in parallel so cards show real images.
+  const displayedIds = useMemo(() => {
+    const ids = new Set<string>();
+    [...bestOffers, ...recommended, ...featured, ...nearbyAll, ...premiumCars, ...trending]
+      .forEach((item) => ids.add(item.id));
+    return Array.from(ids);
+  }, [bestOffers, recommended, featured, nearbyAll, premiumCars, trending]);
+
+  const photoQueries = useQueries({
+    queries: displayedIds.map((id) => ({
+      // "photo-v2" key — avoids stale cache from previous attempts
+      queryKey: ["photo-v2", id],
+      queryFn: async (): Promise<string | null> => {
+        try {
+          // Same endpoint the provider mobile uses — returns fresh presigned S3 URL
+          const res = await listingApi.get<{ data: { photos: Array<{ cdnUrl: string }> } }>(`/listings/${id}`);
+          return res.data.data?.photos?.[0]?.cdnUrl ?? null;
+        } catch {
+          try {
+            const res = await listingApi.get<{ data: { photos: Array<{ cdnUrl: string }> } }>(`/listings/${id}/public`);
+            return res.data.data?.photos?.[0]?.cdnUrl ?? null;
+          } catch {
+            return null;
+          }
+        }
+      },
+      // staleTime: 0 so each session gets fresh presigned URLs (they expire)
+      staleTime: 0,
+      gcTime: 5 * 60_000,
+      retry: 0,
+    })),
+  });
+
+  const photoMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    photoQueries.forEach((q, i) => {
+      const id = displayedIds[i];
+      if (id && q.data) map[id] = q.data;
+    });
+    return map;
+  }, [photoQueries, displayedIds]);
+
+  function navToListing(id: string, isCar?: boolean) {
+    const params: Record<string, string> = {};
+    if (!isCar) {
+      if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
+      if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
+      params.guests = String(guests);
+    }
+    router.push({ pathname: `/listing/${id}` as any, params });
   }
 
   function handleSearch() {
@@ -293,10 +482,13 @@ export default function HomeScreen() {
       Alert.alert("Location required", "Please enter a city.");
       return;
     }
-    router.push({
-      pathname: "/search",
-      params: { category: category === "cars" ? "car" : category === "apartments" ? "apartment" : "hotel", placeName: location },
-    });
+    const apiCat = category === "cars" ? "car" : category === "apartments" ? "apartment" : "hotel";
+    const params: Record<string, string> = { category: apiCat, placeName: location, guests: String(guests) };
+    if (category !== "cars") {
+      if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
+      if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
+    }
+    router.push({ pathname: "/search", params });
   }
 
   function tierColor() {
@@ -340,21 +532,84 @@ export default function HomeScreen() {
           ))}
         </View>
 
-        {/* ── Search Box ── */}
+        {/* ── Search Card ── */}
         <View style={s.searchCard}>
-          <Ionicons name="location-outline" size={18} color={GREEN} style={{ marginRight: 10 }} />
-          <TextInput
-            style={s.locationInput}
-            value={location}
-            onChangeText={setLocation}
-            placeholder="Where to?"
-            placeholderTextColor={MUTED}
-          />
+          {/* Location */}
+          <View style={s.searchRow}>
+            <Ionicons name="location-outline" size={18} color={GREEN} style={{ marginRight: 10 }} />
+            <TextInput
+              style={s.locationInput}
+              value={location}
+              onChangeText={setLocation}
+              placeholder="Where to?"
+              placeholderTextColor={MUTED}
+            />
+          </View>
+
+          {/* Dates — only for hotels/apartments */}
+          {category !== "cars" && (
+            <View style={s.datesRow}>
+              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("checkIn")} activeOpacity={0.7}>
+                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.dateBtnLabel}>Check-in</Text>
+                  <Text style={[s.dateBtnValue, !checkIn && s.dateBtnPlaceholder]}>{fmtDate(checkIn)}</Text>
+                </View>
+              </TouchableOpacity>
+              <View style={s.dateDivider} />
+              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("checkOut")} activeOpacity={0.7}>
+                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.dateBtnLabel}>Check-out</Text>
+                  <Text style={[s.dateBtnValue, !checkOut && s.dateBtnPlaceholder]}>{fmtDate(checkOut)}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Guests */}
+          <View style={s.guestsRow}>
+            <Ionicons name="people-outline" size={16} color={MUTED} style={{ marginRight: 8 }} />
+            <Text style={s.guestsLabel}>Guests</Text>
+            <View style={s.guestsCounter}>
+              <TouchableOpacity
+                style={s.guestBtn}
+                onPress={() => setGuests(g => Math.max(1, g - 1))}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={s.guestBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={s.guestCount}>{guests}</Text>
+              <TouchableOpacity
+                style={s.guestBtn}
+                onPress={() => setGuests(g => Math.min(20, g + 1))}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={s.guestBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
+
         <TouchableOpacity style={s.searchBtn} onPress={handleSearch} activeOpacity={0.85}>
           <Ionicons name="search" size={18} color="#fff" style={{ marginRight: 8 }} />
           <Text style={s.searchBtnText}>Search {category === "cars" ? "Cars" : "Stays"}</Text>
         </TouchableOpacity>
+
+        {/* Date picker modals */}
+        <DatePickerModal
+          visible={datePicker === "checkIn"}
+          title="Select Check-in Date"
+          onSelect={d => { setCheckIn(d); if (checkOut && d >= checkOut) setCheckOut(null); }}
+          onClose={() => setDatePicker(null)}
+        />
+        <DatePickerModal
+          visible={datePicker === "checkOut"}
+          title="Select Check-out Date"
+          minDate={checkIn ?? undefined}
+          onSelect={d => setCheckOut(d)}
+          onClose={() => setDatePicker(null)}
+        />
 
         {/* ── KAI-Points ── */}
         {user ? (
@@ -396,6 +651,7 @@ export default function HomeScreen() {
                     item={item} width={200}
                     badgeLabel={item.longStayDiscountEnabled ? "LONG STAY" : "BEST DEAL"}
                     badgeColor={item.longStayDiscountEnabled ? "#8B5CF6" : "#DC2626"}
+                    photoUrl={photoMap[item.id]}
                     onPress={() => navToListing(item.id, false)}
                   />
                 </View>
@@ -418,6 +674,7 @@ export default function HomeScreen() {
               {recommended.map((item, idx) => (
                 <View key={item.id} style={{ marginRight: idx < recommended.length - 1 ? 12 : 0 }}>
                   <ListingCard item={item} width={210} badgeLabel="TOP RATED" badgeColor="#F59E0B"
+                    photoUrl={photoMap[item.id]}
                     onPress={() => navToListing(item.id, false)} />
                 </View>
               ))}
@@ -432,8 +689,8 @@ export default function HomeScreen() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
               {featured.map((item) => (
                 <TouchableOpacity key={item.id} style={s.featuredCard} onPress={() => navToListing(item.id, false)} activeOpacity={0.88}>
-                  {item.primaryPhotoUrl ? (
-                    <Image source={{ uri: item.primaryPhotoUrl }} style={s.featuredPhoto} resizeMode="cover" />
+                  {(photoMap[item.id] ?? item.primaryPhotoUrl) ? (
+                    <ListingImage uri={photoMap[item.id] ?? item.primaryPhotoUrl} style={s.featuredPhoto} />
                   ) : (
                     <View style={[s.featuredPhoto, { backgroundColor: "#D1FAE5" }]} />
                   )}
@@ -470,7 +727,7 @@ export default function HomeScreen() {
           ) : nearbyAll.length > 0 ? (
             <View style={{ paddingHorizontal: 16 }}>
               {nearbyAll.map((item) => (
-                <NearbyCard key={item.id} item={item} onPress={() => navToListing(item.id, item.listingType === "car")} />
+                <NearbyCard key={item.id} item={item} photoUrl={photoMap[item.id]} onPress={() => navToListing(item.id, item.listingType === "car")} />
               ))}
             </View>
           ) : null}
@@ -495,10 +752,12 @@ export default function HomeScreen() {
                     onPress={() => navToListing(item.id, true)}
                     activeOpacity={0.85}
                   >
-                    {item.primaryPhotoUrl ? (
-                      <Image source={{ uri: item.primaryPhotoUrl }} style={[c.photo, { height: 140 }]} resizeMode="cover" />
+                    {(photoMap[item.id] ?? item.primaryPhotoUrl) ? (
+                      <ListingImage uri={photoMap[item.id] ?? item.primaryPhotoUrl} style={[c.photo, { height: 140 }]} />
                     ) : (
-                      <View style={[c.photo, { height: 140, backgroundColor: "#D1FAE5" }]} />
+                      <View style={[c.photo, { height: 140, backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+                        <Text style={{ fontSize: 28 }}>🚗</Text>
+                      </View>
                     )}
                     <View style={c.body}>
                       <View style={s.carBadge}><Text style={s.carBadgeText}>LUXURY</Text></View>
@@ -520,8 +779,8 @@ export default function HomeScreen() {
             <View style={s.trendGrid}>
               {trending.map((item) => (
                 <TouchableOpacity key={item.id} style={s.trendCard} onPress={() => navToListing(item.id, false)} activeOpacity={0.85}>
-                  {item.primaryPhotoUrl ? (
-                    <Image source={{ uri: item.primaryPhotoUrl }} style={s.trendPhoto} resizeMode="cover" />
+                  {(photoMap[item.id] ?? item.primaryPhotoUrl) ? (
+                    <ListingImage uri={photoMap[item.id] ?? item.primaryPhotoUrl} style={s.trendPhoto} />
                   ) : (
                     <View style={[s.trendPhoto, { backgroundColor: "#D1FAE5" }]} />
                   )}
@@ -579,12 +838,42 @@ const s = StyleSheet.create({
   tabTextActive: { color: "#fff" },
 
   searchCard: {
-    flexDirection: "row", alignItems: "center",
     marginHorizontal: 16, backgroundColor: "#fff", borderRadius: 14,
-    borderWidth: 1.5, borderColor: BORDER, paddingHorizontal: 14, paddingVertical: 13,
+    borderWidth: 1.5, borderColor: BORDER,
     shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+    overflow: "hidden",
+  },
+  searchRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
   },
   locationInput: { flex: 1, fontSize: 15, color: TEXT, fontWeight: "500" },
+
+  datesRow: {
+    flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER,
+  },
+  dateBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  dateDivider: { width: 1, backgroundColor: BORDER, marginVertical: 8 },
+  dateBtnLabel: { fontSize: 11, color: MUTED, fontWeight: "600", marginBottom: 2 },
+  dateBtnValue: { fontSize: 13, fontWeight: "600", color: TEXT },
+  dateBtnPlaceholder: { color: MUTED, fontWeight: "400" },
+
+  guestsRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  guestsLabel: { flex: 1, fontSize: 14, color: TEXT, fontWeight: "500" },
+  guestsCounter: { flexDirection: "row", alignItems: "center", gap: 16 },
+  guestBtn: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: GREEN,
+    alignItems: "center", justifyContent: "center",
+  },
+  guestBtnText: { fontSize: 20, color: "#fff", fontWeight: "700", lineHeight: 24 },
+  guestCount: { fontSize: 16, fontWeight: "700", color: TEXT, minWidth: 20, textAlign: "center" },
 
   searchBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",

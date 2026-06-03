@@ -14,7 +14,7 @@ import {
   Modal,
   FlatList,
 } from "react-native";
-import { Link } from "expo-router";
+import { Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { registerSchema } from "@zika/validators";
 import { api } from "../../lib/api";
@@ -55,7 +55,6 @@ export default function RegisterScreen() {
   });
 
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [submitted, setSubmitted] = useState(false);
   const [showPass, setShowPass] = useState(false);
 
   // Country modal state
@@ -93,7 +92,8 @@ export default function RegisterScreen() {
         await setAuth(data.data.user, data.data.tokens.accessToken);
         handleRoleAndStatusRedirect(data.data.user);
       } else {
-        setSubmitted(true);
+        // Email verification required — go to verify-pending with resend capability
+        router.push({ pathname: "/(auth)/verify-pending", params: { email: form.email } });
       }
     },
     onError: (err: unknown) => {
@@ -152,26 +152,6 @@ export default function RegisterScreen() {
 
   function handleSubmit() {
     if (validate()) registerMutation.mutate();
-  }
-
-  if (submitted) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.successBox}>
-          <Text style={styles.successEmoji}>✉️</Text>
-          <Text style={styles.successTitle}>Check your inbox</Text>
-          <Text style={styles.successSub}>
-            We've sent an activation link to{"\n"}
-            <Text style={styles.successEmail}>{form.email}</Text>
-          </Text>
-          <Link href="/(auth)/login" asChild>
-            <TouchableOpacity style={styles.backBtn}>
-              <Text style={styles.backBtnText}>Back to Sign In</Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
-      </View>
-    );
   }
 
   return (
@@ -563,25 +543,6 @@ const styles = StyleSheet.create({
   loginRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 24 },
   loginText: { color: K.colors.textLightMuted, fontSize: K.font.sm },
   loginLink: { color: K.colors.accentLight, fontSize: K.font.sm, fontWeight: "700" },
-
-  successBox: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40 },
-  successEmoji: { fontSize: 56, marginBottom: 20 },
-  successTitle: { fontSize: K.font.xxl, fontWeight: "800", color: "#fff", textAlign: "center", marginBottom: 12 },
-  successSub: {
-    fontSize: K.font.base,
-    color: K.colors.textLightMuted,
-    textAlign: "center",
-    lineHeight: 24,
-    marginBottom: 32,
-  },
-  successEmail: { color: "#fff", fontWeight: "700" },
-  backBtn: {
-    backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-  },
-  backBtnText: { color: "#fff", fontSize: K.font.base, fontWeight: "700" },
 
   modalOverlay: {
     flex: 1,
