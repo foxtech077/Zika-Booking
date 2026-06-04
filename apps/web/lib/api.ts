@@ -2,9 +2,9 @@ import axios from "axios";
 
 const TOKEN_KEY = "zika:access_token";
 
-// In Next.js we proxy /api/* → auth service via next.config rewrites
+// Direct call to remote backend instead of Next.js proxy
 export const api = axios.create({
-  baseURL: "/api",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "https://api.kainook.com",
   withCredentials: true,
   timeout: 15_000,
 });

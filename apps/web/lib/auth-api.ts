@@ -1,8 +1,7 @@
 import axios from "axios";
 
-// Proxied via Next.js rewrites: /auth/* → auth-service
 export const authApi = axios.create({
-  baseURL: "http://localhost:3003",
+  baseURL: process.env.NEXT_PUBLIC_API_URL || "https://api.kainook.com",
   withCredentials: true,
   timeout: 30_000,
 });

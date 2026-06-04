@@ -1,76 +1,59 @@
-// Example: components/Header.tsx
 "use client";
-
-import { useState, useEffect } from "react";
-// … rest of the component
-
-import React from 'react';
+import React from "react";
+import Link from "next/link";
 
 interface HeaderProps {
+  user?: { firstName: string; lastName: string } | null;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  searchTerm: string;
-  setSearchTerm: (term: string) => void;
-  onSearch: () => void;
+  onLogout: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({
-  activeTab,
-  setActiveTab,
-  searchTerm,
-  setSearchTerm,
-  onSearch,
-}) => {
+const Header: React.FC<HeaderProps> = ({ user, activeTab, setActiveTab, onLogout }) => {
   return (
-    <section className="bg-gray-100 py-12">
-      <div className="container mx-auto px-4">
-        <h1 className="text-4xl font-bold text-center text-gray-800 mb-8">
-          Find Your Dream {activeTab === 'stay' ? 'Stay' : 'Car'}
-        </h1>
-        <div className="flex justify-center mb-6 space-x-4">
+    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-6 py-4 flex items-center justify-between shadow-sm">
+      <Link href="/traveller" className="text-2xl font-bold text-[#0B1E3F] tracking-tight font-serif flex items-center gap-2">
+        <span className="bg-[#0B1E3F] text-white px-2.5 py-1 rounded-xl">Zika</span>Booking
+      </Link>
+
+      <nav className="hidden md:flex items-center gap-6">
+        {["home", "search", "bookings"].map((tab) => (
           <button
-            className={`px-6 py-2 rounded-full ${
-              activeTab === 'stay'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 border'
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`text-sm font-semibold capitalize transition hover:text-[#0B1E3F] ${
+              activeTab === tab ? "text-[#0B1E3F] border-b-2 border-[#0B1E3F] pb-1" : "text-slate-500"
             }`}
-            onClick={() => {
-              setActiveTab('stay');
-              onSearch();
-            }}
           >
-            Stays
+            {tab === "bookings" ? "My Bookings" : tab}
           </button>
-          <button
-            className={`px-6 py-2 rounded-full ${
-              activeTab === 'car'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white text-gray-600 border'
-            }`}
-            onClick={() => {
-              setActiveTab('car');
-              onSearch();
-            }}
+        ))}
+      </nav>
+
+      <div className="flex items-center gap-3">
+        {user ? (
+          <>
+            <span className="text-sm font-semibold text-slate-700 hidden sm:block">
+              {user.firstName} {user.lastName}
+            </span>
+            <button
+              onClick={onLogout}
+              className="rounded-full bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600 transition"
+            >
+              Logout
+            </button>
+          </>
+        ) : (
+          <Link
+            href="/auth/login"
+            className="rounded-full bg-[#0B1E3F] px-4 py-2 text-sm font-semibold text-white hover:bg-[#07152B] transition"
           >
-            Car Rentals
-          </button>
-        </div>
-        <div className="flex justify-center">
-          <input
-            type="text"
-            placeholder="Search by location"
-            className="border rounded-l-md p-2 w-64"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <button
-            className="bg-blue-600 text-white px-4 rounded-r-md"
-            onClick={onSearch}
-          >
-            Search
-          </button>
-        </div>
+            Login
+          </Link>
+        )}
       </div>
-    </section>
+    </header>
   );
 };
+
+export default Header;
