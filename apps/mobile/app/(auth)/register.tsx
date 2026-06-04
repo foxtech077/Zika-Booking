@@ -1,17 +1,31 @@
 import { useState } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform, Alert,
+  View,
+  Text,
+  Image,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  StyleSheet,
+  Dimensions,
+  Modal,
+  FlatList,
 } from "react-native";
-import { Link, router } from "expo-router";
+import { Link } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { registerSchema } from "@zika/validators";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
-import { FormField } from "../../components/ui/FormField";
-import { Button } from "../../components/ui/Button";
+import { K } from "../../constants/theme";
+import { handleRoleAndStatusRedirect } from "./login";
 import type { ApiResponse, PublicUser } from "@zika/types";
+import { ALL_COUNTRIES, POPULAR_COUNTRIES, type CountryData } from "../../constants/countries";
 
-type UserType = "guest" | "provider";
+const { height } = Dimensions.get("window");
+
 
 interface FieldErrors {
   firstName?: string;
@@ -26,71 +40,112 @@ interface FieldErrors {
 
 export default function RegisterScreen() {
   const setAuth = useAuthStore((s) => s.setAuth);
-  const [userType, setUserType] = useState<UserType>("guest");
+  const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
+
+  const [userType, setUserType] = useState<"guest" | "provider">("guest");
+
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "",
-    password: "", confirmPassword: "",
-    businessName: "", country: "",
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    businessName: "",
+    country: "",
   });
+
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+
+  // Country modal state
+  const [countryModalVisible, setCountryModalVisible] = useState(false);
+  const [countrySearchQuery, setCountrySearchQuery] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState<CountryData | null>(null);
 
   const set = (key: keyof typeof form) => (val: string) =>
     setForm((prev) => ({ ...prev, [key]: val }));
+
   const clearError = (key: keyof FieldErrors) =>
     setErrors((prev) => ({ ...prev, [key]: undefined }));
 
   const registerMutation = useMutation({
     mutationFn: async () => {
       const payload = {
-        ...form,
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        password: form.password,
+        confirmPassword: form.confirmPassword,
         userType,
-        businessName: userType === "provider" ? (form.businessName || undefined) : undefined,
-        country: userType === "provider" ? (form.country || undefined) : undefined,
+        businessName: userType === "provider" ? form.businessName || undefined : undefined,
+        country: form.country || undefined,
       };
-      const res = await api.post<ApiResponse<{ message?: string; user?: PublicUser; tokens?: { accessToken: string } }>>("/auth/register", payload);
+      const res = await api.post<ApiResponse<{
+        message?: string;
+        user?: PublicUser;
+        tokens?: { accessToken: string };
+      }>>("/auth/register", payload);
       return res.data;
     },
     onSuccess: async (data) => {
       if (data.success && data.data?.user && data.data?.tokens) {
         await setAuth(data.data.user, data.data.tokens.accessToken);
-        router.replace("/(tabs)");
+        handleRoleAndStatusRedirect(data.data.user);
       } else {
         setSubmitted(true);
       }
     },
     onError: (err: unknown) => {
-      const axiosErr = err as { message?: string; code?: string; config?: { url?: string; baseURL?: string }; response?: { data?: ApiResponse<unknown> } };
+      const axiosErr = err as { response?: { data?: ApiResponse<unknown> } };
       const data = axiosErr.response?.data;
       if (data && !data.success) {
         const fields = data.error.fields ?? {};
         setErrors({ ...fields, general: data.error.fields ? undefined : data.error.message });
       } else {
-        const details = __DEV__
-          ? `\n\n[Dev Details]\nURL: ${axiosErr.config?.baseURL ?? api.defaults.baseURL}${axiosErr.config?.url ?? ""}\nError: ${axiosErr.message ?? "Unknown Network Error"}\nCode: ${axiosErr.code ?? "Unknown Code"}`
-          : "";
-        setErrors({ general: `Something went wrong. Please check your connection and try again.${details}` });
+        setErrors({ general: "Something went wrong. Please check your connection and try again." });
       }
     },
   });
 
-  function validate(): boolean {
-    const dataToValidate = {
-      ...form,
+  const handleSelectCountry = (country: CountryData) => {
+    setSelectedCountry(country);
+    set("country")(country.code);
+    clearError("country");
+    void setLocalCurrency(country.currency);
+    setCountryModalVisible(false);
+    setCountrySearchQuery("");
+  };
+
+  const filteredCountries = ALL_COUNTRIES.filter(
+    (c) =>
+      c.name.toLowerCase().includes(countrySearchQuery.toLowerCase()) ||
+      c.code.toLowerCase().includes(countrySearchQuery.toLowerCase())
+  );
+
+  function validate() {
+    const payload = {
+      firstName: form.firstName,
+      lastName: form.lastName,
+      email: form.email,
+      password: form.password,
+      confirmPassword: form.confirmPassword,
       userType,
-      businessName: userType === "provider" ? (form.businessName || undefined) : undefined,
-      country: userType === "provider" ? (form.country || undefined) : undefined,
+      businessName: userType === "provider" ? form.businessName || undefined : undefined,
+      country: form.country || undefined,
     };
-    const result = registerSchema.safeParse(dataToValidate);
+
+    const result = registerSchema.safeParse(payload);
     if (!result.success) {
-      const fieldErrors: FieldErrors = {};
+      const fe: FieldErrors = {};
       for (const issue of result.error.issues) {
-        const key = issue.path[0] as keyof FieldErrors;
-        if (key && !fieldErrors[key]) fieldErrors[key] = issue.message;
+        const k = issue.path[0] as keyof FieldErrors;
+        if (k && !fe[k]) fe[k] = issue.message;
       }
-      setErrors(fieldErrors);
+      setErrors(fe);
       return false;
     }
+
     setErrors({});
     return true;
   }
@@ -101,181 +156,507 @@ export default function RegisterScreen() {
 
   if (submitted) {
     return (
-      <View className="flex-1 bg-white items-center justify-center px-6">
-        <Text className="text-3xl mb-4">✉️</Text>
-        <Text className="text-2xl font-bold text-gray-900 text-center mb-2">Check your email</Text>
-        <Text className="text-base text-gray-500 text-center mb-6">
-          We've sent a verification link to{"\n"}
-          <Text className="font-semibold text-gray-800">{form.email}</Text>
-        </Text>
-        <Button
-          title="Resend email"
-          variant="ghost"
-          onPress={() => router.push({ pathname: "/(auth)/resend-verification" as any, params: { email: form.email } })}
-        />
-        <Link href="/(auth)/login" className="mt-4 text-primary font-semibold text-base text-center">
-          Back to Sign In
-        </Link>
+      <View style={styles.container}>
+        <View style={styles.successBox}>
+          <Text style={styles.successEmoji}>✉️</Text>
+          <Text style={styles.successTitle}>Check your inbox</Text>
+          <Text style={styles.successSub}>
+            We've sent an activation link to{"\n"}
+            <Text style={styles.successEmail}>{form.email}</Text>
+          </Text>
+          <Link href="/(auth)/login" asChild>
+            <TouchableOpacity style={styles.backBtn}>
+              <Text style={styles.backBtnText}>Back to Sign In</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
       </View>
     );
   }
 
   return (
     <KeyboardAvoidingView
-      className="flex-1 bg-white"
+      style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView className="flex-1" contentContainerStyle={{ padding: 24, paddingTop: 60 }} keyboardShouldPersistTaps="handled">
-        {/* Header */}
-        <Text className="text-3xl font-bold text-gray-900 mb-1">Create account</Text>
-        <Text className="text-base text-gray-500 mb-6">Join ZikaBooking and start exploring.</Text>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Brand Header */}
+        <View style={styles.brandRow}>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require("../../assets/logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+        </View>
 
-        {/* Account type selector */}
-        <View className="flex-row mb-6 rounded-xl overflow-hidden border border-gray-200">
-          {(["guest", "provider"] as UserType[]).map((type) => (
+        <Text style={styles.headline}>Create{"\n"}Account</Text>
+        <Text style={styles.subheadline}>Join our premium ecosystem today</Text>
+
+        {/* Tab: Traveller / Partner Host */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tabButton, userType === "guest" && styles.tabButtonActive]}
+            onPress={() => { setUserType("guest"); setErrors({}); }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabButtonText, userType === "guest" && styles.tabButtonTextActive]}>
+              Traveller
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, userType === "provider" && styles.tabButtonActive]}
+            onPress={() => { setUserType("provider"); setErrors({}); }}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabButtonText, userType === "provider" && styles.tabButtonTextActive]}>
+              Partner Host
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Form Card */}
+        <View style={styles.card}>
+          {/* First / Last Name */}
+          <View style={styles.row}>
+            <View style={styles.halfField}>
+              <Text style={styles.label}>First Name</Text>
+              <TextInput
+                style={[styles.input, errors.firstName ? styles.inputError : null]}
+                value={form.firstName}
+                onChangeText={(v) => { set("firstName")(v); clearError("firstName"); }}
+                placeholder="Ada"
+                placeholderTextColor={K.colors.textLightDim}
+              />
+              {errors.firstName ? <Text style={styles.fieldError}>{errors.firstName}</Text> : null}
+            </View>
+            <View style={styles.halfField}>
+              <Text style={styles.label}>Last Name</Text>
+              <TextInput
+                style={[styles.input, errors.lastName ? styles.inputError : null]}
+                value={form.lastName}
+                onChangeText={(v) => { set("lastName")(v); clearError("lastName"); }}
+                placeholder="Okafor"
+                placeholderTextColor={K.colors.textLightDim}
+              />
+              {errors.lastName ? <Text style={styles.fieldError}>{errors.lastName}</Text> : null}
+            </View>
+          </View>
+
+          {/* Email */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Email Address</Text>
+            <TextInput
+              style={[styles.input, errors.email ? styles.inputError : null]}
+              value={form.email}
+              onChangeText={(v) => { set("email")(v); clearError("email"); }}
+              placeholder="you@example.com"
+              placeholderTextColor={K.colors.textLightDim}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+            />
+            {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
+          </View>
+
+          {/* Provider-only: Business Name */}
+          {userType === "provider" && (
+            <View style={styles.field}>
+              <Text style={styles.label}>Business Name</Text>
+              <TextInput
+                style={[styles.input, errors.businessName ? styles.inputError : null]}
+                value={form.businessName}
+                onChangeText={(v) => { set("businessName")(v); clearError("businessName"); }}
+                placeholder="Serena Hotels Ltd."
+                placeholderTextColor={K.colors.textLightDim}
+              />
+              {errors.businessName ? <Text style={styles.fieldError}>{errors.businessName}</Text> : null}
+            </View>
+          )}
+
+          {/* Country (both roles, sets local currency) */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Country</Text>
             <TouchableOpacity
-              key={type}
-              className={`flex-1 py-3 items-center ${userType === type ? "bg-primary" : "bg-white"}`}
-              onPress={() => { setUserType(type); setErrors({}); }}
+              style={[styles.input, styles.comboSelector, errors.country ? styles.inputError : null]}
+              onPress={() => setCountryModalVisible(true)}
+              activeOpacity={0.8}
             >
-              <Text className={`font-semibold ${userType === type ? "text-white" : "text-gray-600"}`}>
-                {type === "guest" ? "Traveller" : "Provider / Host"}
-              </Text>
+              {selectedCountry ? (
+                <Text style={styles.selectedCountryText}>
+                  {selectedCountry.flag} {selectedCountry.name} ({selectedCountry.code})
+                </Text>
+              ) : (
+                <Text style={styles.placeholderText}>Search or select country</Text>
+              )}
+              <Text style={styles.dropdownArrow}>▼</Text>
             </TouchableOpacity>
-          ))}
+            {errors.country ? <Text style={styles.fieldError}>{errors.country}</Text> : null}
+          </View>
+
+          {/* Password */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.passRow}>
+              <TextInput
+                style={[styles.input, styles.inputFlex, errors.password ? styles.inputError : null]}
+                value={form.password}
+                onChangeText={(v) => { set("password")(v); clearError("password"); }}
+                placeholder="Min. 8 characters"
+                placeholderTextColor={K.colors.textLightDim}
+                secureTextEntry={!showPass}
+              />
+              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPass((v) => !v)}>
+                <Text style={styles.eyeIcon}>{showPass ? "🙈" : "👁️"}</Text>
+              </TouchableOpacity>
+            </View>
+            {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
+          </View>
+
+          {/* Confirm Password */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Confirm Password</Text>
+            <TextInput
+              style={[styles.input, errors.confirmPassword ? styles.inputError : null]}
+              value={form.confirmPassword}
+              onChangeText={(v) => { set("confirmPassword")(v); clearError("confirmPassword"); }}
+              placeholder="Repeat password"
+              placeholderTextColor={K.colors.textLightDim}
+              secureTextEntry={!showPass}
+              returnKeyType="done"
+              onSubmitEditing={handleSubmit}
+            />
+            {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
+          </View>
+
+          {errors.general ? (
+            <View style={styles.errorBox}>
+              <Text style={styles.errorText}>{errors.general}</Text>
+            </View>
+          ) : null}
+
+          {/* Submit */}
+          <TouchableOpacity
+            style={[styles.primaryBtn, registerMutation.isPending && styles.btnDisabled]}
+            onPress={handleSubmit}
+            disabled={registerMutation.isPending}
+            activeOpacity={0.85}
+          >
+            {registerMutation.isPending ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={styles.primaryBtnText}>
+                {userType === "guest" ? "Create Account" : "Register as Partner"}
+              </Text>
+            )}
+          </TouchableOpacity>
         </View>
 
-        {/* Fields */}
-        <View className="flex-row gap-3">
-          <View className="flex-1">
-            <FormField label="First name" value={form.firstName} onChangeText={(v) => { set("firstName")(v); clearError("firstName"); }}
-              error={errors.firstName} placeholder="Ada" />
-          </View>
-          <View className="flex-1">
-            <FormField label="Last name" value={form.lastName} onChangeText={(v) => { set("lastName")(v); clearError("lastName"); }}
-              error={errors.lastName} placeholder="Okafor" />
-          </View>
-        </View>
-
-        <FormField label="Email address" value={form.email} onChangeText={(v) => { set("email")(v); clearError("email"); }}
-          error={errors.email} placeholder="you@example.com" keyboardType="email-address" autoComplete="email" />
-
-        {userType === "provider" && (
-          <>
-            <FormField label="Business name" value={form.businessName} onChangeText={(v) => { set("businessName")(v); clearError("businessName"); }}
-              error={errors.businessName} placeholder="Serena Hotels Ltd." />
-            <FormField label="Country (ISO code, e.g. KE)" value={form.country} onChangeText={(v) => { set("country")(v.toUpperCase()); clearError("country"); }}
-              error={errors.country} placeholder="KE" maxLength={2} autoCapitalize="characters" />
-          </>
-        )}
-
-        <FormField label="Password" value={form.password} onChangeText={(v) => { set("password")(v); clearError("password"); }}
-          error={errors.password} placeholder="Min. 8 characters" secureTextEntry />
-
-        <FormField label="Confirm password" value={form.confirmPassword}
-          onChangeText={(v) => { set("confirmPassword")(v); clearError("confirmPassword"); }}
-          error={errors.confirmPassword} placeholder="Repeat password" secureTextEntry />
-
-        {errors.general ? (
-          <View className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-4">
-            <Text className="text-red-600 text-sm">{errors.general}</Text>
-          </View>
-        ) : null}
-
-        <Button title="Create Account" onPress={handleSubmit} loading={registerMutation.isPending} />
-
-        {/* Divider + OAuth */}
-        <View className="flex-row items-center my-6">
-          <View className="flex-1 h-px bg-gray-200" />
-          <Text className="mx-4 text-gray-400 text-sm">or continue with</Text>
-          <View className="flex-1 h-px bg-gray-200" />
-        </View>
-
-        <OAuthButtons />
-
-        <View className="flex-row justify-center mt-6 mb-8">
-          <Text className="text-gray-500">Already have an account? </Text>
-          <Link href="/(auth)/login" className="text-primary font-semibold">Sign In</Link>
+        <View style={styles.loginRow}>
+          <Text style={styles.loginText}>Already a member? </Text>
+          <Link href="/(auth)/login" asChild>
+            <TouchableOpacity>
+              <Text style={styles.loginLink}>Sign In</Text>
+            </TouchableOpacity>
+          </Link>
         </View>
       </ScrollView>
+
+      {/* Country Selector Modal */}
+      <Modal
+        animationType="slide"
+        transparent
+        visible={countryModalVisible}
+        onRequestClose={() => setCountryModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Country</Text>
+              <TouchableOpacity onPress={() => setCountryModalVisible(false)}>
+                <Text style={styles.modalCloseButton}>Close</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              style={styles.searchBar}
+              value={countrySearchQuery}
+              onChangeText={setCountrySearchQuery}
+              placeholder="Search by country name or code..."
+              placeholderTextColor={K.colors.textMuted}
+              autoCapitalize="none"
+              autoFocus
+            />
+
+            {!countrySearchQuery && (
+              <View style={styles.shortcutsWrapper}>
+                <Text style={styles.shortcutsTitle}>Popular</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.shortcutsScroll}
+                >
+                  {POPULAR_COUNTRIES.map((item) => (
+                    <TouchableOpacity
+                      key={item.code}
+                      style={styles.shortcutBtn}
+                      onPress={() => handleSelectCountry(item)}
+                    >
+                      <Text style={styles.shortcutText}>{item.flag} {item.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            <Text style={styles.listSectionTitle}>
+              {countrySearchQuery ? "Search Results" : "All Countries"}
+            </Text>
+
+            <FlatList
+              data={filteredCountries}
+              keyExtractor={(item) => item.code}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.countryItem}
+                  onPress={() => handleSelectCountry(item)}
+                >
+                  <Text style={styles.countryItemText}>
+                    <Text style={styles.countryFlag}>{item.flag}</Text> {item.name} ({item.code})
+                  </Text>
+                  <Text style={styles.countryDialCode}>{item.dialCode}</Text>
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={() => (
+                <View style={styles.emptyResults}>
+                  <Text style={styles.emptyResultsText}>No countries match your search</Text>
+                </View>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
-function OAuthButtons() {
-  return (
-    <View className="gap-3">
-      <GoogleSignInButton />
-      {Platform.OS === "ios" && <AppleSignInButton />}
-    </View>
-  );
-}
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: K.colors.darkGreen },
+  scroll: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
 
-let _GoogleSignin: typeof import("@react-native-google-signin/google-signin")["GoogleSignin"] | null = null;
-try { _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin; } catch { /* not available in Expo Go */ }
+  brandRow: { alignItems: "flex-start", marginBottom: 32 },
+  logoContainer: {
+    width: 130, height: 130, borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center", justifyContent: "center",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
+  },
+  logoImage: { width: 118, height: 118 },
 
-function GoogleSignInButton() {
-  const { useAuthStore } = require("../../store/auth") as typeof import("../../store/auth");
-  const setAuth = useAuthStore((s) => s.setAuth);
-  const GoogleSignin = _GoogleSignin;
+  headline: { fontSize: K.font.xxxl, fontWeight: "800", color: "#fff", lineHeight: 38, letterSpacing: -0.5 },
+  subheadline: { fontSize: K.font.base, color: K.colors.textLightMuted, marginTop: 8, marginBottom: 28 },
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!GoogleSignin) throw new Error("Google Sign-In not available.");
-      await GoogleSignin.hasPlayServices();
-      const signInResult = await GoogleSignin.signIn();
-      const idToken = (signInResult as any).data?.idToken ?? (signInResult as any).idToken;
-      if (!idToken) throw new Error("No ID token");
-      const res = await api.post("/auth/oauth/google", { idToken });
-      return (res.data as { data: { user: Parameters<typeof setAuth>[0]; tokens: { accessToken: string } } }).data;
-    },
-    onSuccess: async (data) => {
-      await setAuth(data.user, data.tokens.accessToken);
-      router.replace("/(tabs)");
-    },
-    onError: () => Alert.alert("Error", "Sign in with Google failed. Please try again."),
-  });
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: K.radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    padding: 4,
+    marginBottom: 24,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: K.radius.sm,
+  },
+  tabButtonActive: { backgroundColor: K.colors.accent },
+  tabButtonText: { color: K.colors.textLightMuted, fontWeight: "600", fontSize: K.font.sm },
+  tabButtonTextActive: { color: "#fff", fontWeight: "700" },
 
-  if (!GoogleSignin) return null;
-  return (
-    <Button title="Continue with Google" variant="secondary"
-      onPress={() => mutation.mutate()} loading={mutation.isPending} />
-  );
-}
+  card: {
+    backgroundColor: K.colors.glassBg,
+    borderRadius: K.radius.xxl,
+    borderWidth: 1,
+    borderColor: K.colors.glassBorder,
+    padding: 24,
+  },
+  row: { flexDirection: "row", gap: 12 },
+  halfField: { flex: 1, marginBottom: 16 },
+  field: { marginBottom: 16 },
+  label: {
+    fontSize: K.font.sm,
+    fontWeight: "600",
+    color: K.colors.textLightMuted,
+    marginBottom: 8,
+    letterSpacing: 0.3,
+  },
+  input: {
+    backgroundColor: K.colors.glassInput,
+    borderWidth: 1,
+    borderColor: K.colors.glassInputBorder,
+    borderRadius: K.radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: K.font.base,
+    color: K.colors.textLight,
+    flex: 1,
+  },
+  inputFlex: { flex: 1 },
+  inputError: { borderColor: K.colors.error },
+  passRow: { flexDirection: "row", gap: 8, alignItems: "center" },
+  eyeBtn: {
+    backgroundColor: K.colors.glassInput,
+    borderWidth: 1,
+    borderColor: K.colors.glassInputBorder,
+    borderRadius: K.radius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  eyeIcon: { fontSize: 16 },
+  fieldError: { fontSize: 12, color: "#FCA5A5", marginTop: 4 },
 
-function AppleSignInButton() {
-  const AppleAuthentication = require("expo-apple-authentication") as typeof import("expo-apple-authentication");
-  const { useAuthStore } = require("../../store/auth") as typeof import("../../store/auth");
-  const setAuth = useAuthStore((s) => s.setAuth);
+  comboSelector: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    height: 52,
+  },
+  selectedCountryText: { color: "#fff", fontSize: K.font.base, fontWeight: "600" },
+  placeholderText: { color: K.colors.textLightDim, fontSize: K.font.base },
+  dropdownArrow: { color: K.colors.textLightDim, fontSize: 10 },
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const cred = await AppleAuthentication.signInAsync({
-        requestedScopes: [
-          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-          AppleAuthentication.AppleAuthenticationScope.EMAIL,
-        ],
-      });
-      const res = await api.post("/auth/oauth/apple", {
-        authorizationCode: cred.authorizationCode,
-        identityToken: cred.identityToken,
-      });
-      return (res.data as { data: { user: Parameters<typeof setAuth>[0]; tokens: { accessToken: string } } }).data;
-    },
-    onSuccess: async (data) => {
-      await setAuth(data.user, data.tokens.accessToken);
-      router.replace("/(tabs)");
-    },
-    onError: () => Alert.alert("Error", "Sign in with Apple failed. Please try again."),
-  });
+  errorBox: {
+    backgroundColor: "rgba(239,68,68,0.15)",
+    borderRadius: K.radius.md,
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.30)",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 16,
+  },
+  errorText: { color: "#FCA5A5", fontSize: K.font.sm, lineHeight: 20 },
 
-  return (
-    <AppleAuthentication.AppleAuthenticationButton
-      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-      cornerRadius={10}
-      style={{ height: 52 }}
-      onPress={() => mutation.mutate()}
-    />
-  );
-}
+  primaryBtn: {
+    backgroundColor: K.colors.accent,
+    borderRadius: K.radius.md,
+    paddingVertical: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    height: 54,
+    marginTop: 8,
+  },
+  btnDisabled: { opacity: 0.6 },
+  primaryBtnText: { color: "#fff", fontSize: K.font.lg, fontWeight: "700", letterSpacing: 0.3 },
+
+  loginRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 24 },
+  loginText: { color: K.colors.textLightMuted, fontSize: K.font.sm },
+  loginLink: { color: K.colors.accentLight, fontSize: K.font.sm, fontWeight: "700" },
+
+  successBox: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40 },
+  successEmoji: { fontSize: 56, marginBottom: 20 },
+  successTitle: { fontSize: K.font.xxl, fontWeight: "800", color: "#fff", textAlign: "center", marginBottom: 12 },
+  successSub: {
+    fontSize: K.font.base,
+    color: K.colors.textLightMuted,
+    textAlign: "center",
+    lineHeight: 24,
+    marginBottom: 32,
+  },
+  successEmail: { color: "#fff", fontWeight: "700" },
+  backBtn: {
+    backgroundColor: K.colors.accent,
+    borderRadius: K.radius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+  },
+  backBtnText: { color: "#fff", fontSize: K.font.base, fontWeight: "700" },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(9,43,30,0.85)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: K.colors.darkGreen,
+    borderTopLeftRadius: K.radius.xxl,
+    borderTopRightRadius: K.radius.xxl,
+    height: height * 0.75,
+    paddingTop: 20,
+    paddingHorizontal: 24,
+    borderWidth: 1,
+    borderColor: K.colors.glassBorder,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalTitle: { color: "#fff", fontSize: K.font.xl, fontWeight: "800" },
+  modalCloseButton: { color: K.colors.accentLight, fontSize: K.font.base, fontWeight: "700" },
+  searchBar: {
+    backgroundColor: K.colors.glassInput,
+    borderWidth: 1,
+    borderColor: K.colors.glassInputBorder,
+    borderRadius: K.radius.md,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    color: "#fff",
+    fontSize: K.font.base,
+    marginBottom: 20,
+  },
+  countryItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: K.colors.borderDark,
+  },
+  countryItemText: { color: "#fff", fontSize: K.font.base, fontWeight: "500" },
+  countryFlag: { fontSize: 20 },
+  countryDialCode: { color: K.colors.accentLight, fontSize: K.font.sm, fontWeight: "700" },
+  emptyResults: { alignItems: "center", paddingVertical: 40 },
+  emptyResultsText: { color: K.colors.textLightDim, fontSize: K.font.base },
+
+  shortcutsWrapper: { marginBottom: 16 },
+  shortcutsTitle: {
+    color: K.colors.textLightMuted,
+    fontSize: K.font.xs,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  shortcutsScroll: { gap: 8, paddingRight: 24 },
+  shortcutBtn: {
+    backgroundColor: K.colors.glassInput,
+    borderWidth: 1,
+    borderColor: K.colors.glassInputBorder,
+    borderRadius: K.radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  shortcutText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  listSectionTitle: {
+    color: K.colors.textLightMuted,
+    fontSize: K.font.xs,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 10,
+    marginTop: 8,
+  },
+});
