@@ -192,8 +192,8 @@ export default function FinancePage() {
           value={avgBookingValue}
           currency="USD"
           subValue={`across ${formatNumber(confirmed.length)} bookings`}
-          icon={<TrendingUp className="h-4 w-4 text-purple-600" />}
-          iconBg="bg-purple-100"
+          icon={<TrendingUp className="h-4 w-4 text-primary" />}
+          iconBg="bg-primary/10"
           loading={allBookingsQuery.isLoading}
         />
       </div>

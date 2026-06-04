@@ -161,7 +161,7 @@ export default function MessagingPage() {
                   <Avatar
                     name={isGuest ? "Guest" : "Provider"}
                     size="xs"
-                    className={isGuest ? "bg-blue-500" : "bg-emerald-500"}
+                    className={isGuest ? "bg-primary-500" : "bg-primary-700"}
                   />
                   <div className={`max-w-xs ${isGuest ? "" : "items-end flex flex-col"}`}>
                     <div

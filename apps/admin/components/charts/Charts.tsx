@@ -35,7 +35,7 @@ export function StatCard({
   }
 
   return (
-    <div className="bg-white rounded-xl border border-border p-5 card-hover">
+    <div className="bg-white rounded-xl border border-[#008A3A]/10 hover:border-[#4CCB2A]/40 transition-all duration-200 p-5 card-hover">
       <div className="flex items-start justify-between mb-3">
         <p className="text-sm font-medium text-slate-500">{title}</p>
         {icon && (
@@ -86,12 +86,12 @@ export function RevenueBarChart({ data, currency = "USD", height = 220 }: Revenu
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
         <XAxis
           dataKey="label"
-          tick={{ fontSize: 11, fill: "#94a3b8" }}
+          tick={{ fontSize: 11, fill: "#4B6B41" }}
           axisLine={false}
           tickLine={false}
         />
         <YAxis
-          tick={{ fontSize: 11, fill: "#94a3b8" }}
+          tick={{ fontSize: 11, fill: "#4B6B41" }}
           axisLine={false}
           tickLine={false}
           tickFormatter={(v) => formatCurrency(v, currency, { maximumFractionDigits: 0, notation: "compact" })}
@@ -99,7 +99,7 @@ export function RevenueBarChart({ data, currency = "USD", height = 220 }: Revenu
         />
         <Tooltip
           contentStyle={{
-            border: "1px solid #e2e8f0",
+            border: "1px solid #D1F0D1",
             borderRadius: "8px",
             fontSize: 12,
             boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.07)",
@@ -109,7 +109,7 @@ export function RevenueBarChart({ data, currency = "USD", height = 220 }: Revenu
             name === "revenue" ? "Revenue" : "Bookings",
           ]}
         />
-        <Bar dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="revenue" fill="#008A3A" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -149,7 +149,7 @@ export function DonutChart({ data, height = 220, innerLabel, innerValue }: Donut
         </Pie>
         <Tooltip
           contentStyle={{
-            border: "1px solid #e2e8f0",
+            border: "1px solid #D1F0D1",
             borderRadius: "8px",
             fontSize: 12,
           }}

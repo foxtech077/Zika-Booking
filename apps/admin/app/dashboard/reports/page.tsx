@@ -151,8 +151,8 @@ export default function ReportsPage() {
           title="Conversion Rate"
           value={Math.round(conversionRate)}
           subValue={`${confirmed.length} confirmed of ${bookings.length}`}
-          icon={<TrendingUp className="h-4 w-4 text-purple-600" />}
-          iconBg="bg-purple-100"
+          icon={<TrendingUp className="h-4 w-4 text-primary" />}
+          iconBg="bg-primary/10"
           loading={isLoading}
         />
       </div>

@@ -4,18 +4,16 @@ import { cn } from "@/lib/utils";
 // ── Avatar ────────────────────────────────────────────────────────────────────
 
 const AVATAR_COLORS = [
-  "bg-blue-500",
-  "bg-purple-500",
-  "bg-green-500",
-  "bg-amber-500",
-  "bg-rose-500",
-  "bg-teal-500",
-  "bg-indigo-500",
-  "bg-orange-500",
+  "bg-primary-400",
+  "bg-primary-500",
+  "bg-primary-600",
+  "bg-primary-700",
+  "bg-primary-800",
+  "bg-primary-900",
 ];
 
 function getAvatarColor(name?: string | null): string {
-  if (!name) return "bg-blue-500";
+  if (!name) return "bg-primary-600";
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);

@@ -72,7 +72,7 @@
 
   /* Text gradient */
   .text-gradient-primary {
-    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    background: linear-gradient(135deg, #008A3A, #006B2E);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -110,15 +110,19 @@
 
   /* Gradient backgrounds */
   .gradient-primary {
-    background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+    background: linear-gradient(135deg, #006B2E 0%, #008A3A 100%);
+  }
+
+  .gradient-sidebar {
+    background: linear-gradient(180deg, #006B2E 0%, #004D22 100%);
   }
 
   .gradient-mesh {
-    background-color: #f8fafc;
+    background-color: #F6FBF6;
     background-image:
-      radial-gradient(at 40% 20%, hsla(220, 100%, 97%, 1) 0px, transparent 50%),
-      radial-gradient(at 80% 0%, hsla(214, 100%, 97%, 1) 0px, transparent 50%),
-      radial-gradient(at 0% 50%, hsla(240, 100%, 97%, 1) 0px, transparent 50%);
+      radial-gradient(at 40% 20%, hsla(120, 50%, 98%, 1) 0px, transparent 50%),
+      radial-gradient(at 80% 0%, hsla(130, 40%, 98%, 1) 0px, transparent 50%),
+      radial-gradient(at 0% 50%, hsla(100, 30%, 98%, 1) 0px, transparent 50%);
   }
 
   /* Status dot colors */

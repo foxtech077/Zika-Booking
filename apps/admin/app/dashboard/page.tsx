@@ -5,7 +5,7 @@ import {
   Users, Building2, CalendarDays, BadgeCheck,
   DollarSign, TrendingUp, Clock, AlertCircle,
 } from "lucide-react";
-import { api } from "@/lib/api";
+import { adminApi } from "@/lib/admin-api";
 import { listingApi } from "@/lib/listing-api";
 import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Charts";
 import { Card, CardHeader, SectionHeader } from "@/components/ui/Card";
@@ -16,7 +16,7 @@ import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/l
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
 const fetchUsers = () =>
-  api.get("/admin/users?limit=1").then((r) => r.data.data ?? r.data);
+  adminApi.get("/admin/users?limit=1").then((r) => r.data.data ?? r.data);
 
 const fetchBookings = () =>
   listingApi.get("/admin/bookings?limit=100").then((r) => r.data.data ?? r.data);
@@ -28,7 +28,7 @@ const fetchReviewQueue = () =>
   listingApi.get("/admin/listings/review-queue?limit=1").then((r) => r.data.data ?? r.data);
 
 const fetchAuditLogs = () =>
-  api.get("/admin/audit-logs?limit=8").then((r) => r.data.data ?? r.data);
+  adminApi.get("/admin/audit-logs?limit=8").then((r) => r.data.data ?? r.data);
 
 // ── Revenue aggregator (from bookings) ───────────────────────────────────────
 
@@ -56,12 +56,12 @@ function buildRevenueChart(bookings: any[]) {
 // ── Booking status donut data ─────────────────────────────────────────────────
 
 const STATUS_COLORS_MAP: Record<string, string> = {
-  confirmed:          "#3b82f6",
-  completed:          "#10b981",
-  pending_payment:    "#f59e0b",
-  cancelled_by_guest: "#94a3b8",
-  cancelled_by_provider: "#f97316",
-  cancelled_by_system: "#ef4444",
+  confirmed:          "#008A3A",
+  completed:          "#4CCB2A",
+  pending_payment:    "#A3D977",
+  cancelled_by_guest: "#cbd5e1",
+  cancelled_by_provider: "#A3E0A3",
+  cancelled_by_system: "#006B2E",
 };
 
 function buildStatusDonut(bookings: any[]) {
@@ -135,16 +135,16 @@ export default function DashboardPage() {
           title="Total Users"
           value={usersData?.total ?? 0}
           change={12.8}
-          icon={<Users className="h-4 w-4 text-purple-600" />}
-          iconBg="bg-purple-100"
+          icon={<Users className="h-4 w-4 text-[#008A3A]" />}
+          iconBg="bg-[#E8F7E8]"
           loading={loadingUsers}
         />
         <StatCard
           title="Total Listings"
           value={listingsData?.total ?? 0}
           change={2.1}
-          icon={<Building2 className="h-4 w-4 text-teal-600" />}
-          iconBg="bg-teal-100"
+          icon={<Building2 className="h-4 w-4 text-[#4CCB2A]" />}
+          iconBg="bg-[#E8F7E8]"
           loading={loadingListings}
         />
         <StatCard
@@ -158,16 +158,16 @@ export default function DashboardPage() {
           title="Confirmed Bookings"
           value={confirmedBookings.length}
           subValue={`of ${bookings.length} total`}
-          icon={<CalendarDays className="h-4 w-4 text-green-600" />}
-          iconBg="bg-green-100"
+          icon={<CalendarDays className="h-4 w-4 text-[#008A3A]" />}
+          iconBg="bg-[#E8F7E8]"
           loading={loadingBookings}
         />
         <StatCard
           title="Conversion Rate"
           value={bookings.length > 0 ? Math.round((confirmedBookings.length / bookings.length) * 100) : 0}
           subValue="confirmed / total"
-          icon={<TrendingUp className="h-4 w-4 text-indigo-600" />}
-          iconBg="bg-indigo-100"
+          icon={<TrendingUp className="h-4 w-4 text-[#4CCB2A]" />}
+          iconBg="bg-[#E8F7E8]"
           loading={loadingBookings}
         />
       </div>

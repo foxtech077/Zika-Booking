@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
-import { api } from "@/lib/api";
+import { adminApi } from "@/lib/admin-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -12,7 +12,7 @@ import { formatDateTime, formatRelativeTime, slugToLabel } from "@/lib/utils";
 import type { AuditLog } from "@/types/admin";
 
 const fetchAudit = (params: Record<string, string>) =>
-  api.get(`/admin/audit-logs?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  adminApi.get(`/admin/audit-logs?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 function DiffViewer({ oldVal, newVal }: { oldVal: string | null; newVal: string | null }) {
   let oldObj: any, newObj: any;
@@ -77,8 +77,19 @@ export default function AuditPage() {
     queryFn: () => fetchAudit(params),
   });
 
-  const logs: AuditLog[] = data?.logs ?? [];
+  const rawLogs: AuditLog[] = data?.logs ?? [];
   const total: number = data?.total ?? 0;
+  // ── Client‑side combined filter (search + role) ────────────────────────
+  const filteredLogs = rawLogs
+    .filter((log) =>
+      !q ||
+        [log.action, log.targetType, log.oldValue ?? "", log.newValue ?? ""]
+          .join(" ")
+          .toLowerCase()
+          .includes(q.toLowerCase())
+    )
+    .filter((log) => !role || log.role === role);
+  const logs = filteredLogs;
 
   const columns: Column<AuditLog>[] = [
     {

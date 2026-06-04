@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const listingApi = axios.create({
-  baseURL: "/admin/listing-api",
+  baseURL: process.env.NEXT_PUBLIC_LISTING_API_URL ?? "",
   withCredentials: true,
   timeout: 15_000,
 });

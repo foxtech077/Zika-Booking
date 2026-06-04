@@ -109,8 +109,8 @@ export function buildQueryString(params: Record<string, string | number | boolea
 export const STATUS_COLORS: Record<string, string> = {
   // Listing statuses
   draft:              "bg-slate-100 text-slate-600",
-  pending_review:     "bg-amber-100 text-amber-700",
-  approved:           "bg-success-light text-success-dark",
+  pending_review:     "bg-primary-100 text-primary-700",
+  approved:           "bg-primary-400 text-primary-800",
   rejected:           "bg-danger-light text-danger-dark",
   active:             "bg-success-light text-success-dark",
   deactivated:        "bg-slate-100 text-slate-600",
@@ -118,25 +118,25 @@ export const STATUS_COLORS: Record<string, string> = {
   auto_suspended:     "bg-orange-100 text-orange-700",
   permanently_banned: "bg-danger-light text-danger-dark",
   // Booking statuses
-  pending_payment:    "bg-amber-100 text-amber-700",
-  confirmed:          "bg-info-light text-info-dark",
+  pending_payment:    "bg-primary-100 text-primary-700",
+  confirmed:          "bg-success-light text-success-dark",
   completed:          "bg-success-light text-success-dark",
   cancelled_by_guest: "bg-slate-100 text-slate-600",
   cancelled_by_provider: "bg-orange-100 text-orange-700",
   cancelled_by_system: "bg-danger-light text-danger-dark",
   // User statuses
-  pending_verification: "bg-amber-100 text-amber-700",
+  pending_verification: "bg-primary-100 text-primary-700",
   banned:             "bg-danger-light text-danger-dark",
   // Voucher
   active_voucher:     "bg-success-light text-success-dark",
   inactive_voucher:   "bg-slate-100 text-slate-600",
   // Admin roles
-  super_admin:        "bg-purple-100 text-purple-700",
-  admin:              "bg-blue-100 text-blue-700",
-  country_manager:    "bg-teal-100 text-teal-700",
-  sales:              "bg-green-100 text-green-700",
-  support:            "bg-orange-100 text-orange-700",
-  finance:            "bg-indigo-100 text-indigo-700",
+  super_admin:        "bg-primary-50 text-primary-900",
+  admin:              "bg-primary-100 text-primary-800",
+  country_manager:    "bg-primary-200 text-primary-700",
+  sales:              "bg-primary-300 text-primary-600",
+  support:            "bg-primary-400 text-primary-500",
+  finance:            "bg-primary-500 text-primary-400",
 };
 
 export function getStatusColor(status: string): string {

@@ -271,9 +271,9 @@ export default function ListingReviewPage() {
               {listing.amenities.map((a) => (
                 <span key={a.amenityKey} className="bg-gray-100 text-gray-700 rounded-full px-3 py-1 text-xs">{a.amenityKey.replace(/_/g, " ")}</span>
               ))}
-              {listing.customAmenities.map((a) => (
-                <span key={a.label} className="bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-xs">{a.label}</span>
-              ))}
+               {listing.customAmenities.map((a) => (
+                 <span key={a.label} className="bg-success-light text-success-dark rounded-full px-3 py-1 text-xs">{a.label}</span>
+               ))}
               {!listing.amenities.length && !listing.customAmenities.length && <p className="text-sm text-gray-400">None listed.</p>}
             </div>
           </Section>
