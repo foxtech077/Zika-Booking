@@ -11,20 +11,19 @@ const queryClient = new QueryClient({
 });
 
 const screenOptionsByName: Record<string, object> = {
-  "pending-approval":    { headerShown: false },
-  suspended:             { headerShown: false },
-  "(provider)":          { headerShown: false },
-  wallet:                { headerShown: false },
-  notifications:         { headerShown: false },
-  "listings/new":        { headerShown: false },
-  "listings/[id]/index": { headerShown: false },
-  "booking/[id]":        { headerShown: false },
-  verify:                { headerShown: false },
-  "reset-password":      { headerShown: false },
-  search:                { headerShown: true, title: "Search Results", headerBackTitle: "Back" },
-  "book/[listingId]":    { headerShown: true, headerBackTitle: "Back" },
-  "pay/[bookingId]":     { headerShown: true, title: "Complete Payment", headerBackTitle: "Back" },
-  "review/[bookingId]":  { headerShown: true, title: "Leave a Review", headerBackTitle: "Back" },
+  "pending-approval":          { headerShown: false },
+  suspended:                   { headerShown: false },
+  "(provider)":                { headerShown: false },
+  wallet:                      { headerShown: false },
+  notifications:               { headerShown: false },
+  "listings/new":              { headerShown: false },
+  "listings/[id]/index":       { headerShown: false },
+  "booking/[id]":              { headerShown: false },
+  "provider/booking/[id]":     { headerShown: false },
+  search:                      { headerShown: true, title: "Search Results", headerBackTitle: "Back" },
+  "book/[listingId]":          { headerShown: true, headerBackTitle: "Back" },
+  "pay/[bookingId]":           { headerShown: true, title: "Complete Payment", headerBackTitle: "Back" },
+  "review/[bookingId]":        { headerShown: true, title: "Leave a Review", headerBackTitle: "Back" },
 };
 
 // Error codes from the auth service that mean "this account can't continue"
@@ -41,7 +40,7 @@ async function verifySession(): Promise<"ok" | "revoked" | "network_error"> {
   const { accessToken, user } = useAuthStore.getState();
   if (!accessToken || !user) return "ok"; // not logged in — nothing to check
 
-  const apiUrl = process.env["EXPO_PUBLIC_API_URL"] ?? "https://api.kainook.com";
+  const apiUrl = process.env["EXPO_PUBLIC_API_URL"] ?? "http://localhost:3001";
   try {
     await axios.post(
       `${apiUrl}/auth/refresh`,
@@ -122,17 +121,17 @@ export default function RootLayout() {
     };
   }, []);
 
+  if (!isHydrated) return null;
+
   return (
     <QueryClientProvider client={queryClient}>
       <StatusBar style="auto" />
-      {isHydrated ? (
-        <Stack
-          screenOptions={({ route }) => ({
-            headerShown: false,
-            ...(screenOptionsByName[route.name] ?? {}),
-          })}
-        />
-      ) : null}
+      <Stack
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          ...(screenOptionsByName[route.name] ?? {}),
+        })}
+      />
     </QueryClientProvider>
   );
 }

@@ -12,6 +12,7 @@ import { router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { K } from "../constants/theme";
+import { useAuthStore } from "../store/auth";
 
 interface Notification {
   id: string;
@@ -90,7 +91,11 @@ export default function NotificationsScreen() {
 
   function handlePress(item: Notification) {
     if (!item.isRead) markRead.mutate(item.id);
-    if (item.data?.bookingId) router.push(`/booking/${item.data.bookingId}` as any);
+    if (item.data?.bookingId) {
+      const isProvider = useAuthStore.getState().user?.userType === "provider";
+      const route = isProvider ? `/provider/booking/${item.data.bookingId}` : `/booking/${item.data.bookingId}`;
+      router.push(route as any);
+    }
     if (item.data?.listingId) router.push(`/listings/${item.data.listingId}` as any);
   }
 

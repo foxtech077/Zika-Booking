@@ -77,7 +77,8 @@ function calcRefund(booking: any): number {
 
   const hoursUntil = (new Date(refDate).getTime() - Date.now()) / 3_600_000;
 
-  if (policy === "free") return hoursUntil >= 48 ? total : 0;
+  // FIX: was "free" — correct enum value is "flexible"
+  if (policy === "flexible") return hoursUntil >= 48 ? total : 0;
   if (policy === "moderate") {
     if (hoursUntil >= 168) return total; // 7 days
     if (hoursUntil >= 48) return total * 0.5;
@@ -441,7 +442,6 @@ export async function bookingRoutes(app: FastifyInstance) {
     // E16: Award loyalty points (1 point per USD equivalent)
     const points = Math.floor(Number(booking.totalAmount));
     if (points > 0) {
-      // Update User table in shared DB using raw SQL
       await prisma.$executeRaw`
         UPDATE "User"
         SET
