@@ -1,3 +1,5 @@
+import "react-native-get-random-values";
+import "react-native-url-polyfill/auto";
 import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { Stack } from "expo-router";

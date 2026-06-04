@@ -34,6 +34,8 @@ try {
 
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
+import { ListingImage } from "../../components/ListingImage";
+
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const PHOTO_HEIGHT = 260;
@@ -595,17 +597,16 @@ export default function PublicListingDetailScreen() {
     // New key — breaks old stale cache from the /public endpoint version
     queryKey: ["listing-full", id],
     queryFn: async () => {
-      // GET /listings/{id} (same endpoint provider uses) generates fresh S3 presigned URLs.
-      // listingApi automatically sends the Bearer token, so auth'd guests can access it.
-      try {
-        const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}`);
-        if (res.data?.data?.photos?.length) return res.data.data;
-        throw new Error("no photos");
-      } catch {
-        // Fallback: public endpoint
-        const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}/public`);
-        return res.data.data;
-      }
+      const endpoint = `/listings/${id}/public`;
+      console.log(`[Listing Detail Query] API Endpoint Called: ${endpoint}`);
+      console.log(`[Listing Detail Query] Listing ID: ${id}`);
+      const res = await listingApi.get<{ data: PublicListing }>(endpoint);
+      const returnedData = res.data.data;
+      const returnedPrimaryPhotoUrl = (returnedData as any).primaryPhotoUrl ?? returnedData.photos?.[0]?.cdnUrl ?? null;
+      const returnedPhotoGalleryUrls = returnedData.photos?.map((p: any) => p.cdnUrl) ?? [];
+      console.log(`[Listing Detail Query] Returned primaryPhotoUrl: ${returnedPrimaryPhotoUrl}`);
+      console.log(`[Listing Detail Query] Returned photo gallery URLs:`, returnedPhotoGalleryUrls);
+      return returnedData;
     },
     enabled: !!id,
     // Presigned S3 URLs expire — always treat listing data as stale so we re-fetch fresh URLs
@@ -860,13 +861,10 @@ export default function PublicListingDetailScreen() {
                 onScroll={handlePhotoScroll}
                 scrollEventThrottle={16}
                 renderItem={({ item: photo }) => {
-                  const isApiUrl = photo.cdnUrl?.includes("api.kainook.com") && !photo.cdnUrl?.includes("amazonaws.com");
                   return (
                     <TouchableOpacity activeOpacity={0.95} onPress={() => setFullscreenVisible(true)}>
-                      <Image
-                        source={isApiUrl && accessToken
-                          ? { uri: photo.cdnUrl, headers: { Authorization: `Bearer ${accessToken}` } }
-                          : { uri: photo.cdnUrl }}
+                      <ListingImage
+                        uri={photo.cdnUrl}
                         style={styles.photo}
                         resizeMode="cover"
                       />
@@ -933,13 +931,10 @@ export default function PublicListingDetailScreen() {
                   setPhotoIndex(index);
                 }}
                 renderItem={({ item: photo }) => {
-                  const isApiUrl = photo.cdnUrl?.includes("api.kainook.com") && !photo.cdnUrl?.includes("amazonaws.com");
                   return (
                     <View style={styles.fullscreenPhotoWrapper}>
-                      <Image
-                        source={isApiUrl && accessToken
-                          ? { uri: photo.cdnUrl, headers: { Authorization: `Bearer ${accessToken}` } }
-                          : { uri: photo.cdnUrl }}
+                      <ListingImage
+                        uri={photo.cdnUrl}
                         style={styles.fullscreenPhoto}
                         resizeMode="contain"
                       />
@@ -1202,8 +1197,8 @@ export default function PublicListingDetailScreen() {
           {/* Host Card Section */}
           <View style={styles.divider} />
           <View style={styles.hostCard}>
-            <Image
-              source={{ uri: hostAvatar }}
+            <ListingImage
+              uri={hostAvatar}
               style={styles.hostAvatar}
             />
             <View style={styles.hostInfo}>

@@ -33,35 +33,8 @@ try {
 
 import { listingApi } from "../lib/listing-api";
 import { useAuthStore } from "../store/auth";
+import { ListingImage } from "../components/ListingImage";
 
-const LISTING_BASE = process.env["EXPO_PUBLIC_LISTING_API_URL"] ?? "https://api.kainook.com/listings";
-function resolvePhoto(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (url.startsWith("http")) return url;
-  return `${LISTING_BASE}${url.startsWith("/") ? "" : "/"}${url}`;
-}
-
-function ListingImage({ uri, style, resizeMode = "cover", onError }: {
-  uri: string | null | undefined;
-  style: any;
-  resizeMode?: "cover" | "contain" | "stretch" | "center";
-  onError?: () => void;
-}) {
-  const token = useAuthStore((s) => s.accessToken);
-  const resolved = resolvePhoto(uri);
-  if (!resolved) return null;
-  const isApiUrl = resolved.includes("api.kainook.com") && !resolved.includes("amazonaws.com");
-  return (
-    <Image
-      source={isApiUrl && token
-        ? { uri: resolved, headers: { Authorization: `Bearer ${token}` } }
-        : { uri: resolved }}
-      style={style}
-      resizeMode={resizeMode}
-      onError={onError}
-    />
-  );
-}
 
 // Deterministic coordinates calculator from search center + distance
 function getListingCoordinates(item: SearchResult, centerLat: number, centerLng: number) {

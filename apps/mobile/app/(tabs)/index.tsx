@@ -18,6 +18,7 @@ import { useQuery, useQueries } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
 import { listingApi } from "../../lib/listing-api";
+import { ListingImage } from "../../components/ListingImage";
 
 const { width: W } = Dimensions.get("window");
 const GREEN = "#1B5E20";
@@ -52,38 +53,6 @@ interface SearchResult {
 
 interface SearchResponse {
   data: { totalCount: number; nextCursor: string | null; results: SearchResult[] };
-}
-
-const LISTING_BASE = process.env["EXPO_PUBLIC_LISTING_API_URL"] ?? "https://api.kainook.com/listings";
-function resolvePhoto(url: string | null | undefined): string | null {
-  if (!url) return null;
-  if (url.startsWith("http")) return url;
-  return `${LISTING_BASE}${url.startsWith("/") ? "" : "/"}${url}`;
-}
-
-// S3 presigned URLs already contain auth in query params.
-// Adding an Authorization header breaks them ("only one auth mechanism allowed").
-// Only add Bearer token when the image URL routes through our own API gateway.
-function ListingImage({ uri, style, resizeMode = "cover", onError }: {
-  uri: string | null | undefined;
-  style: any;
-  resizeMode?: "cover" | "contain" | "stretch" | "center";
-  onError?: () => void;
-}) {
-  const token = useAuthStore((s) => s.accessToken);
-  const resolved = resolvePhoto(uri);
-  if (!resolved) return null;
-  const isApiUrl = resolved.includes("api.kainook.com") && !resolved.includes("amazonaws.com");
-  return (
-    <Image
-      source={isApiUrl && token
-        ? { uri: resolved, headers: { Authorization: `Bearer ${token}` } }
-        : { uri: resolved }}
-      style={style}
-      resizeMode={resizeMode}
-      onError={onError}
-    />
-  );
 }
 
 function fmtPrice(n: number | null, currency: string): string {
@@ -438,17 +407,19 @@ export default function HomeScreen() {
       // "photo-v2" key — avoids stale cache from previous attempts
       queryKey: ["photo-v2", id],
       queryFn: async (): Promise<string | null> => {
+        const endpoint = `/listings/${id}/public`;
+        console.log(`[Home Listing Cards] API Endpoint Called: ${endpoint}`);
+        console.log(`[Home Listing Cards] Listing ID: ${id}`);
         try {
-          // Same endpoint the provider mobile uses — returns fresh presigned S3 URL
-          const res = await listingApi.get<{ data: { photos: Array<{ cdnUrl: string }> } }>(`/listings/${id}`);
-          return res.data.data?.photos?.[0]?.cdnUrl ?? null;
-        } catch {
-          try {
-            const res = await listingApi.get<{ data: { photos: Array<{ cdnUrl: string }> } }>(`/listings/${id}/public`);
-            return res.data.data?.photos?.[0]?.cdnUrl ?? null;
-          } catch {
-            return null;
-          }
+          const res = await listingApi.get<{ data: { primaryPhotoUrl?: string; photos: Array<{ cdnUrl: string }> } }>(endpoint);
+          const returnedPrimaryPhotoUrl = res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
+          const returnedPhotoGalleryUrls = res.data.data?.photos?.map((p) => p.cdnUrl) ?? [];
+          console.log(`[Home Listing Cards] Returned primaryPhotoUrl: ${returnedPrimaryPhotoUrl}`);
+          console.log(`[Home Listing Cards] Returned photo gallery URLs:`, returnedPhotoGalleryUrls);
+          return returnedPrimaryPhotoUrl;
+        } catch (error) {
+          console.error(`[Home Listing Cards] Error fetching from ${endpoint}:`, error);
+          return null;
         }
       },
       // staleTime: 0 so each session gets fresh presigned URLs (they expire)
