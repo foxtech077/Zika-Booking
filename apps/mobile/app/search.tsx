@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -246,6 +246,7 @@ interface ResultCardProps {
   returnDatetime?: string;
   onFavouriteToggle: (id: string, current: boolean) => void;
   favouriteLoading: string | null;
+  photoUrl?: string | null;
 }
 
 function ResultCard({
@@ -258,6 +259,7 @@ function ResultCard({
   returnDatetime,
   onFavouriteToggle,
   favouriteLoading,
+  photoUrl,
 }: ResultCardProps) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -282,12 +284,14 @@ function ResultCard({
   // Prefer backend-provided voucher details if exposed, otherwise fall back to category default
   const voucherCode = (item as any).voucherCode || (item as any).activeVoucher?.code || (isCar ? "SAFARI20" : "WELCOME10");
 
+  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
+
   return (
     <TouchableOpacity style={cardStyles.card} onPress={handlePress} activeOpacity={0.88}>
       {/* Photo */}
       <View style={cardStyles.photoWrapper}>
-        {!imgError && item.primaryPhotoUrl ? (
-          <ListingImage uri={item.primaryPhotoUrl} style={cardStyles.photo} onError={() => setImgError(true)} />
+        {!imgError && displayPhoto ? (
+          <ListingImage uri={displayPhoto} style={cardStyles.photo} onError={() => setImgError(true)} />
         ) : (
           <View style={[cardStyles.photo, cardStyles.photoPlaceholder, { alignItems: "center", justifyContent: "center" }]}>
             <Text style={{ fontSize: 36 }}>{isCar ? "🚗" : "🏨"}</Text>
@@ -756,6 +760,45 @@ export default function SearchScreen() {
     staleTime: 30_000,
   });
 
+  // ── Batch-fetch fresh photo URLs for search results ──────────────────────
+  // POST /listings/batch-summary is the public "Search" API — no provider auth
+  // required. Falls back to individual GET /listings/{id}/public per listing.
+  const displayedIds = useMemo(() => Array.from(new Set(allResults.map((r) => r.id))), [allResults]);
+
+  const { data: batchSummary } = useQuery({
+    queryKey: ["batch-photos", displayedIds],
+    queryFn: async (): Promise<Record<string, string>> => {
+      if (!displayedIds.length) return {};
+      const map: Record<string, string> = {};
+      try {
+        const res = await listingApi.post<{ data: { listings: any[] } }>("/listings/batch-summary", { ids: displayedIds });
+        const items = res.data?.data?.listings ?? [];
+        for (const item of items) {
+          const url = item.primaryPhotoUrl ?? item.photos?.[0]?.cdnUrl ?? item.coverPhotoUrl ?? null;
+          if (item.id && url) map[item.id] = url;
+        }
+        if (Object.keys(map).length > 0) return map;
+      } catch { /* fall through to per-listing fallback */ }
+      // Fallback: individual public endpoint per listing
+      await Promise.allSettled(
+        displayedIds.map(async (id) => {
+          try {
+            const res = await listingApi.get<{ data: { photos?: Array<{ cdnUrl: string }>; primaryPhotoUrl?: string } }>(`/listings/${id}/public`);
+            const url = res.data?.data?.photos?.[0]?.cdnUrl ?? res.data?.data?.primaryPhotoUrl ?? null;
+            if (url) map[id] = url;
+          } catch { /* ignore */ }
+        })
+      );
+      return map;
+    },
+    staleTime: 0,
+    gcTime: 5 * 60_000,
+    retry: 0,
+    enabled: displayedIds.length > 0,
+  });
+
+  const photoMap: Record<string, string> = batchSummary ?? {};
+
   // ── Favourite toggle ──
   const handleFavouriteToggle = useCallback(async (id: string, current: boolean) => {
     setFavouriteLoading(id);
@@ -1007,6 +1050,7 @@ export default function SearchScreen() {
                   returnDatetime={returnDatetime}
                   onFavouriteToggle={handleFavouriteToggle}
                   favouriteLoading={favouriteLoading}
+                  photoUrl={photoMap[selectedListing.id]}
                 />
                 <TouchableOpacity
                   style={styles.closePreviewBtn}
@@ -1035,6 +1079,7 @@ export default function SearchScreen() {
                 returnDatetime={returnDatetime}
                 onFavouriteToggle={handleFavouriteToggle}
                 favouriteLoading={favouriteLoading}
+                photoUrl={photoMap[item.id]}
               />
             )}
             ListEmptyComponent={

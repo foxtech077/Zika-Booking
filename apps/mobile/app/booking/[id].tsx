@@ -286,7 +286,11 @@ export default function BookingDetailScreen() {
 
   const cancelMutation = useMutation({
     mutationFn: async () => {
-      await listingApi.post(`/bookings/${id}/cancel`);
+      if (booking?.status === "pending_payment") {
+        await listingApi.patch(`/bookings/${id}/fail`, { failureReason: "Cancelled by guest" });
+      } else {
+        await listingApi.post(`/bookings/${id}/cancel`);
+      }
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["booking", id] });
@@ -301,6 +305,7 @@ export default function BookingDetailScreen() {
 
   function handleCancelPress() {
     if (!booking) return;
+    const isPendingPayment = booking.status === "pending_payment";
     const refundLine =
       booking.refundAmount != null && booking.refundAmount > 0
         ? `\n\nEstimated refund: ${formatCurrency(booking.refundAmount, booking.currency)}`
@@ -310,12 +315,14 @@ export default function BookingDetailScreen() {
       : "";
 
     Alert.alert(
-      "Cancel Booking?",
-      `Are you sure you want to cancel this booking?${policyLine}${refundLine}`,
+      isPendingPayment ? "Discard Booking?" : "Cancel Booking?",
+      isPendingPayment
+        ? "Are you sure you want to discard this pending reservation?"
+        : `Are you sure you want to cancel this booking?${policyLine}${refundLine}`,
       [
-        { text: "Keep Booking", style: "cancel" },
+        { text: isPendingPayment ? "Keep" : "Keep Booking", style: "cancel" },
         {
-          text: "Cancel Booking",
+          text: isPendingPayment ? "Discard" : "Cancel Booking",
           style: "destructive",
           onPress: () => cancelMutation.mutate(),
         },
@@ -535,8 +542,8 @@ export default function BookingDetailScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Cancel — only when canCancel and not already cancelled */}
-            {booking.canCancel && !cancelled && (
+            {/* Cancel — only when canCancel (or pending_payment) and not already cancelled */}
+            {(booking.canCancel || booking.status === "pending_payment") && !cancelled && (
               <TouchableOpacity
                 style={styles.cancelBtn}
                 onPress={handleCancelPress}
@@ -545,7 +552,9 @@ export default function BookingDetailScreen() {
                 {cancelMutation.isPending ? (
                   <ActivityIndicator size="small" color="#dc2626" />
                 ) : (
-                  <Text style={styles.cancelBtnText}>Cancel Booking</Text>
+                  <Text style={styles.cancelBtnText}>
+                    {booking.status === "pending_payment" ? "Discard Booking" : "Cancel Booking"}
+                  </Text>
                 )}
               </TouchableOpacity>
             )}

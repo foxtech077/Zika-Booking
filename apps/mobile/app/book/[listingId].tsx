@@ -143,6 +143,7 @@ export default function BookingFlowScreen() {
   // ── Lock state ────────────────────────────────────────────────────────────
   const [lockState, setLockState] = useState<LockState | null>(null);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [lockErrorMessage, setLockErrorMessage] = useState<string | null>(null);
   const [lockLoading, setLockLoading] = useState(true);
   const [expiredModal, setExpiredModal] = useState(false);
 
@@ -226,14 +227,17 @@ export default function BookingFlowScreen() {
           pricingPreview: mapped,
         });
       } catch (err: any) {
+        console.warn("LOCK INITIATION ERROR:", err?.response?.data || err?.message || err);
         const status = err?.response?.status;
         const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
+        const errMsg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message;
         if (code === "LISTING_UNAVAILABLE") {
           setLockError("unavailable");
         } else if (status === 401 || code === "NO_TOKEN" || code === "INVALID_TOKEN") {
           setLockError("auth");
         } else {
           setLockError("generic");
+          setLockErrorMessage(errMsg || "An error occurred while trying to reserve this listing. Please go back and try again.");
         }
       } finally {
         setLockLoading(false);
@@ -457,7 +461,7 @@ export default function BookingFlowScreen() {
           <Ionicons name="warning" size={64} color="#f59e0b" />
           <Text style={styles.errorTitle}>Could not secure reservation</Text>
           <Text style={styles.errorBody}>
-            An error occurred while trying to reserve this listing. Please go back and try again.
+            {lockErrorMessage}
           </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => router.back()}>
             <Text style={styles.primaryBtnText}>Go Back</Text>
