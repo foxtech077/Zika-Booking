@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
+import { withSignedPhotos } from "../lib/s3.js";
 
 // ── Geo helper ────────────────────────────────────────────────────────────────
 
@@ -282,9 +283,12 @@ export async function searchRoutes(app: FastifyInstance) {
       isFavourited = !!fav;
     }
 
+    const signedPhotos = await withSignedPhotos(listing.photos);
+
     // Strip sensitive car fields pre-booking
     const data: any = {
       ...listing,
+      photos: signedPhotos,
       licencePlate: undefined, // Never expose car licence plate here
       isFavourited: guestId ? isFavourited : undefined,
     };
