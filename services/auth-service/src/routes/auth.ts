@@ -611,18 +611,9 @@ export async function authRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    // const parsed = resetPasswordSchema.safeParse(req.body);
-    // if (!parsed.success) {
-    //   return sendError(reply, 422, "VALIDATION_ERROR", "Validation failed",
-    //     zodFieldErrors((parsed.error as ZodError).issues));
-    // }
-
-
     const parsed = resetPasswordSchema.safeParse(req.body);
-
     if (!parsed.success) {
       console.log(JSON.stringify(parsed.error.format(), null, 2));
-
       return sendError(
         reply,
         422,
@@ -663,11 +654,17 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/oauth/google  (UC-1.6) ──────────────────────────────────────
-  app.post("/auth/oauth/google", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/oauth/google", { schema: { tags: ["User Auth"],body: {
+        type: "object",
+        required: ["idToken"],
+        properties: {
+          idToken: {
+            type: "string",
+}}} } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = googleOAuthSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid payload.");
     const { idToken, userType, businessName, country } = parsed.data;
-
+  
     let googlePayload: { email: string; given_name?: string; family_name?: string; sub: string } | null = null;
     try {
       const client = new OAuth2Client();
@@ -680,6 +677,15 @@ export async function authRoutes(app: FastifyInstance) {
         ],
       });
       const p = ticket.getPayload();
+
+//----sample console
+      console.log("========== GOOGLE TOKEN DEBUG ==========");
+console.log("AUD:", p?.aud);
+console.log("EMAIL:", p?.email);
+console.log("SUB:", p?.sub);
+console.log("========================================");
+
+
       if (!p?.email || !p?.sub) throw new Error("Missing fields");
       googlePayload = { email: p.email, given_name: p.given_name, family_name: p.family_name, sub: p.sub };
     } catch {
@@ -731,9 +737,38 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/oauth/apple  (UC-1.7) ───────────────────────────────────────
-  app.post("/auth/oauth/apple", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/auth/oauth/apple", { schema: { tags: ["User Auth"],  body: {
+        type: "object",
+        required: ["identityToken"],
+        properties: {
+          identityToken: {
+            type: "string"
+          },
+          userType: {
+            type: "string",
+          },
+          // businessName: {
+          //   type: "string"
+          // },
+          // country: {
+          //   type: "string"
+          }
+        }}} , async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = appleOAuthSchema.safeParse(req.body);
-    if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid payload.");
+   if (!parsed.success) {
+  console.log(
+    JSON.stringify(parsed.error.format(), null, 2)
+  );
+
+  return reply.status(422).send({
+    success: false,
+    error: {
+      code: "VALIDATION_ERROR",
+      message: "Invalid payload",
+      details: parsed.error.flatten(),
+    },
+  });
+}
     const { identityToken, userType, businessName, country } = parsed.data;
 
     let appleSub: string;
@@ -777,7 +812,6 @@ export async function authRoutes(app: FastifyInstance) {
       const tokens = await issueTokens(reply, user.id, user.userType, user.status);
       return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: !userType });
     }
-
     if (user.status === "pending_verification") {
       return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
     }
@@ -789,6 +823,9 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/account-type  (post-OAuth account type selection) ───────────
+  
+
+
   // app.post("/auth/account-type", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
   //   const parsed = accountTypeSchema.safeParse(req.body);
   //   if (!parsed.success) {
@@ -820,10 +857,7 @@ export async function authRoutes(app: FastifyInstance) {
   // });
 
 
-  app.post(
-    "/auth/account-type",
-    {
-      schema: {
+  app.post("/auth/account-type", {schema: {
         tags: ["User Auth"],
         body: {
           type: "object",
@@ -901,6 +935,19 @@ export async function authRoutes(app: FastifyInstance) {
     reply.redirect(authUrl);
   });
 
+
+
+//   //-----sample---
+// //   //app.get("/auth/oauth/google/url", async (req, reply) => {
+//   const authUrl = client.generateAuthUrl({
+//     access_type: "offline",
+//     scope: ["openid", "email", "profile"],
+//   });
+
+//   return { authUrl };
+// });
+
+
   // ── GET /auth/oauth/google/callback (Web OAuth Callback) ──────────────────
   app.get("/auth/oauth/google/callback", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { code, error } = req.query as { code?: string; error?: string };
@@ -913,7 +960,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
-      const redirectUri = `${webBaseUrl}/api/auth/oauth/google/callback`;
+      const redirectUri = `${webBaseUrl}/auth/oauth/google/callback`;
       const client = new OAuth2Client({
         clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
         clientSecret: process.env["GOOGLE_CLIENT_SECRET"],
