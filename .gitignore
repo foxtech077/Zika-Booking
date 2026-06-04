@@ -12,3 +12,6 @@ coverage
 *.log
 .DS_Store
 prisma/migrations/*.sql
+*.node
+node_modules/.prisma
+**/src/generated
