@@ -57,6 +57,11 @@ export default function AccreditationPage() {
   const [reasons, setReasons] = useState<string[]>([]);
   const [providerNote, setProviderNote] = useState("");
 
+  const [activeDocId, setActiveDocId] = useState<string | null>(null);
+  const [docUrl, setDocUrl] = useState<{ url: string; fileType: string } | null>(null);
+  const [docLoading, setDocLoading] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
+
   const params = { country, slaStatus, page: String(page), limit: "20" };
   const { data, isLoading } = useQuery({
     queryKey: ["accreditation-queue", params],
@@ -90,6 +95,32 @@ export default function AccreditationPage() {
     mutationFn: (taskId: string) => listingApi.patch(`/admin/listings/review-tasks/${taskId}/assign`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["accreditation-queue"] }),
   });
+
+  async function viewDocument(docId: string) {
+    if (!selectedTask) return;
+    if (activeDocId === docId && docUrl) return;
+    
+    setDocLoading(true);
+    setDocError(null);
+    try {
+      const res = await listingApi.get<{ data: { url: string; fileType: string } }>(
+        `/admin/listings/${selectedTask.listingId}/documents/${docId}`
+      );
+      setDocUrl(res.data.data);
+      setActiveDocId(docId);
+    } catch {
+      setDocError("Could not load document.");
+    } finally {
+      setDocLoading(false);
+    }
+  }
+
+  const handleCloseDrawer = () => {
+    setSelectedTask(null);
+    setActiveDocId(null);
+    setDocUrl(null);
+    setDocError(null);
+  };
 
   const columns: Column<ListingReviewTask>[] = [
     {
@@ -221,7 +252,7 @@ export default function AccreditationPage() {
       {/* Review detail drawer */}
       <SlideDrawer
         open={!!selectedTask}
-        onClose={() => setSelectedTask(null)}
+        onClose={handleCloseDrawer}
         title={selectedTask?.listing.name ?? "Review Listing"}
         description={`${selectedTask?.listing.town}, ${selectedTask?.listing.country} · Submission #${selectedTask?.submissionNumber}`}
         width="lg"
@@ -284,12 +315,38 @@ export default function AccreditationPage() {
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Documents ({detail.documents?.length ?? 0})</p>
               <div className="space-y-1.5">
                 {detail.documents?.map((doc: any) => (
-                  <div key={doc.id} className="flex items-center justify-between p-2.5 bg-surface-subtle rounded-lg border border-border">
-                    <span className="text-xs text-slate-700 font-medium capitalize">{doc.documentType.replace(/_/g, " ")}</span>
-                    <span className="text-xs text-slate-400 uppercase">{doc.fileType}</span>
-                  </div>
+                  <button
+                    key={doc.id}
+                    onClick={() => viewDocument(doc.id)}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-lg border transition ${
+                      activeDocId === doc.id
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "bg-surface-subtle border-border hover:border-gray-300 text-slate-700"
+                    }`}
+                  >
+                    <span className="text-xs font-medium capitalize">{doc.documentType.replace(/_/g, " ")}</span>
+                    <span className="text-xs uppercase opacity-70">{doc.fileType}</span>
+                  </button>
                 ))}
               </div>
+
+              {docError && <p className="text-sm text-red-600 mt-2">{docError}</p>}
+              
+              {docLoading && <div className="flex justify-center py-4"><div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" /></div>}
+              
+              {docUrl && !docLoading && (
+                <div className="mt-4 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
+                  {docUrl.fileType === "pdf" ? (
+                    <iframe src={docUrl.url} className="w-full h-80" title="Document" />
+                  ) : (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={docUrl.url} alt="Document" className="w-full object-contain max-h-80" />
+                  )}
+                  <div className="p-2 flex justify-end">
+                    <a href={docUrl.url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Open in new tab ↗</a>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Photos */}

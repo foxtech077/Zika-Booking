@@ -1,3 +1,6 @@
+const authApiUrl = (process.env.ADMIN_API_URL ?? "http://localhost:3001")
+	.replace(/\/(auth|admin)\/?$/, "");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
 	basePath: "/admin",
@@ -16,11 +19,18 @@ const nextConfig = {
 		return [
 			{
 				source: "/api/:path*",
-				destination: `${process.env.ADMIN_API_URL ?? "http://localhost:3001"}/:path*`,
+				destination: `${authApiUrl}/:path*`,
+				basePath: false,
 			},
 			{
 				source: "/listing-api/:path*",
 				destination: `${process.env.ADMIN_LISTING_API_URL ?? "http://localhost:3003"}/:path*`,
+				basePath: false,
+			},
+			{
+				source: "/payment-api/:path*",
+				destination: `${process.env.ADMIN_PAYMENT_API_URL ?? "http://localhost:3004"}/:path*`,
+				basePath: false,
 			},
 		];
 	},
