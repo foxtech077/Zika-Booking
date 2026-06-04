@@ -1,4 +1,4 @@
-﻿import { useState, useRef } from "react";
+import { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -17,7 +17,8 @@ import { Feather } from "@expo/vector-icons";
 import { listingApi } from "../../../lib/listing-api";
 import { K } from "../../../constants/theme";
 import { formatCurrency } from "../../../lib/currency";
-import { AMENITY_CONFIG } from "../../../constants/amenities";
+import { AMENITY_CATEGORIES, AMENITY_CONFIG } from "../../../constants/amenities";
+import { getListingDisplayStatus } from "../../../lib/listing-validation";
 
 const { width: W } = Dimensions.get("window");
 const CAROUSEL_H = 300;
@@ -37,16 +38,16 @@ const BODY_TYPE_LABELS: Record<string, string> = {
 };
 const TRANSMISSION_LABELS: Record<string, string> = { manual: "Manual", automatic: "Automatic", both: "Both" };
 const FUEL_TYPE_LABELS: Record<string, string> = { petrol: "Petrol", diesel: "Diesel", electric: "Electric", hybrid: "Hybrid" };
-const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Apartment", car: "Vehicle" };
+const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Apartment", car: "Car Rental" };
 
 const STATUS_CFG: Record<string, { label: string; bg: string; text: string; icon: string }> = {
-  active:         { label: "Active",       bg: "#059669", text: "#fff", icon: "check-circle" },
-  approved:       { label: "Active",       bg: "#059669", text: "#fff", icon: "check-circle" },
-  draft:          { label: "Draft",        bg: "#475569", text: "#fff", icon: "edit-2" },
-  pending_review: { label: "Under Review", bg: "#D97706", text: "#fff", icon: "clock" },
-  rejected:       { label: "Rejected",     bg: "#DC2626", text: "#fff", icon: "x-circle" },
-  deactivated:    { label: "Paused",       bg: "#64748B", text: "#fff", icon: "pause-circle" },
-  suspended:      { label: "Suspended",    bg: "#DC2626", text: "#fff", icon: "alert-circle" },
+  active:         { label: "Active",           bg: "#059669", text: "#fff", icon: "check-circle" },
+  approved:       { label: "Active",           bg: "#059669", text: "#fff", icon: "check-circle" },
+  draft:          { label: "Draft",            bg: "#475569", text: "#fff", icon: "edit-2" },
+  pending_review: { label: "Pending Approval", bg: "#D97706", text: "#fff", icon: "clock" },
+  rejected:       { label: "Rejected",         bg: "#DC2626", text: "#fff", icon: "x-circle" },
+  deactivated:    { label: "Paused",           bg: "#64748B", text: "#fff", icon: "pause-circle" },
+  suspended:      { label: "Suspended",        bg: "#DC2626", text: "#fff", icon: "alert-circle" },
 };
 
 const STATUS_BODY: Record<string, string | undefined> = {
@@ -136,14 +137,62 @@ export default function ViewListingScreen() {
   const category: "hotel" | "apartment" | "car" = listing.category ?? "hotel";
   const photos: Array<{ cdnUrl: string }> = Array.isArray(listing.photos) ? listing.photos : [];
   const documents: Array<{ documentType: string }> = Array.isArray(listing.documents) ? listing.documents : [];
-  const amenityKeys: string[] = Array.isArray(listing.amenities)
-    ? listing.amenities.map((a: any) => a.amenityKey as string).filter(Boolean) : [];
   const customAmenities: string[] = Array.isArray(listing.customAmenities)
-    ? listing.customAmenities.map((a: any) => a.label as string).filter(Boolean) : [];
+    ? listing.customAmenities.map((a: any) => a.label ?? a).filter(Boolean) : [];
 
-  const sc = STATUS_CFG[listing.status] ?? { label: listing.status, bg: "#64748B", text: "#fff", icon: "info" };
-  const isActive = listing.status === "active" || listing.status === "approved";
-  const canEdit = listing.status !== "pending_review" && listing.status !== "suspended";
+  // Helper to ensure predefined amenities are grouped
+  const groupedAmenities: Record<string, string[]> = (() => {
+    const empty: Record<string, string[]> = {
+      Connectivity: [],
+      "Food & Drink": [],
+      Wellness: [],
+      Comfort: [],
+      Services: [],
+    };
+    if (!listing.amenities) return empty;
+    
+    if (Array.isArray(listing.amenities)) {
+      for (const item of listing.amenities) {
+        const key = item?.amenityKey ?? item;
+        if (typeof key === "string") {
+          const cleanKey = key.includes(":") ? key.split(":")[1] : key;
+          let foundCat = "Services";
+          for (const cat of AMENITY_CATEGORIES) {
+            if (AMENITY_CONFIG[cat].some(i => i.key === cleanKey)) {
+              foundCat = cat;
+              break;
+            }
+          }
+          if (!empty[foundCat].includes(cleanKey)) {
+            empty[foundCat].push(cleanKey);
+          }
+        }
+      }
+      return empty;
+    } else if (typeof listing.amenities === "object") {
+      for (const cat of AMENITY_CATEGORIES) {
+        const vals = listing.amenities[cat];
+        if (Array.isArray(vals)) {
+          for (const val of vals) {
+            const itemKey = typeof val === "object" ? val?.amenityKey ?? val : val;
+            if (typeof itemKey === "string") {
+              const cleanKey = itemKey.includes(":") ? itemKey.split(":")[1] : itemKey;
+              if (!empty[cat].includes(cleanKey)) {
+                empty[cat].push(cleanKey);
+              }
+            }
+          }
+        }
+      }
+      return empty;
+    }
+    return empty;
+  })();
+
+  const { status: displayStatus, missingFields } = getListingDisplayStatus(listing);
+  const sc = STATUS_CFG[displayStatus] ?? { label: displayStatus, bg: "#64748B", text: "#fff", icon: "info" };
+  const isActive = displayStatus === "active";
+  const canEdit = displayStatus !== "pending_review" && displayStatus !== "suspended";
   const editRoute = `/listings/${id}` as any;
   const priceLabel = listing.pricePerNight != null
     ? formatCurrency(listing.pricePerNight, listing.currency ?? "USD") : null;
@@ -225,16 +274,28 @@ export default function ViewListingScreen() {
           )}
         </View>
 
-        {!isActive && STATUS_BODY[listing.status] !== undefined && (
+        {!isActive && STATUS_BODY[displayStatus] !== undefined && (
           <View style={[vs.statusCard, { borderLeftColor: sc.bg }]}>
             <View style={[vs.statusDot, { backgroundColor: sc.bg }]} />
             <View style={{ flex: 1 }}>
               <Text style={vs.statusCardTitle}>{sc.label}</Text>
-              {!!STATUS_BODY[listing.status] && (
-                <Text style={vs.statusCardBody}>{STATUS_BODY[listing.status]}</Text>
+              {!!STATUS_BODY[displayStatus] && (
+                <Text style={vs.statusCardBody}>{STATUS_BODY[displayStatus]}</Text>
               )}
-              {listing.status === "rejected" && !!listing.rejectionNote && (
+              {!!listing.rejectionNote && (
                 <Text style={vs.rejectionNote}>Reason: {listing.rejectionNote}</Text>
+              )}
+              {displayStatus === "draft" && missingFields.length > 0 && (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={{ fontWeight: "700", fontSize: K.font.sm, color: K.colors.error, marginBottom: 4 }}>
+                    Missing required fields:
+                  </Text>
+                  {missingFields.map((field) => (
+                    <Text key={field} style={{ fontSize: K.font.xs, color: K.colors.textMuted, lineHeight: 18 }}>
+                      • {field}
+                    </Text>
+                  ))}
+                </View>
               )}
             </View>
           </View>
@@ -297,14 +358,42 @@ export default function ViewListingScreen() {
           )}
         </SectionCard>
 
-        {(amenityKeys.length > 0 || customAmenities.length > 0) && (
-          <SectionCard title="Amenities">
+        {(() => {
+          const hasPredefined = AMENITY_CATEGORIES.some(
+            (cat) => groupedAmenities[cat] && groupedAmenities[cat].length > 0
+          );
+          if (!hasPredefined) return null;
+
+          return (
+            <SectionCard title="Amenities">
+              {AMENITY_CATEGORIES.map((cat) => {
+                const vals = groupedAmenities[cat];
+                if (!vals || vals.length === 0) return null;
+
+                return (
+                  <View key={cat} style={{ marginBottom: 14 }}>
+                    <Text style={{ fontSize: 10, fontWeight: "700", color: K.colors.textMuted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
+                      {cat}
+                    </Text>
+                    <View style={vs.amenitiesGrid}>
+                      {vals.map((key) => (
+                        <View key={key} style={vs.chip}>
+                          <Text style={vs.chipText}>
+                            {AMENITY_LABELS[key] ?? cap(key.replace(/_/g, " "))}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })}
+            </SectionCard>
+          );
+        })()}
+
+        {customAmenities.length > 0 && (
+          <SectionCard title="Custom Amenities">
             <View style={vs.amenitiesGrid}>
-              {amenityKeys.map((key) => (
-                <View key={key} style={vs.chip}>
-                  <Text style={vs.chipText}>{AMENITY_LABELS[key] ?? cap(key.replace(/_/g, " "))}</Text>
-                </View>
-              ))}
               {customAmenities.map((lbl) => (
                 <View key={`c-${lbl}`} style={[vs.chip, vs.chipCustom]}>
                   <Text style={[vs.chipText, vs.chipTextCustom]}>{lbl}</Text>
@@ -342,15 +431,39 @@ export default function ViewListingScreen() {
       </ScrollView>
 
       <SafeAreaView edges={["bottom"]} style={vs.bottomBar}>
-        {canEdit ? (
-          <TouchableOpacity style={vs.editBtn} onPress={() => router.push(editRoute)} activeOpacity={0.88}>
-            <Feather name="edit-2" size={17} color="#fff" />
-            <Text style={vs.editBtnText}>Edit Listing</Text>
-          </TouchableOpacity>
-        ) : (
+        {displayStatus === "pending_review" ? (
           <View style={vs.pendingBar}>
             <Feather name="clock" size={15} color={K.colors.warning} />
             <Text style={vs.pendingBarText}>Under review - editing is disabled</Text>
+          </View>
+        ) : displayStatus === "suspended" ? (
+          <View style={[vs.pendingBar, { backgroundColor: "#FEF2F2" }]}>
+            <Feather name="alert-circle" size={15} color={K.colors.error} />
+            <Text style={[vs.pendingBarText, { color: "#B91C1C" }]}>Suspended - editing is disabled</Text>
+          </View>
+        ) : (
+          <View style={{ flexDirection: "row", gap: 12 }}>
+            <TouchableOpacity 
+              style={[vs.editBtn, { flex: 1, backgroundColor: "#fff", borderWidth: 1.5, borderColor: K.colors.darkGreen }]} 
+              onPress={() => router.push(editRoute)} 
+              activeOpacity={0.88}
+            >
+              <Feather name="edit-2" size={17} color={K.colors.darkGreen} />
+              <Text style={[vs.editBtnText, { color: K.colors.darkGreen }]}>Edit Listing</Text>
+            </TouchableOpacity>
+            
+            {(displayStatus === "draft" || displayStatus === "rejected" || displayStatus === "deactivated") && (
+              <TouchableOpacity 
+                style={[vs.editBtn, { flex: 1 }]} 
+                onPress={() => router.push(`/listings/${id}/submit` as any)} 
+                activeOpacity={0.88}
+              >
+                <Feather name="zap" size={17} color="#fff" />
+                <Text style={vs.editBtnText}>
+                  {category === "hotel" ? "Submit Review" : "Go Live"}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </SafeAreaView>

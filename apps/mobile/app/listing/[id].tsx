@@ -34,6 +34,8 @@ try {
 
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
+import { ListingImage } from "../../components/ListingImage";
+
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const PHOTO_HEIGHT = 260;
@@ -305,7 +307,7 @@ function InlineCalendar({ unavailableRanges, currency }: { unavailableRanges: { 
   const isDateUnavailable = (day: number) => {
     const dStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const dDate = new Date(dStr);
-    
+
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     if (dDate < yesterday) return true;
@@ -412,8 +414,8 @@ function ReviewsSection({ listingId }: { listingId: string }) {
   const headerLabel = avg != null && total > 0
     ? `★ ${avg.toFixed(1)} · ${total} ${total === 1 ? "review" : "reviews"}`
     : total > 0
-    ? `${total} ${total === 1 ? "review" : "reviews"}`
-    : "";
+      ? `${total} ${total === 1 ? "review" : "reviews"}`
+      : "";
 
   return (
     <View style={reviewStyles.sectionWrapper}>
@@ -519,7 +521,7 @@ const reviewStyles = StyleSheet.create({
   loadingBox: { paddingVertical: 20, alignItems: "center" },
   emptyText: { fontSize: 14, color: "#9ca3af", fontStyle: "italic" },
   viewAllText: { fontSize: 14, color: "#1B5E20", fontWeight: "600", marginTop: 4 },
-  
+
   // Breakdown
   breakdownContainer: {
     flexDirection: "row",
@@ -572,6 +574,7 @@ export default function PublicListingDetailScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const accessToken = useAuthStore((s) => s.accessToken);
 
   const [photoIndex, setPhotoIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -591,12 +594,24 @@ export default function PublicListingDetailScreen() {
   // ── Fetch listing ──────────────────────────────────────────────────────────
 
   const { data: listing, isLoading, isError } = useQuery<PublicListing>({
-    queryKey: ["public-listing", id],
+    // New key — breaks old stale cache from the /public endpoint version
+    queryKey: ["listing-full", id],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}/public`);
-      return res.data.data;
+      const endpoint = `/listings/${id}/public`;
+      console.log(`[Listing Detail Query] API Endpoint Called: ${endpoint}`);
+      console.log(`[Listing Detail Query] Listing ID: ${id}`);
+      const res = await listingApi.get<{ data: PublicListing }>(endpoint);
+      const returnedData = res.data.data;
+      const returnedPrimaryPhotoUrl = (returnedData as any).primaryPhotoUrl ?? returnedData.photos?.[0]?.cdnUrl ?? null;
+      const returnedPhotoGalleryUrls = returnedData.photos?.map((p: any) => p.cdnUrl) ?? [];
+      console.log(`[Listing Detail Query] Returned primaryPhotoUrl: ${returnedPrimaryPhotoUrl}`);
+      console.log(`[Listing Detail Query] Returned photo gallery URLs:`, returnedPhotoGalleryUrls);
+      return returnedData;
     },
     enabled: !!id,
+    // Presigned S3 URLs expire — always treat listing data as stale so we re-fetch fresh URLs
+    staleTime: 0,
+    gcTime: 5 * 60_000,
   });
 
   // ── Favourite toggle ───────────────────────────────────────────────────────
@@ -668,12 +683,51 @@ export default function PublicListingDetailScreen() {
     return null;
   })();
 
-  // Amenities
-  const standardAmenities = listing.amenities ?? [];
-  const customAmenities = listing.customAmenities ?? [];
+  // Predefined Amenities
+  const standardAmenitiesList: string[] = (() => {
+    if (!listing.amenities) return [];
+    if (Array.isArray(listing.amenities)) {
+      return listing.amenities
+        .map((a: any) => {
+          const key = a?.amenityKey ?? a;
+          if (typeof key === "string") {
+            return key.includes(":") ? key.split(":")[1] : key;
+          }
+          return null;
+        })
+        .filter(Boolean) as string[];
+    } else if (typeof listing.amenities === "object") {
+      return Object.values(listing.amenities)
+        .flat()
+        .map((a: any) => {
+          const key = a?.amenityKey ?? a;
+          if (typeof key === "string") {
+            return key.includes(":") ? key.split(":")[1] : key;
+          }
+          return null;
+        })
+        .filter(Boolean) as string[];
+    }
+    return [];
+  })();
+
+  const customAmenitiesList: string[] = (() => {
+    if (!listing.customAmenities) return [];
+    if (Array.isArray(listing.customAmenities)) {
+      return listing.customAmenities.map((a: any) => a?.label ?? a).filter(Boolean) as string[];
+    }
+    return [];
+  })();
+
   const allAmenities: { label: string; isCustom: boolean }[] = [
-    ...standardAmenities.map((a) => ({ label: AMENITY_LABELS[a.amenityKey] ?? a.amenityKey, isCustom: false })),
-    ...customAmenities.map((a) => ({ label: a.label, isCustom: true })),
+    ...standardAmenitiesList.map((key) => ({
+      label: AMENITY_LABELS[key] ?? key.replace(/_/g, " "),
+      isCustom: false,
+    })),
+    ...customAmenitiesList.map((lbl) => ({
+      label: lbl,
+      isCustom: true,
+    })),
   ];
   const MAX_AMENITIES = 10;
   const visibleAmenities = amenitiesExpanded ? allAmenities : allAmenities.slice(0, MAX_AMENITIES);
@@ -746,14 +800,14 @@ export default function PublicListingDetailScreen() {
   // Pricing Breakout Calculations
   const pricingBreakout = (() => {
     if (!hasDates || !listing.pricePerNight && !listing.pricePerDay) return null;
-    
+
     const rate = isCar ? Number(listing.pricePerDay ?? listing.pricePerNight ?? 0) : Number(listing.pricePerNight ?? 0);
-    const count = isCar 
+    const count = isCar
       ? (pickupDatetime && returnDatetime ? daysBetween(pickupDatetime, returnDatetime) : 1)
       : (checkIn && checkOut ? nightsBetween(checkIn, checkOut) : 1);
-    
+
     const base = rate * count;
-    
+
     let discount = 0;
     if (!isCar && listing.longStayEnabled && listing.longStayMinNights != null && count >= listing.longStayMinNights) {
       const discountValue = Number(listing.longStayDiscountValue ?? 0);
@@ -763,7 +817,7 @@ export default function PublicListingDetailScreen() {
         discount = discountValue * count;
       }
     }
-    
+
     const serviceFee = base * 0.05;
     const tax = base * 0.10;
     const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee ? Number(listing.deliveryFee) : 0;
@@ -806,15 +860,17 @@ export default function PublicListingDetailScreen() {
                 showsHorizontalScrollIndicator={false}
                 onScroll={handlePhotoScroll}
                 scrollEventThrottle={16}
-                renderItem={({ item }) => (
-                  <TouchableOpacity activeOpacity={0.95} onPress={() => setFullscreenVisible(true)}>
-                    <Image
-                      source={{ uri: item.cdnUrl }}
-                      style={styles.photo}
-                      resizeMode="cover"
-                    />
-                  </TouchableOpacity>
-                )}
+                renderItem={({ item: photo }) => {
+                  return (
+                    <TouchableOpacity activeOpacity={0.95} onPress={() => setFullscreenVisible(true)}>
+                      <ListingImage
+                        uri={photo.cdnUrl}
+                        style={styles.photo}
+                        resizeMode="cover"
+                      />
+                    </TouchableOpacity>
+                  );
+                }}
               />
               {/* Photo counter */}
               <View style={styles.photoCounter}>
@@ -874,11 +930,17 @@ export default function PublicListingDetailScreen() {
                   const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
                   setPhotoIndex(index);
                 }}
-                renderItem={({ item }) => (
-                  <View style={styles.fullscreenPhotoWrapper}>
-                    <Image source={{ uri: item.cdnUrl }} style={styles.fullscreenPhoto} resizeMode="contain" />
-                  </View>
-                )}
+                renderItem={({ item: photo }) => {
+                  return (
+                    <View style={styles.fullscreenPhotoWrapper}>
+                      <ListingImage
+                        uri={photo.cdnUrl}
+                        style={styles.fullscreenPhoto}
+                        resizeMode="contain"
+                      />
+                    </View>
+                  );
+                }}
               />
               <View style={styles.fullscreenCounter}>
                 <Text style={styles.fullscreenCounterText}>{photoIndex + 1} / {totalPhotos}</Text>
@@ -1108,8 +1170,8 @@ export default function PublicListingDetailScreen() {
                     listing.mileagePolicy === "unlimited"
                       ? "Unlimited"
                       : listing.mileageLimitKm != null
-                      ? `${listing.mileageLimitKm} km/day`
-                      : "See host"
+                        ? `${listing.mileageLimitKm} km/day`
+                        : "See host"
                   }
                 />
                 {listing.fuelType ? (
@@ -1135,8 +1197,8 @@ export default function PublicListingDetailScreen() {
           {/* Host Card Section */}
           <View style={styles.divider} />
           <View style={styles.hostCard}>
-            <Image
-              source={{ uri: hostAvatar }}
+            <ListingImage
+              uri={hostAvatar}
               style={styles.hostAvatar}
             />
             <View style={styles.hostInfo}>
