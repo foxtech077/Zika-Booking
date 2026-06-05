@@ -66,144 +66,130 @@ async function getBookedListingIds(
 export async function searchRoutes(app: FastifyInstance) {
 
   // ── GET /search ──────────────────────────────────────────────────────────
-  app.get(
-    "/search",
-    {
-      schema: {
-        tags: ["Search"],
-        querystring: {
-          type: "object",
-          properties: {
-            category: { type: "string", enum: ["hotel", "apartment", "car"], description: "Listing category (required)" },
-            lat: { type: "number", description: "Latitude of search centre (required)" },
-            lng: { type: "number", description: "Longitude of search centre (required)" },
-            place_name: { type: "string", description: "Human-readable place name (for logging)" },
-            radius_km: { type: "integer", default: 25, description: "Search radius in km (default 25)" },
-            check_in: { type: "string", description: "Hotel/apartment check-in date (YYYY-MM-DD)" },
-            check_out: { type: "string", description: "Hotel/apartment check-out date (YYYY-MM-DD)" },
-            pickup_datetime: { type: "string", description: "Car pickup datetime (ISO 8601)" },
-            return_datetime: { type: "string", description: "Car return datetime (ISO 8601)" },
-            guests: { type: "integer", description: "Number of guests" },
-            sort: {
-              type: "string",
-              enum: ["recommended", "price_asc", "price_desc", "distance", "newest"],
-              default: "recommended",
-              description: "Sort order",
-            },
-            limit: { type: "integer", default: 20, description: "Page size (max 50)" },
-            cursor: { type: "integer", default: 0, description: "Pagination offset cursor" },
-            price_min: { type: "number", description: "Minimum price per night/day" },
-            price_max: { type: "number", description: "Maximum price per night/day" },
-            rating_min: { type: "number", description: "Minimum rating" },
-            cancellation_policy: { type: "string", description: "Cancellation policy filter" },
-            amenity_ids: { type: "string", description: "Comma-separated amenity keys" },
-            // Hotel filters
-            star_rating: { type: "string", description: "Comma-separated star ratings e.g. 3,4,5" },
-            // Apartment filters
-            bedrooms_min: { type: "integer", description: "Minimum number of bedrooms" },
-            max_guests_min: { type: "integer", description: "Minimum max-guests capacity" },
-            long_stay_discount: { type: "string", enum: ["true", "false"], description: "Filter listings with long-stay discount" },
-            // Car filters
-            transmission: { type: "string", enum: ["automatic", "manual"], description: "Transmission type" },
-            seats_min: { type: "integer", description: "Minimum number of seats" },
-            mileage_policy: { type: "string", description: "Mileage policy filter" },
-            car_category: { type: "string", description: "Car category (e.g. suv, sedan)" },
-            drive_type: { type: "string", description: "Drive type (e.g. 4wd, fwd)" },
-            air_conditioning: { type: "string", enum: ["true", "false"], description: "Air conditioning filter" },
-            driver_age: { type: "integer", description: "Driver age for minimum age check" },
-          },
-          required: ["category", "lat", "lng"],
-        },
+  app.get("/search", { schema: { tags: ["Search"] }, preHandler: [optionalGuest] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const guestId = (req as GuestRequest).guestId;
+    const q = req.query as Record<string, string>;
+
+    const category = q["category"] as string | undefined;
+    const lat = parseFloat(q["lat"] ?? "");
+    const lng = parseFloat(q["lng"] ?? "");
+    const placeName = q["place_name"] ?? "";
+    const radiusKm = parseInt(q["radius_km"] ?? "25", 10);
+    const checkIn = q["check_in"];
+    const checkOut = q["check_out"];
+    const pickupDatetime = q["pickup_datetime"];
+    const returnDatetime = q["return_datetime"];
+    const guests = q["guests"] ? parseInt(q["guests"], 10) : undefined;
+    const sort = q["sort"] ?? "recommended";
+    const limit = Math.min(parseInt(q["limit"] ?? "20", 10), 50);
+    const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
+
+    // Filters
+    const priceMin = q["price_min"] ? parseFloat(q["price_min"]) : undefined;
+    const priceMax = q["price_max"] ? parseFloat(q["price_max"]) : undefined;
+    const ratingMin = q["rating_min"] ? parseFloat(q["rating_min"]) : undefined;
+    const cancellationPolicy = q["cancellation_policy"];
+    const amenityIds = q["amenity_ids"] ? q["amenity_ids"].split(",") : undefined;
+    // Hotel filters
+    const starRatings = q["star_rating"] ? q["star_rating"].split(",").map(Number) : undefined;
+    // Apartment filters
+    const bedroomsMin = q["bedrooms_min"] ? parseInt(q["bedrooms_min"], 10) : undefined;
+    const maxGuestsMin = q["max_guests_min"] ? parseInt(q["max_guests_min"], 10) : undefined;
+    const longStayDiscount = q["long_stay_discount"] === "true";
+    // Car filters
+    const transmission = q["transmission"];
+    const seatsMin = q["seats_min"] ? parseInt(q["seats_min"], 10) : undefined;
+    const mileagePolicy = q["mileage_policy"];
+    const carCategory = q["car_category"];
+    const driveType = q["drive_type"];
+    const airConditioning = q["air_conditioning"];
+    const driverAge = q["driver_age"] ? parseInt(q["driver_age"], 10) : undefined;
+
+    if (!category || isNaN(lat) || isNaN(lng)) {
+      return sendError(reply, 400, "INVALID_PARAMS", "category, lat, and lng are required.");
+    }
+
+    // Determine valid statuses per category
+    const validStatuses = category === "hotel" ? ["approved"] : ["active"];
+
+    // Build Prisma where clause
+    const where: any = {
+      deletedAt: null,
+      category,
+      status: { in: validStatuses },
+    };
+    // Category-aware price filtering
+    const priceField = category === "car" ? "pricePerDay" : "pricePerNight";
+    if (priceMin !== undefined) where[priceField] = { ...where[priceField], gte: priceMin };
+    if (priceMax !== undefined) where[priceField] = { ...where[priceField], lte: priceMax };
+    if (cancellationPolicy) where.cancellationPolicy = cancellationPolicy;
+    if (starRatings?.length) where.starRating = { in: starRatings };
+    if (bedroomsMin !== undefined) where.bedrooms = { gte: bedroomsMin };
+    if (maxGuestsMin !== undefined) where.maxGuests = { gte: maxGuestsMin };
+    if (longStayDiscount) where.longStayEnabled = true;
+    if (transmission) where.transmission = transmission;
+    if (seatsMin !== undefined) where.seats = { gte: seatsMin };
+    if (mileagePolicy) where.mileagePolicy = mileagePolicy;
+    if (carCategory) where.carCategory = carCategory;
+    if (driveType) where.driveType = driveType;
+    if (airConditioning !== undefined) where.airConditioning = airConditioning === "true";
+    if (driverAge !== undefined) {
+      where.OR = [
+        { minimumDriverAge: null },
+        { minimumDriverAge: { lte: driverAge } },
+      ];
+    }
+    if (amenityIds?.length) {
+      where.amenities = { some: { amenityKey: { in: amenityIds } } };
+    }
+
+    // Fetch candidates (wide net — geo filter in JS)
+    const candidates = await prisma.listing.findMany({
+      where,
+      include: {
+        photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 },
+        amenities: true,
       },
-      preHandler: [optionalGuest],
-    },
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as GuestRequest).guestId;
-      const q = req.query as Record<string, string>;
+      take: 500,
+    });
 
-      const category = q["category"] as string | undefined;
-      const lat = parseFloat(q["lat"] ?? "");
-      const lng = parseFloat(q["lng"] ?? "");
-      const placeName = q["place_name"] ?? "";
-      const radiusKm = parseInt(q["radius_km"] ?? "25", 10);
-      const checkIn = q["check_in"];
-      const checkOut = q["check_out"];
-      const pickupDatetime = q["pickup_datetime"];
-      const returnDatetime = q["return_datetime"];
-      const guests = q["guests"] ? parseInt(q["guests"], 10) : undefined;
-      const sort = q["sort"] ?? "recommended";
-      const limit = Math.min(parseInt(q["limit"] ?? "20", 10), 50);
-      const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
+    // Geo filter
+    const withDistance = candidates
+      .map((l) => ({
+        ...l,
+        distanceKm: l.lat != null && l.lng != null
+          ? haversineKm(lat, lng, Number(l.lat), Number(l.lng))
+          : 0,
+      }))
+      .filter((l) => l.lat == null || l.lng == null || l.distanceKm <= radiusKm);
 
-      // Filters
-      const priceMin = q["price_min"] ? parseFloat(q["price_min"]) : undefined;
-      const priceMax = q["price_max"] ? parseFloat(q["price_max"]) : undefined;
-      const ratingMin = q["rating_min"] ? parseFloat(q["rating_min"]) : undefined;
-      const cancellationPolicy = q["cancellation_policy"];
-      const amenityIds = q["amenity_ids"] ? q["amenity_ids"].split(",") : undefined;
-      // Hotel filters
-      const starRatings = q["star_rating"] ? q["star_rating"].split(",").map(Number) : undefined;
-      // Apartment filters
-      const bedroomsMin = q["bedrooms_min"] ? parseInt(q["bedrooms_min"], 10) : undefined;
-      const maxGuestsMin = q["max_guests_min"] ? parseInt(q["max_guests_min"], 10) : undefined;
-      const longStayDiscount = q["long_stay_discount"] === "true";
-      // Car filters
-      const transmission = q["transmission"];
-      const seatsMin = q["seats_min"] ? parseInt(q["seats_min"], 10) : undefined;
-      const mileagePolicy = q["mileage_policy"];
-      const carCategory = q["car_category"];
-      const driveType = q["drive_type"];
-      const airConditioning = q["air_conditioning"];
-      const driverAge = q["driver_age"] ? parseInt(q["driver_age"], 10) : undefined;
+    // Availability filter (when dates provided)
+    const candidateIds = withDistance.map((l) => l.id);
+    const bookedIds = await getBookedListingIds(
+      candidateIds, checkIn, checkOut, pickupDatetime, returnDatetime,
+    );
+    const available = withDistance.filter((l) => !bookedIds.has(l.id));
 
-      if (!category || isNaN(lat) || isNaN(lng)) {
-        return sendError(reply, 400, "INVALID_PARAMS", "category, lat, and lng are required.");
-      }
+    // Sort
+    const sortPriceField = category === "car" ? "pricePerDay" : "pricePerNight";
+    let sorted = [...available];
+    if (sort === "price_asc") sorted.sort((a, b) => Number((a as any)[sortPriceField] ?? 0) - Number((b as any)[sortPriceField] ?? 0));
+    else if (sort === "price_desc") sorted.sort((a, b) => Number((b as any)[sortPriceField] ?? 0) - Number((a as any)[sortPriceField] ?? 0));
+    else if (sort === "distance") sorted.sort((a, b) => a.distanceKm - b.distanceKm);
+    else if (sort === "newest") sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    else sorted.sort((a, b) => a.distanceKm - b.distanceKm); // recommended default = nearest
 
-      // Determine valid statuses per category
-      const validStatuses = category === "hotel" ? ["approved"] : ["active"];
+    // Pagination (cursor = offset)
+    const total = sorted.length;
+    const page = sorted.slice(cursor, cursor + limit);
+    const nextCursor = cursor + limit < total ? String(cursor + limit) : null;
 
-      // Build Prisma where clause
-      const where: any = {
-        deletedAt: null,
-        category,
-        status: { in: validStatuses },
-        lat: { not: null },
-        lng: { not: null },
-      };
-      // Category-aware price filtering
-      const priceField = category === "car" ? "pricePerDay" : "pricePerNight";
-      if (priceMin !== undefined) where[priceField] = { ...where[priceField], gte: priceMin };
-      if (priceMax !== undefined) where[priceField] = { ...where[priceField], lte: priceMax };
-      if (cancellationPolicy) where.cancellationPolicy = cancellationPolicy;
-      if (starRatings?.length) where.starRating = { in: starRatings };
-      if (bedroomsMin !== undefined) where.bedrooms = { gte: bedroomsMin };
-      if (maxGuestsMin !== undefined) where.maxGuests = { gte: maxGuestsMin };
-      if (longStayDiscount) where.longStayEnabled = true;
-      if (transmission) where.transmission = transmission;
-      if (seatsMin !== undefined) where.seats = { gte: seatsMin };
-      if (mileagePolicy) where.mileagePolicy = mileagePolicy;
-      if (carCategory) where.carCategory = carCategory;
-      if (driveType) where.driveType = driveType;
-      if (airConditioning !== undefined) where.airConditioning = airConditioning === "true";
-      if (driverAge !== undefined) {
-        where.OR = [
-          { minimumDriverAge: null },
-          { minimumDriverAge: { lte: driverAge } },
-        ];
-      }
-      if (amenityIds?.length) {
-        where.amenities = { some: { amenityKey: { in: amenityIds } } };
-      }
-
-      // Fetch candidates (wide net — geo filter in JS)
-      const candidates = await prisma.listing.findMany({
-        where,
-        include: {
-          photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 },
-          amenities: true,
-        },
-        take: 500,
+    // Favourites enrichment
+    let favouriteSet = new Set<string>();
+    if (guestId) {
+      const favs = await prisma.userFavourite.findMany({
+        where: { userId: guestId, listingId: { in: page.map((l) => l.id) } },
+        select: { listingId: true },
       });
 
       // Geo filter
