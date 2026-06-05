@@ -191,320 +191,520 @@ export async function searchRoutes(app: FastifyInstance) {
         where: { userId: guestId, listingId: { in: page.map((l) => l.id) } },
         select: { listingId: true },
       });
-      favouriteSet = new Set(favs.map((f) => f.listingId));
-    }
 
-    // Log search
-    await prisma.searchLog.create({
-      data: {
-        userId: guestId ?? undefined,
-        category,
-        placeName,
-        lat,
-        lng,
-        radiusKm,
-        checkIn: checkIn ? new Date(checkIn) : undefined,
-        checkOut: checkOut ? new Date(checkOut) : undefined,
-        pickupDatetime: pickupDatetime ? new Date(pickupDatetime) : undefined,
-        returnDatetime: returnDatetime ? new Date(returnDatetime) : undefined,
-        guests,
-        sortApplied: sort,
-        resultCount: total,
-      },
-    }).catch(() => { /* non-critical */ });
+      // Geo filter
+      const withDistance = candidates
+        .map((l) => ({
+          ...l,
+          distanceKm: haversineKm(lat, lng, Number(l.lat), Number(l.lng)),
+        }))
+        .filter((l) => l.distanceKm <= radiusKm);
 
-    const results = page.map((l) => ({
-      id: l.id,
-      listingType: l.category,
-      title: l.name,
-      city: l.town,
-      countryCode: l.country,
-      distanceKm: Math.round(l.distanceKm * 10) / 10,
-      primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
-      nightlyRate: l.category !== "car" && l.pricePerNight ? Number(l.pricePerNight) : null,
-      dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
-      currency: l.currency,
-      cancellationPolicy: l.cancellationPolicy,
-      // Hotel
-      starRating: l.starRating,
-      isAccredited: !!l.approvedAt,
-      roomType: l.roomType,
-      // Apartment
-      bedrooms: l.bedrooms,
-      bathrooms: l.bathrooms,
-      maxGuests: l.maxGuests,
-      longStayDiscountEnabled: l.longStayEnabled,
-      // Car
-      carMake: l.carMake,
-      carModel: l.carModel,
-      carYear: l.carYear,
-      transmission: l.transmission,
-      seats: l.seats,
-      mileagePolicy: l.mileagePolicy,
-      // Favourited
-      isFavourited: guestId ? favouriteSet.has(l.id) : undefined,
-    }));
+      // Availability filter (when dates provided)
+      const candidateIds = withDistance.map((l) => l.id);
+      const bookedIds = await getBookedListingIds(
+        candidateIds, checkIn, checkOut, pickupDatetime, returnDatetime,
+      );
+      const available = withDistance.filter((l) => !bookedIds.has(l.id));
 
-    return sendSuccess(reply, 200, {
-      totalCount: total,
-      availableCount: available.length,
-      nextCursor,
-      results,
-    });
-  });
+      // Sort
+      const sortPriceField = category === "car" ? "pricePerDay" : "pricePerNight";
+      let sorted = [...available];
+      if (sort === "price_asc") sorted.sort((a, b) => Number((a as any)[sortPriceField] ?? 0) - Number((b as any)[sortPriceField] ?? 0));
+      else if (sort === "price_desc") sorted.sort((a, b) => Number((b as any)[sortPriceField] ?? 0) - Number((a as any)[sortPriceField] ?? 0));
+      else if (sort === "distance") sorted.sort((a, b) => a.distanceKm - b.distanceKm);
+      else if (sort === "newest") sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      else sorted.sort((a, b) => a.distanceKm - b.distanceKm); // recommended default = nearest
 
-  // ── GET /listings/:id/public — public listing detail ─────────────────────
-  app.get("/listings/:id/public", { schema: { tags: ["Search"] }, preHandler: [optionalGuest] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const guestId = (req as GuestRequest).guestId;
-    const { id } = req.params as { id: string };
+      // Pagination (cursor = offset)
+      const total = sorted.length;
+      const page = sorted.slice(cursor, cursor + limit);
+      const nextCursor = cursor + limit < total ? String(cursor + limit) : null;
 
-    const listing = await prisma.listing.findUnique({
-      where: { id, deletedAt: null },
-      include: {
-        photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
-        amenities: true,
-        customAmenities: true,
-      },
-    });
+      // Favourites enrichment
+      let favouriteSet = new Set<string>();
+      if (guestId) {
+        const favs = await prisma.userFavourite.findMany({
+          where: { userId: guestId, listingId: { in: page.map((l) => l.id) } },
+          select: { listingId: true },
+        });
+        favouriteSet = new Set(favs.map((f) => f.listingId));
+      }
 
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      // Log search
+      await prisma.searchLog.create({
+        data: {
+          userId: guestId ?? undefined,
+          category,
+          placeName,
+          lat,
+          lng,
+          radiusKm,
+          checkIn: checkIn ? new Date(checkIn) : undefined,
+          checkOut: checkOut ? new Date(checkOut) : undefined,
+          pickupDatetime: pickupDatetime ? new Date(pickupDatetime) : undefined,
+          returnDatetime: returnDatetime ? new Date(returnDatetime) : undefined,
+          guests,
+          sortApplied: sort,
+          resultCount: total,
+        },
+      }).catch(() => { /* non-critical */ });
 
-    const validStatuses = ["approved", "active"];
-    if (!validStatuses.includes(listing.status)) {
-      return reply.status(410).send({
-        success: false,
-        error: { code: "LISTING_INACTIVE", message: "This listing is no longer available." },
-      });
-    }
-
-    let isFavourited = false;
-    if (guestId) {
-      const fav = await prisma.userFavourite.findUnique({ where: { userId_listingId: { userId: guestId, listingId: id } } });
-      isFavourited = !!fav;
-    }
-
-    const signedPhotos = await withSignedPhotos(listing.photos);
-
-    // Strip sensitive car fields pre-booking
-    const data: any = {
-      ...listing,
-      photos: signedPhotos,
-      licencePlate: undefined, // Never expose car licence plate here
-      isFavourited: guestId ? isFavourited : undefined,
-    };
-    if (data.licencePlate !== undefined) {
-      delete data.licencePlate;
-    }
-
-    return sendSuccess(reply, 200, data);
-  });
-
-  // ── GET /listings/:id/availability ───────────────────────────────────────
-  app.get("/listings/:id/availability", { schema: { tags: ["Search"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
-    const { month } = req.query as { month?: string };
-
-    const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    // Build date range for the month query
-    const now = new Date();
-    let rangeStart = now;
-    if (month) {
-      const [y, m] = month.split("-").map(Number);
-      rangeStart = new Date(y!, m! - 1, 1);
-    }
-    const rangeEnd = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + 3, 1); // 3 months forward
-
-    const bookings = await prisma.booking.findMany({
-      where: {
-        listingId: id,
-        status: { in: ["pending_payment", "confirmed"] as any },
-        OR: [
-          { checkIn: { gte: rangeStart, lt: rangeEnd }, checkOut: { not: null } },
-          { pickupDatetime: { gte: rangeStart, lt: rangeEnd }, returnDatetime: { not: null } },
-        ],
-      },
-      select: { checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true },
-    });
-
-    const unavailableRanges = bookings.map((b) => ({
-      start: (b.checkIn ?? b.pickupDatetime)?.toISOString().slice(0, 10) ?? null,
-      end: (b.checkOut ?? b.returnDatetime)?.toISOString().slice(0, 10) ?? null,
-    })).filter((r) => r.start && r.end);
-
-    return sendSuccess(reply, 200, { unavailableRanges });
-  });
-
-  // ── POST /listings/batch-summary — for anonymous recently-viewed ─────────
-  app.post("/listings/batch-summary", { schema: { tags: ["Search"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { ids?: string[] };
-    const ids = (body.ids ?? []).slice(0, 20);
-    if (!ids.length) return sendSuccess(reply, 200, { listings: [] });
-
-    const listings = await prisma.listing.findMany({
-      where: { id: { in: ids }, deletedAt: null, status: { in: ["approved", "active"] } },
-      include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } },
-    });
-
-    return sendSuccess(reply, 200, {
-      listings: listings.map((l) => ({
+      const results = page.map((l) => ({
         id: l.id,
+        listingType: l.category,
         title: l.name,
-        category: l.category,
         city: l.town,
         countryCode: l.country,
-        nightlyRate: l.pricePerNight ? Number(l.pricePerNight) : null,
-        currency: l.currency,
+        distanceKm: Math.round(l.distanceKm * 10) / 10,
         primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
-      })),
-    });
-  });
+        nightlyRate: l.category !== "car" && l.pricePerNight ? Number(l.pricePerNight) : null,
+        dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
+        currency: l.currency,
+        cancellationPolicy: l.cancellationPolicy,
+        // Hotel
+        starRating: l.starRating,
+        isAccredited: !!l.approvedAt,
+        roomType: l.roomType,
+        // Apartment
+        bedrooms: l.bedrooms,
+        bathrooms: l.bathrooms,
+        maxGuests: l.maxGuests,
+        longStayDiscountEnabled: l.longStayEnabled,
+        // Car
+        carMake: l.carMake,
+        carModel: l.carModel,
+        carYear: l.carYear,
+        transmission: l.transmission,
+        seats: l.seats,
+        mileagePolicy: l.mileagePolicy,
+        // Favourited
+        isFavourited: guestId ? favouriteSet.has(l.id) : undefined,
+      }));
+
+      return sendSuccess(reply, 200, {
+        totalCount: total,
+        availableCount: available.length,
+        nextCursor,
+        results,
+      });
+    },
+  );
+
+  // ── GET /listings/:id/public — public listing detail ─────────────────────
+  app.get(
+    "/listings/:id/public",
+    {
+      schema: {
+        tags: ["Search"],
+        params: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Listing ID" },
+          },
+          required: ["id"],
+        },
+      },
+      preHandler: [optionalGuest],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const guestId = (req as GuestRequest).guestId;
+      const { id } = req.params as { id: string };
+
+      const listing = await prisma.listing.findUnique({
+        where: { id, deletedAt: null },
+        include: {
+          photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
+          amenities: true,
+          customAmenities: true,
+        },
+      });
+
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      const validStatuses = ["approved", "active"];
+      if (!validStatuses.includes(listing.status)) {
+        return reply.status(410).send({
+          success: false,
+          error: { code: "LISTING_INACTIVE", message: "This listing is no longer available." },
+        });
+      }
+
+      let isFavourited = false;
+      if (guestId) {
+        const fav = await prisma.userFavourite.findUnique({ where: { userId_listingId: { userId: guestId, listingId: id } } });
+        isFavourited = !!fav;
+      }
+
+      const signedPhotos = await withSignedPhotos(listing.photos);
+
+      // Strip sensitive car fields pre-booking
+      const data: any = {
+        ...listing,
+        photos: signedPhotos,
+        licencePlate: undefined,
+        isFavourited: guestId ? isFavourited : undefined,
+      };
+      if (data.licencePlate !== undefined) {
+        delete data.licencePlate;
+      }
+
+      return sendSuccess(reply, 200, data);
+    },
+  );
+
+  // ── GET /listings/:id/availability ───────────────────────────────────────
+  app.get(
+    "/listings/:id/availability",
+    {
+      schema: {
+        tags: ["Search"],
+        params: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Listing ID" },
+          },
+          required: ["id"],
+        },
+        querystring: {
+          type: "object",
+          properties: {
+            month: { type: "string", description: "Month to query availability (YYYY-MM). Defaults to current month. Returns 3 months forward." },
+          },
+        },
+      },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const { id } = req.params as { id: string };
+      const { month } = req.query as { month?: string };
+
+      const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      const now = new Date();
+      let rangeStart = now;
+      if (month) {
+        const [y, m] = month.split("-").map(Number);
+        rangeStart = new Date(y!, m! - 1, 1);
+      }
+      const rangeEnd = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + 3, 1);
+
+      const bookings = await prisma.booking.findMany({
+        where: {
+          listingId: id,
+          status: { in: ["pending_payment", "confirmed"] as any },
+          OR: [
+            { checkIn: { gte: rangeStart, lt: rangeEnd }, checkOut: { not: null } },
+            { pickupDatetime: { gte: rangeStart, lt: rangeEnd }, returnDatetime: { not: null } },
+          ],
+        },
+        select: { checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true },
+      });
+
+      const unavailableRanges = bookings.map((b) => ({
+        start: (b.checkIn ?? b.pickupDatetime)?.toISOString().slice(0, 10) ?? null,
+        end: (b.checkOut ?? b.returnDatetime)?.toISOString().slice(0, 10) ?? null,
+      })).filter((r) => r.start && r.end);
+
+      return sendSuccess(reply, 200, { unavailableRanges });
+    },
+  );
+
+  // ── POST /listings/batch-summary — for anonymous recently-viewed ─────────
+  app.post(
+    "/listings/batch-summary",
+    {
+      schema: {
+        tags: ["Search"],
+        body: {
+          type: "object",
+          properties: {
+            ids: {
+              type: "array",
+              items: { type: "string" },
+              maxItems: 20,
+              description: "Array of listing IDs (max 20)",
+            },
+          },
+          required: ["ids"],
+        },
+      },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = req.body as { ids?: string[] };
+      const ids = (body.ids ?? []).slice(0, 20);
+      if (!ids.length) return sendSuccess(reply, 200, { listings: [] });
+
+      const listings = await prisma.listing.findMany({
+        where: { id: { in: ids }, deletedAt: null, status: { in: ["approved", "active"] } },
+        include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } },
+      });
+
+      return sendSuccess(reply, 200, {
+        listings: listings.map((l) => ({
+          id: l.id,
+          title: l.name,
+          category: l.category,
+          city: l.town,
+          countryCode: l.country,
+          nightlyRate: l.pricePerNight ? Number(l.pricePerNight) : null,
+          currency: l.currency,
+          primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
+        })),
+      });
+    },
+  );
 
   // ── Favourites ───────────────────────────────────────────────────────────
 
-  app.post("/guests/me/favourites", { schema: { tags: ["Favourites"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const userId = (req as any).providerId as string;
-    const { listingId } = req.body as { listingId: string };
-
-    const listing = await prisma.listing.findUnique({ where: { id: listingId, deletedAt: null } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    await prisma.userFavourite.upsert({
-      where: { userId_listingId: { userId, listingId } },
-      create: { userId, listingId },
-      update: {},
-    });
-
-    return sendSuccess(reply, 201, { message: "Saved to favourites." });
-  });
-
-  app.delete("/guests/me/favourites/:listingId", { schema: { tags: ["Favourites"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const userId = (req as any).providerId as string;
-    const { listingId } = req.params as { listingId: string };
-
-    await prisma.userFavourite.deleteMany({ where: { userId, listingId } });
-    reply.status(204).send();
-  });
-
-  app.get("/guests/me/favourites", { schema: { tags: ["Favourites"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const userId = (req as any).providerId as string;
-    const q = req.query as Record<string, string>;
-    const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
-    const limit = 20;
-
-    const favs = await prisma.userFavourite.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      skip: cursor,
-      take: limit + 1,
-      include: {
-        listing: {
-          include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } },
+  app.post(
+    "/guests/me/favourites",
+    {
+      schema: {
+        tags: ["Favourites"],
+        body: {
+          type: "object",
+          properties: {
+            listingId: { type: "string", description: "Listing ID to favourite" },
+          },
+          required: ["listingId"],
         },
       },
-    });
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const userId = (req as any).providerId as string;
+      const { listingId } = req.body as { listingId: string };
 
-    const hasMore = favs.length > limit;
-    const page = hasMore ? favs.slice(0, limit) : favs;
+      const listing = await prisma.listing.findUnique({ where: { id: listingId, deletedAt: null } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-    return sendSuccess(reply, 200, {
-      favourites: page.map((f) => ({
-        listingId: f.listingId,
-        savedAt: f.createdAt,
-        listing: {
-          id: f.listing.id,
-          title: f.listing.name,
-          category: f.listing.category,
-          status: f.listing.status,
-          city: f.listing.town,
-          countryCode: f.listing.country,
-          nightlyRate: f.listing.pricePerNight ? Number(f.listing.pricePerNight) : null,
-          currency: f.listing.currency,
-          primaryPhotoUrl: f.listing.photos[0]?.cdnUrl ?? null,
+      await prisma.userFavourite.upsert({
+        where: { userId_listingId: { userId, listingId } },
+        create: { userId, listingId },
+        update: {},
+      });
+
+      return sendSuccess(reply, 201, { message: "Saved to favourites." });
+    },
+  );
+
+  app.delete(
+    "/guests/me/favourites/:listingId",
+    {
+      schema: {
+        tags: ["Favourites"],
+        params: {
+          type: "object",
+          properties: {
+            listingId: { type: "string", description: "Listing ID to remove from favourites" },
+          },
+          required: ["listingId"],
         },
-      })),
-      nextCursor: hasMore ? String(cursor + limit) : null,
-    });
-  });
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const userId = (req as any).providerId as string;
+      const { listingId } = req.params as { listingId: string };
+
+      await prisma.userFavourite.deleteMany({ where: { userId, listingId } });
+      return sendSuccess(reply, 200, {
+  message: "Favourite removed successfully"
+});
+    },
+  );
+
+  app.get(
+    "/guests/me/favourites",
+    {
+      schema: {
+        tags: ["Favourites"],
+        querystring: {
+          type: "object",
+          properties: {
+            cursor: { type: "integer", default: 0, description: "Pagination offset cursor" },
+          },
+        },
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const userId = (req as any).providerId as string;
+      const q = req.query as Record<string, string>;
+      const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
+      const limit = 20;
+
+      const favs = await prisma.userFavourite.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        skip: cursor,
+        take: limit + 1,
+        include: {
+          listing: {
+            include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } },
+          },
+        },
+      });
+
+      const hasMore = favs.length > limit;
+      const page = hasMore ? favs.slice(0, limit) : favs;
+
+      return sendSuccess(reply, 200, {
+        favourites: page.map((f) => ({
+          listingId: f.listingId,
+          savedAt: f.createdAt,
+          listing: {
+            id: f.listing.id,
+            title: f.listing.name,
+            category: f.listing.category,
+            status: f.listing.status,
+            city: f.listing.town,
+            countryCode: f.listing.country,
+            nightlyRate: f.listing.pricePerNight ? Number(f.listing.pricePerNight) : null,
+            currency: f.listing.currency,
+            primaryPhotoUrl: f.listing.photos[0]?.cdnUrl ?? null,
+          },
+        })),
+        nextCursor: hasMore ? String(cursor + limit) : null,
+      });
+    },
+  );
 
   // ── Recently Viewed ───────────────────────────────────────────────────────
 
-  app.post("/guests/me/recently-viewed", { schema: { tags: ["Recently Viewed"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const userId = (req as any).providerId as string;
-    const { listingId } = req.body as { listingId: string };
-
-    const listing = await prisma.listing.findUnique({ where: { id: listingId, deletedAt: null } });
-    if (!listing) return reply.status(204).send(); // silent on invalid
-
-    await prisma.userRecentlyViewed.upsert({
-      where: { userId_listingId: { userId, listingId } },
-      create: { userId, listingId },
-      update: { viewedAt: new Date() },
-    });
-
-    // Prune to last 20
-    const all = await prisma.userRecentlyViewed.findMany({
-      where: { userId },
-      orderBy: { viewedAt: "desc" },
-      select: { listingId: true },
-    });
-    if (all.length > 20) {
-      const toDelete = all.slice(20).map((r) => r.listingId);
-      await prisma.userRecentlyViewed.deleteMany({ where: { userId, listingId: { in: toDelete } } });
-    }
-
-    reply.status(204).send();
-  });
-
-  app.get("/guests/me/recently-viewed", { schema: { tags: ["Recently Viewed"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const userId = (req as any).providerId as string;
-
-    const views = await prisma.userRecentlyViewed.findMany({
-      where: { userId },
-      orderBy: { viewedAt: "desc" },
-      take: 20,
-      include: {
-        listing: {
-          include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } },
+  app.post(
+    "/guests/me/recently-viewed",
+    {
+      schema: {
+        tags: ["Recently Viewed"],
+        body: {
+          type: "object",
+          properties: {
+            listingId: { type: "string", description: "Listing ID to mark as recently viewed" },
+          },
+          required: ["listingId"],
         },
       },
-    });
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const userId = (req as any).providerId as string;
+      const { listingId } = req.body as { listingId: string };
 
-    return sendSuccess(reply, 200, {
-      recentlyViewed: views.map((v) => ({
-        listingId: v.listingId,
-        viewedAt: v.viewedAt,
-        listing: {
-          id: v.listing.id,
-          title: v.listing.name,
-          category: v.listing.category,
-          status: v.listing.status,
-          city: v.listing.town,
-          nightlyRate: v.listing.pricePerNight ? Number(v.listing.pricePerNight) : null,
-          currency: v.listing.currency,
-          primaryPhotoUrl: v.listing.photos[0]?.cdnUrl ?? null,
-        },
-      })),
-    });
-  });
+      const listing = await prisma.listing.findUnique({ where: { id: listingId, deletedAt: null } });
+      if (!listing) return reply.status(204).send();
 
-  app.post("/guests/me/recently-viewed/import", { schema: { tags: ["Recently Viewed"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const userId = (req as any).providerId as string;
-    const { items } = req.body as { items: { listingId: string; viewedAt: string }[] };
-
-    if (!Array.isArray(items)) return sendError(reply, 400, "INVALID_BODY", "items array required.");
-
-    for (const item of items.slice(0, 20)) {
-      const listing = await prisma.listing.findUnique({ where: { id: item.listingId, deletedAt: null } });
-      if (!listing) continue;
       await prisma.userRecentlyViewed.upsert({
-        where: { userId_listingId: { userId, listingId: item.listingId } },
-        create: { userId, listingId: item.listingId, viewedAt: new Date(item.viewedAt) },
-        update: { viewedAt: new Date(item.viewedAt) },
+        where: { userId_listingId: { userId, listingId } },
+        create: { userId, listingId },
+        update: { viewedAt: new Date() },
       });
-    }
 
-    reply.status(204).send();
-  });
+      // Prune to last 20
+      const all = await prisma.userRecentlyViewed.findMany({
+        where: { userId },
+        orderBy: { viewedAt: "desc" },
+        select: { listingId: true },
+      });
+      if (all.length > 20) {
+        const toDelete = all.slice(20).map((r) => r.listingId);
+        await prisma.userRecentlyViewed.deleteMany({ where: { userId, listingId: { in: toDelete } } });
+      }
+return sendSuccess(reply, 200, {
+  message: "Recently viewed updated"
+});
+    },
+  );
+
+  app.get(
+    "/guests/me/recently-viewed",
+    {
+      schema: {
+        tags: ["Recently Viewed"],
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const userId = (req as any).providerId as string;
+
+      const views = await prisma.userRecentlyViewed.findMany({
+        where: { userId },
+        orderBy: { viewedAt: "desc" },
+        take: 20,
+        include: {
+          listing: {
+            include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } },
+          },
+        },
+      });
+
+      return sendSuccess(reply, 200, {
+        recentlyViewed: views.map((v) => ({
+          listingId: v.listingId,
+          viewedAt: v.viewedAt,
+          listing: {
+            id: v.listing.id,
+            title: v.listing.name,
+            category: v.listing.category,
+            status: v.listing.status,
+            city: v.listing.town,
+            nightlyRate: v.listing.pricePerNight ? Number(v.listing.pricePerNight) : null,
+            currency: v.listing.currency,
+            primaryPhotoUrl: v.listing.photos[0]?.cdnUrl ?? null,
+          },
+        })),
+      });
+    },
+  );
+
+  app.post(
+    "/guests/me/recently-viewed/import",
+    {
+      schema: {
+        tags: ["Recently Viewed"],
+        body: {
+          type: "object",
+          properties: {
+            items: {
+              type: "array",
+              maxItems: 20,
+              description: "Array of recently viewed items to import (max 20)",
+              items: {
+                type: "object",
+                properties: {
+                  listingId: { type: "string" },
+                  viewedAt: { type: "string", description: "ISO 8601 datetime" },
+                },
+                required: ["listingId", "viewedAt"],
+              },
+            },
+          },
+          required: ["items"],
+        },
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const userId = (req as any).providerId as string;
+      const { items } = req.body as { items: { listingId: string; viewedAt: string }[] };
+
+      if (!Array.isArray(items)) return sendError(reply, 400, "INVALID_BODY", "items array required.");
+
+      for (const item of items.slice(0, 20)) {
+        const listing = await prisma.listing.findUnique({ where: { id: item.listingId, deletedAt: null } });
+        if (!listing) continue;
+        await prisma.userRecentlyViewed.upsert({
+          where: { userId_listingId: { userId, listingId: item.listingId } },
+          create: { userId, listingId: item.listingId, viewedAt: new Date(item.viewedAt) },
+          update: { viewedAt: new Date(item.viewedAt) },
+        });
+      }
+
+      return sendSuccess(reply, 200, {
+  message: "Recently viewed imported successfully",
+  importedCount: items.slice(0, 20).length
+});
+    },
+  );
 }
