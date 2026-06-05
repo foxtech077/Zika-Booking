@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, LogOut, User, ChevronDown } from "lucide-react";
-import { listingApi } from "@/lib/listing-api";
+import { listingsService } from "@/services/listings";
 import { useAuthStore } from "@/stores/auth";
 import { Avatar } from "@/components/ui/Avatar";
 import { useState } from "react";
@@ -12,9 +12,8 @@ import { cn } from "@/lib/utils";
 
 async function fetchUnreadNotifications() {
   try {
-    const response = await listingApi.get("/provider/notifications/unread-count");
-    const data = response.data?.data ?? response.data;
-    return Number(data?.count ?? data?.unreadCount ?? data?.total ?? 0) || 0;
+    const data = await listingsService.getDashboard();
+    return Number(data.unreadMessages ?? 0) + Number(data.pendingReviews ?? 0);
   } catch {
     return 0;
   }
@@ -31,7 +30,7 @@ export function TopBar() {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const { data: unreadCount = 0 } = useQuery({
-    queryKey: ["provider-notifications-unread-count"],
+    queryKey: ["provider-dashboard-alert-count"],
     queryFn: fetchUnreadNotifications,
     refetchInterval: 30_000,
     staleTime: 15_000,

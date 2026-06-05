@@ -40,6 +40,12 @@ export default function BookingsPage() {
 
   const bookings: ProviderBooking[] = data?.bookings ?? [];
   const total: number = data?.total ?? 0;
+  const selectedGuestName = selected
+    ? `${selected.guestFirstName} ${selected.guestLastName}`.trim()
+    : "";
+  const selectedDriverName = selected
+    ? `${selected.driverFirstName ?? ""} ${selected.driverLastName ?? ""}`.trim()
+    : "";
 
   const columns: Column<ProviderBooking>[] = [
     {
@@ -180,11 +186,11 @@ export default function BookingsPage() {
 
             {/* Guest info */}
             <div className="bg-surface-muted rounded-xl p-4 space-y-3">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Guest</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Traveler</p>
               <div className="flex items-center gap-3">
-                <Avatar name={`${selected.guestFirstName} ${selected.guestLastName}`} size="md" />
+                <Avatar name={selectedGuestName} size="md" />
                 <div>
-                  <p className="font-semibold text-slate-900">{selected.guestFirstName} {selected.guestLastName}</p>
+                  <p className="font-semibold text-slate-900">{selectedGuestName || "Traveler"}</p>
                   <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
                     <Mail className="w-3 h-3" />
                     {selected.guestEmail}
@@ -204,6 +210,35 @@ export default function BookingsPage() {
                 </p>
               )}
             </div>
+
+            {(selectedDriverName || selected.driverAge != null || selected.deliveryRequested || selected.deliveryAddress) && (
+              <div className="bg-surface-muted rounded-xl p-4 space-y-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Driver Details</p>
+                {selectedDriverName && (
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">Driver name</p>
+                    <p className="text-sm font-semibold text-slate-900 mt-0.5">{selectedDriverName}</p>
+                  </div>
+                )}
+                {selected.driverAge != null && (
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">Driver age</p>
+                    <p className="text-sm font-semibold text-slate-900 mt-0.5">{selected.driverAge}</p>
+                  </div>
+                )}
+                {(selected.deliveryRequested || selected.deliveryAddress) && (
+                  <div>
+                    <p className="text-xs text-slate-500 font-medium">Delivery</p>
+                    <p className="text-sm font-semibold text-slate-900 mt-0.5">
+                      {selected.deliveryRequested ? "Requested" : "Not requested"}
+                    </p>
+                    {selected.deliveryAddress && (
+                      <p className="text-xs text-slate-500 mt-1">{selected.deliveryAddress}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Dates */}
             <div className="grid grid-cols-2 gap-4">

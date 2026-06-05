@@ -1,22 +1,18 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   AlertCircle,
-  Banknote,
   Bell,
   BookOpen,
-  CalendarSync,
   CheckCircle2,
   MessageSquare,
   RefreshCw,
   Star,
-  Trash2,
-  XCircle,
 } from "lucide-react";
-import { listingApi } from "@/lib/listing-api";
+import { listingsService } from "@/services/listings";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -25,13 +21,8 @@ import { cn, formatDate, formatRelativeTime } from "@/lib/utils";
 type NotificationFilter = "all" | "unread" | "read";
 type NotificationType =
   | "new_booking"
-  | "booking_cancelled"
   | "booking_confirmed"
   | "review_received"
-  | "listing_approved"
-  | "listing_rejected"
-  | "payout_processed"
-  | "calendar_sync"
   | "new_message"
   | "system_alert";
 
@@ -46,49 +37,6 @@ interface ProviderNotification {
   relatedHref?: string;
 }
 
-interface Notice {
-  type: "success" | "error";
-  text: string;
-}
-
-function readString(value: unknown, fallback = "") {
-  return typeof value === "string" && value.trim() ? value : fallback;
-}
-
-function unwrapList(payload: unknown) {
-  const root = payload as Record<string, unknown>;
-  const data = root?.data as Record<string, unknown> | undefined;
-  for (const source of [data, root]) {
-    if (!source) continue;
-    for (const key of ["notifications", "items", "results", "data"]) {
-      const value = source[key];
-      if (Array.isArray(value)) return value;
-    }
-  }
-  return Array.isArray(payload) ? payload : [];
-}
-
-function normalizeType(value: unknown): NotificationType {
-  const type = readString(value, "system_alert").toLowerCase().replace(/[\s-]/g, "_");
-  if (
-    [
-      "new_booking",
-      "booking_cancelled",
-      "booking_confirmed",
-      "review_received",
-      "listing_approved",
-      "listing_rejected",
-      "payout_processed",
-      "calendar_sync",
-      "new_message",
-      "system_alert",
-    ].includes(type)
-  ) {
-    return type as NotificationType;
-  }
-  return "system_alert";
-}
-
 function typeLabel(type: NotificationType) {
   return type
     .split("_")
@@ -96,42 +44,50 @@ function typeLabel(type: NotificationType) {
     .join(" ");
 }
 
-function relatedHref(type: NotificationType, raw: Record<string, unknown>) {
-  const bookingId = readString(raw.bookingId ?? raw.relatedBookingId);
-  const listingId = readString(raw.listingId ?? raw.relatedListingId);
-  if (type === "new_message") return "/dashboard/messaging";
-  if (type === "review_received") return "/dashboard/reviews";
-  if (type === "payout_processed") return "/dashboard/earnings";
-  if (type === "calendar_sync") return "/dashboard/channel";
-  if (type.includes("booking")) return bookingId ? `/dashboard/bookings?id=${bookingId}` : "/dashboard/bookings";
-  if (type.includes("listing")) return listingId ? `/dashboard/listings/${listingId}/edit` : "/dashboard/listings";
-  return "/dashboard";
-}
-
-function normalizeNotification(raw: unknown): ProviderNotification {
-  const item = raw as Record<string, unknown>;
-  const type = normalizeType(item.type ?? item.category);
-  const id = readString(item.id ?? item._id ?? item.notificationId, crypto.randomUUID());
-  const relatedLabel = readString(item.relatedLabel ?? item.bookingReference ?? item.listingName ?? item.propertyName);
-
-  return {
-    id,
-    title: readString(item.title, typeLabel(type)),
-    message: readString(item.message ?? item.body ?? item.description, "You have a new provider notification."),
-    type,
-    read: Boolean(item.read ?? item.isRead ?? item.readAt),
-    createdAt: readString(item.createdAt ?? item.date, new Date().toISOString()),
-    relatedLabel,
-    relatedHref: readString(item.relatedHref, relatedHref(type, item)),
-  };
-}
-
 async function fetchNotifications() {
   try {
-    const response = await listingApi.get("/provider/notifications", { params: { limit: 100 } });
-    return unwrapList(response.data)
-      .map(normalizeNotification)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const dashboard = await listingsService.getDashboard();
+    const now = new Date().toISOString();
+    const notifications: ProviderNotification[] = [];
+
+    if (dashboard.unreadMessages > 0) {
+      notifications.push({
+        id: "unread-messages",
+        title: `${dashboard.unreadMessages} unread message${dashboard.unreadMessages === 1 ? "" : "s"}`,
+        message: "Open your inbox to review guest conversations that need attention.",
+        type: "new_message",
+        read: false,
+        createdAt: now,
+        relatedHref: "/dashboard/messaging",
+      });
+    }
+
+    if (dashboard.pendingReviews > 0) {
+      notifications.push({
+        id: "pending-reviews",
+        title: `${dashboard.pendingReviews} review${dashboard.pendingReviews === 1 ? "" : "s"} awaiting reply`,
+        message: "Respond to recent guest feedback from the reviews dashboard.",
+        type: "review_received",
+        read: false,
+        createdAt: now,
+        relatedHref: "/dashboard/reviews",
+      });
+    }
+
+    for (const booking of dashboard.recentBookings ?? []) {
+      notifications.push({
+        id: `booking-${booking.id}`,
+        title: `Booking ${booking.reference}`,
+        message: `${booking.guestName} booked ${booking.listingTitle ?? "a listing"}.`,
+        type: booking.status === "confirmed" ? "booking_confirmed" : "new_booking",
+        read: true,
+        createdAt: booking.createdAt,
+        relatedLabel: booking.listingTitle ?? booking.listingCategory,
+        relatedHref: `/dashboard/bookings?id=${booking.id}`,
+      });
+    }
+
+    return notifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch {
     return [];
   }
@@ -141,13 +97,8 @@ function notificationIcon(type: NotificationType) {
   const className = "h-5 w-5";
   const icons: Record<NotificationType, ReactNode> = {
     new_booking: <BookOpen className={className} />,
-    booking_cancelled: <XCircle className={className} />,
     booking_confirmed: <CheckCircle2 className={className} />,
     review_received: <Star className={className} />,
-    listing_approved: <CheckCircle2 className={className} />,
-    listing_rejected: <XCircle className={className} />,
-    payout_processed: <Banknote className={className} />,
-    calendar_sync: <CalendarSync className={className} />,
     new_message: <MessageSquare className={className} />,
     system_alert: <AlertCircle className={className} />,
   };
@@ -165,10 +116,8 @@ function NotificationSkeleton() {
 }
 
 export default function NotificationsPage() {
-  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<NotificationFilter>("all");
   const [localRead, setLocalRead] = useState<Record<string, boolean>>({});
-  const [notice, setNotice] = useState<Notice | null>(null);
 
   const { data: notifications = [], isLoading, isFetching, refetch } = useQuery({
     queryKey: ["provider-notifications"],
@@ -189,39 +138,8 @@ export default function NotificationsPage() {
     return true;
   });
 
-  const markReadMutation = useMutation({
-    mutationFn: (id: string) => listingApi.patch(`/provider/notifications/${id}/read`),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["provider-notifications"] });
-      queryClient.invalidateQueries({ queryKey: ["provider-notifications-unread-count"] });
-    },
-  });
-
-  const markAllMutation = useMutation({
-    mutationFn: () => listingApi.patch("/provider/notifications/read-all"),
-    onMutate: () => {
-      setLocalRead((current) => ({
-        ...current,
-        ...Object.fromEntries(mergedNotifications.map((item) => [item.id, true])),
-      }));
-    },
-    onSuccess: () => setNotice({ type: "success", text: "All notifications marked as read." }),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["provider-notifications"] });
-      queryClient.invalidateQueries({ queryKey: ["provider-notifications-unread-count"] });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => listingApi.delete(`/provider/notifications/${id}`),
-    onSuccess: () => setNotice({ type: "success", text: "Notification deleted." }),
-    onError: () => setNotice({ type: "error", text: "Delete is not available for this notification yet." }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["provider-notifications"] }),
-  });
-
   const markRead = (id: string) => {
     setLocalRead((current) => ({ ...current, [id]: true }));
-    markReadMutation.mutate(id);
   };
 
   return (
@@ -234,26 +152,12 @@ export default function NotificationsPage() {
             <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !isLoading} onClick={() => refetch()}>
               Refresh
             </Button>
-            <Button icon={<CheckCircle2 />} disabled={unreadCount === 0} loading={markAllMutation.isPending} onClick={() => markAllMutation.mutate()}>
+            <Button icon={<CheckCircle2 />} disabled={unreadCount === 0} onClick={() => setLocalRead(Object.fromEntries(mergedNotifications.map((item) => [item.id, true])))}>
               Mark all as read
             </Button>
           </div>
         }
       />
-
-      {notice && (
-        <div
-          className={cn(
-            "flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm",
-            notice.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"
-          )}
-        >
-          <span>{notice.text}</span>
-          <button className="rounded-lg px-2 py-1 hover:bg-white/70" onClick={() => setNotice(null)}>
-            Dismiss
-          </button>
-        </div>
-      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <SummaryCard label="All Notifications" value={mergedNotifications.length} icon={<Bell />} active={filter === "all"} onClick={() => setFilter("all")} />
@@ -327,7 +231,6 @@ export default function NotificationsPage() {
                         Mark read
                       </Button>
                     )}
-                    <Button size="xs" variant="ghost" icon={<Trash2 />} onClick={() => deleteMutation.mutate(notification.id)} />
                   </div>
                 </div>
               </div>

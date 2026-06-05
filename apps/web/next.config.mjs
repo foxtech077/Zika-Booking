@@ -14,7 +14,7 @@ const nextConfig = {
     ];
   },
   images: {
-    domains: ["zika-listings.s3.us-east-1.amazonaws.com", "localhost"],
+    domains: ["zika-storage.s3.af-south-1.amazonaws.com", "localhost"],
   },
 };
 
