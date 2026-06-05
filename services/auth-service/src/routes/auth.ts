@@ -250,6 +250,133 @@ export async function authRoutes(app: FastifyInstance) {
     });
   });
 
+  // ── GET /verify  (Email link landing — HTML page for all clients) ───────────
+  app.get("/verify", async (req: FastifyRequest, reply: FastifyReply) => {
+    const { token } = req.query as { token?: string };
+    const userAgent = req.headers["user-agent"] ?? "";
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+
+    function html(icon: string, title: string, body: string, color = "#16a34a", showOpenBtn = false) {
+      const deepLinkScript = showOpenBtn ? `
+  <script>
+    function openApp() {
+      window.location.href = 'zikabooking://';
+      setTimeout(function() {
+        var msg = document.getElementById('fallback-msg');
+        if (msg) { msg.style.display = 'block'; }
+      }, 2000);
+    }
+  </script>` : "";
+
+      const openBtn = showOpenBtn
+        ? isMobile
+          ? `
+    <button class="btn" onclick="openApp()">Open ZikaBooking App</button>
+    <div id="fallback-msg" style="display:none;margin-top:16px;padding:14px 16px;background:#f1f5f9;border-radius:10px;font-size:13px;color:#475569;line-height:1.7;text-align:left">
+      <strong>App didn't open?</strong><br/>
+      • Make sure the ZikaBooking app is installed<br/>
+      • Open the app manually and sign in
+    </div>`
+          : `
+    <div style="margin-top:8px;padding:16px;background:#f0fdf4;border-radius:10px;font-size:14px;color:#166534;line-height:1.7;border:1px solid #bbf7d0">
+      ✅ Your email is verified!<br/>
+      <strong>Open the ZikaBooking app on your phone</strong> and sign in.
+    </div>`
+        : `<p style="font-size:13px;color:#94a3b8;margin-top:8px">Please open the ZikaBooking app and sign in.</p>`;
+
+      return reply
+        .code(200)
+        .header("Content-Type", "text/html; charset=utf-8")
+        .send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${title} — ZikaBooking</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+         background:linear-gradient(135deg,#0f3443 0%,#1a5276 50%,#0f3443 100%);
+         min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+    .card{background:#fff;border-radius:20px;padding:48px 36px;max-width:420px;width:100%;
+          text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+    .icon{font-size:64px;margin-bottom:20px;display:block}
+    h1{font-size:24px;font-weight:800;color:#0f3443;margin-bottom:12px}
+    p{font-size:15px;color:#64748b;line-height:1.6;margin-bottom:24px}
+    .btn{display:inline-block;background:${color};color:#fff;padding:14px 32px;
+         border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;
+         border:none;cursor:pointer;width:100%;margin-top:8px}
+    .btn:hover{opacity:.85}
+    .brand{margin-top:32px;font-size:13px;color:#94a3b8;font-weight:600;letter-spacing:.5px}
+  </style>
+  ${deepLinkScript}
+</head>
+<body>
+  <div class="card">
+    <span class="icon">${icon}</span>
+    <h1>${title}</h1>
+    <p>${body}</p>
+    ${openBtn}
+    <div class="brand">ZIKABOOKING</div>
+  </div>
+</body>
+</html>`);
+    }
+
+    // ── Validate token presence ────────────────────────────────────────────────
+    if (!token || token.length !== 64) {
+      return html("❌", "Invalid Link", "This verification link is invalid or incomplete. Please request a new verification email from the app.", "#dc2626");
+    }
+
+    // ── Rate limit ─────────────────────────────────────────────────────────────
+    const ip = req.ip;
+    const rlCount = await incrementCounter(`rl:verify:${ip}`, 60);
+    if (rlCount > 10) {
+      return html("⏳", "Too Many Requests", "You've made too many requests. Please wait a moment and try again.", "#d97706");
+    }
+
+    const tokenHash = hashToken(token);
+    const record = await prisma.verificationToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    if (!record || record.tokenType !== "email_verification") {
+      return html("❌", "Invalid Link", "This verification link is invalid. Please request a new verification email from the app.", "#dc2626");
+    }
+
+    if (record.used) {
+      return html("🔒", "Already Used", "This verification link has already been used. Your email may already be verified — please open the app and sign in.", "#7c3aed", true);
+    }
+
+    if (record.expiresAt < new Date()) {
+      return html("⌛", "Link Expired", "Your verification link has expired (links are valid for 24 hours). Please open the app and request a new verification email.", "#d97706");
+    }
+
+    // Already verified
+    if (record.user.emailVerified && record.user.status === "active") {
+      return html("✅", "Already Verified!", "Your email address is already verified. Open the app and sign in to your account.", "#16a34a", true);
+    }
+
+    // ── Perform verification ───────────────────────────────────────────────────
+    try {
+      await prisma.$transaction([
+        prisma.verificationToken.update({
+          where: { id: record.id },
+          data: { used: true, usedAt: new Date() },
+        }),
+        prisma.user.update({
+          where: { id: record.userId },
+          data: { status: "active", emailVerified: true, emailVerifiedAt: new Date() },
+        }),
+      ]);
+    } catch {
+      return html("⚠️", "Something Went Wrong", "We could not complete your verification. Please try again or contact support.", "#dc2626");
+    }
+
+    return html("🎉", "Email Verified!", "Your ZikaBooking account is now active. Tap the button below to open the app and sign in.", "#16a34a", true);
+  });
+
   // ── GET /auth/verify  (UC-1.3) ─────────────────────────────────────────────
   app.get(
     "/auth/verify",
@@ -570,8 +697,8 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
 
-      console.log("RESET TOKEN:", plainToken);
-      const resetUrl =`${process.env.WEB_BASE_URL}reset-password?token=${plainToken}`;
+      const webBase = (process.env.WEB_BASE_URL ?? "http://localhost:3000").trim().replace(/\/$/, "");
+      const resetUrl = `${webBase}/reset-password?token=${plainToken}`;
 
       try {
   await sendPasswordResetEmail(email, resetUrl);  
