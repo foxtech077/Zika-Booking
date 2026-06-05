@@ -2,6 +2,39 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, requireAdmin, type ProviderRequest } from "../middleware/auth.js";
+import { getRedis } from "../lib/redis.js";
+
+const errSchema = {
+  type: "object",
+  properties: {
+    success: { type: "boolean" },
+    error: {
+      type: "object",
+      properties: { code: { type: "string" }, message: { type: "string" } },
+      required: ["code", "message"],
+    },
+  },
+  required: ["success", "error"],
+};
+
+const voucherItemSchema = {
+  type: "object",
+  properties: {
+    id:            { type: "string" },
+    code:          { type: "string" },
+    discountType:  { type: "string", enum: ["percentage", "fixed"] },
+    discountValue: { type: "number" },
+    minOrderValue: { type: "number", nullable: true },
+    maxDiscount:   { type: "number", nullable: true },
+    usageLimit:    { type: "integer", nullable: true },
+    usageCount:    { type: "integer" },
+    validFrom:     { type: "string" },
+    validUntil:    { type: "string" },
+    isActive:      { type: "boolean" },
+    createdAt:     { type: "string" },
+  },
+  required: ["id", "code", "discountType", "discountValue", "usageCount", "validFrom", "validUntil", "isActive", "createdAt"],
+};
 
 export async function voucherRoutes(app: FastifyInstance) {
   const redis = getRedis();
@@ -333,123 +366,6 @@ export async function voucherRoutes(app: FastifyInstance) {
     },
   );
 
-  // ── GET /admin/vouchers — list all vouchers ───────────────────────────────
-  app.get(
-    "/admin/vouchers",
-    {
-      schema: {
-        tags: ["Admin Vouchers"],
-        summary: "List all vouchers with redemption counts (admin)",
-        security: [{ bearerAuth: [] }],
-        querystring: {
-          type: "object",
-          properties: {
-            isActive: { type: "string", enum: ["true", "false"] },
-          },
-        },
-        response: {
-          200: {
-            type: "object",
-            properties: {
-              success: { type: "boolean" },
-              data: {
-                type: "object",
-                properties: {
-                  vouchers: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        ...voucherItemSchema.properties,
-                        redemptionCount: { type: "integer" },
-                        createdBy:       { type: "string" },
-                      },
-                      required: [
-                        ...voucherItemSchema.required,
-                        "redemptionCount", "createdBy",
-                      ],
-                    },
-                  },
-                },
-                required: ["vouchers"],
-              },
-            },
-            required: ["success", "data"],
-          },
-        },
-      },
-    });
-  });
-
-  // ── POST /admin/vouchers — create a voucher ───────────────────────────
-  app.post("/admin/vouchers", { schema: { tags: ["Admin Vouchers"], body: { type: "object", required: ["code", "discountType", "discountValue", "validFrom", "validUntil"], properties: { code: { type: "string" }, discountType: { type: "string", enum: ["percentage", "fixed"] }, discountValue: { type: "number" }, minOrderValue: { type: "number" }, maxDiscount: { type: "number" }, usageLimit: { type: "integer" }, validFrom: { type: "string", format: "date-time" }, validUntil: { type: "string", format: "date-time" } } } }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as {
-      code: string;
-      discountType: "percentage" | "fixed";
-      discountValue: number;
-      minOrderValue?: number;
-      maxDiscount?: number;
-      usageLimit?: number;
-      validFrom: string;
-      validUntil: string;
-    };
-
-    if (!body.code || !body.discountType || body.discountValue === undefined || !body.validFrom || !body.validUntil) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "code, discountType, discountValue, validFrom, and validUntil are required.");
-    }
-    if (!["percentage", "fixed"].includes(body.discountType)) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "discountType must be 'percentage' or 'fixed'.");
-    }
-    if (body.discountValue <= 0) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "discountValue must be greater than 0.");
-    }
-    if (body.discountType === "percentage" && body.discountValue > 100) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Percentage discount cannot exceed 100.");
-    }
-
-    const validFrom = new Date(body.validFrom);
-    const validUntil = new Date(body.validUntil);
-    if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime())) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "validFrom and validUntil must be valid dates.");
-    }
-    if (validUntil <= validFrom) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be after validFrom.");
-    }
-
-    const existing = await prisma.voucher.findUnique({ where: { code: body.code } });
-    if (existing) {
-      return sendError(reply, 409, "DUPLICATE_CODE", "A voucher with this code already exists.");
-    }
-
-    const voucher = await prisma.voucher.create({
-      data: {
-        code: body.code,
-        discountType: body.discountType,
-        discountValue: body.discountValue,
-        maxDiscount:   body.maxDiscount ?? null,
-        validFrom:     validFrom.toISOString(),
-        validUntil:    validUntil.toISOString(),
-        isActive,
-        createdAt,
-      };
-
-      // Persist in Redis
-      await redis.set(`promo:${id}`, JSON.stringify(promo));
-      await redis.sadd("promos:all", id);
-
-      // Mark as active for each affected category
-      if (isActive) {
-        const cats = body.category === "all"
-          ? ["hotel", "apartment", "car"]
-          : [body.category];
-        for (const cat of cats) {
-          await redis.set(`promo:active:${cat}`, id);
-        }
-      }
-
-      return sendSuccess(reply, 201, promo);
-    },
-  );
 
   // ── GET /admin/promotions — list all promotion campaigns ─────────────────
   app.get(
@@ -550,23 +466,33 @@ export async function voucherRoutes(app: FastifyInstance) {
           },
         },
       },
-    });
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const q = req.query as { category?: string };
+      const now = new Date();
 
-    return sendSuccess(reply, 201, {
-      id: voucher.id,
-      code: voucher.code,
-      discountType: voucher.discountType,
-      discountValue: Number(voucher.discountValue),
-      minOrderValue: voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
-      maxDiscount: voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
-      usageLimit: voucher.usageLimit,
-      usageCount: voucher.usageCount,
-      validFrom: voucher.validFrom.toISOString(),
-      validUntil: voucher.validUntil.toISOString(),
-      isActive: voucher.isActive,
-      createdAt: voucher.createdAt.toISOString(),
-    });
-  });
+      const ids = await redis.smembers("promos:all");
+      if (!ids.length) return sendSuccess(reply, 200, { promotions: [] });
+
+      const pipeline = redis.pipeline();
+      for (const id of ids) pipeline.get(`promo:${id}`);
+      const results = await pipeline.exec();
+
+      let promotions: any[] = (results ?? [])
+        .map((r) => {
+          if (!r || r[0] != null || !r[1]) return null;
+          try { return JSON.parse(r[1] as string); } catch { return null; }
+        })
+        .filter(Boolean)
+        .filter((p: any) => p.isActive && new Date(p.validFrom) <= now && new Date(p.validUntil) >= now);
+
+      if (q.category) {
+        promotions = promotions.filter((p: any) => p.category === q.category || p.category === "all");
+      }
+
+      return sendSuccess(reply, 200, { promotions });
+    },
+  );
 
   // ── GET /admin/vouchers — list all vouchers ───────────────────────────
   app.get("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] }, preHandler: [requireAdmin] }, async (_req: FastifyRequest, reply: FastifyReply) => {
