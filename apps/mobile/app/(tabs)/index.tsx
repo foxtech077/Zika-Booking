@@ -14,7 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
 import { listingApi } from "../../lib/listing-api";
@@ -526,7 +526,12 @@ export default function HomeScreen() {
     })),
   });
 
-  const photoMap: Record<string, string> = batchSummary ?? {};
+  const photoMap: Record<string, string> = Object.fromEntries(
+    displayedIds.flatMap((id, i) => {
+      const url = photoQueries[i]?.data;
+      return url ? [[id, url]] : [];
+    })
+  );
 
   function navToListing(id: string, isCar?: boolean) {
     const params: Record<string, string> = {};
