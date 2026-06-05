@@ -81,6 +81,40 @@ function parseIcalDate(value: string): Date {
   return new Date(`${year}-${month}-${day}`);
 }
 
+<<<<<<< HEAD
+=======
+// ── Alert helper ──────────────────────────────────────────────────────────────
+
+async function sendSyncAlert(feedId: string, platform: string, failures: number, lastError: string) {
+  const webhookUrl = process.env.ALERT_WEBHOOK_URL;
+
+  console.error(
+    `[iCal Poller] ⚠️  ALERT: Feed ${feedId} (${platform}) has failed ${failures} consecutive times. ` +
+    `Last error: ${lastError}. Manual intervention may be required.`
+  );
+
+  if (webhookUrl) {
+    try {
+      await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: `🚨 iCal Sync Alert`,
+          feedId,
+          platform,
+          consecutiveFailures: failures,
+          lastError,
+          timestamp: new Date().toISOString(),
+        }),
+        signal: AbortSignal.timeout(5_000),
+      });
+    } catch (alertErr) {
+      console.error("[iCal Poller] Failed to send webhook alert:", alertErr);
+    }
+  }
+}
+
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
 // ── Sync helper ───────────────────────────────────────────────────────────────
 
 export async function syncFeed(feedId: string): Promise<{ synced: number; error?: string }> {
@@ -96,7 +130,6 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
     const msg = err instanceof Error ? err.message : "Fetch failed";
     const failures = feed.consecutiveFailures + 1;
 
-    // Progressive backoff: 1min → 5min → 15min (PRD §3.6)
     const backoffMs = failures === 1 ? 60_000 : failures === 2 ? 5 * 60_000 : 15 * 60_000;
     const nextRetryAt = new Date(Date.now() + backoffMs);
 
@@ -105,7 +138,10 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
       data: { lastError: msg, consecutiveFailures: failures, nextRetryAt, updatedAt: new Date() },
     });
 
+<<<<<<< HEAD
     // Alert after 3 consecutive failures (PRD §3.6)
+=======
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     if (failures >= 3) {
       console.error(
         `[iCal Poller] ⚠️  ALERT: Feed ${feedId} (${feed.platform}) has failed ${failures} consecutive times. ` +
@@ -137,7 +173,11 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
     return { synced: 0, error: msg };
   }
 
+<<<<<<< HEAD
   // Upsert blocked dates
+=======
+  // Upsert blocked dates — UID is idempotency key
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
   let synced = 0;
   for (const ev of events) {
     await prisma.icalBlockedDate.upsert({
@@ -164,11 +204,75 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
   return { synced };
 }
 
+<<<<<<< HEAD
 // ── Routes ────────────────────────────────────────────────────────────────────
 
 export async function icalRoutes(app: FastifyInstance) {
   // ── GET /listings/:id/ical-feeds — list provider's iCal feeds ─────────
   app.get("/listings/:id/ical-feeds", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+// ── Derive channel status from feed state ─────────────────────────────────────
+
+function deriveFeedStatus(feed: {
+  lastSyncedAt: Date | null;
+  lastError: string | null;
+  consecutiveFailures: number;
+}): "synced" | "error" | "pending" {
+  if (feed.consecutiveFailures >= 1 || feed.lastError) return "error";
+  if (feed.lastSyncedAt) return "synced";
+  return "pending";
+}
+
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+export async function icalRoutes(app: FastifyInstance) {
+
+  // ── GET /listings/:id/ical-feeds ──────────────────────────────────────
+  app.get("/listings/:id/ical-feeds", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["iCal Calendar Sync"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                feeds: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      platform: { type: "string" },
+                      feedUrl: { type: "string" },
+                      isActive: { type: "boolean" },
+                      status: { type: "string", enum: ["synced", "error", "pending"] },
+                      lastSyncedAt: { type: "string", nullable: true },
+                      lastError: { type: "string", nullable: true },
+                      consecutiveFailures: { type: "integer" },
+                      createdAt: { type: "string" }
+                    },
+                    required: ["id", "platform", "feedUrl", "isActive", "status", "lastSyncedAt", "lastError", "consecutiveFailures", "createdAt"]
+                  }
+                }
+              },
+              required: ["feeds"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     const { id } = req.params as { id: string };
     const providerId = (req as ProviderRequest).providerId;
 
@@ -186,6 +290,10 @@ export async function icalRoutes(app: FastifyInstance) {
         platform: f.platform,
         feedUrl: f.feedUrl,
         isActive: f.isActive,
+<<<<<<< HEAD
+=======
+        status: deriveFeedStatus(f),
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
         lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
         lastError: f.lastError,
         createdAt: f.createdAt.toISOString(),
@@ -193,8 +301,54 @@ export async function icalRoutes(app: FastifyInstance) {
     });
   });
 
+<<<<<<< HEAD
   // ── POST /listings/:id/ical-feeds — add a new iCal feed ───────────────
   app.post("/listings/:id/ical-feeds", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+  // ── POST /listings/:id/ical-feeds ─────────────────────────────────────
+  app.post("/listings/:id/ical-feeds", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["iCal Calendar Sync"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } }
+      },
+      body: {
+        type: "object",
+        required: ["platform", "feedUrl"],
+        properties: {
+          platform: { type: "string" },
+          feedUrl: { type: "string" }
+        }
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                platform: { type: "string" },
+                feedUrl: { type: "string" },
+                isActive: { type: "boolean" },
+                status: { type: "string" },
+                lastSyncedAt: { type: "string", nullable: true },
+                consecutiveFailures: { type: "integer" },
+                createdAt: { type: "string" }
+              },
+              required: ["id", "platform", "feedUrl", "isActive", "status", "lastSyncedAt", "consecutiveFailures", "createdAt"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     const { id } = req.params as { id: string };
     const providerId = (req as ProviderRequest).providerId;
     const body = req.body as { platform: string; feedUrl: string };
@@ -212,6 +366,14 @@ export async function icalRoutes(app: FastifyInstance) {
     const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
+<<<<<<< HEAD
+=======
+    const existing = await prisma.icalFeed.findFirst({ where: { listingId: id, feedUrl: body.feedUrl } });
+    if (existing) {
+      return sendError(reply, 409, "CONFLICT", "This feed URL is already connected to this listing.");
+    }
+
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     const feed = await prisma.icalFeed.create({
       data: {
         listingId: id,
@@ -228,13 +390,49 @@ export async function icalRoutes(app: FastifyInstance) {
       platform: feed.platform,
       feedUrl: feed.feedUrl,
       isActive: feed.isActive,
+<<<<<<< HEAD
+=======
+      status: "pending" as const,
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
       lastSyncedAt: null,
       createdAt: feed.createdAt.toISOString(),
     });
   });
 
+<<<<<<< HEAD
   // ── DELETE /listings/:id/ical-feeds/:feedId — remove an iCal feed ─────
   app.delete("/listings/:id/ical-feeds/:feedId", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+  // ── DELETE /listings/:id/ical-feeds/:feedId ───────────────────────────
+  app.delete("/listings/:id/ical-feeds/:feedId", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["iCal Calendar Sync"],
+      params: {
+        type: "object",
+        required: ["id", "feedId"],
+        properties: {
+          id: { type: "string" },
+          feedId: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: { message: { type: "string" } },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     const { id, feedId } = req.params as { id: string; feedId: string };
     const providerId = (req as ProviderRequest).providerId;
 
@@ -249,8 +447,44 @@ export async function icalRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { message: "Feed removed." });
   });
 
+<<<<<<< HEAD
   // ── POST /listings/:id/ical-feeds/:feedId/sync — manual sync trigger ──
   app.post("/listings/:id/ical-feeds/:feedId/sync", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+  // ── POST /listings/:id/ical-feeds/:feedId/sync ────────────────────────
+  app.post("/listings/:id/ical-feeds/:feedId/sync", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["iCal Calendar Sync"],
+      params: {
+        type: "object",
+        required: ["id", "feedId"],
+        properties: {
+          id: { type: "string" },
+          feedId: { type: "string" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                synced: { type: "integer" },
+                message: { type: "string" },
+                error: { type: "string" }
+              },
+              required: ["synced", "message"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     const { id, feedId } = req.params as { id: string; feedId: string };
     const providerId = (req as ProviderRequest).providerId;
 
@@ -269,6 +503,7 @@ export async function icalRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { synced: result.synced, message: `Synced ${result.synced} events.` });
   });
 
+<<<<<<< HEAD
   // ── GET /listings/:id/blocked-dates — get external blocked date ranges ─
   app.get("/listings/:id/blocked-dates", { schema: { tags: ["iCal Calendar Sync"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
@@ -290,14 +525,237 @@ export async function icalRoutes(app: FastifyInstance) {
         endDate: b.endDate.toISOString().slice(0, 10),
         summary: b.summary,
         platform: "external",
+=======
+  // ── GET /listings/:id/blocked-dates ───────────────────────────────────
+  // FIX: car bookings now correctly use pickupDatetime/returnDatetime in date filter
+  app.get("/listings/:id/blocked-dates", {
+    schema: {
+      tags: ["iCal Calendar Sync"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } }
+      },
+      querystring: {
+        type: "object",
+        properties: {
+          from: { type: "string", format: "date" },
+          to: { type: "string", format: "date" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                blockedDates: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      type: { type: "string", enum: ["blocked", "confirmed", "held"] },
+                      startDate: { type: "string", nullable: true },
+                      endDate: { type: "string", nullable: true },
+                      summary: { type: "string" },
+                      platform: { type: "string" }
+                    },
+                    required: ["id", "type", "startDate", "endDate", "summary", "platform"]
+                  }
+                }
+              },
+              required: ["blockedDates"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const { from, to } = req.query as { from?: string; to?: string };
+
+    const dateFilter = {
+      ...(from ? { startDate: { gte: new Date(from) } } : {}),
+      ...(to ? { endDate: { lte: new Date(to) } } : {}),
+    };
+
+    // FIX: booking date filter covers both hotel (checkIn/checkOut) and car (pickupDatetime/returnDatetime)
+    const bookingDateFilter = from || to ? {
+      OR: [
+        {
+          ...(from ? { checkIn: { gte: new Date(from) } } : {}),
+          ...(to ? { checkOut: { lte: new Date(to) } } : {}),
+        },
+        {
+          ...(from ? { pickupDatetime: { gte: new Date(from) } } : {}),
+          ...(to ? { returnDatetime: { lte: new Date(to) } } : {}),
+        },
+      ],
+    } : {};
+
+    // 1. iCal-blocked dates from external feeds (grey)
+    const externalBlocked = await prisma.icalBlockedDate.findMany({
+      where: { listingId: id, ...dateFilter },
+      include: { feed: { select: { platform: true } } },
+      orderBy: { startDate: "asc" },
+    });
+
+    // 2. Confirmed bookings (green)
+    const confirmedBookings = await prisma.booking.findMany({
+      where: {
+        listingId: id,
+        status: "confirmed",
+        ...bookingDateFilter,
+      },
+      select: { id: true, checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true, reference: true },
+      orderBy: { checkIn: "asc" },
+    });
+
+    // 3. Pending payment bookings — "held" (amber)
+    const heldBookings = await prisma.booking.findMany({
+      where: {
+        listingId: id,
+        status: "pending_payment",
+        ...bookingDateFilter,
+      },
+      select: { id: true, checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true, reference: true },
+      orderBy: { checkIn: "asc" },
+    });
+
+    const toDateStr = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
+
+    return sendSuccess(reply, 200, {
+      blockedDates: [
+        // External iCal blocked (grey)
+        ...externalBlocked.map((b) => ({
+          id: b.id,
+          type: "blocked" as const,
+          startDate: toDateStr(b.startDate),
+          endDate: toDateStr(b.endDate),
+          summary: b.summary,
+          platform: b.feed?.platform ?? "external",
+        })),
+        // Confirmed bookings (green)
+        ...confirmedBookings.map((b) => ({
+          id: b.id,
+          type: "confirmed" as const,
+          startDate: toDateStr(b.checkIn ?? b.pickupDatetime),
+          endDate: toDateStr(b.checkOut ?? b.returnDatetime),
+          summary: `Booking ${b.reference}`,
+          platform: "zikabooking",
+        })),
+        // Held / pending payment (amber)
+        ...heldBookings.map((b) => ({
+          id: b.id,
+          type: "held" as const,
+          startDate: toDateStr(b.checkIn ?? b.pickupDatetime),
+          endDate: toDateStr(b.checkOut ?? b.returnDatetime),
+          summary: `Held ${b.reference}`,
+          platform: "zikabooking",
+        })),
+      ].sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? "")),
+    });
+  });
+
+  // ── GET /listings/:id/channel-status ──────────────────────────────────
+  app.get("/listings/:id/channel-status", {
+    preHandler: [requireProviderRole],
+    schema: {
+      tags: ["iCal Calendar Sync"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                channels: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      platform: { type: "string" },
+                      status: { type: "string" },
+                      lastSyncedAt: { type: "string", nullable: true },
+                      lastError: { type: "string", nullable: true },
+                      consecutiveFailures: { type: "integer" },
+                      blockedDatesImported: { type: "integer" },
+                      nextRetryAt: { type: "string", nullable: true }
+                    },
+                    required: ["id", "platform", "status", "lastSyncedAt", "lastError", "consecutiveFailures", "blockedDatesImported", "nextRetryAt"]
+                  }
+                }
+              },
+              required: ["channels"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const providerId = (req as ProviderRequest).providerId;
+
+    const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
+    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+    const feeds = await prisma.icalFeed.findMany({
+      where: { listingId: id, isActive: true },
+      include: { blockedDates: { select: { id: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return sendSuccess(reply, 200, {
+      channels: feeds.map((f) => ({
+        id: f.id,
+        platform: f.platform,
+        status: deriveFeedStatus(f),
+        lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
+        lastError: f.lastError,
+        consecutiveFailures: f.consecutiveFailures,
+        blockedDatesImported: f.blockedDates.length,
+        nextRetryAt: f.nextRetryAt?.toISOString() ?? null,
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
       })),
     });
   });
 
+<<<<<<< HEAD
   // ── GET /listings/:id/ical — outbound iCal export (public) ────────────
   // Returns a standards-compliant .ics feed of all confirmed bookings so
   // external calendars (Airbnb, Google Calendar, etc.) can subscribe to it.
   app.get("/listings/:id/ical", async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+  // ── GET /listings/:id/ical — outbound iCal export (public) ───────────
+  app.get("/listings/:id/ical", {
+    schema: {
+      tags: ["iCal Calendar Sync"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } }
+      },
+      response: {
+        200: {
+          type: "string",
+          description: "ICS file download containing busy periods for external channels"
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     const { id } = req.params as { id: string };
 
     const listing = await prisma.listing.findUnique({
@@ -314,7 +772,6 @@ export async function icalRoutes(app: FastifyInstance) {
       return reply.status(410).send({ success: false, error: { code: "LISTING_INACTIVE", message: "This listing is not available." } });
     }
 
-    // Fetch only confirmed bookings (no pending/cancelled)
     const bookings = await prisma.booking.findMany({
       where: {
         listingId: id,
@@ -335,12 +792,10 @@ export async function icalRoutes(app: FastifyInstance) {
       orderBy: { createdAt: "asc" },
     });
 
-    // Helper: format a Date as iCal UTC datetime string (YYYYMMDDTHHmmssZ)
     function toIcalUtc(d: Date): string {
       return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
     }
 
-    // Helper: fold long iCal lines at 75 octets per RFC 5545 §3.1
     function foldLine(line: string): string {
       const bytes = Buffer.from(line, "utf8");
       if (bytes.length <= 75) return line;
@@ -365,7 +820,10 @@ export async function icalRoutes(app: FastifyInstance) {
       const dtend   = b.checkOut ?? b.returnDatetime;
       if (!dtstart || !dtend) return "";
 
+<<<<<<< HEAD
       // UID is deterministic: booking reference + listing id
+=======
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
       const uid = `${b.reference}@${id}.zikabooking`;
       const dtstamp = toIcalUtc(b.updatedAt ?? new Date());
       const created = toIcalUtc(b.confirmedAt ?? new Date());
@@ -424,12 +882,25 @@ export function startIcalPoller() {
       });
       const now = new Date();
       for (const feed of feeds) {
-        // Respect progressive backoff — skip if nextRetryAt is still in the future
         if (feed.nextRetryAt && feed.nextRetryAt > now) {
           console.log(`[iCal Poller] Skipping feed ${feed.id} — next retry at ${feed.nextRetryAt.toISOString()}`);
           continue;
         }
+<<<<<<< HEAD
         await syncFeed(feed.id).catch(() => null);
+=======
+
+        try {
+          const result = await syncFeed(feed.id);
+          if (result.error) {
+            console.warn(`[iCal Poller] Feed ${feed.id} sync error: ${result.error}`);
+          } else {
+            console.log(`[iCal Poller] Feed ${feed.id} synced ${result.synced} events.`);
+          }
+        } catch (syncErr) {
+          console.error(`[iCal Poller] Unexpected error for feed ${feed.id}:`, syncErr);
+        }
+>>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
       }
     } catch (error) {
       console.warn('[iCal Poller] Database connection error (will retry):', error instanceof Error ? error.message : error);
@@ -438,7 +909,6 @@ export function startIcalPoller() {
 
   setInterval(() => { poll().catch(() => null); }, POLL_INTERVAL_MS);
 
-  // Start polling with a small delay to avoid connection errors on startup
   setTimeout(() => {
     poll().catch(() => null);
   }, 5000);

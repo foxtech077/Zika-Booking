@@ -282,6 +282,10 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     const { sub: adminId } = (req as FastifyRequest & { adminIntermediate: { sub: string } }).adminIntermediate;
     const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
+
+console.log("admin.fido2Credential =", admin.fido2Credential);
+
+
     if (!admin.fido2Credential) {
       return sendError(reply, 400, "NO_FIDO2", "No hardware key registered for this account.");
     }
@@ -327,8 +331,12 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { options });
   });
 
+  // ── POST /admin/auth/webauthn/register/complete  (UC-1.12 A3) ─────────────────────
   app.post("/admin/auth/webauthn/register/complete", { schema: { tags: ["Admin Auth"], body: { type: "object", required: ["id", "rawId", "response", "type"], properties: { id: { type: "string" }, rawId: { type: "string" }, response: { type: "object" }, type: { type: "string", enum: ["public-key"] } } } }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
+
+
+
     let result: Awaited<ReturnType<typeof waFinishRegistration>>;
     try {
       result = await waFinishRegistration(adminId, req.body);
@@ -351,6 +359,93 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { message: "Security key registered successfully." });
   });
 
+
+// app.post(
+//   "/admin/auth/webauthn/register/complete",
+//   {
+//     schema: {
+//       tags: ["Admin Auth"],
+//       body: {
+//         type: "object",
+//         required: ["id", "rawId", "response", "type"],
+//         properties: {
+//           id: { type: "string" },
+//           rawId: { type: "string" },
+//           response: { type: "object" },
+//           type: { type: "string", enum: ["public-key"] },
+//         },
+//       },
+//     },
+//     preHandler: [requireAdminSession],
+//   },
+//   async (req: FastifyRequest, reply: FastifyReply) => {
+//     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
+
+//     // DEV ONLY
+//     if (process.env.NODE_ENV === "development") {
+//       await prisma.adminUser.update({
+//         where: { id: adminId },
+//         data: {
+//           fido2Credential: {
+//             id: "test",
+//             publicKey: "test",
+//             counter: 0,
+//           },
+//         },
+//       });
+
+//       const updated = await prisma.adminUser.findUnique({
+//         where: { id: adminId },
+//       });
+
+//       console.log("DEV BYPASS EXECUTED");
+//       console.log("Saved credential:", updated?.fido2Credential);
+
+//       return sendSuccess(reply, 200, {
+//         message: "Mock registration complete",
+//       });
+//     }
+
+//     let result: Awaited<ReturnType<typeof waFinishRegistration>>;
+
+//     try {
+//       result = await waFinishRegistration(adminId, req.body);
+//     } catch {
+//       return sendError(
+//         reply,
+//         400,
+//         "WEBAUTHN_FAILED",
+//         "Key registration failed."
+//       );
+//     }
+
+//     if (!result.verified || !result.registrationInfo) {
+//       return sendError(
+//         reply,
+//         400,
+//         "WEBAUTHN_FAILED",
+//         "Verification failed."
+//       );
+//     }
+
+//     const { credential } = result.registrationInfo;
+
+//     await prisma.adminUser.update({
+//       where: { id: adminId },
+//       data: {
+//         fido2Credential: {
+//           id: credential.id,
+//           publicKey: isoBase64URL.fromBuffer(credential.publicKey),
+//           counter: credential.counter,
+//         },
+//       },
+//     });
+
+//     return sendSuccess(reply, 200, {
+//       message: "Security key registered successfully.",
+//     });
+//   }
+// );
   // ── POST /admin/auth/logout ───────────────────────────────────────────────
   app.post("/admin/auth/logout", { schema: { tags: ["Admin Auth"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const token = req.headers.authorization?.slice(7) ?? "";
@@ -672,8 +767,22 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
     }
 
     // Revoke all sessions
-    await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
-    await prisma.adminUser.delete({ where: { id: targetId } });
+    // await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
+    // await prisma.adminUser.delete({ where: { id: targetId } });
+    await prisma.$transaction([
+  prisma.adminSession.updateMany({
+    where: { adminUserId: targetId },
+    data: { revoked: true }
+  }),
+
+  prisma.auditLog.deleteMany({
+    where: { adminId: targetId }
+  }),
+
+  prisma.adminUser.delete({
+    where: { id: targetId }
+  })
+]);
 
     await writeAudit(adminId, adminRole, "admin_operator_deleted", req, {
       targetType: "admin_user",

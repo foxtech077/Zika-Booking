@@ -33,7 +33,8 @@ export async function sendVerificationEmail(
   to: string,
   plainToken: string,
 ): Promise<void> {
-  const link = `${WEB}/verify?token=${plainToken}`;
+  const link = `${WEB}/auth/verify?token=${plainToken}`;
+  console.log("VERIFICATION LINK:", link);
 
   if (process.env["NODE_ENV"] !== "production") {
     console.log("\n" + "=".repeat(60));

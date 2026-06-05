@@ -27,7 +27,27 @@ function filterMessage(body: string): { filtered: boolean; text: string } {
 
 export async function messagingRoutes(app: FastifyInstance) {
   // ── POST /conversations — start or get a conversation ─────────────────
-  app.post("/conversations", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+app.post(
+  "/conversations",
+  {
+    schema: {
+      tags: ["Messaging"],
+      body: {
+        type: "object",
+        required: ["listingId"],
+        properties: {
+          listingId: {
+            type: "string"
+          },
+          bookingId: {
+            type: "string"
+          }
+        }
+      }
+    },
+    preHandler: [requireProvider]
+  },
+  async (req: FastifyRequest, reply: FastifyReply) => {
     const user = req as ProviderRequest;
     const body = req.body as { listingId: string; bookingId?: string };
 
@@ -167,7 +187,44 @@ export async function messagingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /conversations/:id/messages — send a message ─────────────────
-  app.post("/conversations/:id/messages", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+app.post(
+  "/conversations/:id/messages",
+  {
+    schema: {
+      tags: ["Messaging"],
+      body: {
+        type: "object",
+        required: ["body"],
+        properties: {
+          body: {
+            type: "string"
+          
+          }
+        }
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                id: { type: "string" },
+                senderId: { type: "string" },
+                senderType: { type: "string" },
+                body: { type: "string" },
+                isFiltered: { type: "boolean" },
+                createdAt: { type: "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    preHandler: [requireProvider]
+  },
+  async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const userId = (req as ProviderRequest).providerId;
     const body = req.body as { body: string };
@@ -175,19 +232,29 @@ export async function messagingRoutes(app: FastifyInstance) {
     if (!body.body || !body.body.trim()) {
       return sendError(reply, 400, "VALIDATION_ERROR", "Message body cannot be empty.");
     }
+
     if (body.body.length > 2000) {
       return sendError(reply, 400, "VALIDATION_ERROR", "Message cannot exceed 2000 characters.");
     }
 
-    const convo = await prisma.conversation.findUnique({ where: { id } });
-    if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
-    if (convo.status === "closed") return sendError(reply, 400, "CONVERSATION_CLOSED", "This conversation is closed.");
+    const convo = await prisma.conversation.findUnique({
+      where: { id }
+    });
+
+    if (!convo) {
+      return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
+    }
+
+    if (convo.status === "closed") {
+      return sendError(reply, 400, "CONVERSATION_CLOSED", "This conversation is closed.");
+    }
 
     if (convo.guestId !== userId && convo.providerId !== userId) {
       return sendError(reply, 403, "FORBIDDEN", "You are not part of this conversation.");
     }
 
     const senderType = convo.guestId === userId ? "guest" : "provider";
+
     const { filtered, text } = filterMessage(body.body.trim());
 
     const message = await prisma.message.create({
@@ -196,13 +263,15 @@ export async function messagingRoutes(app: FastifyInstance) {
         senderId: userId,
         senderType,
         body: filtered ? text : body.body.trim(),
-        isFiltered: filtered,
-      },
+        isFiltered: filtered
+      }
     });
 
     await prisma.conversation.update({
       where: { id },
-      data: { updatedAt: new Date() },
+      data: {
+        updatedAt: new Date()
+      }
     });
 
     return sendSuccess(reply, 201, {
@@ -211,9 +280,10 @@ export async function messagingRoutes(app: FastifyInstance) {
       senderType: message.senderType,
       body: message.body,
       isFiltered: message.isFiltered,
-      createdAt: message.createdAt.toISOString(),
+      createdAt: message.createdAt.toISOString()
     });
-  });
+  }
+);
 
   // ── GET /conversations/unread-count — unread message count ────────────
   app.get("/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
