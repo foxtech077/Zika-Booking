@@ -6,47 +6,7 @@ const DEFAULT_RATE = 0.05;
 
 export async function commissionRoutes(app: FastifyInstance) {
   // ── GET /admin/commission-rates — list all country-specific rates ─────
-<<<<<<< HEAD
   app.get("/admin/commission-rates", { schema: { tags: ["Admin Commission"] } }, async (_req: FastifyRequest, reply: FastifyReply) => {
-=======
-  app.get("/admin/commission-rates", {
-    schema: {
-      tags: ["Admin Commission"],
-      response: {
-        200: {
-          type: "object",
-          properties: {
-            success: { type: "boolean" },
-            data: {
-              type: "object",
-              properties: {
-                defaultRate: { type: "number" },
-                rates: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      id: { type: "string" },
-                      country: { type: "string" },
-                      rate: { type: "number" },
-                      setBy: { type: "string" },
-                      createdAt: { type: "string" },
-                      updatedAt: { type: "string" }
-                    },
-                    required: ["id", "country", "rate", "setBy", "createdAt", "updatedAt"]
-                  }
-                }
-              },
-              required: ["defaultRate", "rates"]
-            }
-          },
-          required: ["success", "data"]
-        }
-      }
-    },
-    preHandler: [requireAdmin]
-  }, async (_req: FastifyRequest, reply: FastifyReply) => {
->>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     const rates = await prisma.commissionRate.findMany({
       orderBy: { country: "asc" },
     });
@@ -65,60 +25,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/commission-rates — upsert a country rate ─────────────
-<<<<<<< HEAD
   app.post("/admin/commission-rates", { schema: { tags: ["Admin Commission"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-=======
-  app.post("/admin/commission-rates", {
-    schema: {
-      tags: ["Admin Commission"],
-      body: {
-        type: "object",
-        required: ["country", "rate"],
-        properties: {
-          country: { type: "string", minLength: 2, maxLength: 2 },
-          rate: { type: "number", minimum: 0, maximum: 0.30 }
-        }
-      },
-      response: {
-        200: {
-          type: "object",
-          properties: {
-            success: { type: "boolean" },
-            data: {
-              type: "object",
-              properties: {
-                id: { type: "string" },
-                country: { type: "string" },
-                rate: { type: "number" },
-                setBy: { type: "string" },
-                createdAt: { type: "string" },
-                updatedAt: { type: "string" }
-              },
-              required: ["id", "country", "rate", "setBy", "createdAt", "updatedAt"]
-            }
-          },
-          required: ["success", "data"]
-        },
-        400: {
-          type: "object",
-          properties: {
-            success: { type: "boolean" },
-            error: {
-              type: "object",
-              properties: {
-                code: { type: "string" },
-                message: { type: "string" }
-              },
-              required: ["code", "message"]
-            }
-          },
-          required: ["success", "error"]
-        }
-      }
-    },
-    preHandler: [requireAdmin]
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
->>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     const body = req.body as { country: string; rate: number };
 
     if (!body.country || typeof body.country !== "string" || body.country.length !== 2) {
@@ -147,54 +54,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   });
 
   // ── DELETE /admin/commission-rates/:country — remove country rate ─────
-<<<<<<< HEAD
   app.delete("/admin/commission-rates/:country", { schema: { tags: ["Admin Commission"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-=======
-  app.delete("/admin/commission-rates/:country", {
-    schema: {
-      tags: ["Admin Commission"],
-      params: {
-        type: "object",
-        required: ["country"],
-        properties: {
-          country: { type: "string", minLength: 2, maxLength: 2 }
-        }
-      },
-      response: {
-        200: {
-          type: "object",
-          properties: {
-            success: { type: "boolean" },
-            data: {
-              type: "object",
-              properties: {
-                message: { type: "string" }
-              },
-              required: ["message"]
-            }
-          },
-          required: ["success", "data"]
-        },
-        404: {
-          type: "object",
-          properties: {
-            success: { type: "boolean" },
-            error: {
-              type: "object",
-              properties: {
-                code: { type: "string" },
-                message: { type: "string" }
-              },
-              required: ["code", "message"]
-            }
-          },
-          required: ["success", "error"]
-        }
-      }
-    },
-    preHandler: [requireAdmin]
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
->>>>>>> fcb38d33ef126f802619ec41f030654c65b4f260
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
 
@@ -207,36 +67,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   });
 
   // ── GET /commission-rates/effective/:country — effective rate ─────────
-  app.get("/commission-rates/effective/:country", {
-    schema: {
-      tags: ["Commission"],
-      params: {
-        type: "object",
-        required: ["country"],
-        properties: {
-          country: { type: "string", minLength: 2, maxLength: 2 }
-        }
-      },
-      response: {
-        200: {
-          type: "object",
-          properties: {
-            success: { type: "boolean" },
-            data: {
-              type: "object",
-              properties: {
-                country: { type: "string" },
-                effectiveRate: { type: "number" },
-                isCountrySpecific: { type: "boolean" }
-              },
-              required: ["country", "effectiveRate", "isCountrySpecific"]
-            }
-          },
-          required: ["success", "data"]
-        }
-      }
-    }
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/commission-rates/effective/:country", { schema: { tags: ["Commission"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
 
