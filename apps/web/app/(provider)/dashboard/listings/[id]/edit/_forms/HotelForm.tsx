@@ -177,7 +177,16 @@ const STEPS: FormStep[] = [
   { id: "media",    label: "Media & Documents",   sublabel: "Photos & verification documents" },
 ];
 
-const apiErr = (e: any) => e?.response?.data?.error?.message ?? e?.message ?? "An error occurred.";
+const apiErr = (e: any) => {
+  const err = e?.response?.data?.error;
+  if (err?.details && typeof err.details === "object") {
+    const details = Object.entries(err.details)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(", ");
+    return `${err.message || "Validation Error"}: ${details}`;
+  }
+  return err?.message ?? e?.message ?? "An error occurred.";
+};
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -324,6 +333,7 @@ export function HotelForm({ listingId, listing }: Props) {
       <FormShell
         steps={STEPS}
         activeStep={step}
+        status={status}
         onStepClick={(id) => { setTried(false); setStep(id as Step); }}
         isComplete={isComplete}
         isLocked={isLocked}

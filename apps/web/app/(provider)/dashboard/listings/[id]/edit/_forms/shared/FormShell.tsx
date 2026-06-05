@@ -13,6 +13,7 @@ export interface FormStep {
 interface FormShellProps {
   steps: FormStep[];
   activeStep: string;
+  status?: string;
   onStepClick: (id: string) => void;
   isComplete: (id: string) => boolean;
   isLocked: (id: string) => boolean;
@@ -20,9 +21,12 @@ interface FormShellProps {
 }
 
 export function FormShell({
-  steps, activeStep, onStepClick, isComplete, isLocked, children,
+  steps, activeStep, status, onStepClick, isComplete, isLocked, children,
 }: FormShellProps) {
-  const done = steps.filter((s) => isComplete(s.id)).length;
+  const isSubmitted = status && !["draft", "rejected"].includes(status);
+  const currentIndex = steps.findIndex((s) => s.id === activeStep);
+  
+  const done = isSubmitted ? steps.length : (currentIndex >= 0 ? currentIndex : 0);
   const pct  = Math.round((done / steps.length) * 100);
 
   return (

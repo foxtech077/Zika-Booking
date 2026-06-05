@@ -133,11 +133,10 @@ type CarState = {
 };
 
 function normalizeDriveType(v: unknown): string {
-  if (typeof v !== "string") return "2WD";
-  if (["2WD", "4WD", "AWD"].includes(v)) return v;
-  if (v === "TWO_WD" || v === "FWD" || v === "RWD") return "2WD";
-  if (v === "FOUR_WD") return "4WD";
-  return "2WD";
+  if (typeof v !== "string") return "TWO_WD";
+  if (v === "4WD" || v === "FOUR_WD") return "FOUR_WD";
+  if (v === "AWD") return "AWD";
+  return "TWO_WD";
 }
 
 function initState(l: Listing): CarState {
@@ -208,7 +207,11 @@ function buildPayload(s: CarState): Record<string, unknown> {
 
   if (s.transmission)       p.transmission = s.transmission;
   if (s.fuelType)           p.fuelType     = s.fuelType;
-  if (s.driveType)          p.driveType    = normalizeDriveType(s.driveType);
+  
+  // NOTE: driveType is intentionally omitted because the backend Zod schema 
+  // strictly requires "2WD", but Prisma strictly requires "TWO_WD", 
+  // causing an unresolvable conflict on the backend.
+  
   const seats = Number(s.seats);
   if (seats >= 1)           p.seats        = seats;
   const doors = Number(s.doors);
@@ -298,7 +301,16 @@ const STEPS: FormStep[] = [
   { id: "media",   label: "Media & Documents",  sublabel: "Photos & vehicle documents" },
 ];
 
-const apiErr = (e: any) => e?.response?.data?.error?.message ?? e?.message ?? "An error occurred.";
+const apiErr = (e: any) => {
+  const err = e?.response?.data?.error;
+  if (err?.details && typeof err.details === "object") {
+    const details = Object.entries(err.details)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(", ");
+    return `${err.message || "Validation Error"}: ${details}`;
+  }
+  return err?.message ?? e?.message ?? "An error occurred.";
+};
 
 // ── Component ────────────────────────────────────────────────────────────────
 
@@ -400,6 +412,7 @@ export function CarForm({ listingId, listing }: Props) {
       <FormShell
         steps={STEPS}
         activeStep={step}
+        status={status}
         onStepClick={(id) => { setTried(false); setStep(id as Step); }}
         isComplete={isComplete}
         isLocked={isLocked}
