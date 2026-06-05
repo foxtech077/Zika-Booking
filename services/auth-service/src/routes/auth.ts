@@ -461,11 +461,29 @@ export async function authRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    // ── DEBUG: log raw body and parsed result ─────────────────────────────────
+    console.log("[Login] Content-Type:", req.headers["content-type"]);
+    console.log("[Login] Raw body:", JSON.stringify(req.body));
+
     const parsed = loginSchema.safeParse(req.body);
-    if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid credentials.");
+
+    if (!parsed.success) {
+      console.log("[Login] Zod validation FAILED:", JSON.stringify(parsed.error.flatten()));
+      return sendError(reply, 422, "VALIDATION_ERROR", "Invalid credentials.");
+    }
+
     const { email, password } = parsed.data;
+    console.log("[Login] Normalized email from Zod:", email);
 
     const user = await prisma.user.findUnique({ where: { email } });
+    console.log("[Login] DB user found:", user ? "YES" : "NO");
+    if (user) {
+      console.log("[Login] user.status:", user.status);
+      console.log("[Login] user.emailVerified:", user.emailVerified);
+      console.log("[Login] user.passwordHash is null:", user.passwordHash === null);
+      console.log("[Login] user.oauthProvider:", user.oauthProvider);
+    }
+
     const GENERIC = "Incorrect email or password.";
 
     // Timing-safe: always run bcrypt even if user not found (prevents timing attacks)
@@ -474,16 +492,22 @@ export async function authRoutes(app: FastifyInstance) {
       ? await verifyPassword(password, user.passwordHash)
       : await verifyPassword(password, dummyHash).then(() => false);
 
-    if (!user || !passwordOk) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
+    console.log("[Login] passwordOk:", passwordOk);
 
-  if (user.status === "pending_verification") {
-  return sendError(
-    reply,
-    403,
-    "EMAIL_NOT_VERIFIED",
-    "Please verify your email address to sign in."
-  );
-}
+    if (!user || !passwordOk) {
+      console.log("[Login] FAIL → INVALID_CREDENTIALS (user found:", !!user, "passwordOk:", passwordOk, ")");
+      return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
+    }
+
+    if (user.status === "pending_verification") {
+      console.log("[Login] FAIL → EMAIL_NOT_VERIFIED");
+      return sendError(
+        reply,
+        403,
+        "EMAIL_NOT_VERIFIED",
+        "Please verify your email address to sign in."
+      );
+    }
     if (user.status === "suspended") {
       return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended. Please contact support for assistance.");
     }
@@ -491,6 +515,7 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from ZikaBooking.");
     }
 
+    console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
     const tokens = await issueTokens(reply, user.id, user.userType, user.status);
     return sendSuccess(reply, 200, { user: publicUser(user), tokens });
   });
