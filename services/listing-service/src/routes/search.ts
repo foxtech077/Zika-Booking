@@ -625,8 +625,9 @@ export async function searchRoutes(app: FastifyInstance) {
         const toDelete = all.slice(20).map((r) => r.listingId);
         await prisma.userRecentlyViewed.deleteMany({ where: { userId, listingId: { in: toDelete } } });
       }
-
-      reply.status(204).send();
+return sendSuccess(reply, 200, {
+  message: "Recently viewed updated"
+});
     },
   );
 
@@ -714,7 +715,10 @@ export async function searchRoutes(app: FastifyInstance) {
         });
       }
 
-      reply.status(204).send();
+      return sendSuccess(reply, 200, {
+  message: "Recently viewed imported successfully",
+  importedCount: items.slice(0, 20).length
+});
     },
   );
 }

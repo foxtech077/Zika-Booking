@@ -1,11 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, requireAdmin } from "../middleware/auth.js";
+import { requireProvider, requireAdmin, type ProviderRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
-import { randomUUID } from "crypto";
-
-// ── Reusable error schema fragment ────────────────────────────────────────────
 
 const errSchema = {
   type: "object",
@@ -19,8 +16,6 @@ const errSchema = {
   },
   required: ["success", "error"],
 };
-
-// ── Reusable voucher item schema ──────────────────────────────────────────────
 
 const voucherItemSchema = {
   type: "object",
@@ -38,14 +33,8 @@ const voucherItemSchema = {
     isActive:      { type: "boolean" },
     createdAt:     { type: "string" },
   },
-  required: [
-    "id", "code", "discountType", "discountValue",
-    "minOrderValue", "maxDiscount", "usageLimit",
-    "usageCount", "validFrom", "validUntil", "isActive", "createdAt",
-  ],
+  required: ["id", "code", "discountType", "discountValue", "usageCount", "validFrom", "validUntil", "isActive", "createdAt"],
 };
-
-// ── Route plugin ──────────────────────────────────────────────────────────────
 
 export async function voucherRoutes(app: FastifyInstance) {
   const redis = getRedis();
@@ -377,258 +366,6 @@ export async function voucherRoutes(app: FastifyInstance) {
     },
   );
 
-  // ── GET /admin/vouchers — list all vouchers ───────────────────────────────
-  app.get(
-    "/admin/vouchers",
-    {
-      schema: {
-        tags: ["Admin Vouchers"],
-        summary: "List all vouchers with redemption counts (admin)",
-        security: [{ bearerAuth: [] }],
-        querystring: {
-          type: "object",
-          properties: {
-            isActive: { type: "string", enum: ["true", "false"] },
-          },
-        },
-        response: {
-          200: {
-            type: "object",
-            properties: {
-              success: { type: "boolean" },
-              data: {
-                type: "object",
-                properties: {
-                  vouchers: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        ...voucherItemSchema.properties,
-                        redemptionCount: { type: "integer" },
-                        createdBy:       { type: "string" },
-                      },
-                      required: [
-                        ...voucherItemSchema.required,
-                        "redemptionCount", "createdBy",
-                      ],
-                    },
-                  },
-                },
-                required: ["vouchers"],
-              },
-            },
-            required: ["success", "data"],
-          },
-        },
-      },
-      preHandler: [requireAdmin],
-    },
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      const q = req.query as { isActive?: string };
-      const where: any = {};
-      if (q.isActive === "true")  where.isActive = true;
-      else if (q.isActive === "false") where.isActive = false;
-
-      const vouchers = await prisma.voucher.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        include: { _count: { select: { redemptions: true } } },
-      });
-
-      return sendSuccess(reply, 200, {
-        vouchers: vouchers.map((v) => ({
-          id:              v.id,
-          code:            v.code,
-          discountType:    v.discountType,
-          discountValue:   Number(v.discountValue),
-          minOrderValue:   v.minOrderValue ? Number(v.minOrderValue) : null,
-          maxDiscount:     v.maxDiscount ? Number(v.maxDiscount) : null,
-          usageLimit:      v.usageLimit,
-          usageCount:      v.usageCount,
-          redemptionCount: v._count.redemptions,
-          validFrom:       v.validFrom.toISOString(),
-          validUntil:      v.validUntil.toISOString(),
-          isActive:        v.isActive,
-          createdBy:       v.createdBy,
-          createdAt:       v.createdAt.toISOString(),
-        })),
-      });
-    },
-  );
-
-  // ── PATCH /admin/vouchers/:id — activate / deactivate ────────────────────
-  app.patch(
-    "/admin/vouchers/:id",
-    {
-      schema: {
-        tags: ["Admin Vouchers"],
-        summary: "Activate or deactivate a voucher (admin)",
-        security: [{ bearerAuth: [] }],
-        params: {
-          type: "object",
-          properties: { id: { type: "string" } },
-          required: ["id"],
-        },
-        body: {
-          type: "object",
-          required: ["isActive"],
-          properties: { isActive: { type: "boolean" } },
-        },
-        response: {
-          200: {
-            type: "object",
-            properties: {
-              success: { type: "boolean" },
-              data: {
-                type: "object",
-                properties: {
-                  id:       { type: "string" },
-                  code:     { type: "string" },
-                  isActive: { type: "boolean" },
-                },
-                required: ["id", "code", "isActive"],
-              },
-            },
-          },
-          404: errSchema,
-        },
-      },
-      preHandler: [requireAdmin],
-    },
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      const { id } = req.params as { id: string };
-      const { isActive } = req.body as { isActive: boolean };
-
-      const existing = await prisma.voucher.findUnique({ where: { id } });
-      if (!existing) return sendError(reply, 404, "NOT_FOUND", "Voucher not found.");
-
-      const updated = await prisma.voucher.update({ where: { id }, data: { isActive } });
-
-      return sendSuccess(reply, 200, {
-        id:       updated.id,
-        code:     updated.code,
-        isActive: updated.isActive,
-      });
-    },
-  );
-
-  // ── POST /admin/promotions — create a promotion campaign ─────────────────
-  // Promotions are Redis-backed (no Promotion table in the DB schema).
-  // Active promotions are indexed by category key: promo:active:{category}
-  app.post(
-    "/admin/promotions",
-    {
-      schema: {
-        tags: ["Admin Promotions"],
-        summary: "Create a promotion campaign (admin, Redis-backed)",
-        security: [{ bearerAuth: [] }],
-        body: {
-          type: "object",
-          required: ["title", "category", "discountType", "discountValue", "validFrom", "validUntil"],
-          properties: {
-            title:         { type: "string", maxLength: 120 },
-            description:   { type: "string", maxLength: 500 },
-            category:      { type: "string", enum: ["hotel", "apartment", "car", "all"] },
-            discountType:  { type: "string", enum: ["percentage", "fixed"] },
-            discountValue: { type: "number", minimum: 0.01 },
-            maxDiscount:   { type: "number", minimum: 0, nullable: true },
-            validFrom:     { type: "string" },
-            validUntil:    { type: "string" },
-            isActive:      { type: "boolean", default: true },
-          },
-        },
-        response: {
-          201: {
-            type: "object",
-            properties: {
-              success: { type: "boolean" },
-              data: {
-                type: "object",
-                properties: {
-                  id:            { type: "string" },
-                  title:         { type: "string" },
-                  description:   { type: "string", nullable: true },
-                  category:      { type: "string" },
-                  discountType:  { type: "string" },
-                  discountValue: { type: "number" },
-                  maxDiscount:   { type: "number", nullable: true },
-                  validFrom:     { type: "string" },
-                  validUntil:    { type: "string" },
-                  isActive:      { type: "boolean" },
-                  createdAt:     { type: "string" },
-                },
-                required: [
-                  "id", "title", "category", "discountType", "discountValue",
-                  "validFrom", "validUntil", "isActive", "createdAt",
-                ],
-              },
-            },
-            required: ["success", "data"],
-          },
-          400: errSchema,
-        },
-      },
-      preHandler: [requireAdmin],
-    },
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      const body = req.body as {
-        title: string;
-        description?: string;
-        category: string;
-        discountType: "percentage" | "fixed";
-        discountValue: number;
-        maxDiscount?: number;
-        validFrom: string;
-        validUntil: string;
-        isActive?: boolean;
-      };
-
-      if (body.discountType === "percentage" && body.discountValue > 100)
-        return sendError(reply, 400, "VALIDATION_ERROR", "Percentage discount cannot exceed 100.");
-
-      const validFrom  = new Date(body.validFrom);
-      const validUntil = new Date(body.validUntil);
-      if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime()))
-        return sendError(reply, 400, "VALIDATION_ERROR", "validFrom and validUntil must be valid ISO dates.");
-      if (validUntil <= validFrom)
-        return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be after validFrom.");
-
-      const id       = randomUUID();
-      const isActive = body.isActive !== false;
-      const createdAt = new Date().toISOString();
-
-      const promo = {
-        id,
-        title:         body.title,
-        description:   body.description ?? null,
-        category:      body.category,
-        discountType:  body.discountType,
-        discountValue: body.discountValue,
-        maxDiscount:   body.maxDiscount ?? null,
-        validFrom:     validFrom.toISOString(),
-        validUntil:    validUntil.toISOString(),
-        isActive,
-        createdAt,
-      };
-
-      // Persist in Redis
-      await redis.set(`promo:${id}`, JSON.stringify(promo));
-      await redis.sadd("promos:all", id);
-
-      // Mark as active for each affected category
-      if (isActive) {
-        const cats = body.category === "all"
-          ? ["hotel", "apartment", "car"]
-          : [body.category];
-        for (const cat of cats) {
-          await redis.set(`promo:active:${cat}`, id);
-        }
-      }
-
-      return sendSuccess(reply, 201, promo);
-    },
-  );
 
   // ── GET /admin/promotions — list all promotion campaigns ─────────────────
   app.get(
@@ -734,34 +471,53 @@ export async function voucherRoutes(app: FastifyInstance) {
       const q = req.query as { category?: string };
       const now = new Date();
 
-      const categoriesToCheck = q.category
-        ? [q.category]
-        : ["hotel", "apartment", "car"];
+      const ids = await redis.smembers("promos:all");
+      if (!ids.length) return sendSuccess(reply, 200, { promotions: [] });
 
-      const promotions: any[] = [];
-      const seen = new Set<string>();
+      const pipeline = redis.pipeline();
+      for (const id of ids) pipeline.get(`promo:${id}`);
+      const results = await pipeline.exec();
 
-      for (const cat of categoriesToCheck) {
-        const activeId = await redis.get(`promo:active:${cat}`);
-        if (!activeId || seen.has(activeId)) continue;
+      let promotions: any[] = (results ?? [])
+        .map((r) => {
+          if (!r || r[0] != null || !r[1]) return null;
+          try { return JSON.parse(r[1] as string); } catch { return null; }
+        })
+        .filter(Boolean)
+        .filter((p: any) => p.isActive && new Date(p.validFrom) <= now && new Date(p.validUntil) >= now);
 
-        const raw = await redis.get(`promo:${activeId}`);
-        if (!raw) continue;
-
-        try {
-          const promo = JSON.parse(raw);
-          if (
-            promo.isActive &&
-            new Date(promo.validFrom)  <= now &&
-            new Date(promo.validUntil) >= now
-          ) {
-            promotions.push(promo);
-            seen.add(activeId);
-          }
-        } catch { /* skip malformed entries */ }
+      if (q.category) {
+        promotions = promotions.filter((p: any) => p.category === q.category || p.category === "all");
       }
 
       return sendSuccess(reply, 200, { promotions });
     },
   );
+
+  // ── GET /admin/vouchers — list all vouchers ───────────────────────────
+  app.get("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] }, preHandler: [requireAdmin] }, async (_req: FastifyRequest, reply: FastifyReply) => {
+    const vouchers = await prisma.voucher.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { redemptions: true } } },
+    });
+
+    return sendSuccess(reply, 200, {
+      vouchers: vouchers.map((v) => ({
+        id: v.id,
+        code: v.code,
+        discountType: v.discountType,
+        discountValue: Number(v.discountValue),
+        minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
+        maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
+        usageLimit: v.usageLimit,
+        usageCount: v.usageCount,
+        redemptionCount: v._count.redemptions,
+        validFrom: v.validFrom.toISOString(),
+        validUntil: v.validUntil.toISOString(),
+        isActive: v.isActive,
+        createdBy: v.createdBy,
+        createdAt: v.createdAt.toISOString(),
+      })),
+    });
+  });
 }
