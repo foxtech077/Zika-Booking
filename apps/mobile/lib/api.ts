@@ -1,10 +1,19 @@
 import axios from "axios";
+import Constants from "expo-constants";
 import { useAuthStore } from "../store/auth";
 
 const getBaseUrl = () => {
+  // Always prefer the Expo dev server host so that any phone scanning the QR
+  // code automatically reaches the correct machine — no hardcoded IPs needed.
+  const host = Constants.expoConfig?.hostUri?.split(":")[0];
+  const isIP = host && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+  if (isIP && host !== "localhost" && host !== "127.0.0.1") {
+    return `http://${host}:3001`;
+  }
+  // Fallback to the env var (useful for tunnel mode / production / standalone builds)
   const envUrl = process.env["EXPO_PUBLIC_API_URL"];
   if (envUrl) return envUrl;
-  return "https://api.kainook.com";
+  return "http://localhost:3001";
 };
 
 const BASE_URL = getBaseUrl();
@@ -22,26 +31,11 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-const ACCOUNT_CODES = ["ACCOUNT_BANNED", "ACCOUNT_SUSPENDED", "ACCOUNT_INACTIVE", "INVALID_SESSION", "SESSION_EXPIRED"];
-
-function isAccountRevoked(error: unknown): boolean {
-  const res = (error as any)?.response;
-  if (!res) return false;
-  const code: string = res.data?.error?.code ?? "";
-  return res.status === 403 && ACCOUNT_CODES.includes(code);
-}
-
-// On 401, try to refresh then retry once.
-// On 403 with account-revocation codes, clear auth immediately.
+// On 401, try to refresh, then retry once
 let refreshing: Promise<void> | null = null;
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
-    if (isAccountRevoked(error)) {
-      await useAuthStore.getState().clearAuth();
-      return Promise.reject(error);
-    }
-
     const original = error.config as (typeof error.config) & { _retry?: boolean };
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;

@@ -7,7 +7,7 @@
  * For listing-schema models we use raw SQL via $queryRawUnsafe so we don't need a
  * separate generated client.
  */
-import { PrismaClient as AuthPrisma } from "../src/generated/index.js";
+import { PrismaClient as AuthPrisma } from "../node_modules/.prisma/client/index.js";
 
 const authPrisma = new AuthPrisma();
 

@@ -2,12 +2,11 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
-import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
+import { createPresignedDownloadUrl } from "../lib/s3.js";
 import {
   sendListingApprovedEmail,
   sendListingRejectedEmail,
   sendListingSuspendedEmail,
-  sendListingReinstatedEmail,
   sendStarRatingUpdatedEmail,
 } from "../lib/email.js";
 
@@ -19,58 +18,6 @@ const REJECTION_REASONS = new Set([
   "Business name on documents does not match listing name",
   "Other",
 ]);
-
-/**
- * Required hotel document groups (§3.1 accreditation requirements).
- * At least one document from each group must be present (not replaced)
- * before an admin can approve a hotel listing.
- */
-const HOTEL_REQUIRED_DOC_GROUPS: Array<{ label: string; types: string[] }> = [
-  { label: "business licence",              types: ["business_licence"] },
-  { label: "hotel operating permit",        types: ["operating_permit", "hotel_operating_permit"] },
-  { label: "tourism authority certificate", types: ["tourism_certificate", "tourism_authority_certificate"] },
-];
-
-// ── Shared schema building-blocks ─────────────────────────────────────────────
-
-const ErrorResponse = {
-  type: "object",
-  properties: {
-    success: { type: "boolean" },
-    error: {
-      type: "object",
-      required: ["code", "message"],
-      properties: {
-        code:    { type: "string" },
-        message: { type: "string" },
-      },
-    },
-  },
-  required: ["success", "error"],
-} as const;
-
-const ok = (dataSchema: object) => ({
-  type: "object",
-  required: ["success", "data"],
-  properties: {
-    success: { type: "boolean" },
-    data:    dataSchema,
-  },
-});
-
-const PhotoSchema = {
-  type: "object",
-  properties: {
-    id:       { type: "string" },
-    cdnUrl:   { type: "string" },
-    position: { type: "integer" },
-  },
-} as const;
-
-const PageQuery = {
-  page:  { type: "string", default: "1",  description: "1-based page number" },
-  limit: { type: "string", default: "20", description: "Items per page (max 100)" },
-} as const;
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -90,11 +37,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
           starRating: { type: "string", description: "Filter by claimed star rating (1–5)" },
           slaStatus:  { type: "string", enum: ["breached", "approaching", "ok"], description: "SLA breach status" },
           sortBy:     { type: "string", enum: ["sla_deadline", "submitted_at"], default: "sla_deadline" },
-          ...PageQuery,
+          
         },
       },
       response: {
-        200: ok({
+        200:({
           type: "object",
           properties: {
             tasks: {
@@ -118,7 +65,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
                       submittedAt:       { type: "string", format: "date-time", nullable: true },
                       providerId:        { type: "string" },
                       category:          { type: "string" },
-                      photos:            { type: "array", items: PhotoSchema },
+                      photos:            { type: "array" },
                     },
                   },
                 },
@@ -129,8 +76,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             limit: { type: "integer" },
           },
         }),
-        401: ErrorResponse,
-        403: ErrorResponse,
+      
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -142,23 +88,22 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     const now = new Date();
     const slaFilter =
-      slaStatus === "breached"    ? { slaDeadline: { lt: now } } :
+      slaStatus === "breached" ? { slaDeadline: { lt: now } } :
       slaStatus === "approaching" ? { slaDeadline: { gte: now, lt: new Date(now.getTime() + 4 * 60 * 60 * 1000) } } :
-      slaStatus === "ok"          ? { slaDeadline: { gte: new Date(now.getTime() + 4 * 60 * 60 * 1000) } } :
+      slaStatus === "ok" ? { slaDeadline: { gte: new Date(now.getTime() + 4 * 60 * 60 * 1000) } } :
       {};
 
     const isCountryManager = admin.adminRole === "country_manager";
-    const countryScope = isCountryManager && admin.adminCountry ? admin.adminCountry : null;
 
     const tasks = await prisma.listingReviewTask.findMany({
       where: {
-        status: { in: ["open", "escalated"] },
+        status: "open",
         ...slaFilter,
         listing: {
           status: "pending_review",
-          ...(countryScope ? { country: countryScope } : {}),
-          ...(country      ? { country }               : {}),
-          ...(starRating   ? { claimedStarRating: parseInt(starRating, 10) } : {}),
+          ...(isCountryManager ? { country: admin.adminRole } : {}),
+          ...(country ? { country } : {}),
+          ...(starRating ? { claimedStarRating: parseInt(starRating, 10) } : {}),
         },
       },
       include: {
@@ -176,7 +121,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
             photos: {
               where: { deletedAt: null },
               orderBy: { position: "asc" },
-              select: { id: true, s3Key: true, cdnUrl: true, position: true },
+              select: {
+                id: true,
+                cdnUrl: true,
+                position: true,
+              },
             },
           },
         },
@@ -187,19 +136,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
     });
 
     const total = await prisma.listingReviewTask.count({
-      where: {
-        status: { in: ["open", "escalated"] },
-        listing: { status: "pending_review" },
-      },
+      where: { status: "open", listing: { status: "pending_review" } },
     });
 
-    const signedTasks = await Promise.all(
-      tasks.map(async (t) => ({
-        ...t,
-        listing: { ...t.listing, photos: await withSignedPhotos(t.listing.photos) },
-      })),
-    );
-    return sendSuccess(reply, 200, { tasks: signedTasks, total, page: parseInt(page, 10), limit: take });
+    return sendSuccess(reply, 200, { tasks, total, page: parseInt(page, 10), limit: take });
   });
 
   // ── GET /admin/listings/:id/review (UC-2.9) ───────────────────────────────
@@ -217,7 +157,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({
+        200:({
           type: "object",
           description: "Full listing object with grouped amenities and document checklist",
           properties: {
@@ -230,7 +170,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             claimedStarRating: { type: "integer", nullable: true },
             starRating:        { type: "integer", nullable: true },
             submissionCount:   { type: "integer" },
-            photos:            { type: "array", items: PhotoSchema },
+            photos:            { type: "array", },
             documents: {
               type: "array",
               items: {
@@ -269,9 +209,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             reviewTasks: { type: "array", items: { type: "object" } },
           },
         }),
-        404: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+       
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -280,11 +218,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const listing = await prisma.listing.findUnique({
       where: { id },
       include: {
-        photos:          { where: { deletedAt: null }, orderBy: { position: "asc" } },
-        documents:       { where: { replacedAt: null } },
-        amenities:       true,
+        photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
+        documents: { where: { replacedAt: null } },
+        amenities: true,
         customAmenities: true,
-        reviewTasks:     { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
+        reviewTasks: { where: { status: "open" }, take: 1, orderBy: { createdAt: "desc" } },
       },
     });
 
@@ -300,33 +238,38 @@ export async function adminListingRoutes(app: FastifyInstance) {
       airport_shuttle: "Services", tv: "Services", workspace: "Services", washing_machine: "Services", garden: "Services",
     };
 
+    // Group amenities!
     const groupedAmenities: Record<string, string[]> = {
-      Connectivity: [], "Food & Drink": [], Wellness: [], Comfort: [], Services: [],
+      Connectivity: [],
+      "Food & Drink": [],
+      Wellness: [],
+      Comfort: [],
+      Services: [],
     };
     for (const item of listing.amenities) {
       const key = item.amenityKey;
       if (key.includes(":")) {
         const [cat = "Services", val = ""] = key.split(":");
-        (groupedAmenities[cat] ??= []).push(val);
+        if (groupedAmenities[cat]) {
+          groupedAmenities[cat].push(val);
+        } else {
+          groupedAmenities[cat] = [val];
+        }
       } else {
         const cat = legacyAmenityCategoryMap[key] || "Services";
-        (groupedAmenities[cat] ??= []).push(key);
+        if (!groupedAmenities[cat]) {
+          groupedAmenities[cat] = [];
+        }
+        groupedAmenities[cat].push(key);
       }
     }
 
-    const presentDocTypes = listing.documents.map((d) => d.documentType as string);
-    const docChecklist = HOTEL_REQUIRED_DOC_GROUPS.map((group) => ({
-      label:         group.label,
-      satisfied:     group.types.some((t) => presentDocTypes.includes(t)),
-      uploadedTypes: group.types.filter((t) => presentDocTypes.includes(t)),
-    }));
-
-    return sendSuccess(reply, 200, {
+    const formattedListing = {
       ...listing,
-      amenities:    groupedAmenities,
-      photos:       await withSignedPhotos(listing.photos),
-      docChecklist,
-    });
+      amenities: groupedAmenities,
+    };
+
+    return sendSuccess(reply, 200, formattedListing);
   });
 
   // ── GET /admin/listings/:id/documents/:docId ──────────────────────────────
@@ -345,16 +288,14 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({
+        200: ({
           type: "object",
           properties: {
             url:      { type: "string", format: "uri", description: "Presigned S3 URL (valid 15 min)" },
             fileType: { type: "string" },
           },
         }),
-        404: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+        
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -382,11 +323,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({ type: "object", properties: { message: { type: "string" } } }),
-        404: ErrorResponse,
-        409: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+        200: ({ type: "object", properties: { message: { type: "string" } } }),
+      
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -395,9 +333,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId } });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
-    if (!["open", "escalated"].includes(task.status)) {
-      return sendError(reply, 409, "TASK_RESOLVED", "Cannot assign a resolved task.");
-    }
     if (task.assignedTo && task.assignedTo !== admin.adminId) {
       return sendError(reply, 409, "ALREADY_ASSIGNED", "This listing is already assigned to another reviewer.");
     }
@@ -406,186 +341,42 @@ export async function adminListingRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { message: "Assigned to you." });
   });
 
-  // ── PATCH /admin/listings/review-tasks/:taskId/unassign ───────────────────
-  app.patch("/admin/listings/review-tasks/:taskId/unassign", {
-    preHandler: [requireAdmin],
-    schema: {
-      tags:    ["Admin Listings"],
-      summary: "Release a claimed review task",
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: "object",
-        required: ["taskId"],
-        properties: {
-          taskId: { type: "string" },
-        },
-      },
-      response: {
-        200: ok({ type: "object", properties: { message: { type: "string" } } }),
-        404: ErrorResponse,
-        409: ErrorResponse,
-        403: ErrorResponse,
-      },
-    },
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const admin = req as AdminRequest;
-    const { taskId } = req.params as { taskId: string };
-
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId } });
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
-    if (!["open", "escalated"].includes(task.status)) {
-      return sendError(reply, 409, "TASK_RESOLVED", "Cannot unassign a resolved task.");
-    }
-    if (task.assignedTo && task.assignedTo !== admin.adminId && admin.adminRole !== "super_admin") {
-      return sendError(reply, 403, "FORBIDDEN", "Only the assigned reviewer or a super admin can unassign this task.");
-    }
-
-    await prisma.listingReviewTask.update({ where: { id: taskId }, data: { assignedTo: null } });
-    return sendSuccess(reply, 200, { message: "Task unassigned." });
-  });
-
-  // ── PATCH /admin/listings/review-tasks/:taskId/escalate ───────────────────
-  app.patch("/admin/listings/review-tasks/:taskId/escalate", {
-    preHandler: [requireAdmin],
-    schema: {
-      tags:    ["Admin Listings"],
-      summary: "Escalate a review task (breached SLA)",
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: "object",
-        required: ["taskId"],
-        properties: {
-          taskId: { type: "string" },
-        },
-      },
-      body: {
-        type: "object",
-        properties: {
-          reason: { type: "string", description: "Optional escalation note" },
-        },
-      },
-      response: {
-        200: ok({ type: "object", properties: { message: { type: "string" } } }),
-        404: ErrorResponse,
-        409: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
-      },
-    },
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const admin = req as AdminRequest;
-    const { taskId } = req.params as { taskId: string };
-    const { reason } = req.body as { reason?: string };
-
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId } });
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
-    if (!["open", "awaiting_provider_response"].includes(task.status)) {
-      return sendError(reply, 409, "INVALID_STATUS", "Only open or awaiting-provider-response tasks can be escalated.");
-    }
-
-    await prisma.$transaction([
-      prisma.listingReviewTask.update({ where: { id: taskId }, data: { status: "escalated" } }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: task.listingId,
-          action:    "escalated",
-          actorId:   admin.adminId,
-          actorRole: admin.adminRole,
-          metadata:  { taskId, reason: reason ?? null, slaDeadline: task.slaDeadline.toISOString() },
-        },
-      }),
-    ]);
-
-    return sendSuccess(reply, 200, { message: "Review task escalated." });
-  });
-
   // POST /admin/listings/:id/approve — Approve listing (UC-2.9)
-  app.post("/admin/listings/:id/approve", {
-    schema: {
-      tags: ["Admin Listings"],
-      body: {
-        type: "object",
-        required: ["starRating"],
-        properties: {
-          starRating: { type: "integer", minimum: 1, maximum: 5, description: "Verified star rating assigned by admin (1–5)" },
-          adminNote:  { type: "string", description: "Optional internal note for the review log" },
-        },
-      },
-    },
-    preHandler: [requireAdmin],
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/listings/:id/approve", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
-    const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
+    const { starRating, adminNote } = req.body as { starRating: number; adminNote?: string };
 
-    if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "A verified star rating (1–5, integer) is required to approve a hotel listing.");
+    if (!starRating || starRating < 1 || starRating > 5) {
+      return sendError(reply, 422, "VALIDATION_ERROR", "A verified star rating (1–5) is required to approve a hotel listing.");
     }
 
     const listing = await prisma.listing.findUnique({
       where: { id },
-      include: {
-        reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
-        documents:   { where: { replacedAt: null } },
-      },
+      include: { reviewTasks: { where: { status: "open" }, take: 1 } },
     });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
     if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
 
-    const task = listing.reviewTasks[0] ?? null;
+    const task = listing.reviewTasks[0];
 
-    if (task?.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
-        "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
-    }
-
-    const presentDocTypes = listing.documents.map((d) => d.documentType as string);
-    const missingDocs = HOTEL_REQUIRED_DOC_GROUPS
-      .filter((g) => !g.types.some((t) => presentDocTypes.includes(t)))
-      .map((g) => g.label);
-    if (missingDocs.length > 0) {
-      return sendError(reply, 422, "MISSING_DOCUMENTS",
-        `Cannot approve: the following required document(s) are missing: ${missingDocs.join(", ")}.`);
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.listing.updateMany({
-        where: { id, status: "pending_review" },
-        data: { status: "approved", starRating, approvedAt: new Date(), approvedBy: admin.adminId },
-      });
-
-      if (updated.count === 0) return { actioned: false };
-
-      if (task) {
-        await tx.listingReviewTask.update({
-          where: { id: task.id },
-          data:  { status: "resolved", outcome: "approved", adminNote: adminNote ?? null, resolvedAt: new Date() },
-        });
-      }
-
-      await tx.listingModerationLog.create({
+    await prisma.$transaction([
+      prisma.listing.update({
+        where: { id },
         data: {
-          listingId: id,
-          action:    "approved",
-          actorId:   admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: {
-            starRating,
-            claimedStarRating: listing.claimedStarRating,
-            adminNote:         adminNote ?? null,
-            taskId:            task?.id ?? null,
-            submissionNumber:  task?.submissionNumber ?? listing.submissionCount,
-          },
+          status: "approved",
+          starRating,
+          approvedAt: new Date(),
+          approvedBy: admin.adminId,
         },
-      });
-
-      return { actioned: true };
-    });
-
-    if (!result.actioned) {
-      return sendError(reply, 409, "INVALID_STATUS",
-        "Listing is not pending review — it may have already been actioned by another admin.");
-    }
+      }),
+      ...(task ? [
+        prisma.listingReviewTask.update({
+          where: { id: task.id },
+          data: { status: "resolved", outcome: "approved", adminNote, resolvedAt: new Date() },
+        }),
+      ] : []),
+    ]);
 
     sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
     return sendSuccess(reply, 200, { message: "Listing approved and published." });
@@ -636,12 +427,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({ type: "object", properties: { message: { type: "string" } } }),
-        404: ErrorResponse,
-        409: ErrorResponse,
-        422: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+        200: ({ type: "object", properties: { message: { type: "string" } } }),
+     
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -663,62 +450,31 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     const listing = await prisma.listing.findUnique({
       where: { id },
-      include: { reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } } },
+      include: { reviewTasks: { where: { status: "open" }, take: 1 } },
     });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
     if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
 
-    const task = listing.reviewTasks[0] ?? null;
+    const task = listing.reviewTasks[0];
 
-    if (task?.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
-        "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.listing.updateMany({
-        where: { id, status: "pending_review" },
+    await prisma.$transaction([
+      prisma.listing.update({
+        where: { id },
         data: {
-          status:           "rejected",
-          rejectedAt:       new Date(),
-          rejectedBy:       admin.adminId,
+          status: "rejected",
+          rejectedAt: new Date(),
+          rejectedBy: admin.adminId,
           rejectionReasons: reasons,
-          rejectionNote:    providerNote ?? null,
+          rejectionNote: providerNote ?? null,
         },
-      });
-
-      if (updated.count === 0) return { actioned: false };
-
-      if (task) {
-        await tx.listingReviewTask.update({
+      }),
+      ...(task ? [
+        prisma.listingReviewTask.update({
           where: { id: task.id },
-          data:  { status: "resolved", outcome: "rejected", adminNote: adminNote ?? null, resolvedAt: new Date() },
-        });
-      }
-
-      await tx.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action:    "rejected",
-          actorId:   admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: {
-            reasons,
-            providerNote:     providerNote ?? null,
-            adminNote:        adminNote ?? null,
-            taskId:           task?.id ?? null,
-            submissionNumber: task?.submissionNumber ?? listing.submissionCount,
-          },
-        },
-      });
-
-      return { actioned: true };
-    });
-
-    if (!result.actioned) {
-      return sendError(reply, 409, "INVALID_STATUS",
-        "Listing is not pending review — it may have already been actioned by another admin.");
-    }
+          data: { status: "resolved", outcome: "rejected", adminNote, resolvedAt: new Date() },
+        }),
+      ] : []),
+    ]);
 
     sendListingRejectedEmail(listing.providerId, listing.name ?? id, reasons, providerNote ?? null).catch(() => null);
     return sendSuccess(reply, 200, { message: "Listing rejected. Provider has been notified." });
@@ -756,12 +512,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({ type: "object", properties: { message: { type: "string" } } }),
-        404: ErrorResponse,
-        409: ErrorResponse,
-        422: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+        200: ({ type: "object", properties: { message: { type: "string" } } }),
+      
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -769,8 +521,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
     const { starRating, reason } = req.body as { starRating: number; reason: string };
 
-    if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "Star rating must be a whole number between 1 and 5.");
+    if (!starRating || starRating < 1 || starRating > 5) {
+      return sendError(reply, 422, "VALIDATION_ERROR", "Star rating must be between 1 and 5.");
     }
     if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "A reason for the rating change is required.");
 
@@ -779,19 +531,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
     if (listing.status !== "approved") return sendError(reply, 409, "INVALID_STATUS", "Star rating can only be updated on approved listings.");
 
     const oldRating = listing.starRating ?? 0;
-
-    await prisma.$transaction([
-      prisma.listing.update({ where: { id }, data: { starRating } }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action:    "star_rating_updated",
-          actorId:   admin.adminId,
-          actorRole: admin.adminRole,
-          metadata:  { oldRating, newRating: starRating, reason },
-        },
-      }),
-    ]);
+    await prisma.listing.update({ where: { id }, data: { starRating } });
 
     sendStarRatingUpdatedEmail(listing.providerId, listing.name ?? id, oldRating, starRating, reason).catch(() => null);
     return sendSuccess(reply, 200, { message: "Star rating updated." });
@@ -828,12 +568,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({ type: "object", properties: { message: { type: "string" } } }),
-        404: ErrorResponse,
-        409: ErrorResponse,
-        422: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+        200: ({ type: "object", properties: { message: { type: "string" } } }),
+       
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -845,25 +581,20 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     const listing = await prisma.listing.findUnique({ where: { id } });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (!["approved", "active"].includes(listing.status)) {
+    const suspendableStatuses = ["approved", "active"];
+    if (!suspendableStatuses.includes(listing.status)) {
       return sendError(reply, 409, "INVALID_STATUS", "Only live listings can be suspended.");
     }
 
-    await prisma.$transaction([
-      prisma.listing.update({
-        where: { id },
-        data: { status: "suspended", suspendedAt: new Date(), suspendedBy: admin.adminId, suspensionReason: reason },
-      }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action:    "suspended",
-          actorId:   admin.adminId,
-          actorRole: admin.adminRole,
-          metadata:  { reason, previousStatus: listing.status, notifyProvider },
-        },
-      }),
-    ]);
+    await prisma.listing.update({
+      where: { id },
+      data: {
+        status: "suspended",
+        suspendedAt: new Date(),
+        suspendedBy: admin.adminId,
+        suspensionReason: reason,
+      },
+    });
 
     if (notifyProvider) {
       sendListingSuspendedEmail(listing.providerId, listing.name ?? id).catch(() => null);
@@ -872,288 +603,26 @@ export async function adminListingRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { message: "Listing suspended." });
   });
 
-  // ── POST /admin/listings/:id/reinstate (UC-2.14 A1) ───────────────────────
-  app.post("/admin/listings/:id/reinstate", {
-    preHandler: [requireAdmin],
-    schema: {
-      tags:    ["Admin Listings"],
-      summary: "Reinstate a suspended listing",
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "Listing ID" },
-        },
-      },
-      body: {
-        type: "object",
-        properties: {
-          reason: {
-            type: "string",
-            description: "Optional note explaining the reinstatement",
-          },
-        },
-      },
-      response: {
-        200: ok({ type: "object", properties: { message: { type: "string" } } }),
-        404: ErrorResponse,
-        409: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
-      },
-    },
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const admin = req as AdminRequest;
+  // POST /admin/listings/:id/reinstate — Reinstate suspended listing (UC-2.14 A1)
+  app.post("/admin/listings/:id/reinstate", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
-    const { reason } = req.body as { reason?: string };
 
     const listing = await prisma.listing.findUnique({ where: { id } });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
     if (listing.status !== "suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
 
-    const restoreStatus = (listing.category === "apartment" || listing.category === "car") ? "active" : "approved";
+    // Restore to category-appropriate live status
+    const restoreStatus = listing.category === "apartment" ? "active" : "approved";
+    await prisma.listing.update({
+      where: { id },
+      data: { status: restoreStatus, suspendedAt: null, suspendedBy: null, suspensionReason: null },
+    });
 
-    await prisma.$transaction([
-      prisma.listing.update({ where: { id }, data: { status: restoreStatus } }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action:    "reinstated",
-          actorId:   admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: {
-            restoredStatus:   restoreStatus,
-            reason:           reason ?? null,
-            suspendedAt:      listing.suspendedAt?.toISOString() ?? null,
-            suspendedBy:      listing.suspendedBy ?? null,
-            suspensionReason: listing.suspensionReason ?? null,
-          },
-        },
-      }),
-    ]);
-
-    sendListingReinstatedEmail(listing.providerId, listing.name ?? id).catch(() => null);
     return sendSuccess(reply, 200, { message: "Listing reinstated and live again." });
   });
 
-  // ── GET /admin/listings/:id/review-tasks ──────────────────────────────────
-  app.get("/admin/listings/:id/review-tasks", {
-    preHandler: [requireAdmin],
-    schema: {
-      tags:    ["Admin Listings"],
-      summary: "Full review-task submission history for a listing",
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "Listing ID" },
-        },
-      },
-      response: {
-        200: ok({
-          type: "object",
-          properties: {
-            listing: {
-              type: "object",
-              properties: {
-                id:              { type: "string" },
-                name:            { type: "string", nullable: true },
-                status:          { type: "string" },
-                category:        { type: "string" },
-                submissionCount: { type: "integer" },
-              },
-            },
-            tasks: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  id:               { type: "string" },
-                  submissionNumber: { type: "integer" },
-                  assignedTo:       { type: "string", nullable: true },
-                  status:           { type: "string" },
-                  outcome:          { type: "string", nullable: true },
-                  adminNote:        { type: "string", nullable: true },
-                  slaDeadline:      { type: "string", format: "date-time" },
-                  createdAt:        { type: "string", format: "date-time" },
-                  resolvedAt:       { type: "string", format: "date-time", nullable: true },
-                },
-              },
-            },
-            total: { type: "integer" },
-          },
-        }),
-        404: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
-      },
-    },
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
-
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      select: { id: true, name: true, status: true, category: true, submissionCount: true },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    const tasks = await prisma.listingReviewTask.findMany({
-      where:   { listingId: id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id:               true,
-        submissionNumber: true,
-        assignedTo:       true,
-        status:           true,
-        outcome:          true,
-        adminNote:        true,
-        slaDeadline:      true,
-        createdAt:        true,
-        resolvedAt:       true,
-      },
-    });
-
-    return sendSuccess(reply, 200, { listing, tasks, total: tasks.length });
-  });
-
-  // ── GET /admin/listings/:id/moderation-history ────────────────────────────
-  app.get("/admin/listings/:id/moderation-history", {
-    preHandler: [requireAdmin],
-    schema: {
-      tags:    ["Admin Listings"],
-      summary: "Full moderation audit trail for a listing",
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "Listing ID" },
-        },
-      },
-      response: {
-        200: ok({
-          type: "object",
-          properties: {
-            listing: {
-              type: "object",
-              properties: {
-                id:                { type: "string" },
-                name:              { type: "string", nullable: true },
-                status:            { type: "string" },
-                category:          { type: "string" },
-                starRating:        { type: "integer", nullable: true },
-                claimedStarRating: { type: "integer", nullable: true },
-                submissionCount:   { type: "integer" },
-                approvedAt:        { type: "string", format: "date-time", nullable: true },
-                approvedBy:        { type: "string", nullable: true },
-                rejectedAt:        { type: "string", format: "date-time", nullable: true },
-                rejectedBy:        { type: "string", nullable: true },
-                rejectionReasons:  { type: "array", items: { type: "string" }, nullable: true },
-                rejectionNote:     { type: "string", nullable: true },
-                suspendedAt:       { type: "string", format: "date-time", nullable: true },
-                suspendedBy:       { type: "string", nullable: true },
-                suspensionReason:  { type: "string", nullable: true },
-              },
-            },
-            history: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  id:        { type: "string" },
-                  action:    { type: "string" },
-                  actorId:   { type: "string" },
-                  actorRole: { type: "string" },
-                  metadata:  { type: "object" },
-                  createdAt: { type: "string", format: "date-time" },
-                },
-              },
-            },
-            total: { type: "integer" },
-          },
-        }),
-        404: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
-      },
-    },
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
-
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      select: {
-        id: true, name: true, status: true, category: true,
-        starRating: true, claimedStarRating: true, submissionCount: true,
-        approvedAt: true, approvedBy: true,
-        rejectedAt: true, rejectedBy: true, rejectionReasons: true, rejectionNote: true,
-        suspendedAt: true, suspendedBy: true, suspensionReason: true,
-      },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    const history = await prisma.listingModerationLog.findMany({
-      where:   { listingId: id },
-      orderBy: { createdAt: "desc" },
-    });
-
-    return sendSuccess(reply, 200, { listing, history, total: history.length });
-  });
-
-  // ── GET /admin/listings ───────────────────────────────────────────────────
-  app.get("/admin/listings", {
-    preHandler: [requireAdmin],
-    schema: {
-      tags:    ["Admin Listings"],
-      summary: "Search all listings (admin)",
-      security: [{ bearerAuth: [] }],
-      querystring: {
-        type: "object",
-        properties: {
-          q:        { type: "string", default: "", description: "Search by name or town" },
-          status:   { type: "string", description: "Filter by listing status" },
-          category: { type: "string", description: "Filter by category (hotel, apartment, car)" },
-          country:  { type: "string", description: "Filter by country code" },
-          ...PageQuery,
-        },
-      },
-      response: {
-        200: ok({
-          type: "object",
-          properties: {
-            listings: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  id:              { type: "string" },
-                  name:            { type: "string", nullable: true },
-                  category:        { type: "string" },
-                  status:          { type: "string" },
-                  starRating:      { type: "integer", nullable: true },
-                  country:         { type: "string", nullable: true },
-                  town:            { type: "string", nullable: true },
-                  pricePerNight:   { type: "number", nullable: true },
-                  currency:        { type: "string", nullable: true },
-                  submissionCount: { type: "integer" },
-                  providerId:      { type: "string" },
-                  approvedAt:      { type: "string", format: "date-time", nullable: true },
-                  photos:          { type: "array", items: PhotoSchema },
-                },
-              },
-            },
-            total: { type: "integer" },
-            page:  { type: "integer" },
-            limit: { type: "integer" },
-          },
-        }),
-        401: ErrorResponse,
-        403: ErrorResponse,
-      },
-    },
-  }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // GET /admin/listings — Search all listings (for admin use)
+  app.get("/admin/listings", { schema: { tags: ["Admin Listings"] }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { q = "", status, category, country, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -1161,10 +630,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const where = {
       deletedAt: null,
       AND: [
-        q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { town: { contains: q, mode: "insensitive" as const } }] } : {},
-        status   ? { status:   status   as "draft" } : {},
+        q ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" as const } },
+            { town: { contains: q, mode: "insensitive" as const } },
+          ],
+        } : {},
+        status ? { status: status as "draft" } : {},
         category ? { category: category as "hotel" } : {},
-        country  ? { country }                       : {},
+        country ? { country } : {},
       ],
     };
 
@@ -1173,32 +647,33 @@ export async function adminListingRoutes(app: FastifyInstance) {
       prisma.listing.findMany({
         where, skip, take,
         select: {
-          id:              true,
-          name:            true,
-          category:        true,
-          status:          true,
-          starRating:      true,
-          country:         true,
-          town:            true,
-          pricePerNight:   true,
-          currency:        true,
+          id: true,
+          name: true,
+          category: true,
+          status: true,
+          starRating: true,
+          country: true,
+          town: true,
+          pricePerNight: true,
+          currency: true,
           submissionCount: true,
-          providerId:      true,
-          approvedAt:      true,
+          providerId: true,
+          approvedAt: true,
           photos: {
-            where:   { deletedAt: null },
+            where: { deletedAt: null },
             orderBy: { position: "asc" },
-            select:  { id: true, s3Key: true, cdnUrl: true, position: true },
+            select: {
+              id: true,
+              cdnUrl: true,
+              position: true,
+            },
           },
         },
         orderBy: { updatedAt: "desc" },
       }),
     ]);
 
-    const signedListings = await Promise.all(
-      listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
-    );
-    return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
+    return sendSuccess(reply, 200, { listings, total, page: parseInt(page, 10), limit: take });
   });
 
   // ── GET /admin/bookings ───────────────────────────────────────────────────
@@ -1215,11 +690,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
           status:      { type: "string", description: "Filter by booking status" },
           listingType: { type: "string", description: "Filter by listing type (hotel, apartment, car)" },
           country:     { type: "string", description: "Filter by listing country code" },
-          ...PageQuery,
+          
         },
       },
       response: {
-        200: ok({
+        200: ({
           type: "object",
           properties: {
             bookings: {
@@ -1262,8 +737,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             limit: { type: "integer" },
           },
         }),
-        401: ErrorResponse,
-        403: ErrorResponse,
+       
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1275,15 +749,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
       AND: [
         q ? {
           OR: [
-            { reference:      { contains: q, mode: "insensitive" } },
-            { guestEmail:     { contains: q, mode: "insensitive" } },
+            { reference: { contains: q, mode: "insensitive" } },
+            { guestEmail: { contains: q, mode: "insensitive" } },
             { guestFirstName: { contains: q, mode: "insensitive" } },
-            { guestLastName:  { contains: q, mode: "insensitive" } },
+            { guestLastName: { contains: q, mode: "insensitive" } },
           ],
         } : {},
-        status      ? { status }               : {},
-        listingType ? { listingType }          : {},
-        country     ? { listing: { country } } : {},
+        status ? { status } : {},
+        listingType ? { listingType } : {},
+        country ? { listing: { country } } : {},
       ],
     };
 
@@ -1293,13 +767,29 @@ export async function adminListingRoutes(app: FastifyInstance) {
         where, skip, take,
         orderBy: { createdAt: "desc" },
         select: {
-          id: true, reference: true, listingId: true, guestId: true, providerId: true,
-          listingType: true, status: true, checkIn: true, checkOut: true,
-          pickupDatetime: true, returnDatetime: true, nightsOrDays: true,
-          guestFirstName: true, guestLastName: true, guestEmail: true,
-          totalAmount: true, currency: true, commissionAmount: true,
-          providerPayout: true, voucherDiscount: true,
-          cancelledAt: true, confirmedAt: true, createdAt: true,
+          id: true,
+          reference: true,
+          listingId: true,
+          guestId: true,
+          providerId: true,
+          listingType: true,
+          status: true,
+          checkIn: true,
+          checkOut: true,
+          pickupDatetime: true,
+          returnDatetime: true,
+          nightsOrDays: true,
+          guestFirstName: true,
+          guestLastName: true,
+          guestEmail: true,
+          totalAmount: true,
+          currency: true,
+          commissionAmount: true,
+          providerPayout: true,
+          voucherDiscount: true,
+          cancelledAt: true,
+          confirmedAt: true,
+          createdAt: true,
           listing: { select: { name: true } },
         },
       }),
@@ -1323,10 +813,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({ type: "object", description: "Full booking object with statusLog and listing info" }),
-        404: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+        200: ({ type: "object", description: "Full booking object with statusLog and listing info" }),
+       
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1336,7 +824,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       where: { id },
       include: {
         statusLog: { orderBy: { createdAt: "asc" } },
-        listing:   { select: { name: true, country: true, category: true } },
+        listing: { select: { name: true, country: true, category: true } },
       },
     });
     if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
@@ -1370,12 +858,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({ type: "object", properties: { message: { type: "string" } } }),
-        404: ErrorResponse,
-        409: ErrorResponse,
-        422: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+        200: ({ type: "object", properties: { message: { type: "string" } } }),
+       
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1394,21 +878,21 @@ export async function adminListingRoutes(app: FastifyInstance) {
     await prisma.booking.update({
       where: { id },
       data: {
-        status:             "cancelled_by_system",
-        cancelledAt:        new Date(),
-        cancelledBy:        admin.adminId,
+        status: "cancelled_by_system",
+        cancelledAt: new Date(),
+        cancelledBy: admin.adminId,
         cancellationReason: reason,
-        refundAmount:       booking.status === "confirmed" ? booking.totalAmount : 0,
+        refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
       },
     });
 
     await prisma.bookingStatusLog.create({
       data: {
-        bookingId:  id,
+        bookingId: id,
         fromStatus: booking.status,
-        toStatus:   "cancelled_by_system",
-        actorType:  "admin",
-        changedBy:  admin.adminId,
+        toStatus: "cancelled_by_system",
+        actorType: "admin",
+        changedBy: admin.adminId,
         reason,
       },
     });
@@ -1428,11 +912,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
         properties: {
           q:      { type: "string", default: "", description: "Search by guestId or bookingId" },
           status: { type: "string", description: "Filter by conversation status" },
-          ...PageQuery,
         },
       },
       response: {
-        200: ok({
+        200: ({
           type: "object",
           properties: {
             conversations: {
@@ -1467,8 +950,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             limit: { type: "integer" },
           },
         }),
-        401: ErrorResponse,
-        403: ErrorResponse,
+     
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1479,7 +961,12 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const where: any = {
       AND: [
         status ? { status } : {},
-        q ? { OR: [{ guestId: { contains: q } }, { bookingId: { contains: q } }] } : {},
+        q ? {
+          OR: [
+            { guestId: { contains: q } },
+            { bookingId: { contains: q } },
+          ],
+        } : {},
       ],
     };
 
@@ -1488,25 +975,27 @@ export async function adminListingRoutes(app: FastifyInstance) {
       prisma.conversation.findMany({
         where, skip, take,
         orderBy: { updatedAt: "desc" },
-        include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+        include: {
+          messages: { orderBy: { createdAt: "desc" }, take: 1 },
+        },
       }),
     ]);
 
     return sendSuccess(reply, 200, {
       conversations: conversations.map((c) => ({
-        id:         c.id,
-        listingId:  c.listingId,
-        bookingId:  c.bookingId,
-        guestId:    c.guestId,
+        id: c.id,
+        listingId: c.listingId,
+        bookingId: c.bookingId,
+        guestId: c.guestId,
         providerId: c.providerId,
-        status:     c.status,
+        status: c.status,
         lastMessage: c.messages[0]
           ? {
-              body:       c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
-              senderId:   c.messages[0].senderId,
+              body: c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
+              senderId: c.messages[0].senderId,
               senderType: c.messages[0].senderType,
               isFiltered: c.messages[0].isFiltered,
-              createdAt:  c.messages[0].createdAt.toISOString(),
+              createdAt: c.messages[0].createdAt.toISOString(),
             }
           : null,
         updatedAt: c.updatedAt.toISOString(),
@@ -1533,7 +1022,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({
+        200:({
           type: "object",
           properties: {
             conversation: {
@@ -1564,9 +1053,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             },
           },
         }),
-        404: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+       
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1576,27 +1063,27 @@ export async function adminListingRoutes(app: FastifyInstance) {
     if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
 
     const messages = await prisma.message.findMany({
-      where:   { conversationId: id },
+      where: { conversationId: id },
       orderBy: { createdAt: "asc" },
     });
 
     return sendSuccess(reply, 200, {
       conversation: {
-        id:         convo.id,
-        listingId:  convo.listingId,
-        bookingId:  convo.bookingId,
-        guestId:    convo.guestId,
+        id: convo.id,
+        listingId: convo.listingId,
+        bookingId: convo.bookingId,
+        guestId: convo.guestId,
         providerId: convo.providerId,
-        status:     convo.status,
+        status: convo.status,
       },
       messages: messages.map((m) => ({
-        id:         m.id,
-        senderId:   m.senderId,
+        id: m.id,
+        senderId: m.senderId,
         senderType: m.senderType,
-        body:       m.body,
+        body: m.body,
         isFiltered: m.isFiltered,
-        readAt:     m.readAt?.toISOString() ?? null,
-        createdAt:  m.createdAt.toISOString(),
+        readAt: m.readAt?.toISOString() ?? null,
+        createdAt: m.createdAt.toISOString(),
       })),
     });
   });
@@ -1612,11 +1099,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
         type: "object",
         properties: {
           isActive: { type: "string", enum: ["true", "false"], description: "Filter by active status" },
-          ...PageQuery,
+        
         },
       },
       response: {
-        200: ok({
+        200:({
           type: "object",
           properties: {
             feeds: {
@@ -1644,8 +1131,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             limit: { type: "integer" },
           },
         }),
-        401: ErrorResponse,
-        403: ErrorResponse,
+       
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1662,24 +1148,26 @@ export async function adminListingRoutes(app: FastifyInstance) {
       prisma.icalFeed.findMany({
         where, skip, take,
         orderBy: { updatedAt: "desc" },
-        include: { listing: { select: { name: true, category: true, country: true } } },
+        include: {
+          listing: { select: { name: true, category: true, country: true } },
+        },
       }),
     ]);
 
     return sendSuccess(reply, 200, {
       feeds: feeds.map((f) => ({
-        id:              f.id,
-        listingId:       f.listingId,
-        listingName:     f.listing.name,
+        id: f.id,
+        listingId: f.listingId,
+        listingName: f.listing.name,
         listingCategory: f.listing.category,
-        listingCountry:  f.listing.country,
-        platform:        f.platform,
-        feedUrl:         f.feedUrl,
-        isActive:        f.isActive,
-        lastSyncedAt:    f.lastSyncedAt?.toISOString() ?? null,
-        lastError:       f.lastError,
-        createdAt:       f.createdAt.toISOString(),
-        updatedAt:       f.updatedAt.toISOString(),
+        listingCountry: f.listing.country,
+        platform: f.platform,
+        feedUrl: f.feedUrl,
+        isActive: f.isActive,
+        lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
+        lastError: f.lastError,
+        createdAt: f.createdAt.toISOString(),
+        updatedAt: f.updatedAt.toISOString(),
       })),
       total,
       page: parseInt(page, 10),
@@ -1702,7 +1190,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({
+        200:({
           type: "object",
           properties: {
             synced:  { type: "integer" },
@@ -1710,9 +1198,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             message: { type: "string" },
           },
         }),
-        404: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+    
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1744,11 +1230,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
           isHidden:  { type: "string", enum: ["true", "false"], description: "Filter by hidden status" },
           rating:    { type: "string", description: "Filter by rating (1–5)" },
           listingId: { type: "string", description: "Filter by listing ID" },
-          ...PageQuery,
+          
         },
       },
       response: {
-        200: ok({
+        200:({
           type: "object",
           properties: {
             reviews: {
@@ -1778,8 +1264,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             limit: { type: "integer" },
           },
         }),
-        401: ErrorResponse,
-        403: ErrorResponse,
+     
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1790,12 +1275,12 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const where: any = {
       AND: [
         isHidden !== undefined ? { isHidden: isHidden === "true" } : {},
-        rating    ? { rating: parseInt(rating, 10) } : {},
-        listingId ? { listingId }                    : {},
+        rating ? { rating: parseInt(rating, 10) } : {},
+        listingId ? { listingId } : {},
         q ? {
           OR: [
-            { title:   { contains: q, mode: "insensitive" } },
-            { body:    { contains: q, mode: "insensitive" } },
+            { title: { contains: q, mode: "insensitive" } },
+            { body: { contains: q, mode: "insensitive" } },
             { guestId: { contains: q } },
           ],
         } : {},
@@ -1813,20 +1298,20 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     return sendSuccess(reply, 200, {
       reviews: reviews.map((r) => ({
-        id:            r.id,
-        bookingId:     r.bookingId,
-        listingId:     r.listingId,
-        listingName:   r.listing.name,
-        guestId:       r.guestId,
-        rating:        r.rating,
-        title:         r.title,
-        body:          r.body,
+        id: r.id,
+        bookingId: r.bookingId,
+        listingId: r.listingId,
+        listingName: r.listing.name,
+        guestId: r.guestId,
+        rating: r.rating,
+        title: r.title,
+        body: r.body,
         providerReply: r.providerReply,
-        isHidden:      r.isHidden,
-        hiddenBy:      r.hiddenBy,
-        hiddenAt:      r.hiddenAt?.toISOString() ?? null,
-        hiddenReason:  r.hiddenReason,
-        createdAt:     r.createdAt.toISOString(),
+        isHidden: r.isHidden,
+        hiddenBy: r.hiddenBy,
+        hiddenAt: r.hiddenAt?.toISOString() ?? null,
+        hiddenReason: r.hiddenReason,
+        createdAt: r.createdAt.toISOString(),
       })),
       total,
       page: parseInt(page, 10),

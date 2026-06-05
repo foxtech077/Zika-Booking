@@ -33,8 +33,7 @@ function parseIcal(text: string): IcalEvent[] {
     } else if (line === "END:VEVENT" && current) {
       if (current.dtstart && current.dtend) {
         events.push({
-          // FIX #4: uid always non-null — generate deterministic fallback so upsert key never null
-          uid: current.uid ?? `${current.dtstart.toISOString()}-${current.dtend.toISOString()}-fallback`,
+          uid: current.uid ?? `${current.dtstart.toISOString()}-${Math.random()}`,
           summary: current.summary ?? "Blocked",
           dtstart: current.dtstart,
           dtend: current.dtend,
@@ -68,6 +67,7 @@ function parseIcalDate(value: string): Date {
   if (cleaned.length === 8) {
     return new Date(`${cleaned.slice(0, 4)}-${cleaned.slice(4, 6)}-${cleaned.slice(6, 8)}`);
   }
+  // Full datetime
   const year = cleaned.slice(0, 4);
   const month = cleaned.slice(4, 6);
   const day = cleaned.slice(6, 8);
@@ -81,6 +81,7 @@ function parseIcalDate(value: string): Date {
   return new Date(`${year}-${month}-${day}`);
 }
 
+<<<<<<< HEAD
 // ── Alert helper ──────────────────────────────────────────────────────────────
 
 async function sendSyncAlert(feedId: string, platform: string, failures: number, lastError: string) {
@@ -112,6 +113,8 @@ async function sendSyncAlert(feedId: string, platform: string, failures: number,
   }
 }
 
+=======
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
 // ── Sync helper ───────────────────────────────────────────────────────────────
 
 export async function syncFeed(feedId: string): Promise<{ synced: number; error?: string }> {
@@ -135,8 +138,15 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
       data: { lastError: msg, consecutiveFailures: failures, nextRetryAt, updatedAt: new Date() },
     });
 
+<<<<<<< HEAD
+=======
+    // Alert after 3 consecutive failures (PRD §3.6)
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
     if (failures >= 3) {
-      await sendSyncAlert(feedId, feed.platform, failures, msg);
+      console.error(
+        `[iCal Poller] ⚠️  ALERT: Feed ${feedId} (${feed.platform}) has failed ${failures} consecutive times. ` +
+        `Last error: ${msg}. Manual intervention may be required.`
+      );
     }
 
     return { synced: 0, error: msg };
@@ -155,12 +165,19 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
       data: { lastError: msg, consecutiveFailures: failures, nextRetryAt, updatedAt: new Date() },
     });
     if (failures >= 3) {
-      await sendSyncAlert(feedId, feed.platform, failures, msg);
+      console.error(
+        `[iCal Poller] ⚠️  ALERT: Feed ${feedId} (${feed.platform}) has failed ${failures} consecutive times. ` +
+        `Last error: ${msg}. Manual intervention may be required.`
+      );
     }
     return { synced: 0, error: msg };
   }
 
+<<<<<<< HEAD
   // Upsert blocked dates — UID is idempotency key
+=======
+  // Upsert blocked dates
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
   let synced = 0;
   for (const ev of events) {
     await prisma.icalBlockedDate.upsert({
@@ -187,6 +204,7 @@ export async function syncFeed(feedId: string): Promise<{ synced: number; error?
   return { synced };
 }
 
+<<<<<<< HEAD
 // ── Derive channel status from feed state ─────────────────────────────────────
 
 function deriveFeedStatus(feed: {
@@ -248,6 +266,13 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+// ── Routes ────────────────────────────────────────────────────────────────────
+
+export async function icalRoutes(app: FastifyInstance) {
+  // ── GET /listings/:id/ical-feeds — list provider's iCal feeds ─────────
+  app.get("/listings/:id/ical-feeds", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
     const { id } = req.params as { id: string };
     const providerId = (req as ProviderRequest).providerId;
 
@@ -265,15 +290,18 @@ export async function icalRoutes(app: FastifyInstance) {
         platform: f.platform,
         feedUrl: f.feedUrl,
         isActive: f.isActive,
+<<<<<<< HEAD
         status: deriveFeedStatus(f),
+=======
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
         lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
         lastError: f.lastError,
-        consecutiveFailures: f.consecutiveFailures,
         createdAt: f.createdAt.toISOString(),
       })),
     });
   });
 
+<<<<<<< HEAD
   // ── POST /listings/:id/ical-feeds ─────────────────────────────────────
   app.post("/listings/:id/ical-feeds", {
     preHandler: [requireProviderRole],
@@ -317,6 +345,10 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+  // ── POST /listings/:id/ical-feeds — add a new iCal feed ───────────────
+  app.post("/listings/:id/ical-feeds", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
     const { id } = req.params as { id: string };
     const providerId = (req as ProviderRequest).providerId;
     const body = req.body as { platform: string; feedUrl: string };
@@ -334,11 +366,14 @@ export async function icalRoutes(app: FastifyInstance) {
     const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
+<<<<<<< HEAD
     const existing = await prisma.icalFeed.findFirst({ where: { listingId: id, feedUrl: body.feedUrl } });
     if (existing) {
       return sendError(reply, 409, "CONFLICT", "This feed URL is already connected to this listing.");
     }
 
+=======
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
     const feed = await prisma.icalFeed.create({
       data: {
         listingId: id,
@@ -347,7 +382,7 @@ export async function icalRoutes(app: FastifyInstance) {
       },
     });
 
-    // Trigger initial sync in background
+    // Trigger initial sync
     syncFeed(feed.id).catch(() => null);
 
     return sendSuccess(reply, 201, {
@@ -355,13 +390,16 @@ export async function icalRoutes(app: FastifyInstance) {
       platform: feed.platform,
       feedUrl: feed.feedUrl,
       isActive: feed.isActive,
+<<<<<<< HEAD
       status: "pending" as const,
+=======
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
       lastSyncedAt: null,
-      consecutiveFailures: 0,
       createdAt: feed.createdAt.toISOString(),
     });
   });
 
+<<<<<<< HEAD
   // ── DELETE /listings/:id/ical-feeds/:feedId ───────────────────────────
   app.delete("/listings/:id/ical-feeds/:feedId", {
     preHandler: [requireProviderRole],
@@ -391,6 +429,10 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+  // ── DELETE /listings/:id/ical-feeds/:feedId — remove an iCal feed ─────
+  app.delete("/listings/:id/ical-feeds/:feedId", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
     const { id, feedId } = req.params as { id: string; feedId: string };
     const providerId = (req as ProviderRequest).providerId;
 
@@ -405,6 +447,7 @@ export async function icalRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { message: "Feed removed." });
   });
 
+<<<<<<< HEAD
   // ── POST /listings/:id/ical-feeds/:feedId/sync ────────────────────────
   app.post("/listings/:id/ical-feeds/:feedId/sync", {
     preHandler: [requireProviderRole],
@@ -438,6 +481,10 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+  // ── POST /listings/:id/ical-feeds/:feedId/sync — manual sync trigger ──
+  app.post("/listings/:id/ical-feeds/:feedId/sync", { schema: { tags: ["iCal Calendar Sync"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
     const { id, feedId } = req.params as { id: string; feedId: string };
     const providerId = (req as ProviderRequest).providerId;
 
@@ -456,6 +503,7 @@ export async function icalRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { synced: result.synced, message: `Synced ${result.synced} events.` });
   });
 
+<<<<<<< HEAD
   // ── GET /listings/:id/blocked-dates ───────────────────────────────────
   // FIX: car bookings now correctly use pickupDatetime/returnDatetime in date filter
   app.get("/listings/:id/blocked-dates", {
@@ -657,10 +705,34 @@ export async function icalRoutes(app: FastifyInstance) {
         consecutiveFailures: f.consecutiveFailures,
         blockedDatesImported: f.blockedDates.length,
         nextRetryAt: f.nextRetryAt?.toISOString() ?? null,
+=======
+  // ── GET /listings/:id/blocked-dates — get external blocked date ranges ─
+  app.get("/listings/:id/blocked-dates", { schema: { tags: ["iCal Calendar Sync"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const { from, to } = req.query as { from?: string; to?: string };
+
+    const blocked = await prisma.icalBlockedDate.findMany({
+      where: {
+        listingId: id,
+        ...(from ? { startDate: { gte: new Date(from) } } : {}),
+        ...(to ? { endDate: { lte: new Date(to) } } : {}),
+      },
+      orderBy: { startDate: "asc" },
+    });
+
+    return sendSuccess(reply, 200, {
+      blockedDates: blocked.map((b) => ({
+        id: b.id,
+        startDate: b.startDate.toISOString().slice(0, 10),
+        endDate: b.endDate.toISOString().slice(0, 10),
+        summary: b.summary,
+        platform: "external",
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
       })),
     });
   });
 
+<<<<<<< HEAD
   // ── GET /listings/:id/ical — outbound iCal export (public) ───────────
   app.get("/listings/:id/ical", {
     schema: {
@@ -678,6 +750,12 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+  // ── GET /listings/:id/ical — outbound iCal export (public) ────────────
+  // Returns a standards-compliant .ics feed of all confirmed bookings so
+  // external calendars (Airbnb, Google Calendar, etc.) can subscribe to it.
+  app.get("/listings/:id/ical", async (req: FastifyRequest, reply: FastifyReply) => {
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
     const { id } = req.params as { id: string };
 
     const listing = await prisma.listing.findUnique({
@@ -695,7 +773,10 @@ export async function icalRoutes(app: FastifyInstance) {
     }
 
     const bookings = await prisma.booking.findMany({
-      where: { listingId: id, status: "confirmed" },
+      where: {
+        listingId: id,
+        status: "confirmed",
+      },
       select: {
         id: true,
         reference: true,
@@ -736,9 +817,13 @@ export async function icalRoutes(app: FastifyInstance) {
 
     const vevents = bookings.map((b) => {
       const dtstart = b.checkIn ?? b.pickupDatetime;
-      const dtend = b.checkOut ?? b.returnDatetime;
+      const dtend   = b.checkOut ?? b.returnDatetime;
       if (!dtstart || !dtend) return "";
 
+<<<<<<< HEAD
+=======
+      // UID is deterministic: booking reference + listing id
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
       const uid = `${b.reference}@${id}.zikabooking`;
       const dtstamp = toIcalUtc(b.updatedAt ?? new Date());
       const created = toIcalUtc(b.confirmedAt ?? new Date());
@@ -769,7 +854,7 @@ export async function icalRoutes(app: FastifyInstance) {
       "METHOD:PUBLISH",
       `X-WR-CALNAME:${listingName}`,
       `X-WR-CALDESC:Confirmed bookings for ${listingName}`,
-      "X-WR-TIMEZONE:UTC",
+      `X-WR-TIMEZONE:UTC`,
       `LAST-MODIFIED:${now}`,
       ...vevents,
       "END:VCALENDAR",
@@ -787,21 +872,21 @@ export async function icalRoutes(app: FastifyInstance) {
 // ── Background polling (15-min cycle) ────────────────────────────────────────
 
 export function startIcalPoller() {
-  const POLL_INTERVAL_MS = parseInt(process.env.ICAL_POLL_INTERVAL_MS ?? "") || 15 * 60 * 1000;
+  const POLL_INTERVAL_MS = 15 * 60 * 1000;
 
   async function poll() {
     try {
       const feeds = await prisma.icalFeed.findMany({
         where: { isActive: true },
-        select: { id: true, consecutiveFailures: true, nextRetryAt: true },
+        select: { id: true, consecutiveFailures: true, nextRetryAt: true }
       });
-
       const now = new Date();
       for (const feed of feeds) {
         if (feed.nextRetryAt && feed.nextRetryAt > now) {
           console.log(`[iCal Poller] Skipping feed ${feed.id} — next retry at ${feed.nextRetryAt.toISOString()}`);
           continue;
         }
+<<<<<<< HEAD
 
         try {
           const result = await syncFeed(feed.id);
@@ -813,9 +898,12 @@ export function startIcalPoller() {
         } catch (syncErr) {
           console.error(`[iCal Poller] Unexpected error for feed ${feed.id}:`, syncErr);
         }
+=======
+        await syncFeed(feed.id).catch(() => null);
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
       }
     } catch (error) {
-      console.warn("[iCal Poller] DB error (will retry):", error instanceof Error ? error.message : error);
+      console.warn('[iCal Poller] Database connection error (will retry):', error instanceof Error ? error.message : error);
     }
   }
 
@@ -824,6 +912,4 @@ export function startIcalPoller() {
   setTimeout(() => {
     poll().catch(() => null);
   }, 5000);
-
-  console.log(`[iCal Poller] Started — polling every ${POLL_INTERVAL_MS / 1000}s`);
 }

@@ -2,7 +2,10 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
+<<<<<<< HEAD
 import { requireAdmin } from "../middleware/auth.js";
+=======
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
 
 export async function reviewRoutes(app: FastifyInstance) {
   // ── POST /reviews — guest submits a review ────────────────────────────
@@ -447,6 +450,7 @@ export async function reviewRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /reviews/:id/hide — admin hide/unhide a review ─────────────
+<<<<<<< HEAD
   app.patch("/reviews/:id/hide", {
     schema: {
       tags: ["Admin Reviews"],
@@ -514,6 +518,15 @@ export async function reviewRoutes(app: FastifyInstance) {
     },
     preHandler: [requireAdmin]
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+=======
+  app.patch("/reviews/:id/hide", { schema: { tags: ["Admin Reviews"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const adminKey = req.headers["x-admin-key"];
+    const expectedKey = process.env["ADMIN_JWT_SECRET"];
+    if (!adminKey || adminKey !== expectedKey) {
+      return sendError(reply, 401, "UNAUTHORIZED", "Invalid admin key.");
+    }
+
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
     const { id } = req.params as { id: string };
     const body = req.body as { hidden: boolean; reason?: string };
 

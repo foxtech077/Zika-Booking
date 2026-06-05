@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   View,
   Text,
@@ -8,29 +7,22 @@ import {
   Alert,
   ActivityIndicator,
   StyleSheet,
-  Share,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
-import { useAuthStore } from "../../store/auth";
-import { ListingImage } from "../../components/ListingImage";
-
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type BookingStatus =
-  | "pending"
   | "confirmed"
   | "pending_payment"
-  | "active"
   | "completed"
   | "cancelled_by_guest"
   | "cancelled_by_provider"
-  | "cancelled_by_system"
-  | "refunded";
+  | "cancelled_by_system";
 
 interface BookingListing {
   id: string;
@@ -63,8 +55,6 @@ interface BookingDetail {
   driverAge?: number;
   subtotal: number;
   discountAmount?: number;
-  serviceFee?: number;
-  taxAmount?: number;
   deliveryFee?: number;
   totalAmount: number;
   currency: string;
@@ -73,7 +63,6 @@ interface BookingDetail {
   cancelledAt?: string;
   confirmedAt?: string;
   completedAt?: string;
-  checkedInAt?: string;
   createdAt: string;
   canCancel: boolean;
   hasReview?: boolean;
@@ -110,25 +99,18 @@ function isCancelled(status: BookingStatus): boolean {
   return (
     status === "cancelled_by_guest" ||
     status === "cancelled_by_provider" ||
-    status === "cancelled_by_system" ||
-    status === "refunded"
+    status === "cancelled_by_system"
   );
 }
 
 function statusInfo(status: BookingStatus): { label: string; bg: string; textColor: string } {
   switch (status) {
-    case "pending":
-      return { label: "Pending", bg: "#fef3c7", textColor: "#92400e" };
     case "confirmed":
       return { label: "Confirmed", bg: "#dcfce7", textColor: "#16a34a" };
     case "pending_payment":
       return { label: "Pending Payment", bg: "#fef3c7", textColor: "#92400e" };
-    case "active":
-      return { label: "Active", bg: "#dbeafe", textColor: "#1d4ed8" };
     case "completed":
       return { label: "Completed", bg: "#f3f4f6", textColor: "#6b7280" };
-    case "refunded":
-      return { label: "Refunded", bg: "#f0fdf4", textColor: "#15803d" };
     case "cancelled_by_guest":
     case "cancelled_by_provider":
     case "cancelled_by_system":
@@ -142,57 +124,7 @@ function cancelledByLabel(status: BookingStatus): string {
   if (status === "cancelled_by_guest") return "Cancelled by you";
   if (status === "cancelled_by_provider") return "Cancelled by provider";
   if (status === "cancelled_by_system") return "Cancelled by system";
-  if (status === "refunded") return "Cancelled with refund";
   return "Cancelled";
-}
-
-// ── Share voucher ─────────────────────────────────────────────────────────────
-
-async function shareVoucher(booking: BookingDetail) {
-  const isCar = booking.listingType === "car";
-  const dateInfo = isCar && booking.pickupDatetime && booking.returnDatetime
-    ? `Pickup: ${formatDateTime(booking.pickupDatetime)}\nReturn: ${formatDateTime(booking.returnDatetime)}`
-    : booking.checkIn && booking.checkOut
-      ? `Check-in: ${formatShortDate(booking.checkIn)}\nCheck-out: ${formatShortDate(booking.checkOut)}`
-      : "";
-
-  const lines = [
-    "═══════════════════════════",
-    "   ZIKABOOKING VOUCHER",
-    "═══════════════════════════",
-    `Booking: ${booking.reference}`,
-    `Status:  ${statusInfo(booking.status).label}`,
-    "",
-    `Property: ${booking.listing.title}`,
-    `Address:  ${booking.listing.address}, ${booking.listing.town}`,
-    "",
-    dateInfo,
-    "",
-    `Guest: ${booking.guestFirstName} ${booking.guestLastName}`,
-    `Email:  ${booking.guestEmail}`,
-    "",
-    "─── Pricing ────────────────",
-    `Subtotal: ${formatCurrency(booking.subtotal, booking.currency)}`,
-    booking.discountAmount && booking.discountAmount > 0
-      ? `Discount: -${formatCurrency(booking.discountAmount, booking.currency)}`
-      : "",
-    booking.serviceFee && booking.serviceFee > 0
-      ? `Service fee: +${formatCurrency(booking.serviceFee, booking.currency)}`
-      : "",
-    booking.taxAmount && booking.taxAmount > 0
-      ? `Taxes: +${formatCurrency(booking.taxAmount, booking.currency)}`
-      : "",
-    `TOTAL: ${formatCurrency(booking.totalAmount, booking.currency)}`,
-    "",
-    "═══════════════════════════",
-    "Powered by ZikaBooking",
-  ].filter(Boolean).join("\n");
-
-  try {
-    await Share.share({ message: lines, title: `Booking ${booking.reference}` });
-  } catch {
-    // User dismissed share sheet — no action needed
-  }
 }
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -238,11 +170,6 @@ function Timeline({ booking }: { booking: BookingDetail }) {
   const events: { label: string; date: string | undefined; done: boolean }[] = [
     { label: "Booking Created", date: booking.createdAt, done: true },
     { label: "Confirmed", date: booking.confirmedAt, done: !!booking.confirmedAt },
-    {
-      label: "Active",
-      date: booking.checkedInAt,
-      done: booking.status === "active" || booking.status === "completed",
-    },
     { label: "Completed", date: booking.completedAt, done: !!booking.completedAt },
   ];
 
@@ -272,14 +199,12 @@ function Timeline({ booking }: { booking: BookingDetail }) {
   );
 }
 
-
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function BookingDetailScreen() {
-  const { id, fromPayment } = useLocalSearchParams<{ id: string; fromPayment?: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const qc = useQueryClient();
-  const [imgError, setImgError] = useState(false);
 
   const { data: booking, isLoading, isError } = useQuery<BookingDetail>({
     queryKey: ["booking", id],
@@ -329,6 +254,7 @@ export default function BookingDetailScreen() {
     );
   }
 
+  // ── Loading / error states ──────────────────────────────────────────────
   if (isLoading) return <Skeleton />;
 
   if (isError || !booking) {
@@ -348,8 +274,8 @@ export default function BookingDetailScreen() {
   const { label: statusLabel, bg: statusBg, textColor: statusTextColor } = statusInfo(booking.status);
   const isCar = booking.listingType === "car";
   const cancelled = isCancelled(booking.status);
-  const justPaid = fromPayment === "true";
 
+  // ── Stay / rental details string ───────────────────────────────────────
   function stayDetails(): string {
     if (!booking) return "";
     if (isCar && booking.pickupDatetime && booking.returnDatetime) {
@@ -369,48 +295,27 @@ export default function BookingDetailScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll} stickyHeaderIndices={[0]}>
-        {/* Cover photo + back button */}
+        {/* Cover photo + back button — sticky header at scroll index 0 */}
         <View style={styles.photoContainer}>
-          {!imgError && booking.listing.primaryPhotoUrl ? (
-            <ListingImage
-              uri={booking.listing.primaryPhotoUrl}
+          {booking.listing.primaryPhotoUrl ? (
+            <Image
+              source={{ uri: booking.listing.primaryPhotoUrl }}
               style={styles.coverPhoto}
               resizeMode="cover"
-              onError={() => setImgError(true)}
             />
           ) : (
             <View style={[styles.coverPhoto, styles.coverPhotoPlaceholder]} />
           )}
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </TouchableOpacity>
           <TouchableOpacity
-            style={styles.shareBtn}
-            onPress={() => void shareVoucher(booking)}
+            style={styles.backBtn}
+            onPress={() => router.back()}
           >
-            <Ionicons name="share-outline" size={20} color="#fff" />
+            <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
+        {/* Content below the photo */}
         <View style={styles.contentPad}>
-          {/* Payment success banner */}
-          {justPaid && (
-            <View style={styles.successBanner}>
-              <Ionicons name="checkmark-circle" size={22} color="#15803d" />
-              <Text style={styles.successBannerText}>
-                Payment successful! Your booking is confirmed.
-              </Text>
-            </View>
-          )}
-
-          {/* Active booking banner */}
-          {booking.status === "active" && (
-            <View style={styles.activeBanner}>
-              <Ionicons name="radio-button-on" size={16} color="#1d4ed8" />
-              <Text style={styles.activeBannerText}>This booking is currently active</Text>
-            </View>
-          )}
-
           {/* Reference + status */}
           <View style={styles.referenceRow}>
             <View style={styles.referenceBox}>
@@ -421,7 +326,7 @@ export default function BookingDetailScreen() {
             </View>
           </View>
 
-          {/* Listing */}
+          {/* Listing section */}
           <Section title="Listing">
             <Text style={styles.listingTitle}>{booking.listing.title}</Text>
             <Text style={styles.listingAddress}>{booking.listing.address}</Text>
@@ -471,18 +376,6 @@ export default function BookingDetailScreen() {
                   </Text>
                 </View>
               )}
-              {booking.serviceFee != null && booking.serviceFee > 0 && (
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Service fee</Text>
-                  <Text style={styles.priceValue}>+ {formatCurrency(booking.serviceFee, booking.currency)}</Text>
-                </View>
-              )}
-              {booking.taxAmount != null && booking.taxAmount > 0 && (
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceLabel}>Taxes</Text>
-                  <Text style={styles.priceValue}>+ {formatCurrency(booking.taxAmount, booking.currency)}</Text>
-                </View>
-              )}
               {booking.deliveryFee != null && booking.deliveryFee > 0 && (
                 <View style={styles.priceRow}>
                   <Text style={styles.priceLabel}>Delivery fee</Text>
@@ -508,13 +401,11 @@ export default function BookingDetailScreen() {
             <Timeline booking={booking} />
           </Section>
 
-          {/* Cancellation / refund details */}
+          {/* Cancellation details (if cancelled) */}
           {cancelled && (
-            <Section title={booking.status === "refunded" ? "Refund Details" : "Cancellation Details"}>
-              <View style={[styles.cancellationBox, booking.status === "refunded" && styles.refundBox]}>
-                <Text style={[styles.cancellationReason, booking.status === "refunded" && styles.refundReason]}>
-                  {cancelledByLabel(booking.status)}
-                </Text>
+            <Section title="Cancellation Details">
+              <View style={styles.cancellationBox}>
+                <Text style={styles.cancellationReason}>{cancelledByLabel(booking.status)}</Text>
                 {booking.cancelledAt && (
                   <Text style={styles.cancellationDate}>On {formatFullDate(booking.cancelledAt)}</Text>
                 )}
@@ -529,20 +420,6 @@ export default function BookingDetailScreen() {
 
           {/* Actions */}
           <View style={styles.actionsSection}>
-            {/* Complete Payment — for pending_payment status */}
-            {booking.status === "pending_payment" && (
-              <TouchableOpacity
-                style={styles.payBtn}
-                onPress={() =>
-                  router.push({ pathname: "/pay/[bookingId]", params: { bookingId: booking.id } })
-                }
-              >
-                <Ionicons name="card-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
-                <Text style={styles.payBtnText}>Complete Payment</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Cancel — only when canCancel and not already cancelled */}
             {booking.canCancel && !cancelled && (
               <TouchableOpacity
                 style={styles.cancelBtn}
@@ -557,7 +434,6 @@ export default function BookingDetailScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Review — only for completed bookings */}
             {booking.status === "completed" && (
               (booking.hasReview || booking.reviewId) ? (
                 <View style={styles.reviewSubmittedBox}>
@@ -574,15 +450,6 @@ export default function BookingDetailScreen() {
                 </TouchableOpacity>
               )
             )}
-
-            {/* Share voucher button */}
-            <TouchableOpacity
-              style={styles.shareVoucherBtn}
-              onPress={() => void shareVoucher(booking)}
-            >
-              <Ionicons name="document-text-outline" size={16} color="#374151" style={{ marginRight: 6 }} />
-              <Text style={styles.shareVoucherBtnText}>Share Voucher</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
@@ -612,45 +479,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  shareBtn: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 20,
-    width: 38,
-    height: 38,
-    alignItems: "center",
-    justifyContent: "center",
-  },
 
-  // Banners
-  successBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f0fdf4",
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    marginBottom: 16,
-    gap: 10,
-  },
-  successBannerText: { fontSize: 14, fontWeight: "600", color: "#15803d", flex: 1 },
-  activeBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#eff6ff",
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    marginBottom: 16,
-    gap: 8,
-  },
-  activeBannerText: { fontSize: 13, fontWeight: "600", color: "#1d4ed8" },
-
-  // Content
+  // Content padding
   contentPad: { paddingHorizontal: 16, paddingTop: 16 },
 
   // Reference + status
@@ -754,32 +584,19 @@ const styles = StyleSheet.create({
   timelineDate: { fontSize: 12, color: "#6b7280", marginTop: 2 },
   timelinePending: { fontSize: 12, color: "#9ca3af", marginTop: 2, fontStyle: "italic" },
 
-  // Cancellation / refund
+  // Cancellation
   cancellationBox: {
     backgroundColor: "#fee2e2",
     borderRadius: 10,
     padding: 12,
     gap: 4,
   },
-  refundBox: { backgroundColor: "#f0fdf4", borderWidth: 1, borderColor: "#bbf7d0" },
   cancellationReason: { fontSize: 14, fontWeight: "700", color: "#dc2626" },
-  refundReason: { color: "#15803d" },
   cancellationDate: { fontSize: 13, color: "#b91c1c" },
   cancellationRefund: { fontSize: 13, color: "#16a34a", fontWeight: "600" },
 
   // Actions
   actionsSection: { gap: 12, marginTop: 4, marginBottom: 20 },
-
-  payBtn: {
-    backgroundColor: "#1a73e8",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-  payBtnText: { fontSize: 15, fontWeight: "700", color: "#fff" },
-
   cancelBtn: {
     borderWidth: 2,
     borderColor: "#dc2626",
@@ -790,6 +607,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   cancelBtnText: { fontSize: 15, fontWeight: "700", color: "#dc2626" },
+  disabledBtn: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    backgroundColor: "#f9fafb",
+  },
+  disabledBtnText: { fontSize: 14, color: "#9ca3af" },
 
   reviewBtn: {
     borderWidth: 2,
@@ -814,18 +642,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#f9fafb",
   },
   reviewSubmittedText: { fontSize: 14, color: "#9ca3af" },
-
-  shareVoucherBtn: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 12,
-    paddingVertical: 13,
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
-    backgroundColor: "#fff",
-  },
-  shareVoucherBtnText: { fontSize: 14, fontWeight: "600", color: "#374151" },
 
   // Error / skeleton
   errorTitle: { fontSize: 18, fontWeight: "700", color: "#111827", marginTop: 16, marginBottom: 20, textAlign: "center" },

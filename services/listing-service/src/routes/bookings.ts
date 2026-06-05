@@ -135,7 +135,7 @@ function calcRefund(booking: any): number {
 
   const hoursUntil = (new Date(refDate).getTime() - Date.now()) / 3_600_000;
 
-  if (policy === "flexible") return hoursUntil >= 48 ? total : 0;
+  if (policy === "free") return hoursUntil >= 48 ? total : 0;
   if (policy === "moderate") {
     if (hoursUntil >= 168) return total;
     if (hoursUntil >= 48) return total * 0.5;
@@ -1266,6 +1266,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       const guestId = (req as ProviderRequest).providerId;
       const { id } = req.params as { id: string };
 
+<<<<<<< HEAD
       const booking = await prisma.booking.findUnique({
         where: { id },
         include: {
@@ -1280,6 +1281,26 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         },
       });
+=======
+    // E16: Award loyalty points (1 point per USD equivalent)
+    const points = Math.floor(Number(booking.totalAmount));
+    if (points > 0) {
+      // Update User table in shared DB using raw SQL
+      await prisma.$executeRaw`
+        UPDATE "User"
+        SET
+          "loyaltyPoints" = "loyaltyPoints" + ${points},
+          "currentTier" = CASE
+            WHEN "loyaltyPoints" + ${points} >= 15000 THEN 'diamond'::"LoyaltyTier"
+            WHEN "loyaltyPoints" + ${points} >= 5000  THEN 'gold'::"LoyaltyTier"
+            WHEN "loyaltyPoints" + ${points} >= 1000  THEN 'silver'::"LoyaltyTier"
+            ELSE 'bronze'::"LoyaltyTier"
+          END,
+          "updatedAt" = NOW()
+        WHERE id = ${booking.guestId}
+      `;
+    }
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
 
       if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
       if (booking.guestId !== guestId)
@@ -1332,5 +1353,202 @@ export async function bookingRoutes(app: FastifyInstance) {
     },
   );
 
+<<<<<<< HEAD
   // Note: GET /provider/bookings is in provider.ts (full pagination + status filter)
 }
+=======
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+
+    await prisma.booking.update({
+      where: { id },
+      data: { status: "cancelled_by_system", cancellationReason: failureReason ?? "Payment failed", cancelledAt: new Date(), cancelledBy: "system" },
+    });
+
+    await prisma.bookingStatusLog.create({
+      data: { bookingId: id, fromStatus: "pending_payment", toStatus: "cancelled_by_system", actorType: "system", reason: failureReason },
+    });
+
+    return sendSuccess(reply, 200, { message: "Booking marked as failed." });
+  });
+
+  // ── POST /bookings/:id/cancel — guest cancellation ────────────────────
+  app.post("/bookings/:id/cancel", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const guestId = (req as ProviderRequest).providerId;
+    const { id } = req.params as { id: string };
+    const { reason } = req.body as { reason?: string };
+
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    if (booking.guestId !== guestId) return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
+    if (booking.status === "completed") return reply.status(409).send({ success: false, error: { code: "ALREADY_COMPLETED", message: "Completed bookings cannot be cancelled." } });
+    if (booking.status !== "confirmed") return reply.status(409).send({ success: false, error: { code: "INVALID_STATUS", message: "Only confirmed bookings can be cancelled." } });
+
+    const refundAmount = calcRefund(booking);
+
+    await prisma.booking.update({
+      where: { id },
+      data: {
+        status: "cancelled_by_guest",
+        cancelledAt: new Date(),
+        cancelledBy: "guest",
+        cancellationReason: reason,
+        refundAmount,
+      },
+    });
+
+    await prisma.bookingStatusLog.create({
+      data: { bookingId: id, fromStatus: "confirmed", toStatus: "cancelled_by_guest", actorType: "guest", changedBy: guestId, reason },
+    });
+
+    const cancelledListing = await prisma.listing.findUnique({ where: { id: booking.listingId } });
+    sendBookingCancellationEmail(
+      booking.guestEmail,
+      `${booking.guestFirstName} ${booking.guestLastName}`,
+      { reference: booking.reference, listingName: cancelledListing?.name ?? "Your booking", refundAmount, currency: booking.currency },
+    ).catch(() => {});
+
+    return sendSuccess(reply, 200, { refundAmount, currency: booking.currency, message: "Booking cancelled." });
+  });
+
+  // ── POST /provider/bookings/:id/cancel — provider cancellation ────────
+  app.post("/provider/bookings/:id/cancel", { schema: { tags: ["Bookings"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const providerId = (req as ProviderRequest).providerId;
+    const { id } = req.params as { id: string };
+    const { reasonCode, reasonText } = req.body as { reasonCode: string; reasonText?: string };
+
+    const booking = await prisma.booking.findUnique({ where: { id }, include: { listing: true } });
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    if (booking.listing.providerId !== providerId) return sendError(reply, 403, "FORBIDDEN", "This booking is not for your listing.");
+    if (booking.status !== "confirmed") return reply.status(409).send({ success: false, error: { code: "INVALID_STATUS", message: "Only confirmed bookings can be cancelled by the provider." } });
+
+    await prisma.booking.update({
+      where: { id },
+      data: {
+        status: "cancelled_by_provider",
+        cancelledAt: new Date(),
+        cancelledBy: "provider",
+        cancellationReason: reasonText ?? reasonCode,
+        refundAmount: booking.totalAmount, // always full refund
+      },
+    });
+
+    await prisma.bookingStatusLog.create({
+      data: { bookingId: id, fromStatus: "confirmed", toStatus: "cancelled_by_provider", actorType: "provider", changedBy: providerId, reason: reasonText ?? reasonCode },
+    });
+
+    return sendSuccess(reply, 200, { refundAmount: Number(booking.totalAmount), currency: booking.currency, message: "Booking cancelled. Full refund will be issued." });
+  });
+
+  // ── GET /guests/me/bookings — guest booking history ───────────────────
+  app.get("/guests/me/bookings", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const guestId = (req as ProviderRequest).providerId;
+    const q = req.query as Record<string, string>;
+    const status = q["status"];
+    const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
+    const limit = 20;
+
+    const where: any = { guestId };
+    if (status && status !== "all") {
+      const statusMap: Record<string, string[]> = {
+        upcoming: ["confirmed"],
+        completed: ["completed"],
+        cancelled: ["cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"],
+      };
+      if (statusMap[status]) where.status = { in: statusMap[status] };
+    }
+
+    const [bookings, total] = await Promise.all([
+      prisma.booking.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: cursor,
+        take: limit + 1,
+        include: { listing: { include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } } } },
+      }),
+      prisma.booking.count({ where }),
+    ]);
+
+    const hasMore = bookings.length > limit;
+    const page = hasMore ? bookings.slice(0, limit) : bookings;
+
+    return sendSuccess(reply, 200, {
+      total,
+      nextCursor: hasMore ? String(cursor + limit) : null,
+      bookings: page.map((b) => ({
+        id: b.id,
+        reference: b.reference,
+        status: b.status,
+        listingType: b.listingType,
+        listingTitle: b.listing.name,
+        listingPrimaryPhotoUrl: b.listing.photos[0]?.cdnUrl ?? null,
+        checkIn: b.checkIn?.toISOString().slice(0, 10) ?? null,
+        checkOut: b.checkOut?.toISOString().slice(0, 10) ?? null,
+        pickupDatetime: b.pickupDatetime?.toISOString() ?? null,
+        returnDatetime: b.returnDatetime?.toISOString() ?? null,
+        nightsOrDays: b.nightsOrDays,
+        totalAmount: Number(b.totalAmount),
+        currency: b.currency,
+        voucherDiscount: Number(b.voucherDiscount),
+        createdAt: b.createdAt,
+      })),
+    });
+  });
+
+  // ── GET /guests/me/bookings/:id — booking detail ──────────────────────
+  app.get("/guests/me/bookings/:id", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const guestId = (req as ProviderRequest).providerId;
+    const { id } = req.params as { id: string };
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: { listing: { include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } } } },
+    });
+
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    if (booking.guestId !== guestId) return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
+
+    const canCancel = booking.status === "confirmed" && booking.checkIn && booking.checkIn > new Date();
+
+    return sendSuccess(reply, 200, {
+      id: booking.id,
+      reference: booking.reference,
+      status: booking.status,
+      listingType: booking.listingType,
+      listing: {
+        id: booking.listing.id,
+        title: booking.listing.name,
+        address: booking.listing.address,
+        town: booking.listing.town,
+        country: booking.listing.country,
+        primaryPhotoUrl: booking.listing.photos[0]?.cdnUrl ?? null,
+      },
+      checkIn: booking.checkIn?.toISOString().slice(0, 10) ?? null,
+      checkOut: booking.checkOut?.toISOString().slice(0, 10) ?? null,
+      pickupDatetime: booking.pickupDatetime?.toISOString() ?? null,
+      returnDatetime: booking.returnDatetime?.toISOString() ?? null,
+      nightsOrDays: booking.nightsOrDays,
+      adults: booking.adults,
+      children: booking.children,
+      specialRequests: booking.specialRequests,
+      guestFirstName: booking.guestFirstName,
+      guestLastName: booking.guestLastName,
+      guestEmail: booking.guestEmail,
+      subtotal: Number(booking.subtotal),
+      discountAmount: Number(booking.discountAmount),
+      deliveryFee: Number(booking.deliveryFee),
+      totalAmount: Number(booking.totalAmount),
+      currency: booking.currency,
+      cancellationPolicy: booking.cancellationPolicy,
+      refundAmount: booking.refundAmount ? Number(booking.refundAmount) : null,
+      cancelledAt: booking.cancelledAt?.toISOString() ?? null,
+      confirmedAt: booking.confirmedAt?.toISOString() ?? null,
+      completedAt: booking.completedAt?.toISOString() ?? null,
+      createdAt: booking.createdAt,
+      canCancel,
+    });
+  });
+
+  // Note: GET /provider/bookings has been moved to provider.ts to support pagination, search and status filtering.
+}
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac

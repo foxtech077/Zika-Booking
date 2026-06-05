@@ -2,7 +2,6 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
-import { withSignedPhotos } from "../lib/s3.js";
 
 // ── Geo helper ────────────────────────────────────────────────────────────────
 
@@ -250,7 +249,87 @@ export async function searchRoutes(app: FastifyInstance) {
         },
       }).catch(() => { /* non-critical */ });
 
+<<<<<<< HEAD
       const results = page.map((l) => ({
+=======
+    const validStatuses = ["approved", "active"];
+    if (!validStatuses.includes(listing.status)) {
+      return reply.status(410).send({
+        success: false,
+        error: { code: "LISTING_INACTIVE", message: "This listing is no longer available." },
+      });
+    }
+
+    let isFavourited = false;
+    if (guestId) {
+      const fav = await prisma.userFavourite.findUnique({ where: { userId_listingId: { userId: guestId, listingId: id } } });
+      isFavourited = !!fav;
+    }
+
+    // Strip sensitive car fields pre-booking
+    const data: any = {
+      ...listing,
+      licencePlate: undefined, // Never expose car licence plate here
+      isFavourited: guestId ? isFavourited : undefined,
+    };
+    if (data.licencePlate !== undefined) {
+      delete data.licencePlate;
+    }
+
+    return sendSuccess(reply, 200, data);
+  });
+
+  // ── GET /listings/:id/availability ───────────────────────────────────────
+  app.get("/listings/:id/availability", { schema: { tags: ["Search"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const { month } = req.query as { month?: string };
+
+    const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true } });
+    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+    // Build date range for the month query
+    const now = new Date();
+    let rangeStart = now;
+    if (month) {
+      const [y, m] = month.split("-").map(Number);
+      rangeStart = new Date(y!, m! - 1, 1);
+    }
+    const rangeEnd = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + 3, 1); // 3 months forward
+
+    const bookings = await prisma.booking.findMany({
+      where: {
+        listingId: id,
+        status: { in: ["pending_payment", "confirmed"] as any },
+        OR: [
+          { checkIn: { gte: rangeStart, lt: rangeEnd }, checkOut: { not: null } },
+          { pickupDatetime: { gte: rangeStart, lt: rangeEnd }, returnDatetime: { not: null } },
+        ],
+      },
+      select: { checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true },
+    });
+
+    const unavailableRanges = bookings.map((b) => ({
+      start: (b.checkIn ?? b.pickupDatetime)?.toISOString().slice(0, 10) ?? null,
+      end: (b.checkOut ?? b.returnDatetime)?.toISOString().slice(0, 10) ?? null,
+    })).filter((r) => r.start && r.end);
+
+    return sendSuccess(reply, 200, { unavailableRanges });
+  });
+
+  // ── POST /listings/batch-summary — for anonymous recently-viewed ─────────
+  app.post("/listings/batch-summary", { schema: { tags: ["Search"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const body = req.body as { ids?: string[] };
+    const ids = (body.ids ?? []).slice(0, 20);
+    if (!ids.length) return sendSuccess(reply, 200, { listings: [] });
+
+    const listings = await prisma.listing.findMany({
+      where: { id: { in: ids }, deletedAt: null, status: { in: ["approved", "active"] } },
+      include: { photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 } },
+    });
+
+    return sendSuccess(reply, 200, {
+      listings: listings.map((l) => ({
+>>>>>>> b2827f46246e1fae203f04192f301df0ff38caac
         id: l.id,
         listingType: l.category,
         title: l.name,

@@ -7,14 +7,11 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["payments"]
 }
 
 enum PaymentProvider {
   stripe
   tara
-
-  @@schema("payments")
 }
 
 enum PaymentStatus {
@@ -24,8 +21,6 @@ enum PaymentStatus {
   failed
   timed_out
   refunded
-
-  @@schema("payments")
 }
 
 enum RefundStatus {
@@ -33,8 +28,6 @@ enum RefundStatus {
   submitted
   succeeded
   failed
-
-  @@schema("payments")
 }
 
 model Payment {
@@ -61,7 +54,6 @@ model Payment {
 
   @@index([bookingId, attemptNumber(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
-  @@schema("payments")
 }
 
 model Refund {
@@ -81,7 +73,6 @@ model Refund {
 
   @@index([bookingId])
   @@index([status, createdAt(sort: Desc)])
-  @@schema("payments")
 }
 
 model PaymentMethod {
@@ -100,5 +91,4 @@ model PaymentMethod {
   createdAt             DateTime        @default(now())
 
   @@index([userId, isDeleted])
-  @@schema("payments")
 }

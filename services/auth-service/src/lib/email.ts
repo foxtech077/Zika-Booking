@@ -1,59 +1,29 @@
 import sgMail from "@sendgrid/mail";
 
-const rawKey = process.env["SENDGRID_API_KEY"] ?? "";
-const cleanKey = rawKey.replace(/^["']|["']$/g, "");
-sgMail.setApiKey(cleanKey);
-
-const rawEmail = process.env["SENDGRID_FROM_EMAIL"] ?? "noreply@zikabooking.com";
-const cleanEmail = rawEmail.replace(/^["']|["']$/g, "");
-
-const rawName = process.env["SENDGRID_FROM_NAME"] ?? "ZikaBooking";
-const cleanName = rawName.replace(/^["']|["']$/g, "");
+sgMail.setApiKey(process.env["SENDGRID_API_KEY"] ?? "");
 
 const FROM = {
-  email: cleanEmail,
-  name: cleanName,
+  email: process.env["SENDGRID_FROM_EMAIL"] ?? "noreply@zikabooking.com",
+  name: process.env["SENDGRID_FROM_NAME"] ?? "ZikaBooking",
 };
 
 const WEB = process.env["WEB_BASE_URL"] ?? "https://zikabooking.com";
 
-// ── Send logic ─────────────────────────────────────────────────────────────
+// ── Retry logic (A3 in UC-1.1) ───────────────────────────────────────────────
 
-async function sendEmail(msg: sgMail.MailDataRequired): Promise<void> {
+async function sendWithRetry(
+  msg: sgMail.MailDataRequired,
+  attempt = 1,
+): Promise<void> {
   try {
     await sgMail.send(msg);
-  } catch (err:any) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    console.error("[Email] SendGrid send failed:", error);
-    console.log(JSON.stringify(err.response?.body, null, 2)); //Temporary for debugging
-    throw error;
-  }
-}
-
-async function sendWithRetry(msg: sgMail.MailDataRequired, attempt = 1): Promise<void> {
-  try {
-    if (!cleanKey || process.env["NODE_ENV"] !== "production") {
-      console.log("\n" + "=".repeat(60));
-      console.log("📧 [Email Sandbox] Email request prepared");
-      console.log(`To: ${Array.isArray(msg.to) ? msg.to.join(", ") : msg.to}`);
-      console.log(`Subject: ${msg.subject}`);
-      console.log("=".repeat(60) + "\n");
-      return;
-    }
-
-    await sendEmail(msg);
   } catch (err) {
     if (attempt < 3) {
-      const delayMs = attempt === 1 ? 5 * 60_000 : 30 * 60_000;
-      console.warn(`[Email] Send attempt ${attempt} failed. Retrying in ${delayMs / 60000} minute(s)...`, err);
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-      await sendWithRetry(msg, attempt + 1);
-      return;
+      const delay = attempt === 1 ? 5 * 60_000 : 30 * 60_000;
+      setTimeout(() => void sendWithRetry(msg, attempt + 1), delay);
+    } else {
+      console.error("[Email] Failed after 3 attempts:", err);
     }
-
-    const error = err instanceof Error ? err : new Error(String(err));
-    console.error("[Email] Failed after 3 attempts:", error);
-    throw error;
   }
 }
 
@@ -65,6 +35,15 @@ export async function sendVerificationEmail(
 ): Promise<void> {
   const link = `${WEB}/auth/verify?token=${plainToken}`;
   console.log("VERIFICATION LINK:", link);
+
+  if (process.env["NODE_ENV"] !== "production") {
+    console.log("\n" + "=".repeat(60));
+    console.log("📧 [Email Sandbox] Verification Email Sent");
+    console.log(`To: ${to}`);
+    console.log(`Subject: Verify your ZikaBooking email`);
+    console.log(`Verification Link: ${link}`);
+    console.log("=".repeat(60) + "\n");
+  }
 
   await sendWithRetry({
     to,
