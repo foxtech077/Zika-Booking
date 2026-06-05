@@ -21,16 +21,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 
-// Safely load MapView and Marker to prevent crashes in environments without the native module
-let MapView: any = null;
-let Marker: any = null;
-try {
-  const Maps = require("react-native-maps");
-  MapView = Maps.default || Maps;
-  Marker = Maps.Marker;
-} catch (e) {
-  // console.warn("react-native-maps native module not available:", e);
-}
 
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
@@ -1247,44 +1237,22 @@ export default function PublicListingDetailScreen() {
 
           <View style={styles.divider} />
 
-          {/* Map view using react-native-maps */}
+          {/* Location section */}
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>Location</Text>
             {listing.lat && listing.lng ? (
               <View style={styles.mapCard}>
-                {MapView && Marker ? (
-                  <MapView
-                    style={styles.detailMap}
-                    initialRegion={{
-                      latitude: Number(listing.lat),
-                      longitude: Number(listing.lng),
-                      latitudeDelta: 0.012,
-                      longitudeDelta: 0.012,
-                    }}
-                    scrollEnabled={false}
-                    zoomEnabled={false}
-                  >
-                    <Marker
-                      coordinate={{
-                        latitude: Number(listing.lat),
-                        longitude: Number(listing.lng),
-                      }}
-                      title={listing.name ?? "Property Location"}
-                    />
-                  </MapView>
-                ) : (
-                  <View style={[styles.detailMap, { backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center", paddingHorizontal: 16 }]}>
-                    <View style={{ backgroundColor: "#eff6ff", width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-                      <Ionicons name="location" size={24} color="#1B5E20" />
-                    </View>
-                    <Text style={{ fontSize: 13, fontWeight: "700", color: "#111827", textAlign: "center" }}>
-                      {listing.name ?? "Property Location"}
-                    </Text>
-                    <Text style={{ fontSize: 11, color: "#6b7280", textAlign: "center", marginTop: 4, paddingHorizontal: 20 }}>
-                      {[listing.address, listing.town, listing.country].filter(Boolean).join(", ")}
-                    </Text>
+                <View style={[styles.detailMap, { backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center", paddingHorizontal: 16 }]}>
+                  <View style={{ backgroundColor: "#e8f5e9", width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
+                    <Ionicons name="location" size={24} color="#1B5E20" />
                   </View>
-                )}
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#111827", textAlign: "center" }}>
+                    {listing.name ?? "Property Location"}
+                  </Text>
+                  <Text style={{ fontSize: 11, color: "#6b7280", textAlign: "center", marginTop: 4, paddingHorizontal: 20 }}>
+                    {[listing.address, listing.town, listing.country].filter(Boolean).join(", ")}
+                  </Text>
+                </View>
                 <TouchableOpacity
                   style={styles.openInMapsBtn}
                   onPress={() => {

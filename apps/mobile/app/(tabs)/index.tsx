@@ -416,7 +416,7 @@ export default function HomeScreen() {
   const currentTier = user?.currentTier ?? "bronze";
 
   const [category, setCategory] = useState<Category>("hotels");
-  const [location, setLocation] = useState("Nairobi");
+  const [location, setLocation] = useState("");
   const [checkIn, setCheckIn] = useState<Date | null>(null);
   const [checkOut, setCheckOut] = useState<Date | null>(null);
   const [pickupDate, setPickupDate] = useState<Date | null>(null);
@@ -547,12 +547,9 @@ export default function HomeScreen() {
   }
 
   function handleSearch() {
-    if (!location.trim()) {
-      Alert.alert("Location required", "Please enter a city.");
-      return;
-    }
     const apiCat = category === "cars" ? "car" : category === "apartments" ? "apartment" : "hotel";
-    const params: Record<string, string> = { category: apiCat, placeName: location, guests: String(guests) };
+    const params: Record<string, string> = { category: apiCat, guests: String(guests) };
+    if (location.trim()) params.placeName = location.trim();
     if (category !== "cars") {
       if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
       if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
@@ -561,6 +558,34 @@ export default function HomeScreen() {
       if (returnDate) params.returnDatetime = returnDate.toISOString();
     }
     router.push({ pathname: "/search", params });
+  }
+
+  function detectUserLocation() {
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          const apiCat = category === "cars" ? "car" : category === "apartments" ? "apartment" : "hotel";
+          const params: Record<string, string> = {
+            category: apiCat,
+            guests: String(guests),
+            geoLat: String(latitude),
+            geoLng: String(longitude),
+          };
+          if (category !== "cars") {
+            if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
+            if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
+          } else {
+            if (pickupDate) params.pickupDatetime = pickupDate.toISOString();
+            if (returnDate) params.returnDatetime = returnDate.toISOString();
+          }
+          router.push({ pathname: "/search", params });
+        },
+        () => Alert.alert("Location Error", "Could not get your location. Please enable location services.")
+      );
+    } else {
+      Alert.alert("Not supported", "Location detection is not available on this device.");
+    }
   }
 
   function tierColor() {
@@ -613,9 +638,12 @@ export default function HomeScreen() {
               style={s.locationInput}
               value={location}
               onChangeText={setLocation}
-              placeholder="Where to?"
+              placeholder="Anywhere (city, country…)"
               placeholderTextColor={MUTED}
             />
+            <TouchableOpacity onPress={detectUserLocation} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="navigate" size={18} color={GREEN} />
+            </TouchableOpacity>
           </View>
 
           {/* Dates — Stays vs Cars */}
@@ -683,7 +711,11 @@ export default function HomeScreen() {
 
         <TouchableOpacity style={s.searchBtn} onPress={handleSearch} activeOpacity={0.85}>
           <Ionicons name="search" size={18} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={s.searchBtnText}>Search {category === "cars" ? "Cars" : "Stays"}</Text>
+          <Text style={s.searchBtnText}>
+            {location.trim()
+              ? `Search ${category === "cars" ? "Cars" : "Stays"} in ${location}`
+              : `Browse All ${category === "cars" ? "Cars" : "Stays"}`}
+          </Text>
         </TouchableOpacity>
 
         {/* Date picker modals */}
