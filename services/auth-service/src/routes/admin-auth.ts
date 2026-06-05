@@ -875,8 +875,22 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
     }
 
     // Revoke all sessions
-    await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
-    await prisma.adminUser.delete({ where: { id: targetId } });
+    // await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
+    // await prisma.adminUser.delete({ where: { id: targetId } });
+    await prisma.$transaction([
+  prisma.adminSession.updateMany({
+    where: { adminUserId: targetId },
+    data: { revoked: true }
+  }),
+
+  prisma.auditLog.deleteMany({
+    where: { adminId: targetId }
+  }),
+
+  prisma.adminUser.delete({
+    where: { id: targetId }
+  })
+]);
 
     await writeAudit(adminId, adminRole, "admin_operator_deleted", req, {
       targetType: "admin_user",
