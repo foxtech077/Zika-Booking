@@ -1562,7 +1562,7 @@ export async function listingRoutes(app: FastifyInstance) {
       },
     });
 
-    return sendSuccess(reply, 201, { id: doc.id, documentType: doc.documentType });
+    return sendSuccess(reply, 201, { id: doc.id, documentType: doc.documentType, message: "Document uploaded successfully." });
   });
 
   // DELETE /listings/:id/documents/:docId — Remove document before submission
