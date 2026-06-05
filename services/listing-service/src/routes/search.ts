@@ -117,8 +117,6 @@ export async function searchRoutes(app: FastifyInstance) {
       deletedAt: null,
       category,
       status: { in: validStatuses },
-      lat: { not: null },
-      lng: { not: null },
     };
     // Category-aware price filtering
     const priceField = category === "car" ? "pricePerDay" : "pricePerNight";
@@ -159,9 +157,11 @@ export async function searchRoutes(app: FastifyInstance) {
     const withDistance = candidates
       .map((l) => ({
         ...l,
-        distanceKm: haversineKm(lat, lng, Number(l.lat), Number(l.lng)),
+        distanceKm: l.lat != null && l.lng != null
+          ? haversineKm(lat, lng, Number(l.lat), Number(l.lng))
+          : 0,
       }))
-      .filter((l) => l.distanceKm <= radiusKm);
+      .filter((l) => l.lat == null || l.lng == null || l.distanceKm <= radiusKm);
 
     // Availability filter (when dates provided)
     const candidateIds = withDistance.map((l) => l.id);
