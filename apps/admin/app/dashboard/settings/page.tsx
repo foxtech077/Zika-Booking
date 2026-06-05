@@ -66,10 +66,9 @@ export default function SettingsPage() {
         <div className="divide-y divide-border">
           {services.map((svc) => (
             <div key={svc.service} className="flex items-center gap-4 px-5 py-4">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                svc.status === "healthy" ? "bg-success/10" :
-                svc.status === "degraded" ? "bg-danger/10" : "bg-slate-100"
-              }`}>
+              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${svc.status === "healthy" ? "bg-success/10" :
+                  svc.status === "degraded" ? "bg-danger/10" : "bg-slate-100"
+                }`}>
                 {svc.status === "healthy" ? (
                   <CheckCircle className="h-4 w-4 text-success" />
                 ) : svc.status === "degraded" ? (
