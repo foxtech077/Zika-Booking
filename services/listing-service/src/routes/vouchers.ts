@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
+import { requireProvider, requireAdmin, type ProviderRequest } from "../middleware/auth.js";
 
 export async function voucherRoutes(app: FastifyInstance) {
   // ── POST /vouchers/validate — validate a voucher code ────────────────
@@ -65,7 +65,7 @@ export async function voucherRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/vouchers — create a voucher ───────────────────────────
-  app.post("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/vouchers", { schema: { tags: ["Admin Vouchers"], body: { type: "object", required: ["code", "discountType", "discountValue", "validFrom", "validUntil"], properties: { code: { type: "string" }, discountType: { type: "string", enum: ["percentage", "fixed"] }, discountValue: { type: "number" }, minOrderValue: { type: "number" }, maxDiscount: { type: "number" }, usageLimit: { type: "integer" }, validFrom: { type: "string", format: "date-time" }, validUntil: { type: "string", format: "date-time" } } } }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const body = req.body as {
       code: string;
       discountType: "percentage" | "fixed";
@@ -135,7 +135,7 @@ export async function voucherRoutes(app: FastifyInstance) {
   });
 
   // ── GET /admin/vouchers — list all vouchers ───────────────────────────
-  app.get("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] } }, async (_req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] }, preHandler: [requireAdmin] }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const vouchers = await prisma.voucher.findMany({
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { redemptions: true } } },

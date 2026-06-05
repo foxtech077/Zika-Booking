@@ -558,22 +558,7 @@ export async function authRoutes(app: FastifyInstance) {
     const { email } = parsed.data;
 
     const user = await prisma.user.findUnique({ where: { email } });
-
-    //   if (user && user.status === "active" && user.passwordHash) {
-    //     const plainToken = generateToken();
-    //     const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    //     await prisma.verificationToken.create({
-    //       data: { userId: user.id, tokenHash: hashToken(plainToken), tokenType: "password_reset", expiresAt },
-    //     });
-    //     await sendPasswordResetEmail(email, plainToken).catch(() => null);
-    //   }
-
-    //   return sendSuccess(reply, 200, { message: "If an account with that email exists, we've sent a password reset link." });
-    // });
-
-
-
-    if (user && user.status === "active" && user.passwordHash) {
+   if (user && user.status === "active" && user.passwordHash) {
       const plainToken = generateToken();
 
       await prisma.verificationToken.create({
@@ -586,8 +571,13 @@ export async function authRoutes(app: FastifyInstance) {
       });
 
       console.log("RESET TOKEN:", plainToken);
+      const resetUrl =`${process.env.WEB_BASE_URL}reset-password?token=${plainToken}`;
 
-      await sendPasswordResetEmail(email, plainToken).catch(() => null);
+      try {
+  await sendPasswordResetEmail(email, resetUrl);  
+} catch (error) {
+  console.error("Email sending failed:", error);
+}
     }
 
     return sendSuccess(reply, 200, {
@@ -678,12 +668,6 @@ export async function authRoutes(app: FastifyInstance) {
       });
       const p = ticket.getPayload();
 
-//----sample console
-      console.log("========== GOOGLE TOKEN DEBUG ==========");
-console.log("AUD:", p?.aud);
-console.log("EMAIL:", p?.email);
-console.log("SUB:", p?.sub);
-console.log("========================================");
 
 
       if (!p?.email || !p?.sub) throw new Error("Missing fields");
