@@ -51,7 +51,7 @@ export default function MyListingsScreen() {
   }
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["my-listings"],
+    queryKey: ["myListings"],
     queryFn: async () => {
       const res = await listingApi.get<{ data: { listings: Listing[] } }>("/listings");
       return res.data.data.listings;
@@ -62,14 +62,14 @@ export default function MyListingsScreen() {
     mutationFn: async (id: string) => {
       await listingApi.delete(`/listings/${id}`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["my-listings"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["myListings"] }),
   });
 
   const deactivateMutation = useMutation({
     mutationFn: async (id: string) => {
       await listingApi.post(`/listings/${id}/deactivate`);
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["my-listings"] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["myListings"] }),
   });
 
   function handleDelete(id: string) {

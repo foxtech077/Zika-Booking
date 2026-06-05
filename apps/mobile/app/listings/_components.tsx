@@ -22,6 +22,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Dimensions,
+  Alert,
 } from "react-native";
 
 const LOGO = require("../../assets/logo.png");
@@ -52,6 +53,7 @@ interface FormFieldProps {
   autoCapitalize?: any;
   maxLength?: number;
   editable?: boolean;
+  error?: string;
 }
 
 export function FormField({
@@ -60,6 +62,7 @@ export function FormField({
   hint,
   multiline,
   numberOfLines,
+  error,
   ...inputProps
 }: FormFieldProps) {
   const inputHeight = multiline ? (numberOfLines ? numberOfLines * 22 + 24 : 100) : undefined;
@@ -74,12 +77,14 @@ export function FormField({
         style={[
           fs.input,
           multiline && { height: inputHeight, textAlignVertical: "top", paddingTop: 12 },
+          !!error && fs.inputError,
         ]}
         multiline={multiline}
         numberOfLines={numberOfLines}
         placeholderTextColor="#9CA3AF"
         {...inputProps}
       />
+      {!!error && <Text style={fs.errorText}>{error}</Text>}
     </View>
   );
 }
@@ -183,6 +188,7 @@ export function ChipSelector({
   selected,
   onSelect,
   horizontal,
+  error,
 }: {
   label: string;
   required?: boolean;
@@ -191,6 +197,7 @@ export function ChipSelector({
   selected: string;
   onSelect: (key: string) => void;
   horizontal?: boolean;
+  error?: string;
 }) {
   const chips = options.map((opt) => (
     <TouchableOpacity
@@ -217,6 +224,7 @@ export function ChipSelector({
       ) : (
         <View style={fs.chipWrap}>{chips}</View>
       )}
+      {!!error && <Text style={fs.errorText}>{error}</Text>}
     </View>
   );
 }
@@ -312,11 +320,13 @@ export function CountryPickerButton({
   onPress,
   label,
   required,
+  error,
 }: {
   selectedCountry: CountryData | null;
   onPress: () => void;
   label?: string;
   required?: boolean;
+  error?: string;
 }) {
   return (
     <View style={fs.group}>
@@ -324,7 +334,11 @@ export function CountryPickerButton({
         {label ?? "Country"}
         {required && <Text style={fs.required}> *</Text>}
       </Text>
-      <TouchableOpacity style={fs.countryBtn} onPress={onPress} activeOpacity={0.8}>
+      <TouchableOpacity
+        style={[fs.countryBtn, !!error && { borderColor: K.colors.error }]}
+        onPress={onPress}
+        activeOpacity={0.8}
+      >
         {selectedCountry ? (
           <>
             <Text style={fs.countryFlag}>{selectedCountry.flag}</Text>
@@ -340,6 +354,7 @@ export function CountryPickerButton({
         )}
         <Feather name="chevron-down" size={18} color="#9CA3AF" />
       </TouchableOpacity>
+      {!!error && <Text style={fs.errorText}>{error}</Text>}
     </View>
   );
 }
@@ -523,19 +538,27 @@ export function AmenitiesSection({
 export function PhotosSection({
   photos,
   uploading,
+  uploadProgress,
   onAdd,
   onDelete,
   minPhotos = 1,
   maxPhotos = 30,
+  error,
 }: {
   photos: Array<{ id: string; cdnUrl: string; position: number }>;
   uploading: boolean;
+  uploadProgress?: { current: number; total: number };
   onAdd: () => void;
   onDelete: (id: string) => void;
   minPhotos?: number;
   maxPhotos?: number;
+  error?: string;
 }) {
   const meetsMin = photos.length >= minPhotos;
+
+  const uploadLabel = uploadProgress
+    ? `Uploading ${uploadProgress.current} of ${uploadProgress.total}…`
+    : "Uploading…";
 
   return (
     <View>
@@ -545,18 +568,16 @@ export function PhotosSection({
         icon="camera"
       />
 
-      {minPhotos > 1 && (
-        <View style={[fs.counterBadge, meetsMin && fs.counterBadgeDone]}>
-          <Feather
-            name={meetsMin ? "check-circle" : "camera"}
-            size={15}
-            color={meetsMin ? "#059669" : "#92400E"}
-          />
-          <Text style={[fs.counterText, meetsMin && fs.counterTextDone]}>
-            {photos.length} / {minPhotos} minimum required{meetsMin ? " ✓" : ""}
-          </Text>
-        </View>
-      )}
+      <View style={[fs.counterBadge, meetsMin && fs.counterBadgeDone]}>
+        <Feather
+          name={meetsMin ? "check-circle" : "camera"}
+          size={15}
+          color={meetsMin ? "#059669" : "#92400E"}
+        />
+        <Text style={[fs.counterText, meetsMin && fs.counterTextDone]}>
+          {photos.length} / {minPhotos} minimum required{meetsMin ? " ✓" : ""}
+        </Text>
+      </View>
 
       <TouchableOpacity
         style={[fs.uploadArea, (photos.length >= maxPhotos || uploading) && { opacity: 0.5 }]}
@@ -567,7 +588,7 @@ export function PhotosSection({
         {uploading ? (
           <>
             <ActivityIndicator color={K.colors.accent} size="small" />
-            <Text style={fs.uploadAreaText}>Uploading…</Text>
+            <Text style={fs.uploadAreaText}>{uploadLabel}</Text>
           </>
         ) : (
           <>
@@ -582,6 +603,13 @@ export function PhotosSection({
         )}
       </TouchableOpacity>
 
+      {!!error && (
+        <View style={fs.photoError}>
+          <Feather name="alert-circle" size={13} color={K.colors.error} />
+          <Text style={fs.photoErrorText}>{error}</Text>
+        </View>
+      )}
+
       {photos.length > 0 && (
         <View style={fs.photoGrid}>
           {photos.map((p, i) => (
@@ -594,7 +622,12 @@ export function PhotosSection({
               )}
               <TouchableOpacity
                 style={fs.photoDeleteBtn}
-                onPress={() => onDelete(p.id)}
+                onPress={() =>
+                  Alert.alert("Delete Photo", "Remove this photo from your listing?", [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Delete", style: "destructive", onPress: () => onDelete(p.id) },
+                  ])
+                }
                 hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
                 <Feather name="trash-2" size={13} color="#fff" />
@@ -614,12 +647,14 @@ export function DocumentsSection({
   documents,
   uploadingDoc,
   onUpload,
+  onDelete,
   note,
 }: {
   docTypes: Array<{ key: string; label: string; icon: React.ComponentProps<typeof Feather>["name"] }>;
   documents: Array<{ id: string; documentType: string }>;
   uploadingDoc: string | null;
   onUpload: (docType: string, docLabel: string) => void;
+  onDelete?: (docId: string, docLabel: string) => void;
   note?: string;
 }) {
   return (
@@ -632,7 +667,8 @@ export function DocumentsSection({
       {note && <InfoBanner message={note} variant="info" />}
       <View style={{ height: 12 }} />
       {docTypes.map((doc) => {
-        const uploaded = documents.some((d) => d.documentType === doc.key);
+        const uploadedDoc = documents.find((d) => d.documentType === doc.key);
+        const uploaded = !!uploadedDoc;
         const isUploading = uploadingDoc === doc.key;
         return (
           <View key={doc.key} style={[fs.docCard, uploaded && fs.docCardDone]}>
@@ -645,6 +681,24 @@ export function DocumentsSection({
                 {uploaded ? "Uploaded ✓" : "Not yet uploaded"}
               </Text>
             </View>
+            {uploaded && onDelete && uploadedDoc && (
+              <TouchableOpacity
+                style={fs.docDeleteBtn}
+                onPress={() =>
+                  Alert.alert("Delete Document", `Remove "${doc.label}"?`, [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Delete",
+                      style: "destructive",
+                      onPress: () => onDelete(uploadedDoc.id, doc.label),
+                    },
+                  ])
+                }
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Feather name="trash-2" size={16} color={K.colors.error} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[fs.docUploadBtn, uploaded && fs.docUploadBtnReplace]}
               onPress={() => onUpload(doc.key, doc.label)}
@@ -833,6 +887,8 @@ export const fs = StyleSheet.create({
     fontSize: K.font.base,
     color: K.colors.textDark,
   },
+  inputError: { borderColor: K.colors.error },
+  errorText: { fontSize: K.font.xs, color: K.colors.error, marginTop: 4, fontWeight: "600" as const },
 
   // info banner
   infoBanner: {
@@ -1117,6 +1173,16 @@ export const fs = StyleSheet.create({
   },
   docLabel: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark, marginBottom: 2 },
   docStatus: { fontSize: K.font.xs, fontWeight: "600" },
+  docDeleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: K.radius.sm,
+    borderWidth: 1.5,
+    borderColor: "#FECACA",
+    backgroundColor: "#FEF2F2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   docUploadBtn: {
     backgroundColor: K.colors.darkGreen,
     borderRadius: K.radius.sm,
@@ -1131,6 +1197,19 @@ export const fs = StyleSheet.create({
     borderColor: K.colors.accent,
   },
   docUploadBtnText: { fontSize: K.font.xs, fontWeight: "700", color: "#fff" },
+  // photo error
+  photoError: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderRadius: K.radius.sm,
+    padding: 8,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  photoErrorText: { fontSize: K.font.xs, color: K.colors.error, fontWeight: "600" as const, flex: 1 },
 
   // step progress bar
   progressWrap: {

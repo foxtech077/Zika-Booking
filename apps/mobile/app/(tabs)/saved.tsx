@@ -16,6 +16,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
+import { ListingImage } from "../../components/ListingImage";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,6 +66,10 @@ function categoryLabel(cat: string): string {
 
 // ── Skeleton card ─────────────────────────────────────────────────────────────
 
+
+// ── Skeleton card ─────────────────────────────────────────────────────────────
+
+
 function SkeletonCard() {
   return (
     <View style={styles.card}>
@@ -76,6 +81,69 @@ function SkeletonCard() {
         <View style={[styles.skeletonLine, { width: "35%", height: 12, marginTop: 6 }]} />
       </View>
     </View>
+  );
+}
+
+// ── Saved Listing Card ────────────────────────────────────────────────────────
+
+function SavedListingCard({
+  item,
+  onRemove,
+  removePending,
+}: {
+  item: Favourite;
+  onRemove: (listingId: string, title: string) => void;
+  removePending: boolean;
+}) {
+  const router = useRouter();
+  const [imgError, setImgError] = useState(false);
+  const { listing, savedAt, listingId } = item;
+  const locationParts = [listing.city, listing.countryCode].filter(Boolean);
+  const locationStr = locationParts.join(", ");
+  const priceLabel = listing.nightlyRate != null
+    ? `${listing.currency ?? ""} ${listing.nightlyRate.toLocaleString()} / ${listing.category === "car" ? "day" : "night"}`
+    : "Price on request";
+
+  return (
+    <TouchableOpacity
+      style={styles.card}
+      activeOpacity={0.8}
+      onPress={() => router.push(`/listing/${listingId}`)}
+    >
+      {/* Cover photo */}
+      {!imgError && listing.primaryPhotoUrl ? (
+        <ListingImage
+          uri={listing.primaryPhotoUrl}
+          style={styles.cardPhoto}
+          resizeMode="cover"
+          onError={() => setImgError(true)}
+        />
+      ) : (
+        <View style={styles.cardPhotoPlaceholder}>
+          <Ionicons name="image-outline" size={28} color="#9ca3af" />
+        </View>
+      )}
+
+      {/* Info */}
+      <View style={styles.cardInfo}>
+        <Text style={styles.cardTitle} numberOfLines={2}>{listing.title}</Text>
+        <Text style={styles.cardMeta} numberOfLines={1}>
+          {categoryLabel(listing.category)}{locationStr ? ` · ${locationStr}` : ""}
+        </Text>
+        <Text style={styles.cardPrice}>{priceLabel}</Text>
+        <Text style={styles.cardSaved}>Saved {daysAgo(savedAt)}</Text>
+      </View>
+
+      {/* Trash button */}
+      <TouchableOpacity
+        style={styles.trashButton}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        onPress={() => onRemove(listingId, listing.title)}
+        disabled={removePending}
+      >
+        <Ionicons name="trash-outline" size={20} color="#dc2626" />
+      </TouchableOpacity>
+    </TouchableOpacity>
   );
 }
 
@@ -172,52 +240,12 @@ export default function SavedScreen() {
   // ── Render item ──────────────────────────────────────────────────────────
 
   function renderItem({ item }: { item: Favourite }) {
-    const { listing, savedAt, listingId } = item;
-    const locationParts = [listing.city, listing.countryCode].filter(Boolean);
-    const locationStr = locationParts.join(", ");
-    const priceLabel = listing.nightlyRate != null
-      ? `${listing.currency ?? ""} ${listing.nightlyRate.toLocaleString()} / ${listing.category === "car" ? "day" : "night"}`
-      : "Price on request";
-
     return (
-      <TouchableOpacity
-        style={styles.card}
-        activeOpacity={0.8}
-        onPress={() => router.push(`/listing/${listingId}`)}
-      >
-        {/* Cover photo */}
-        {listing.primaryPhotoUrl ? (
-          <Image
-            source={{ uri: listing.primaryPhotoUrl }}
-            style={styles.cardPhoto}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.cardPhotoPlaceholder}>
-            <Ionicons name="image-outline" size={28} color="#9ca3af" />
-          </View>
-        )}
-
-        {/* Info */}
-        <View style={styles.cardInfo}>
-          <Text style={styles.cardTitle} numberOfLines={2}>{listing.title}</Text>
-          <Text style={styles.cardMeta} numberOfLines={1}>
-            {categoryLabel(listing.category)}{locationStr ? ` · ${locationStr}` : ""}
-          </Text>
-          <Text style={styles.cardPrice}>{priceLabel}</Text>
-          <Text style={styles.cardSaved}>Saved {daysAgo(savedAt)}</Text>
-        </View>
-
-        {/* Trash button */}
-        <TouchableOpacity
-          style={styles.trashButton}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          onPress={() => handleRemove(listingId, listing.title)}
-          disabled={removeMutation.isPending}
-        >
-          <Ionicons name="trash-outline" size={20} color="#dc2626" />
-        </TouchableOpacity>
-      </TouchableOpacity>
+      <SavedListingCard
+        item={item}
+        onRemove={handleRemove}
+        removePending={removeMutation.isPending}
+      />
     );
   }
 

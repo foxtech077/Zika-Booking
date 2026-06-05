@@ -63,7 +63,7 @@ export async function sendVerificationEmail(
   to: string,
   plainToken: string,
 ): Promise<void> {
-  const link = `${WEB}/verify?token=${plainToken}`;
+  const link = `${WEB}/auth/verify?token=${plainToken}`;
   console.log("VERIFICATION LINK:", link);
 
   await sendWithRetry({
