@@ -31,7 +31,7 @@ const ALLOWED_DOC_TYPES = new Set([
   "roadworthiness_certificate",
   "hotel_operating_permit",
   "tourism_authority_certificate",
-   "vehicle_registration",
+  "vehicle_registration",
 ]);
 
 // ── legacy amenity mapping for backward compatibility ───────────────────────
@@ -542,6 +542,16 @@ export async function listingRoutes(app: FastifyInstance) {
     if (model !== undefined) dbFields.carModel = model;
     if (year !== undefined) dbFields.carYear = year;
     if (pricePerDay !== undefined) dbFields.pricePerDay = pricePerDay;
+    const driveTypeMap = {
+      "2WD": "TWO_WD",
+      "4WD": "FOUR_WD",
+      "AWD": "AWD",
+    };
+
+    if (dbFields.driveType) {
+      dbFields.driveType =
+        driveTypeMap[dbFields.driveType as keyof typeof driveTypeMap];
+    }
     if (category !== undefined && listing.category === "car") {
       dbFields.carCategory = category;
     }
@@ -650,7 +660,7 @@ export async function listingRoutes(app: FastifyInstance) {
     });
 
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    
+
     if (listing.category !== "hotel") {
       return sendError(reply, 422, "INVALID_CATEGORY", "Only hotel listings require manual admin review. Please use the activation endpoint for apartments and car rentals.");
     }
@@ -1041,7 +1051,7 @@ export async function listingRoutes(app: FastifyInstance) {
         if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
         if (!listing.fuelPolicy) failures.push("Fuel policy is required.");
         if (!listing.insuranceType) failures.push("Insurance type is required.");
-        
+
         // Mileage policy
         if (!listing.mileagePolicy) {
           failures.push("Mileage policy is required.");
@@ -1291,12 +1301,12 @@ export async function listingRoutes(app: FastifyInstance) {
                 message: { type: "string" }
               },
               required: ["message"]
-                }
-              },
-              required: ["success", "data"]
             }
-          }
+          },
+          required: ["success", "data"]
         }
+      }
+    }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
