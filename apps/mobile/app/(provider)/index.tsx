@@ -612,7 +612,7 @@ export default function ProviderHomeScreen() {
                 <TouchableOpacity
                   key={b.id}
                   style={[st.bookingRow, i > 0 && st.bookingRowBorder]}
-                  onPress={() => router.push(`/booking/${b.id}` as any)}
+                  onPress={() => router.push(`/provider/booking/${b.id}` as any)}
                   activeOpacity={0.7}
                 >
                   <View style={st.guestAvatar}>

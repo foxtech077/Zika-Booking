@@ -13,6 +13,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
+import { useAuthStore } from "../../store/auth";
+import { ListingImage } from "../../components/ListingImage";
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -112,11 +115,13 @@ function SkeletonCard() {
   );
 }
 
+
 // ── Booking card ──────────────────────────────────────────────────────────────
 
 function BookingCard({ booking }: { booking: BookingSummary }) {
   const router = useRouter();
   const { label, bg, textColor } = statusInfo(booking.status);
+  const [imgError, setImgError] = useState(false);
 
   return (
     <TouchableOpacity
@@ -124,8 +129,13 @@ function BookingCard({ booking }: { booking: BookingSummary }) {
       onPress={() => router.push(`/booking/${booking.id}` as any)}
       activeOpacity={0.7}
     >
-      {booking.listingPrimaryPhotoUrl ? (
-        <Image source={{ uri: booking.listingPrimaryPhotoUrl }} style={styles.cardThumb} />
+      {!imgError && booking.listingPrimaryPhotoUrl ? (
+        <ListingImage
+          uri={booking.listingPrimaryPhotoUrl}
+          style={styles.cardThumb}
+          resizeMode="cover"
+          onError={() => setImgError(true)}
+        />
       ) : (
         <View style={[styles.cardThumb, styles.cardThumbPlaceholder]} />
       )}

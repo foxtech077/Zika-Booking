@@ -499,49 +499,24 @@ export async function adminListingRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { message: "Review task escalated." });
   });
 
-  // ── POST /admin/listings/:id/approve (UC-2.9) ─────────────────────────────
+  // POST /admin/listings/:id/approve — Approve listing (UC-2.9)
   app.post("/admin/listings/:id/approve", {
-    preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
-      summary: "Approve a hotel listing and assign a verified star rating",
-      security: [{ bearerAuth: [] }],
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string", description: "Listing ID" },
-        },
-      },
+      tags: ["Admin Listings"],
       body: {
         type: "object",
         required: ["starRating"],
         properties: {
-          starRating: {
-            type: "integer",
-            minimum: 1,
-            maximum: 5,
-            description: "Verified star rating assigned by admin (1–5, integers only)",
-          },
-          adminNote: {
-            type: "string",
-            description: "Internal note (not visible to provider)",
-          },
+          starRating: { type: "integer", minimum: 1, maximum: 5, description: "Verified star rating assigned by admin (1–5)" },
+          adminNote:  { type: "string", description: "Optional internal note for the review log" },
         },
       },
-      response: {
-        200: ok({ type: "object", properties: { message: { type: "string" } } }),
-        404: ErrorResponse,
-        409: ErrorResponse,
-        422: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
-      },
     },
+    preHandler: [requireAdmin],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
-    const { starRating, adminNote } = req.body as { starRating: number; adminNote?: string };
+    const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
 
     if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
       return sendError(reply, 422, "VALIDATION_ERROR", "A verified star rating (1–5, integer) is required to approve a hotel listing.");

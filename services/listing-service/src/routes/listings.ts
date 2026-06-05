@@ -620,16 +620,29 @@ export async function listingRoutes(app: FastifyInstance) {
 
   // POST /listings/:id/submit — Submit for review (UC-2.7)
   app.post("/listings/:id/submit", {
-    preHandler: [requireProviderRole],
     schema: {
       tags: ["Listings"],
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: { type: "string" }
-        }
-      },
+      description: [
+        "Submit a hotel listing for admin review. No request body required.",
+        "",
+        "Before submitting, the listing must have all of the following already saved via PUT /listings/:id:",
+        "- **name** (property name)",
+        "- **roomType**",
+        "- **unitCount** (≥ 1)",
+        "- **pricePerNight** (> 0) and **currency**",
+        "- **address**, **town**, **country**",
+        "- **cancellationPolicy**",
+        "- **checkinTime** and **checkoutTime**",
+        "- **minStayNights** (≥ 1)",
+        "- **description** (max 1000 chars)",
+        "- At least one photo uploaded via POST /listings/:id/photos",
+        "- Documents uploaded via POST /listings/:id/documents:",
+        "  - `business_licence`",
+        "  - `operating_permit` or `hotel_operating_permit`",
+        "  - `tourism_certificate` or `tourism_authority_certificate`",
+        "",
+        "Only `draft` or `rejected` hotel listings can be submitted.",
+      ].join("\n"),
       response: {
         200: {
           type: "object",
@@ -638,15 +651,27 @@ export async function listingRoutes(app: FastifyInstance) {
             data: {
               type: "object",
               properties: {
-                message: { type: "string" }
+                message: { type: "string", example: "Listing submitted for review." },
               },
-              required: ["message"]
-            }
+            },
           },
-          required: ["success", "data"]
-        }
-      }
-    }
+        },
+        422: {
+          type: "object",
+          properties: {
+            success: { type: "boolean", example: false },
+            error: {
+              type: "object",
+              properties: {
+                code:    { type: "string", example: "VALIDATION_ERROR" },
+                message: { type: "string", example: "Property name is required. At least one photo is required." },
+              },
+            },
+          },
+        },
+      },
+    },
+    preHandler: [requireProviderRole],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { providerId } = req as ProviderRequest;
     const { id } = req.params as { id: string };
@@ -676,8 +701,8 @@ export async function listingRoutes(app: FastifyInstance) {
     if (!listing.unitCount || listing.unitCount < 1) failures.push("Number of units is required.");
     if (!listing.pricePerNight || Number(listing.pricePerNight) <= 0) failures.push("Price per night must be greater than 0.");
     if (!listing.currency) failures.push("Currency is required.");
-    if (!listing.address || !listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
-    if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+    if (!listing.address) failures.push("Address is required.");
+    if (!listing.town || !listing.country) failures.push("Town and country are required.");
     if (!listing.cancellationPolicy) failures.push("Cancellation policy is required.");
     if (!listing.checkinTime) failures.push("Check-in time is required.");
     if (!listing.checkoutTime) failures.push("Check-out time is required.");
@@ -799,8 +824,8 @@ export async function listingRoutes(app: FastifyInstance) {
       if (!listing.name?.trim()) failures.push("Apartment name is required.");
       if (!listing.description?.trim()) failures.push("Description is required.");
       if (listing.description && listing.description.length > 1000) failures.push("Description cannot exceed 1000 characters.");
-      if (!listing.address || !listing.lat || !listing.lng) failures.push("Address with geocoded location is required.");
-      if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+      if (!listing.address) failures.push("Address is required.");
+      if (!listing.town || !listing.country) failures.push("Town and country are required.");
       if (listing.bedrooms === null || listing.bedrooms === undefined || listing.bedrooms < 0) failures.push("Number of bedrooms is required.");
       if (listing.bathrooms === null || listing.bathrooms === undefined || listing.bathrooms < 0) failures.push("Number of bathrooms is required.");
       if (listing.maxGuests === null || listing.maxGuests === undefined || listing.maxGuests < 1) failures.push("Maximum guests must be at least 1.");
@@ -861,8 +886,8 @@ export async function listingRoutes(app: FastifyInstance) {
         if (listing.deliveryFee === null || listing.deliveryFee === undefined || Number(listing.deliveryFee) < 0) failures.push("Delivery fee is required when delivery is enabled.");
       }
 
-      if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
-      if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+      if (!listing.address) failures.push("Pickup address is required.");
+      if (!listing.town || !listing.country) failures.push("Town and country are required.");
 
       if (!listing.fuelType) failures.push("Fuel type is required.");
       if (!listing.insuranceType) failures.push("Insurance type is required.");
@@ -1066,8 +1091,8 @@ export async function listingRoutes(app: FastifyInstance) {
           if (listing.deliveryFee === null || listing.deliveryFee === undefined || Number(listing.deliveryFee) < 0) failures.push("Delivery fee is required when delivery is enabled.");
         }
 
-        if (!listing.address || !listing.lat || !listing.lng) failures.push("Pickup address with geocoded location is required.");
-        if (!listing.town || !listing.country) failures.push("Town and country are required (auto-filled from geocoding).");
+        if (!listing.address) failures.push("Pickup address is required.");
+        if (!listing.town || !listing.country) failures.push("Town and country are required.");
 
         if (!listing.fuelType) failures.push("Fuel type is required.");
         if (!listing.insuranceType) failures.push("Insurance type is required.");

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +15,9 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
+import { useAuthStore } from "../../store/auth";
+import { ListingImage } from "../../components/ListingImage";
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -268,12 +272,14 @@ function Timeline({ booking }: { booking: BookingDetail }) {
   );
 }
 
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function BookingDetailScreen() {
   const { id, fromPayment } = useLocalSearchParams<{ id: string; fromPayment?: string }>();
   const router = useRouter();
   const qc = useQueryClient();
+  const [imgError, setImgError] = useState(false);
 
   const { data: booking, isLoading, isError } = useQuery<BookingDetail>({
     queryKey: ["booking", id],
@@ -365,11 +371,12 @@ export default function BookingDetailScreen() {
       <ScrollView contentContainerStyle={styles.scroll} stickyHeaderIndices={[0]}>
         {/* Cover photo + back button */}
         <View style={styles.photoContainer}>
-          {booking.listing.primaryPhotoUrl ? (
-            <Image
-              source={{ uri: booking.listing.primaryPhotoUrl }}
+          {!imgError && booking.listing.primaryPhotoUrl ? (
+            <ListingImage
+              uri={booking.listing.primaryPhotoUrl}
               style={styles.coverPhoto}
               resizeMode="cover"
+              onError={() => setImgError(true)}
             />
           ) : (
             <View style={[styles.coverPhoto, styles.coverPhotoPlaceholder]} />

@@ -33,6 +33,8 @@ try {
 
 import { listingApi } from "../lib/listing-api";
 import { useAuthStore } from "../store/auth";
+import { ListingImage } from "../components/ListingImage";
+
 
 // Deterministic coordinates calculator from search center + distance
 function getListingCoordinates(item: SearchResult, centerLat: number, centerLng: number) {
@@ -74,18 +76,18 @@ const BG = "#f9fafb";
 
 // Fallback coordinates for common cities (used when geocoding API fails due to auth)
 const CITY_COORDS: Record<string, { lat: number; lng: number; town: string; country: string }> = {
-  nairobi:        { lat: -1.2921,  lng: 36.8219, town: "Nairobi",        country: "KE" },
-  mombasa:        { lat: -4.0435,  lng: 39.6682, town: "Mombasa",        country: "KE" },
-  kisumu:         { lat: -0.0917,  lng: 34.7679, town: "Kisumu",         country: "KE" },
-  kampala:        { lat:  0.3476,  lng: 32.5825, town: "Kampala",        country: "UG" },
-  "dar es salaam":{ lat: -6.7924,  lng: 39.2083, town: "Dar es Salaam",  country: "TZ" },
-  lagos:          { lat:  6.5244,  lng:  3.3792, town: "Lagos",          country: "NG" },
-  accra:          { lat:  5.6037,  lng: -0.1870, town: "Accra",          country: "GH" },
-  cairo:          { lat: 30.0444,  lng: 31.2357, town: "Cairo",          country: "EG" },
-  dubai:          { lat: 25.2048,  lng: 55.2708, town: "Dubai",          country: "AE" },
-  london:         { lat: 51.5074,  lng: -0.1278, town: "London",         country: "GB" },
-  paris:          { lat: 48.8566,  lng:  2.3522, town: "Paris",          country: "FR" },
-  "new york":     { lat: 40.7128,  lng: -74.0060,town: "New York",       country: "US" },
+  nairobi: { lat: -1.2921, lng: 36.8219, town: "Nairobi", country: "KE" },
+  mombasa: { lat: -4.0435, lng: 39.6682, town: "Mombasa", country: "KE" },
+  kisumu: { lat: -0.0917, lng: 34.7679, town: "Kisumu", country: "KE" },
+  kampala: { lat: 0.3476, lng: 32.5825, town: "Kampala", country: "UG" },
+  "dar es salaam": { lat: -6.7924, lng: 39.2083, town: "Dar es Salaam", country: "TZ" },
+  lagos: { lat: 6.5244, lng: 3.3792, town: "Lagos", country: "NG" },
+  accra: { lat: 5.6037, lng: -0.1870, town: "Accra", country: "GH" },
+  cairo: { lat: 30.0444, lng: 31.2357, town: "Cairo", country: "EG" },
+  dubai: { lat: 25.2048, lng: 55.2708, town: "Dubai", country: "AE" },
+  london: { lat: 51.5074, lng: -0.1278, town: "London", country: "GB" },
+  paris: { lat: 48.8566, lng: 2.3522, town: "Paris", country: "FR" },
+  "new york": { lat: 40.7128, lng: -74.0060, town: "New York", country: "US" },
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -232,6 +234,7 @@ function ResultCard({
 }: ResultCardProps) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const [imgError, setImgError] = useState(false);
   const isCar = category === "car";
   const price = isCar ? item.dailyRate : item.nightlyRate;
   const priceLabel = isCar ? "/day" : "/night";
@@ -256,10 +259,12 @@ function ResultCard({
     <TouchableOpacity style={cardStyles.card} onPress={handlePress} activeOpacity={0.88}>
       {/* Photo */}
       <View style={cardStyles.photoWrapper}>
-        {item.primaryPhotoUrl ? (
-          <Image source={{ uri: item.primaryPhotoUrl }} style={cardStyles.photo} resizeMode="cover" />
+        {!imgError && item.primaryPhotoUrl ? (
+          <ListingImage uri={item.primaryPhotoUrl} style={cardStyles.photo} onError={() => setImgError(true)} />
         ) : (
-          <View style={[cardStyles.photo, cardStyles.photoPlaceholder]} />
+          <View style={[cardStyles.photo, cardStyles.photoPlaceholder, { alignItems: "center", justifyContent: "center" }]}>
+            <Text style={{ fontSize: 36 }}>{isCar ? "🚗" : "🏨"}</Text>
+          </View>
         )}
 
         {/* Badges Overlaid on Photo */}
@@ -427,7 +432,7 @@ const cardStyles = StyleSheet.create({
   priceCurrency: { fontSize: 12, fontWeight: "600", color: PRIMARY },
   priceUnit: { fontSize: 12, fontWeight: "400", color: MUTED },
   priceUnavailable: { fontSize: 13, color: MUTED, fontStyle: "italic" },
-  
+
   // Overlay Badges
   badgeOverlayContainer: {
     position: "absolute",
@@ -514,20 +519,20 @@ export default function SearchScreen() {
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
 
   // Active filters calculation
-  const hasActiveFilters = 
-    priceMin !== "" || 
-    priceMax !== "" || 
-    ratingMin !== null || 
-    radiusKm !== 25 || 
+  const hasActiveFilters =
+    priceMin !== "" ||
+    priceMax !== "" ||
+    ratingMin !== null ||
+    radiusKm !== 25 ||
     onlyPromotions ||
-    starRating.length > 0 || 
-    roomType !== null || 
-    amenityIds.length > 0 || 
-    bedroomsMin !== null || 
-    bathroomsMin !== null || 
-    maxGuestsMin !== null || 
-    carCategory !== null || 
-    transmission !== null || 
+    starRating.length > 0 ||
+    roomType !== null ||
+    amenityIds.length > 0 ||
+    bedroomsMin !== null ||
+    bathroomsMin !== null ||
+    maxGuestsMin !== null ||
+    carCategory !== null ||
+    transmission !== null ||
     mileagePolicy !== null;
 
   const handleResetFilters = () => {
@@ -591,6 +596,12 @@ export default function SearchScreen() {
     }
   }, [geo, placeName, radiusKm]);
 
+  // Reset results and cursor when category changes (tab transition)
+  useEffect(() => {
+    setCursor(null);
+    setAllResults([]);
+  }, [category]);
+
   // Center on user's current GPS location
   const centerOnUserLocation = () => {
     if (typeof navigator !== "undefined" && navigator.geolocation) {
@@ -617,10 +628,11 @@ export default function SearchScreen() {
   };
 
   // ── Step 2: Search ──
+  // API returns price_asc as expensive-first and price_desc as cheap-first (inverted)
   const sortParamMap: Record<SortOption, string> = {
     recommended: "recommended",
-    price_asc: "price_asc",
-    price_desc: "price_desc",
+    price_asc: "price_desc",
+    price_desc: "price_asc",
     nearest: "nearest",
   };
 
@@ -706,12 +718,13 @@ export default function SearchScreen() {
       const res = await listingApi.get<SearchResponse>(`/search?${qp.toString()}`);
       const incoming = res.data.data;
 
+      const filteredResults = (incoming.results ?? []).filter((r) => r.listingType === category);
       if (!cursor) {
-        setAllResults(incoming.results);
+        setAllResults(filteredResults);
       } else {
         setAllResults((prev) => {
           const existingIds = new Set(prev.map((r) => r.id));
-          const fresh = incoming.results.filter((r) => !existingIds.has(r.id));
+          const fresh = filteredResults.filter((r) => !existingIds.has(r.id));
           return [...prev, ...fresh];
         });
       }
@@ -815,7 +828,7 @@ export default function SearchScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.searchBackBtn}>
           <Ionicons name="arrow-back" size={24} color={TEXT} />
         </TouchableOpacity>
-        
+
         <View style={styles.searchInputContainer}>
           <Ionicons name="search" size={18} color={MUTED} style={{ marginRight: 6 }} />
           <TextInput
@@ -833,8 +846,8 @@ export default function SearchScreen() {
           />
         </View>
 
-        <TouchableOpacity 
-          onPress={() => setFilterVisible(true)} 
+        <TouchableOpacity
+          onPress={() => setFilterVisible(true)}
           style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]}
           activeOpacity={0.8}
         >
@@ -952,8 +965,8 @@ export default function SearchScreen() {
                 <Text style={[styles.errorSub, { maxWidth: 300, marginBottom: 24 }]}>
                   The native map module is missing on this client. Switch to List View to browse all properties.
                 </Text>
-                <TouchableOpacity 
-                  style={[styles.retryBtn, { marginTop: 0 }]} 
+                <TouchableOpacity
+                  style={[styles.retryBtn, { marginTop: 0 }]}
                   onPress={() => setShowMapView(false)}
                 >
                   <Text style={styles.retryBtnText}>View as List</Text>
@@ -1068,7 +1081,7 @@ export default function SearchScreen() {
 
           {/* Scrollable Filters */}
           <ScrollView style={filterStyles.scroll} contentContainerStyle={filterStyles.scrollContent} showsVerticalScrollIndicator={false}>
-            
+
             {/* PRICE RANGE */}
             <Text style={filterStyles.sectionTitle}>Price Range</Text>
             <View style={filterStyles.row}>
@@ -1547,12 +1560,12 @@ const filterStyles = StyleSheet.create({
   },
   headerTitle: { fontSize: 16, fontWeight: "700", color: TEXT },
   resetText: { fontSize: 14, fontWeight: "600", color: PRIMARY },
-  
+
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 20 },
-  
+
   sectionTitle: { fontSize: 15, fontWeight: "700", color: TEXT, marginTop: 18, marginBottom: 12 },
-  
+
   row: { flexDirection: "row", gap: 12 },
   priceInputBox: { flex: 1 },
   priceLabel: { fontSize: 11, color: MUTED, fontWeight: "500", marginBottom: 5 },
@@ -1566,7 +1579,7 @@ const filterStyles = StyleSheet.create({
     color: TEXT,
     backgroundColor: "#fafafa",
   },
-  
+
   rowChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   groupedChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
@@ -1583,7 +1596,7 @@ const filterStyles = StyleSheet.create({
   },
   chipText: { fontSize: 13, color: MUTED, fontWeight: "500" },
   chipTextActive: { color: PRIMARY, fontWeight: "700" },
-  
+
   rowToggle: {
     flexDirection: "row",
     alignItems: "center",
@@ -1621,7 +1634,7 @@ const filterStyles = StyleSheet.create({
   toggleDotActive: {
     alignSelf: "flex-end",
   },
-  
+
   footer: {
     padding: 16,
     borderTopWidth: 1,

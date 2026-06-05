@@ -52,8 +52,22 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     setLoading(true);
+     console.log("EMAIL RAW =", JSON.stringify(email));
+  console.log("PASSWORD RAW =", JSON.stringify(password));
+
+  console.log("ALL COOKIES =", document.cookie);
+  console.log("REQUEST URL SHOULD BE:");
+console.log(`${window.location.origin}/admin/api/admin/auth/login`);
     try {
+      console.log("LOGIN REQUEST", { email, password });
       const { data } = await api.post("/admin/auth/login", { email, password });
+      console.log("LOGIN PAYLOAD", {
+  email,
+  password,
+  emailLength: email.length,
+  passwordLength: password.length,
+});
+      console.log("LOGIN RESPONSE", data);
       const { totpRequired, setupRequired, intermediateToken: token } = data.data ?? data;
 
       if (totpRequired) {
@@ -76,17 +90,20 @@ export default function LoginPage() {
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? "Invalid email or password.";
       setError(msg);
+      
     } finally {
       setLoading(false);
     }
   };
+
+  
 
   // Fetch TOTP QR code and setup secret
   const fetchSetupData = async (token: string) => {
     try {
       const { data } = await api.post(
         "/admin/auth/totp/setup",
-        {},
+        { intermediateToken: token },
         {
           headers: { "x-intermediate-token": token },
         }

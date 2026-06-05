@@ -57,7 +57,7 @@ const CAT_TABS = [
   { key: "",          label: "All" },
   { key: "hotel",     label: "Hotels" },
   { key: "apartment", label: "Apartments" },
-  { key: "car",       label: "Cars" },
+  { key: "car",       label: "Car Rentals" },
 ];
 
 const STATUS_TABS = [
@@ -68,7 +68,7 @@ const STATUS_TABS = [
   { key: "suspended",       label: "Suspended" },
 ];
 
-const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Apartment", car: "Vehicle" };
+const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Apartment", car: "Car Rental" };
 
 const STATUS_CFG: Record<string, { label: string; bg: string; text: string }> = {
   active:         { label: "Active",     bg: "#00A86B", text: "#fff" },
