@@ -64,7 +64,15 @@ export default function LoginPage() {
       router.replace("/dashboard");
     },
     onError: (err: any) => {
-      const msg = err?.response?.data?.error?.message ?? "Invalid email or password.";
+      const code = err?.response?.data?.error?.code ?? "";
+      const msg  = err?.response?.data?.error?.message ?? "Invalid email or password.";
+      if (
+        code === "ACCOUNT_PENDING_APPROVAL" ||
+        msg.toLowerCase().includes("pending admin approval")
+      ) {
+        router.replace("/dashboard");
+        return;
+      }
       setError(msg);
     },
   });
