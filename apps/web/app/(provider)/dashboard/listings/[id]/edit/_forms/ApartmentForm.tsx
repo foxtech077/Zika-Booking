@@ -110,25 +110,25 @@ function initState(l: Listing): ApartmentState {
     checkinTime:         l.checkinTime       ?? "14:00",
     checkoutTime:        l.checkoutTime      ?? "11:00",
     cancellationPolicy:  l.cancellationPolicy ?? "flexible",
-    cleaningFee:         a.cleaningFee       ? String(a.cleaningFee) : "",
+    cleaningFee:         a.cleaningFee       != null ? String(a.cleaningFee) : "",
     smokingAllowed:      l.smokingAllowed    ?? false,
     petsAllowed:         l.petsAllowed       ?? false,
     bedrooms:            l.bedrooms          != null ? String(l.bedrooms)  : "",
     bathrooms:           l.bathrooms         != null ? String(l.bathrooms) : "",
-    maxGuests:           l.maxGuests         ? String(l.maxGuests) : "",
-    floorNumber:         a.floorNumber       ? String(a.floorNumber)    : "",
-    propertySizeM2:      a.propertySizeM2    ? String(a.propertySizeM2) : "",
-    extraGuestFee:       a.extraGuestFee     ? String(a.extraGuestFee)  : "",
-    extraGuestAfter:     a.extraGuestAfter   ? String(a.extraGuestAfter) : "",
-    weeklyDiscount:      a.weeklyDiscount    ? String(a.weeklyDiscount)  : "",
-    monthlyDiscount:     a.monthlyDiscount   ? String(a.monthlyDiscount) : "",
+    maxGuests:           l.maxGuests         != null ? String(l.maxGuests) : "",
+    floorNumber:         a.floorNumber       != null ? String(a.floorNumber)    : "",
+    propertySizeM2:      a.propertySizeM2    != null ? String(a.propertySizeM2) : "",
+    extraGuestFee:       a.extraGuestFee     != null ? String(a.extraGuestFee)  : "",
+    extraGuestAfter:     a.extraGuestAfter   != null ? String(a.extraGuestAfter) : "",
+    weeklyDiscount:      a.weeklyDiscount    != null ? String(a.weeklyDiscount)  : "",
+    monthlyDiscount:     a.monthlyDiscount   != null ? String(a.monthlyDiscount) : "",
     instantBooking:      a.instantBooking    ?? false,
     selfCheckin:         a.selfCheckin       ?? false,
     selfCheckinDetails:  a.selfCheckinDetails ?? "",
     longStayEnabled:     l.longStayEnabled   ?? false,
-    longStayMinNights:   l.longStayMinNights  ? String(l.longStayMinNights)  : "30",
+    longStayMinNights:   l.longStayMinNights != null ? String(l.longStayMinNights)  : "30",
     longStayDiscountType: l.longStayDiscountType ?? "percentage",
-    longStayDiscountValue: "",
+    longStayDiscountValue: a.longStayDiscountValue != null ? String(a.longStayDiscountValue) : "",
     selectedAmenities:   flattenGroupedAmenities(a.amenities),
     customAmenities:     (a.customAmenities ?? []).map((x: any) => typeof x === "string" ? x : (x?.label ?? "")),
     customInput:         "",
@@ -612,7 +612,7 @@ export function ApartmentForm({ listingId, listing }: Props) {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" loading={saveMut.isPending} onClick={(e) => { e.preventDefault(); setTried(false); saveMut.mutate(); }} icon={<Save />}>
+              <Button type="button" variant="outline" loading={saveMut.isPending} onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }} icon={<Save />}>
                 Save Draft
               </Button>
               {step !== "media" ? (
@@ -620,7 +620,7 @@ export function ApartmentForm({ listingId, listing }: Props) {
               ) : (
                 <>
                   {["draft", "deactivated"].includes(status) && (
-                    <Button type="button" variant="success" loading={activateMut.isPending} onClick={() => activateMut.mutate()} icon={<CheckCircle />}>
+                    <Button type="button" variant="success" loading={activateMut.isPending || saveMut.isPending} onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }} icon={<CheckCircle />}>
                       {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
                     </Button>
                   )}

@@ -167,15 +167,15 @@ function initState(l: Listing): CarState {
     currency:           l.currency         ?? "USD",
     cancellationPolicy: l.cancellationPolicy ?? "flexible",
     mileagePolicy:      l.mileagePolicy    ?? "unlimited",
-    mileageLimitKm:     l.mileageLimitKm   ? String(l.mileageLimitKm) : "",
-    extraKmRate:        a.extraKmRate      ? String(a.extraKmRate)     : "",
+    mileageLimitKm:     l.mileageLimitKm   != null ? String(l.mileageLimitKm) : "",
+    extraKmRate:        a.extraKmRate      != null ? String(a.extraKmRate)     : "",
     fuelPolicy:         a.fuelPolicy       ?? "full_to_full",
     insuranceType:      a.insuranceType    ?? "standard",
-    minimumDriverAge:   a.minimumDriverAge ? String(a.minimumDriverAge) : "21",
-    securityDeposit:    a.securityDeposit  ? String(a.securityDeposit)  : "",
+    minimumDriverAge:   a.minimumDriverAge != null ? String(a.minimumDriverAge) : "21",
+    securityDeposit:    a.securityDeposit  != null ? String(a.securityDeposit)  : "",
     deliveryEnabled:    a.deliveryEnabled  ?? false,
-    deliveryRadiusKm:   a.deliveryRadiusKm ? String(a.deliveryRadiusKm) : "",
-    deliveryFee:        a.deliveryFee      ? String(a.deliveryFee)      : "",
+    deliveryRadiusKm:   a.deliveryRadiusKm != null ? String(a.deliveryRadiusKm) : "",
+    deliveryFee:        a.deliveryFee      != null ? String(a.deliveryFee)      : "",
     roadsideAssistance: a.roadsideAssistance ?? false,
     crossBorderAllowed: a.crossBorderAllowed ?? false,
     airportPickup:      a.airportPickup     ?? false,
@@ -711,7 +711,7 @@ export function CarForm({ listingId, listing }: Props) {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" loading={saveMut.isPending} onClick={(e) => { e.preventDefault(); setTried(false); saveMut.mutate(); }} icon={<Save />}>
+              <Button type="button" variant="outline" loading={saveMut.isPending} onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }} icon={<Save />}>
                 Save Draft
               </Button>
               {step !== "media" ? (
@@ -719,7 +719,7 @@ export function CarForm({ listingId, listing }: Props) {
               ) : (
                 <>
                   {["draft", "deactivated"].includes(status) && (
-                    <Button type="button" variant="success" loading={activateMut.isPending} onClick={() => activateMut.mutate()} icon={<CheckCircle />}>
+                    <Button type="button" variant="success" loading={activateMut.isPending || saveMut.isPending} onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }} icon={<CheckCircle />}>
                       {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
                     </Button>
                   )}

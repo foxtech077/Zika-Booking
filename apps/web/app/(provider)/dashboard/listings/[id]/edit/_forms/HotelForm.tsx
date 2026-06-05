@@ -611,8 +611,8 @@ export function HotelForm({ listingId, listing }: Props) {
                     <Button
                       type="button"
                       variant="success"
-                      loading={submitMut.isPending}
-                      onClick={() => submitMut.mutate()}
+                      loading={submitMut.isPending || saveMut.isPending}
+                      onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => submitMut.mutate() }); }}
                       icon={<Award />}
                     >
                       Submit for Review
@@ -622,8 +622,8 @@ export function HotelForm({ listingId, listing }: Props) {
                     <Button
                       type="button"
                       variant="success"
-                      loading={reactivateMut.isPending}
-                      onClick={() => reactivateMut.mutate()}
+                      loading={reactivateMut.isPending || saveMut.isPending}
+                      onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => reactivateMut.mutate() }); }}
                       icon={<CheckCircle />}
                     >
                       Reactivate
