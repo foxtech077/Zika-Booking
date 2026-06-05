@@ -523,7 +523,9 @@ export async function searchRoutes(app: FastifyInstance) {
       const { listingId } = req.params as { listingId: string };
 
       await prisma.userFavourite.deleteMany({ where: { userId, listingId } });
-      reply.status(204).send();
+      return sendSuccess(reply, 200, {
+  message: "Favourite removed successfully"
+});
     },
   );
 
