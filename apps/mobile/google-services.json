@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "462667994929",
+    "project_id": "kainook-c1de4",
+    "storage_bucket": "kainook-c1de4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:462667994929:android:5ebeef4e0a78234b7c8210",
+        "android_client_info": {
+          "package_name": "com.zikabooking.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjjJhTVzZ1lO1GwuVda7zdxgUwvYjXERk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

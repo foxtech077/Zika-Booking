@@ -11,8 +11,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
+import { useStripe } from "@stripe/stripe-react-native";
 import { listingApi } from "../../lib/listing-api";
 import { paymentApi } from "../../lib/payment-api";
 
@@ -89,20 +90,17 @@ export default function PaymentScreen() {
   const router = useRouter();
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
 
+  // ── Stripe Payment Sheet ──────────────────────────────────────────────────
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
+
   // ── UI state ──────────────────────────────────────────────────────────────
   const [provider, setProvider] = useState<PaymentProvider>("stripe");
   const [selectedSavedMethodId, setSelectedSavedMethodId] = useState<string | null>(null);
   const [view, setView] = useState<ScreenView>("select");
   const [attemptCount, setAttemptCount] = useState(0);
   const [failureReason, setFailureReason] = useState<string>("");
-  const [currentPaymentId, setCurrentPaymentId] = useState<string | null>(null);
   const [isInitiating, setIsInitiating] = useState(false);
-
-  // ── Stripe card form ──────────────────────────────────────────────────────
-  const [cardNumber, setCardNumber] = useState("");
-  const [expiry, setExpiry] = useState("");
-  const [cvc, setCvc] = useState("");
-  const [cardholderName, setCardholderName] = useState("");
+  const queryClient = useQueryClient();
 
   // ── Tara mobile money form ────────────────────────────────────────────────
   const [countryPrefix, setCountryPrefix] = useState("+254");
@@ -152,15 +150,6 @@ export default function PaymentScreen() {
   }, []);
 
   // ── Validation ────────────────────────────────────────────────────────────
-  function validateStripe(): string | null {
-    const digits = cardNumber.replace(/\D/g, "");
-    if (digits.length < 13 || digits.length > 16) return "Please enter a valid card number.";
-    if (!expiry.match(/^\d{2}\/\d{2}$/)) return "Please enter expiry in MM/YY format.";
-    if (cvc.length < 3) return "Please enter a valid CVC.";
-    if (!cardholderName.trim()) return "Please enter the cardholder name.";
-    return null;
-  }
-
   function validateTara(): string | null {
     const digits = mobileNumber.replace(/\D/g, "");
     if (digits.length < 6) return "Please enter a valid mobile number.";
@@ -214,8 +203,11 @@ export default function PaymentScreen() {
   // ── Tara polling ──────────────────────────────────────────────────────────
   function startTaraPolling(paymentId: string) {
     const INTERVAL = 5_000;
+    const MAX_DURATION = 90_000; // matches the 90s user-facing countdown
+    let elapsed = 0;
 
     taraPollingRef.current = setInterval(async () => {
+      elapsed += INTERVAL;
       try {
         const statusRes = await paymentApi.get<PaymentStatusResponse>(`/payments/${paymentId}/status`);
         const status = statusRes.data.data.status;
@@ -234,9 +226,17 @@ export default function PaymentScreen() {
               : "Mobile money payment failed. Please try again."
           );
           setView("failure");
+          return;
         }
       } catch {
         // Silently ignore transient errors during polling
+      }
+
+      if (elapsed >= MAX_DURATION) {
+        clearPolling();
+        if (taraIntervalRef.current) clearInterval(taraIntervalRef.current);
+        setFailureReason("Mobile money confirmation timed out. Please try again.");
+        setView("failure");
       }
     }, INTERVAL);
   }
@@ -268,6 +268,8 @@ export default function PaymentScreen() {
   // ── Navigate to success ───────────────────────────────────────────────────
   function navigateToSuccess() {
     setView("success");
+    void queryClient.invalidateQueries({ queryKey: ["booking", bookingId] });
+    void queryClient.invalidateQueries({ queryKey: ["myBookings"] });
     router.replace({
       pathname: "/booking/[id]",
       params: { id: bookingId, fromPayment: "true" },
@@ -276,9 +278,82 @@ export default function PaymentScreen() {
 
   // ── Pay button handler ────────────────────────────────────────────────────
   async function handlePay() {
-    // Validate inputs unless using a saved method
+    // ── Stripe Payment Sheet flow ─────────────────────────────────────────
+    if (provider === "stripe") {
+      setIsInitiating(true);
+      try {
+        const res = await paymentApi.post<InitiateResponse>("/payments/initiate", {
+          bookingId,
+          paymentProvider: "stripe",
+          ...(selectedSavedMethodId ? { savedPaymentMethodId: selectedSavedMethodId } : {}),
+        });
+
+        const { paymentId, clientSecret } = res.data.data;
+        setAttemptCount((c) => c + 1);
+
+        if (!clientSecret) {
+          Alert.alert("Payment Error", "Could not initialise payment. Please try again.");
+          return;
+        }
+
+        const isTestKey = (process.env["EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY"] ?? "").startsWith("pk_test");
+        const { error: initError } = await initPaymentSheet({
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: "Kainook",
+          style: "automatic",
+          allowsDelayedPaymentMethods: false,
+          googlePay: {
+            merchantCountryCode: "KE",
+            testEnv: isTestKey,
+          },
+          applePay: {
+            merchantCountryCode: "KE",
+          },
+        });
+
+        if (initError) {
+          Alert.alert("Payment Error", initError.message);
+          return;
+        }
+
+        setIsInitiating(false);
+
+        const { error: presentError } = await presentPaymentSheet();
+
+        if (presentError) {
+          if (presentError.code === "Canceled") return;
+          setFailureReason(presentError.message || "Card payment failed. Please try again.");
+          setView("failure");
+          return;
+        }
+
+        // Payment confirmed by Stripe — poll backend for booking confirmation
+        setView("stripe_polling");
+        startStripePolling(paymentId);
+      } catch (err: any) {
+        const status = err?.response?.status;
+        const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
+        if (status === 429 || code === "PAYMENT_ATTEMPTS_EXCEEDED") {
+          setFailureReason("Too many payment attempts. Your reservation has been released.");
+          setAttemptCount(3);
+          setView("failure");
+        } else if (status === 409) {
+          setFailureReason("This booking is no longer available for payment.");
+          setAttemptCount(3);
+          setView("failure");
+        } else {
+          const message = err?.response?.data?.message ?? err?.message ?? "An unexpected error occurred.";
+          Alert.alert("Payment Error", message);
+        }
+      } finally {
+        setIsInitiating(false);
+      }
+      return;
+    }
+
+    // ── Tara (mobile money) flow ──────────────────────────────────────────
     if (!selectedSavedMethodId) {
-      const err = provider === "stripe" ? validateStripe() : validateTara();
+      const err = validateTara();
       if (err) {
         Alert.alert("Invalid input", err);
         return;
@@ -288,13 +363,12 @@ export default function PaymentScreen() {
     setIsInitiating(true);
 
     try {
-      const fullMobileNumber =
-        provider === "tara" ? `${countryPrefix}${mobileNumber}` : undefined;
+      const fullMobileNumber = `${countryPrefix}${mobileNumber}`;
 
       const res = await paymentApi.post<InitiateResponse>("/payments/initiate", {
         bookingId,
-        paymentProvider: provider,
-        ...(fullMobileNumber ? { mobileNumber: fullMobileNumber } : {}),
+        paymentProvider: "tara",
+        mobileNumber: fullMobileNumber,
         ...(selectedSavedMethodId ? { savedPaymentMethodId: selectedSavedMethodId } : {}),
       });
 
@@ -302,31 +376,23 @@ export default function PaymentScreen() {
       setCurrentPaymentId(paymentId);
       setAttemptCount((c) => c + 1);
 
-      if (provider === "stripe") {
-        // TODO: In a production build, use @stripe/stripe-react-native Payment Sheet
-        // with the clientSecret from res.data.data.clientSecret instead of manual polling.
-        setView("stripe_polling");
-        startStripePolling(paymentId);
-      } else {
-        setView("tara_waiting");
-        startTaraCountdown();
-        startTaraPolling(paymentId);
-      }
+      setView("tara_waiting");
+      startTaraCountdown();
+      startTaraPolling(paymentId);
     } catch (err: any) {
       const status = err?.response?.status;
       const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
 
       if (status === 429 || code === "PAYMENT_ATTEMPTS_EXCEEDED") {
         setFailureReason("Too many payment attempts. Your reservation has been released.");
-        setAttemptCount(3); // Prevent retry
+        setAttemptCount(3);
         setView("failure");
       } else if (status === 409) {
         setFailureReason("This booking is no longer available for payment.");
         setAttemptCount(3);
         setView("failure");
       } else {
-        const message =
-          err?.response?.data?.message ?? err?.message ?? "An unexpected error occurred.";
+        const message = err?.response?.data?.message ?? err?.message ?? "An unexpected error occurred.";
         Alert.alert("Payment Error", message);
       }
     } finally {
@@ -576,16 +642,12 @@ export default function PaymentScreen() {
         {!selectedSavedMethodId && (
           <View style={styles.inputSection}>
             {provider === "stripe" ? (
-              <StripeForm
-                cardNumber={cardNumber}
-                setCardNumber={setCardNumber}
-                expiry={expiry}
-                setExpiry={setExpiry}
-                cvc={cvc}
-                setCvc={setCvc}
-                cardholderName={cardholderName}
-                setCardholderName={setCardholderName}
-              />
+              <View style={styles.stripeNote}>
+                <Ionicons name="lock-closed-outline" size={18} color="#16a34a" />
+                <Text style={styles.stripeNoteText}>
+                  Your card details are collected securely by Stripe. Tap "Pay" to open the secure payment screen.
+                </Text>
+              </View>
             ) : (
               <TaraForm
                 countryPrefix={countryPrefix}
@@ -625,115 +687,6 @@ export default function PaymentScreen() {
 }
 
 // ── Stripe Form Sub-component ─────────────────────────────────────────────────
-
-interface StripeFormProps {
-  cardNumber: string;
-  setCardNumber: (v: string) => void;
-  expiry: string;
-  setExpiry: (v: string) => void;
-  cvc: string;
-  setCvc: (v: string) => void;
-  cardholderName: string;
-  setCardholderName: (v: string) => void;
-}
-
-function StripeForm({
-  cardNumber,
-  setCardNumber,
-  expiry,
-  setExpiry,
-  cvc,
-  setCvc,
-  cardholderName,
-  setCardholderName,
-}: StripeFormProps) {
-  function handleCardNumberChange(raw: string) {
-    // Format as XXXX XXXX XXXX XXXX (max 19 chars with spaces = 16 digits)
-    const digits = raw.replace(/\D/g, "").slice(0, 16);
-    const formatted = digits.replace(/(.{4})/g, "$1 ").trim();
-    setCardNumber(formatted);
-  }
-
-  function handleExpiryChange(raw: string) {
-    // Format as MM/YY
-    const digits = raw.replace(/\D/g, "").slice(0, 4);
-    if (digits.length <= 2) {
-      setExpiry(digits);
-    } else {
-      setExpiry(`${digits.slice(0, 2)}/${digits.slice(2)}`);
-    }
-  }
-
-  return (
-    <View>
-      <Text style={styles.inputSectionTitle}>Card Details</Text>
-
-      <View style={styles.fieldGroup}>
-        <Text style={styles.fieldLabel}>Card Number</Text>
-        <TextInput
-          style={styles.input}
-          value={cardNumber}
-          onChangeText={handleCardNumberChange}
-          placeholder="1234 5678 9012 3456"
-          keyboardType="numeric"
-          maxLength={19}
-          autoComplete="cc-number"
-        />
-      </View>
-
-      <View style={styles.rowFields}>
-        <View style={[styles.fieldGroup, { flex: 1, marginRight: 8 }]}>
-          <Text style={styles.fieldLabel}>Expiry (MM/YY)</Text>
-          <TextInput
-            style={styles.input}
-            value={expiry}
-            onChangeText={handleExpiryChange}
-            placeholder="MM/YY"
-            keyboardType="numeric"
-            maxLength={5}
-            autoComplete="cc-exp"
-          />
-        </View>
-        <View style={[styles.fieldGroup, { flex: 1, marginLeft: 8 }]}>
-          <Text style={styles.fieldLabel}>CVC</Text>
-          <TextInput
-            style={styles.input}
-            value={cvc}
-            onChangeText={(t) => setCvc(t.replace(/\D/g, "").slice(0, 4))}
-            placeholder="123"
-            keyboardType="numeric"
-            maxLength={4}
-            autoComplete="cc-csc"
-            secureTextEntry
-          />
-        </View>
-      </View>
-
-      <View style={styles.fieldGroup}>
-        <Text style={styles.fieldLabel}>Cardholder Name</Text>
-        <TextInput
-          style={styles.input}
-          value={cardholderName}
-          onChangeText={setCardholderName}
-          placeholder="Name as on card"
-          autoCapitalize="words"
-          autoComplete="cc-name"
-        />
-      </View>
-
-      <View style={styles.securityNote}>
-        <Ionicons name="lock-closed-outline" size={14} color="#6b7280" />
-        <Text style={styles.securityNoteText}>
-          Your card is processed securely by Stripe. ZikaBooking does not store card details.
-        </Text>
-      </View>
-      {/* TODO: In a production native build, replace this form with the Stripe Payment Sheet
-          (@stripe/stripe-react-native) using the clientSecret from the /payments/initiate response.
-          The current implementation sends card data server-side to use Stripe's token API, which
-          is only appropriate for Expo Go / development environments. */}
-    </View>
-  );
-}
 
 // ── Tara Form Sub-component ───────────────────────────────────────────────────
 
@@ -928,6 +881,26 @@ const styles = StyleSheet.create({
     color: "#111827",
   },
   rowFields: { flexDirection: "row" },
+
+  // Stripe Payment Sheet note
+  stripeNote: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#f0fdf4",
+    borderRadius: 10,
+    padding: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    marginBottom: 8,
+  },
+  stripeNoteText: {
+    fontSize: 14,
+    color: "#15803d",
+    lineHeight: 20,
+    flex: 1,
+    fontWeight: "500",
+  },
 
   // Security note (Stripe)
   securityNote: {
