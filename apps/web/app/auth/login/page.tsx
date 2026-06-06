@@ -17,6 +17,28 @@ declare global {
   }
 }
 
+let gsiInitialized = false;
+
+function getPostLoginPath(user: AuthResponse["user"]) {
+  return user.userType === "provider" ? "/dashboard" : "/traveller";
+}
+
+function getAccountAccessError(user: AuthResponse["user"]) {
+  if (!user.emailVerified || user.status === "pending_verification") {
+    return "Please verify your email address to sign in.";
+  }
+
+  if (user.status === "suspended") {
+    return "Your account has been suspended. Please contact support for assistance.";
+  }
+
+  if (user.status === "banned") {
+    return "Your account has been permanently removed from ZikaBooking.";
+  }
+
+  return null;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { setSession } = useAuthStore();
@@ -34,26 +56,28 @@ export default function LoginPage() {
     document.body.appendChild(script);
 
     script.onload = () => {
-      if (window.google) {
+      if (window.google && !gsiInitialized) {
+        gsiInitialized = true;
         window.google.accounts.id.initialize({
           client_id: "397191986681-clt35826mp608u6ptq9udm8m7c7dk80u.apps.googleusercontent.com",
           callback: handleGoogleCredentialResponse,
 
         });
-        window.google.accounts.id.renderButton(
-          document.getElementById("google-signin-btn"),
-          {
-            theme: "outline",
-            size: "large",
-            width: "100%",
-            text: "continue_with",
-            shape: "rectangular",
-          }
-        );
+
+        const btn = document.getElementById("google-signin-btn");
+        const btnWidth = btn?.offsetWidth ?? 400;
+        window.google.accounts.id.renderButton(btn, {
+          theme: "outline",
+          size: "large",
+          width: btnWidth,
+          text: "continue_with",
+          shape: "rectangular",
+        });
       }
     };
 
     return () => {
+      gsiInitialized = false;
       document.body.removeChild(script);
     };
   }, []);
@@ -66,8 +90,13 @@ export default function LoginPage() {
       });
       if (!res.data.success) throw res.data;
       const data = res.data.data;
+      const accessError = getAccountAccessError(data.user);
+      if (accessError) {
+        setError(accessError);
+        return;
+      }
       setSession(data.tokens.accessToken, data.user as any);
-      router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
+      router.replace(getPostLoginPath(data.user));
     } catch (err: any) {
       const msg = err.response?.data?.error?.message ?? "Sign in with Google failed. Please try again.";
       setError(msg);
@@ -104,13 +133,26 @@ export default function LoginPage() {
       return res.data.data;
     },
     onSuccess: (data) => {
+      const accessError = getAccountAccessError(data.user);
+      if (accessError) {
+        setError(accessError);
+        return;
+      }
+
       setSession(data.tokens.accessToken, data.user as any);
-      router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
+      router.replace(getPostLoginPath(data.user));
     },
     onError: (err: any) => {
       const e = err.response?.data?.error;
       if (e?.code === "EMAIL_NOT_VERIFIED") {
         router.push(`/auth/verify-pending?email=${encodeURIComponent(form.email)}`);
+        return;
+      }
+      if (
+        e?.code === "ACCOUNT_PENDING_APPROVAL" ||
+        (e?.message ?? "").toLowerCase().includes("pending admin approval")
+      ) {
+        router.replace("/dashboard");
         return;
       }
       setError(e?.message ?? "Unable to connect. Please check your network and try again.");

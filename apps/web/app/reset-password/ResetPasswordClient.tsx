@@ -30,7 +30,7 @@ export function ResetPasswordClient() {
     },
     onSuccess: (data) => {
       storeToken(data.tokens.accessToken);
-      router.replace(data.user.userType === "provider" ? "/listings" : "/traveller");
+      router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
     },
     onError: (err: unknown) => {
       const e = (err as { error?: { code?: string; message?: string; fields?: FieldErrors } }).error;
