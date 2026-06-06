@@ -65,8 +65,11 @@ async function getBookedListingIds(
 
 export async function searchRoutes(app: FastifyInstance) {
 
-  // ── GET /search ──────────────────────────────────────────────────────────
-  app.get("/search", { schema: { tags: ["Search"] }, preHandler: [optionalGuest] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // ── Shared search handler ─────────────────────────────────────────────────
+  // NOTE: The mobile app's listingApi has baseURL "https://api.kainook.com/listings",
+  // so calling .get("/search") resolves to /listings/search. We register the
+  // handler at both /search and /listings/search to cover both paths.
+  async function handleSearch(req: FastifyRequest, reply: FastifyReply) {
     const guestId = (req as GuestRequest).guestId;
     const q = req.query as Record<string, string>;
 
@@ -251,7 +254,14 @@ export async function searchRoutes(app: FastifyInstance) {
       nextCursor,
       results,
     });
-  });
+  }
+
+  // Register at /search (direct service calls) and /listings/search (mobile app via listingApi)
+  const searchOpts = { schema: { tags: ["Search"] }, preHandler: [optionalGuest] };
+  app.get("/search", searchOpts, handleSearch);
+  app.get("/listings/search", searchOpts, handleSearch);
+
+
 
   // ── GET /listings/:id/public — public listing detail ─────────────────────
   app.get("/listings/:id/public", { schema: { tags: ["Search"] }, preHandler: [optionalGuest] }, async (req: FastifyRequest, reply: FastifyReply) => {
