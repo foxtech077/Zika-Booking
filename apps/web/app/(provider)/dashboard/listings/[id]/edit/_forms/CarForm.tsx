@@ -90,6 +90,14 @@ const CURRENCIES = [
   { value: "ZAR", label: "ZAR (R)" },
 ];
 
+const CAR_CATEGORY_VALUES = new Set(CAR_CATEGORIES.map((x) => x.value));
+const TRANSMISSION_VALUES = new Set(TRANSMISSION_OPTIONS.map((x) => x.value));
+const FUEL_TYPE_VALUES = new Set(FUEL_TYPE_OPTIONS.map((x) => x.value));
+const MILEAGE_POLICY_VALUES = new Set(MILEAGE_POLICY_OPTIONS.map((x) => x.value));
+const FUEL_POLICY_VALUES = new Set(FUEL_POLICY_OPTIONS.map((x) => x.value));
+const INSURANCE_TYPE_VALUES = new Set(INSURANCE_TYPE_OPTIONS.map((x) => x.value));
+const CANCELLATION_POLICY_VALUES = new Set(CANCELLATION_POLICIES.map((x) => x.value));
+
 // ── State type ───────────────────────────────────────────────────────────────
 
 type CarState = {
@@ -132,11 +140,54 @@ type CarState = {
   returnSameLocation: boolean;
 };
 
+function toNullableNumber(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toNullableInt(v: unknown): number | null {
+  const n = toNullableNumber(v);
+  return n === null ? null : Math.trunc(n);
+}
+
+function trimOrNull(v: string): string | null {
+  const trimmed = v.trim();
+  return trimmed ? trimmed : null;
+}
+
+function countryOrNull(v: string): string | null {
+  const country = v.trim().toUpperCase();
+  return country.length === 2 ? country : null;
+}
+
+function normalizeSelectValue(v: unknown, allowed: Set<string>, fallback: string): string {
+  if (typeof v !== "string") return fallback;
+  return allowed.has(v) ? v : fallback;
+}
+
+function normalizeTransmission(v: unknown): string {
+  if (typeof v !== "string") return "automatic";
+  const normalized = v.toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "semi_automatic") return "semi_auto";
+  return normalizeSelectValue(normalized, TRANSMISSION_VALUES, "automatic");
+}
+
+function normalizeFuelType(v: unknown): string {
+  if (typeof v !== "string") return "petrol";
+  const normalized = v.toLowerCase().replace(/[\s-]+/g, "_");
+  if (normalized === "gasoline" || normalized === "gas" || normalized === "supercharged_v8") return "petrol";
+  if (normalized === "premium_hybrid" || normalized === "diesel_hybrid") return "hybrid";
+  if (normalized === "100%_electric") return "electric";
+  return normalizeSelectValue(normalized, FUEL_TYPE_VALUES, "petrol");
+}
+
 function normalizeDriveType(v: unknown): string {
-  if (typeof v !== "string") return "TWO_WD";
-  if (v === "4WD" || v === "FOUR_WD") return "FOUR_WD";
-  if (v === "AWD") return "AWD";
-  return "TWO_WD";
+  if (typeof v !== "string") return "2WD";
+  const normalized = v.toUpperCase().replace(/[\s-]+/g, "_");
+  if (normalized === "4WD" || normalized === "FOUR_WD") return "4WD";
+  if (normalized === "AWD") return "AWD";
+  return "2WD";
 }
 
 function initState(l: Listing): CarState {
@@ -147,29 +198,29 @@ function initState(l: Listing): CarState {
     carMake: l.carMake ?? "",
     carModel: l.carModel ?? "",
     carYear: l.carYear ? String(l.carYear) : String(new Date().getFullYear()),
-    carCategory: a.carCategory ?? "Economy",
+    carCategory: normalizeSelectValue(a.carCategory, CAR_CATEGORY_VALUES, "Economy"),
     licencePlate: a.licencePlate ?? "",
     odometerReading: a.odometerReading != null ? String(a.odometerReading) : "",
     unitCount: l.unitCount ? String(l.unitCount) : "1",
     address: l.address ?? "",
-    lat: a.lat ?? null,
-    lng: a.lng ?? null,
+    lat: toNullableNumber(a.lat),
+    lng: toNullableNumber(a.lng),
     town: l.town ?? "",
     country: l.country ?? "",
-    transmission: l.transmission ?? "automatic",
-    fuelType: l.fuelType ?? "petrol",
+    transmission: normalizeTransmission(l.transmission),
+    fuelType: normalizeFuelType(l.fuelType),
     driveType: normalizeDriveType(a.driveType),
     seats: l.seats ? String(l.seats) : "5",
     doors: l.doors ? String(l.doors) : "4",
     airConditioning: a.airConditioning ?? true,
     pricePerDay: l.pricePerDay ? String(l.pricePerDay) : "",
     currency: l.currency ?? "USD",
-    cancellationPolicy: l.cancellationPolicy ?? "flexible",
-    mileagePolicy: l.mileagePolicy ?? "unlimited",
+    cancellationPolicy: normalizeSelectValue(l.cancellationPolicy, CANCELLATION_POLICY_VALUES, "flexible"),
+    mileagePolicy: normalizeSelectValue(l.mileagePolicy, MILEAGE_POLICY_VALUES, "unlimited"),
     mileageLimitKm: l.mileageLimitKm != null ? String(l.mileageLimitKm) : "",
     extraKmRate: a.extraKmRate != null ? String(a.extraKmRate) : "",
-    fuelPolicy: a.fuelPolicy ?? "full_to_full",
-    insuranceType: a.insuranceType ?? "standard",
+    fuelPolicy: normalizeSelectValue(a.fuelPolicy, FUEL_POLICY_VALUES, "full_to_full"),
+    insuranceType: normalizeSelectValue(a.insuranceType, INSURANCE_TYPE_VALUES, "standard"),
     minimumDriverAge: a.minimumDriverAge != null ? String(a.minimumDriverAge) : "21",
     securityDeposit: a.securityDeposit != null ? String(a.securityDeposit) : "",
     deliveryEnabled: a.deliveryEnabled ?? false,
@@ -187,58 +238,71 @@ function initState(l: Listing): CarState {
 function buildPayload(s: CarState): Record<string, unknown> {
   const p: Record<string, unknown> = {};
 
-  if (s.name.trim()) p.name = s.name.trim();
-  if (s.description.trim()) p.description = s.description.trim();
-  if (s.carMake.trim()) p.carMake = s.carMake.trim();
-  if (s.carModel.trim()) p.carModel = s.carModel.trim();
-  const year = Number(s.carYear);
-  if (year >= 1990) p.carYear = year;
-  if (s.carCategory) p.carCategory = s.carCategory;
-  if (s.licencePlate.trim()) p.licencePlate = s.licencePlate.trim().toUpperCase();
-  if (s.odometerReading !== "") p.odometerReading = Number(s.odometerReading);
-  const units = Number(s.unitCount);
-  if (units >= 1) p.unitCount = units;
+  p.name = s.name.trim();
+  p.description = trimOrNull(s.description);
+  p.carMake = trimOrNull(s.carMake);
+  p.carModel = trimOrNull(s.carModel);
+  const year = toNullableInt(s.carYear);
+  p.carYear = year !== null && year >= 1990 && year <= currentYear ? year : null;
+  p.carCategory = normalizeSelectValue(s.carCategory, CAR_CATEGORY_VALUES, "Economy");
+  p.licencePlate = trimOrNull(s.licencePlate.toUpperCase());
+  const odometer = toNullableInt(s.odometerReading);
+  p.odometerReading = odometer !== null && odometer >= 0 ? odometer : null;
+  const units = toNullableInt(s.unitCount);
+  if (units !== null && units >= 1) p.unitCount = units;
 
-  if (s.address.trim()) p.address = s.address.trim();
-  if (s.lat !== null) p.lat = s.lat;
-  if (s.lng !== null) p.lng = s.lng;
-  if (s.town.trim()) p.town = s.town.trim();
-  if (s.country.trim()) p.country = s.country.trim();
+  p.address = trimOrNull(s.address);
+  p.lat = toNullableNumber(s.lat);
+  p.lng = toNullableNumber(s.lng);
+  p.town = trimOrNull(s.town);
+  p.country = countryOrNull(s.country);
 
-  if (s.transmission) p.transmission = s.transmission;
-  if (s.fuelType) p.fuelType = s.fuelType;
+  p.transmission = normalizeTransmission(s.transmission);
+  p.fuelType = normalizeFuelType(s.fuelType);
 
-  // NOTE: driveType is intentionally omitted because the backend Zod schema 
-  // strictly requires "2WD", but Prisma strictly requires "TWO_WD", 
-  // causing an unresolvable conflict on the backend.
+  // The API currently validates driveType as 2WD/4WD/AWD, while Prisma exposes
+  // mapped 2WD and 4WD enum values as TWO_WD/FOUR_WD. Omitting preserves existing
+  // 2WD/4WD values instead of sending a value one layer will reject.
+  if (normalizeDriveType(s.driveType) === "AWD") p.driveType = "AWD";
 
-  const seats = Number(s.seats);
-  if (seats >= 1) p.seats = seats;
-  const doors = Number(s.doors);
-  if (doors >= 2) p.doors = doors;
+  const seats = toNullableInt(s.seats);
+  p.seats = seats !== null && seats >= 1 ? seats : null;
+  const doors = toNullableInt(s.doors);
+  p.doors = doors !== null && doors >= 2 ? doors : null;
   p.airConditioning = s.airConditioning;
 
-  const price = Number(s.pricePerDay);
-  if (price > 0) p.pricePerDay = price;
+  const price = toNullableNumber(s.pricePerDay);
+  if (price !== null && price > 0) p.pricePerDay = price;
   if (s.currency) p.currency = s.currency;
-  if (s.cancellationPolicy) p.cancellationPolicy = s.cancellationPolicy;
-  if (s.mileagePolicy) p.mileagePolicy = s.mileagePolicy;
+  if (CANCELLATION_POLICY_VALUES.has(s.cancellationPolicy)) p.cancellationPolicy = s.cancellationPolicy;
+  p.mileagePolicy = normalizeSelectValue(s.mileagePolicy, MILEAGE_POLICY_VALUES, "unlimited");
 
   if (s.mileagePolicy === "limited") {
-    if (s.mileageLimitKm !== "") p.mileageLimitKm = Number(s.mileageLimitKm);
-    if (s.extraKmRate !== "") p.extraKmRate = Number(s.extraKmRate);
+    const limit = toNullableInt(s.mileageLimitKm);
+    p.mileageLimitKm = limit !== null && limit >= 1 ? limit : null;
+    const rate = toNullableNumber(s.extraKmRate);
+    p.extraKmRate = rate !== null && rate >= 0 ? rate : null;
+  } else {
+    p.mileageLimitKm = null;
+    p.extraKmRate = null;
   }
 
-  if (s.fuelPolicy) p.fuelPolicy = s.fuelPolicy;
-  if (s.insuranceType) p.insuranceType = s.insuranceType;
-  const age = Number(s.minimumDriverAge);
-  if (age >= 16) p.minimumDriverAge = age;
-  if (s.securityDeposit !== "") p.securityDeposit = Number(s.securityDeposit);
+  p.fuelPolicy = normalizeSelectValue(s.fuelPolicy, FUEL_POLICY_VALUES, "full_to_full");
+  p.insuranceType = normalizeSelectValue(s.insuranceType, INSURANCE_TYPE_VALUES, "standard");
+  const age = toNullableInt(s.minimumDriverAge);
+  p.minimumDriverAge = age !== null && age >= 16 && age <= 100 ? age : null;
+  const deposit = toNullableNumber(s.securityDeposit);
+  p.securityDeposit = deposit !== null && deposit >= 0 ? deposit : null;
 
   p.deliveryEnabled = s.deliveryEnabled;
   if (s.deliveryEnabled) {
-    if (s.deliveryRadiusKm !== "") p.deliveryRadiusKm = Number(s.deliveryRadiusKm);
-    if (s.deliveryFee !== "") p.deliveryFee = Number(s.deliveryFee);
+    const radius = toNullableInt(s.deliveryRadiusKm);
+    p.deliveryRadiusKm = radius !== null && radius >= 0 ? radius : null;
+    const fee = toNullableNumber(s.deliveryFee);
+    p.deliveryFee = fee !== null && fee >= 0 ? fee : null;
+  } else {
+    p.deliveryRadiusKm = null;
+    p.deliveryFee = null;
   }
 
   p.roadsideAssistance = s.roadsideAssistance;
@@ -251,7 +315,7 @@ function buildPayload(s: CarState): Record<string, unknown> {
 
 // ── Step validation ──────────────────────────────────────────────────────────
 
-type Step = "vehicle" | "specs" | "pricing" | "media";
+type Step = "basics" | "vehicle" | "specs" | "pricing" | "media";
 
 const currentYear = new Date().getFullYear();
 

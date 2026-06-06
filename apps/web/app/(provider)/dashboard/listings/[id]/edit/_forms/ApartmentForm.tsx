@@ -60,6 +60,9 @@ const LONG_STAY_TYPES = [
   { value: "fixed",      label: "Fixed Amount" },
 ];
 
+const CANCELLATION_POLICY_VALUES = new Set(CANCELLATION_POLICIES.map((x) => x.value));
+const LONG_STAY_TYPE_VALUES = new Set(LONG_STAY_TYPES.map((x) => x.value));
+
 // ── State type ───────────────────────────────────────────────────────────────
 
 type ApartmentState = {
@@ -101,6 +104,27 @@ type ApartmentState = {
   customInput: string;
 } & DiscountState;
 
+function toNullableNumber(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toNullableInt(v: unknown): number | null {
+  const n = toNullableNumber(v);
+  return n === null ? null : Math.trunc(n);
+}
+
+function trimOrNull(v: string): string | null {
+  const trimmed = v.trim();
+  return trimmed ? trimmed : null;
+}
+
+function countryOrNull(v: string): string | null {
+  const country = v.trim().toUpperCase();
+  return country.length === 2 ? country : null;
+}
+
 function initState(l: Listing): ApartmentState {
   const a = l as any;
   return {
@@ -108,8 +132,8 @@ function initState(l: Listing): ApartmentState {
     apartmentType:       a.apartmentType     ?? "entire_place",
     description:         l.description       ?? "",
     address:             l.address           ?? "",
-    lat:                 a.lat               ?? null,
-    lng:                 a.lng               ?? null,
+    lat:                 toNullableNumber(a.lat),
+    lng:                 toNullableNumber(a.lng),
     town:                l.town              ?? "",
     country:             l.country           ?? "",
     pricePerNight:       l.pricePerNight ? String(l.pricePerNight) : "",
@@ -149,63 +173,64 @@ function initState(l: Listing): ApartmentState {
 function buildPayload(s: ApartmentState): Record<string, unknown> {
   const p: Record<string, unknown> = {};
 
-  if (s.name.trim())       p.name         = s.name.trim();
-  if (s.apartmentType)     p.apartmentType = s.apartmentType;
-  if (s.description.trim()) p.description = s.description.trim();
-  if (s.address.trim())    p.address      = s.address.trim();
-  if (s.lat !== null)      p.lat          = s.lat;
-  if (s.lng !== null)      p.lng          = s.lng;
-  if (s.town.trim())       p.town         = s.town.trim();
-  if (s.country.trim())    p.country      = s.country.trim();
+  p.name = s.name.trim();
+  p.description = trimOrNull(s.description);
+  p.address = trimOrNull(s.address);
+  p.lat = toNullableNumber(s.lat);
+  p.lng = toNullableNumber(s.lng);
+  p.town = trimOrNull(s.town);
+  p.country = countryOrNull(s.country);
 
-  const price = Number(s.pricePerNight);
-  if (price > 0)           p.pricePerNight = price;
-  if (s.currency)          p.currency     = s.currency;
+  const price = toNullableNumber(s.pricePerNight);
+  if (price !== null && price > 0) p.pricePerNight = price;
+  if (s.currency) p.currency = s.currency;
 
-  const nights = Number(s.minStayNights);
-  if (nights >= 1)         p.minStayNights = nights;
-  if (s.checkinTime)       p.checkinTime  = s.checkinTime;
-  if (s.checkoutTime)      p.checkoutTime = s.checkoutTime;
-  if (s.cancellationPolicy) p.cancellationPolicy = s.cancellationPolicy;
-
-  const cleaning = Number(s.cleaningFee);
-  if (cleaning >= 0 && s.cleaningFee !== "") p.cleaningFee = cleaning;
+  const nights = toNullableInt(s.minStayNights);
+  if (nights !== null && nights >= 1) p.minStayNights = nights;
+  p.checkinTime = s.checkinTime || null;
+  p.checkoutTime = s.checkoutTime || null;
+  if (CANCELLATION_POLICY_VALUES.has(s.cancellationPolicy)) {
+    p.cancellationPolicy = s.cancellationPolicy;
+  }
 
   p.smokingAllowed = s.smokingAllowed;
   p.petsAllowed    = s.petsAllowed;
 
   // apartment-specific specs
-  if (s.bedrooms  !== "")  p.bedrooms  = Number(s.bedrooms);
-  if (s.bathrooms !== "")  p.bathrooms = Number(s.bathrooms);
-  const guests = Number(s.maxGuests);
-  if (guests >= 1)         p.maxGuests = guests;
+  const bedrooms = toNullableInt(s.bedrooms);
+  p.bedrooms = bedrooms !== null && bedrooms >= 0 ? bedrooms : null;
+  const bathrooms = toNullableInt(s.bathrooms);
+  p.bathrooms = bathrooms !== null && bathrooms >= 0 ? bathrooms : null;
+  const guests = toNullableInt(s.maxGuests);
+  p.maxGuests = guests !== null && guests >= 1 ? guests : null;
 
-  if (s.floorNumber !== "")     p.floorNumber    = Number(s.floorNumber);
-  if (s.propertySizeM2 !== "")  p.propertySizeM2 = Number(s.propertySizeM2);
-  if (s.extraGuestFee !== "")   p.extraGuestFee  = Number(s.extraGuestFee);
-  if (s.extraGuestAfter !== "") p.extraGuestAfter = Number(s.extraGuestAfter);
-  if (s.weeklyDiscount !== "")  p.weeklyDiscount  = Number(s.weeklyDiscount);
-  if (s.monthlyDiscount !== "") p.monthlyDiscount = Number(s.monthlyDiscount);
+  const lsNights = toNullableInt(s.longStayMinNights);
+  const lsValue = toNullableNumber(s.longStayDiscountValue);
+  const lsType = LONG_STAY_TYPE_VALUES.has(s.longStayDiscountType)
+    ? s.longStayDiscountType
+    : "percentage";
+  const hasValidLongStay =
+    s.longStayEnabled &&
+    lsNights !== null &&
+    lsNights >= 1 &&
+    lsValue !== null &&
+    lsValue > 0 &&
+    (lsType !== "percentage" || lsValue <= 100);
 
-  p.instantBooking = s.instantBooking;
-  p.selfCheckin    = s.selfCheckin;
-  if (s.selfCheckin && s.selfCheckinDetails.trim()) {
-    p.selfCheckinDetails = s.selfCheckinDetails.trim();
-  }
+  p.longStayEnabled = hasValidLongStay;
+  p.longStayMinNights = hasValidLongStay ? lsNights : null;
+  p.longStayDiscountType = hasValidLongStay ? lsType : null;
+  p.longStayDiscountValue = hasValidLongStay ? lsValue : null;
 
-  // long-stay: only include when enabled with valid positive value
-  p.longStayEnabled = s.longStayEnabled;
-  if (s.longStayEnabled) {
-    const lsNights = Number(s.longStayMinNights);
-    if (lsNights >= 1)            p.longStayMinNights    = lsNights;
-    if (s.longStayDiscountType)   p.longStayDiscountType = s.longStayDiscountType;
-    const lsVal = Number(s.longStayDiscountValue);
-    if (lsVal > 0)                p.longStayDiscountValue = lsVal;
+  if (s.discountEnabled) {
+    const discountErrors = validateDiscount(s, s.pricePerNight).filter(Boolean);
+    if (discountErrors.length === 0 && s.discountValue !== "") {
+      appendDiscountPayload(p, s);
+    }
   }
 
   p.amenities       = groupAmenities(s.selectedAmenities);
-  p.customAmenities = s.customAmenities;
-  appendDiscountPayload(p, s);
+  p.customAmenities = s.customAmenities.map((x) => x.trim()).filter(Boolean);
 
   return p;
 }
@@ -463,11 +488,11 @@ export function ApartmentForm({ listingId, listing }: Props) {
                   <Input label="Cleaning Fee (optional)"    type="number" min="0" value={s.cleaningFee}    onChange={(e) => set("cleaningFee", e.target.value)}    placeholder="0.00" />
                   <Input label="Extra Guest Fee (optional)" type="number" min="0" value={s.extraGuestFee}  onChange={(e) => set("extraGuestFee", e.target.value)}  placeholder="0.00" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                {/* <div className="grid grid-cols-2 gap-4">
                   <Input label="Extra Guest After (guests)" type="number" min="1" value={s.extraGuestAfter} onChange={(e) => set("extraGuestAfter", e.target.value)} placeholder="E.g., 2" />
                   <Input label="Weekly Discount (%)"        type="number" min="0" max="100" value={s.weeklyDiscount}  onChange={(e) => set("weeklyDiscount",  e.target.value)} placeholder="0" />
-                </div>
-                <Input label="Monthly Discount (%)" type="number" min="0" max="100" value={s.monthlyDiscount} onChange={(e) => set("monthlyDiscount", e.target.value)} placeholder="0" />
+                </div> */}
+                {/* <Input label="Monthly Discount (%)" type="number" min="0" max="100" value={s.monthlyDiscount} onChange={(e) => set("monthlyDiscount", e.target.value)} placeholder="0" /> */}
                 <div className="flex items-center gap-6 pt-1">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input type="checkbox" checked={s.smokingAllowed} onChange={(e) => set("smokingAllowed", e.target.checked)} className="rounded border-slate-300 text-primary focus:ring-primary" />

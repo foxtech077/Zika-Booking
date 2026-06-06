@@ -37,6 +37,6 @@ export function groupAmenities(keys: string[]): Record<string, string[]> {
 
 export function flattenGroupedAmenities(raw: unknown): string[] {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
-  const known = new Set(AMENITY_OPTIONS.map((o) => o.value));
+  const known = new Set<string>(AMENITY_OPTIONS.map((o) => o.value));
   return (Object.values(raw) as string[][]).flat().filter((k) => known.has(k));
 }
