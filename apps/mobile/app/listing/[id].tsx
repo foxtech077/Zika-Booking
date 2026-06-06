@@ -1,644 +1,352 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
-  Image,
-  TouchableOpacity,
-  FlatList,
-  ActivityIndicator,
-  Alert,
-  StyleSheet,
-  Dimensions,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
-  Modal,
-  Platform,
-  Linking,
+  View, Text, ScrollView, TouchableOpacity, FlatList,
+  ActivityIndicator, Alert, StyleSheet, Dimensions,
+  NativeSyntheticEvent, NativeScrollEvent, Modal, Platform, Linking,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
-
-
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 
+let MapView: any = null;
+let Marker: any = null;
+try {
+  const Maps = require("react-native-maps");
+  MapView = Maps.default || Maps;
+  Marker = Maps.Marker;
+} catch { /* not available in bare Expo Go */ }
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const PHOTO_HEIGHT = 260;
+const { width: W, height: H } = Dimensions.get("window");
+const PHOTO_H = Math.round(H * 0.42);
+const GREEN = "#1B5E20";
+const GREEN_LIGHT = "#F0FDF4";
+const TEXT = "#111827";
+const MUTED = "#6B7280";
+const BORDER = "#E5E7EB";
+const BG = "#FAFAFA";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Amenity {
-  amenityKey: string;
-  category: string;
+interface Photo { id: string; cdnUrl: string; position: number; }
+interface Amenity { amenityKey: string; category: string; }
+interface CustomAmenity { label: string; }
+interface Review {
+  id: string; rating: number; title?: string | null;
+  body?: string | null; createdAt: string; providerReply?: string | null;
 }
-
-interface CustomAmenity {
-  label: string;
-}
-
-interface Photo {
-  id: string;
-  cdnUrl: string;
-  position: number;
-}
-
+interface ReviewsData { reviews: Review[]; total: number; averageRating: number; }
 interface PublicListing {
-  id: string;
-  name: string | null;
-  category: "hotel" | "apartment" | "car";
-  status: string;
-  description: string | null;
-  address: string | null;
-  town: string | null;
-  country: string | null;
-  lat: number | null;
-  lng: number | null;
-  pricePerNight: number | null;
-  pricePerDay: number | null;
-  currency: string | null;
-  cancellationPolicy: string | null;
-  minStayNights: number | null;
-  checkinTime: string | null;
-  checkoutTime: string | null;
-  smokingAllowed: boolean | null;
-  petsAllowed: boolean | null;
-  // hotel
-  starRating: number | null;
-  roomType: string | null;
-  unitCount: number | null;
-  // apartment
-  bedrooms: number | null;
-  bathrooms: number | null;
-  maxGuests: number | null;
-  longStayEnabled: boolean | null;
-  longStayMinNights: number | null;
-  longStayDiscountType: string | null;
-  longStayDiscountValue: number | null;
-  // car
-  carMake: string | null;
-  carModel: string | null;
-  carYear: number | null;
-  bodyType: string | null;
-  transmission: string | null;
-  fuelType: string | null;
-  seats: number | null;
-  mileagePolicy: string | null;
-  mileageLimitKm: number | null;
-  minDriverAge: number | null;
-  deliveryAvailable: boolean | null;
-  deliveryFee: number | null;
-  deliveryRadiusKm: number | null;
-  amenities: Amenity[];
-  customAmenities: CustomAmenity[];
-  photos: Photo[];
+  id: string; name: string | null; category: "hotel" | "apartment" | "car";
+  status: string; description: string | null; address: string | null;
+  town: string | null; country: string | null; lat: number | null; lng: number | null;
+  pricePerNight: number | null; pricePerDay: number | null; currency: string | null;
+  cancellationPolicy: string | null; minStayNights: number | null;
+  checkinTime: string | null; checkoutTime: string | null;
+  smokingAllowed: boolean | null; petsAllowed: boolean | null;
+  starRating: number | null; roomType: string | null; unitCount: number | null;
+  bedrooms: number | null; bathrooms: number | null; maxGuests: number | null;
+  longStayEnabled: boolean | null; longStayMinNights: number | null;
+  longStayDiscountType: string | null; longStayDiscountValue: number | null;
+  carMake: string | null; carModel: string | null; carYear: number | null;
+  bodyType: string | null; transmission: string | null; fuelType: string | null;
+  seats: number | null; mileagePolicy: string | null; mileageLimitKm: number | null;
+  minDriverAge: number | null; deliveryAvailable: boolean | null;
+  deliveryFee: number | null; deliveryRadiusKm: number | null;
+  amenities: Amenity[]; customAmenities: CustomAmenity[]; photos: Photo[];
   isFavourited: boolean | undefined;
 }
 
-// ── Review types ──────────────────────────────────────────────────────────────
-
-interface Review {
-  id: string;
-  rating: number;
-  title?: string | null;
-  body?: string | null;
-  createdAt: string;
-  providerReply?: string | null;
-}
-
-interface ReviewsData {
-  reviews: Review[];
-  total: number;
-  averageRating: number;
-}
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
+const AMENITY_ICONS: Record<string, string> = {
+  wifi: "wifi", pool: "water", gym: "barbell", spa: "flower", parking: "car",
+  kitchen: "restaurant", breakfast: "cafe", air_conditioning: "snow",
+  reception_24h: "time", restaurant: "restaurant", bar: "beer",
+  housekeeping: "sparkles", airport_shuttle: "airplane",
+  security_24h: "shield-checkmark", elevator: "arrow-up",
+};
 const AMENITY_LABELS: Record<string, string> = {
-  wifi: "WiFi",
-  smart_tv: "Smart TV",
-  work_desk: "Work desk",
-  kitchen: "Kitchen",
-  breakfast: "Breakfast",
-  restaurant: "Restaurant",
-  minibar: "Minibar",
-  pool: "Swimming pool",
-  gym: "Fitness centre",
-  spa: "Spa",
-  air_conditioning: "Air conditioning",
-  parking: "Parking",
-  elevator: "Elevator",
-  accessible: "Accessible",
-  reception_24h: "24h reception",
-  housekeeping: "Housekeeping",
-  airport_shuttle: "Airport shuttle",
-  security_24h: "24h security",
+  wifi: "WiFi", pool: "Swimming Pool", gym: "Fitness Centre", spa: "Spa",
+  parking: "Free Parking", kitchen: "Kitchen", breakfast: "Breakfast Included",
+  air_conditioning: "Air Conditioning", reception_24h: "24h Reception",
+  restaurant: "Restaurant", bar: "Bar", housekeeping: "Housekeeping",
+  airport_shuttle: "Airport Shuttle", security_24h: "24h Security", elevator: "Elevator",
+  smart_tv: "Smart TV", work_desk: "Work Desk", minibar: "Minibar", accessible: "Accessible",
 };
 
-function formatDate(dateStr: string | undefined): string {
-  if (!dateStr) return "";
+function fmt(d: string | undefined): string {
+  if (!d) return "";
+  try { return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short" }); }
+  catch { return d; }
+}
+function fmtDT(d: string | undefined): string {
+  if (!d) return "";
   try {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-  } catch {
-    return dateStr;
+    const dt = new Date(d);
+    return `${dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} ${dt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+  } catch { return d; }
+}
+function nights(a: string, b: string) { return Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000)); }
+function days(a: string, b: string) { return Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000)); }
+
+function cancelColor(p: string | null) {
+  if (p === "flexible" || p === "free") return "#16a34a";
+  if (p === "moderate") return "#D97706";
+  return "#DC2626";
+}
+function cancelText(p: string | null) {
+  switch (p) {
+    case "flexible": case "free": return "Free cancellation up to 48 hours before check-in.";
+    case "moderate": return "Full refund 7+ days before. 50% refund 48h–7 days. No refund within 48h.";
+    case "strict": return "50% refund 14+ days before. No refund within 14 days.";
+    default: return p ?? "Contact host for details.";
   }
 }
 
-function formatDateWithTime(dateStr: string | undefined): string {
-  if (!dateStr) return "";
-  try {
-    const d = new Date(dateStr);
-    const datePart = d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    const timePart = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-    return `${datePart} ${timePart}`;
-  } catch {
-    return dateStr;
-  }
-}
+// ── Sub-components ────────────────────────────────────────────────────────────
 
-function nightsBetween(checkIn: string, checkOut: string): number {
-  try {
-    const diff = new Date(checkOut).getTime() - new Date(checkIn).getTime();
-    return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
-  } catch {
-    return 1;
-  }
-}
-
-function daysBetween(pickup: string, returnD: string): number {
-  try {
-    const diff = new Date(returnD).getTime() - new Date(pickup).getTime();
-    return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
-  } catch {
-    return 1;
-  }
-}
-
-function cancellationText(policy: string | null): string {
-  switch (policy) {
-    case "free":
-    case "flexible":
-      return "Free cancellation if cancelled 48+ hours before check-in.";
-    case "moderate":
-      return "Full refund if cancelled 7+ days before. 50% refund 48h–7 days. No refund within 48h.";
-    case "strict":
-      return "50% refund if cancelled 14+ days before. No refund within 14 days.";
-    case "non_refundable":
-      return "Non-refundable — no refunds on cancellation.";
-    default:
-      return policy ?? "Contact host for cancellation details.";
-  }
-}
-
-function cancellationBadgeColor(policy: string | null): string {
-  switch (policy) {
-    case "free":
-    case "flexible":
-      return "#16a34a";
-    case "moderate":
-      return "#d97706";
-    case "strict":
-      return "#dc2626";
-    case "non_refundable":
-      return "#7c3aed";
-    default:
-      return "#6b7280";
-  }
-}
-
-// ── Skeleton ──────────────────────────────────────────────────────────────────
-
-function SkeletonBlock({ height, style }: { height: number; style?: object }) {
-  return <View style={[{ height, backgroundColor: "#e5e7eb", borderRadius: 8, marginBottom: 12 }, style]} />;
-}
-
-function LoadingSkeleton() {
+function Stars({ n, size = 13 }: { n: number; size?: number }) {
   return (
-    <SafeAreaView style={styles.container}>
-      <SkeletonBlock height={PHOTO_HEIGHT} style={{ borderRadius: 0, marginBottom: 0 }} />
-      <View style={styles.content}>
-        <SkeletonBlock height={28} style={{ width: "70%", marginTop: 16 }} />
-        <SkeletonBlock height={18} style={{ width: "50%" }} />
-        <SkeletonBlock height={36} style={{ width: "40%" }} />
-        <SkeletonBlock height={1} />
-        <SkeletonBlock height={16} />
-        <SkeletonBlock height={16} style={{ width: "85%" }} />
-        <SkeletonBlock height={16} style={{ width: "60%" }} />
-        <SkeletonBlock height={1} />
-        <SkeletonBlock height={80} />
-        <SkeletonBlock height={200} />
-      </View>
-    </SafeAreaView>
-  );
-}
-
-// ── Reviews Section ───────────────────────────────────────────────────────────
-
-function StarRow({ rating }: { rating: number }) {
-  return (
-    <View style={{ flexDirection: "row", marginBottom: 4 }}>
-      {[1, 2, 3, 4, 5].map((s) => (
-        <Text key={s} style={{ fontSize: 13, color: s <= rating ? "#fbbf24" : "#d1d5db" }}>
-          {s <= rating ? "★" : "☆"}
-        </Text>
+    <View style={{ flexDirection: "row", gap: 1 }}>
+      {[1,2,3,4,5].map(i => (
+        <Text key={i} style={{ fontSize: size, color: i <= n ? "#F59E0B" : "#E5E7EB" }}>★</Text>
       ))}
     </View>
   );
 }
 
-function ReviewCard({ review }: { review: Review }) {
-  const date = (() => {
-    try {
-      return new Date(review.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-    } catch {
-      return "";
-    }
-  })();
-
+function Chip({ icon, label, accent }: { icon: string; label: string; accent?: boolean }) {
   return (
-    <View style={reviewStyles.card}>
-      <StarRow rating={review.rating} />
-      {review.title ? (
-        <Text style={reviewStyles.reviewTitle}>{review.title}</Text>
-      ) : null}
-      {review.body ? (
-        <Text style={reviewStyles.reviewBody} numberOfLines={3}>{review.body}</Text>
-      ) : null}
-      <View style={reviewStyles.reviewMeta}>
-        <Text style={reviewStyles.reviewerName}>Guest</Text>
-        <Text style={reviewStyles.reviewDate}>{date}</Text>
-      </View>
+    <View style={[chip.wrap, accent && chip.wrapAccent]}>
+      <Text style={chip.icon}>{icon}</Text>
+      <Text style={[chip.label, accent && chip.labelAccent]}>{label}</Text>
     </View>
   );
 }
-
-function InlineCalendar({ unavailableRanges, currency }: { unavailableRanges: { start: string; end: string }[], currency: string }) {
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth();
-
-  // Days of week
-  const daysOfWeek = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-  const monthName = today.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-
-  const firstDay = new Date(currentYear, currentMonth, 1).getDay();
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-
-  const cells: (number | null)[] = [];
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-  while (cells.length < 35) cells.push(null); // pad
-
-  const isDateUnavailable = (day: number) => {
-    const dStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    const dDate = new Date(dStr);
-
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    if (dDate < yesterday) return true;
-
-    return unavailableRanges.some((range) => {
-      if (!range.start || !range.end) return false;
-      const start = new Date(range.start);
-      const end = new Date(range.end);
-      return dDate >= start && dDate <= end;
-    });
-  };
-
-  return (
-    <View style={calStyles.container}>
-      <Text style={calStyles.monthName}>{monthName}</Text>
-      <View style={calStyles.dowRow}>
-        {daysOfWeek.map((d) => (
-          <Text key={d} style={calStyles.dowLabel}>{d}</Text>
-        ))}
-      </View>
-      <View style={calStyles.grid}>
-        {cells.map((day, idx) => {
-          if (day === null) return <View key={`empty-${idx}`} style={calStyles.cellEmpty} />;
-          const blocked = isDateUnavailable(day);
-          return (
-            <View
-              key={`day-${day}`}
-              style={[
-                calStyles.cell,
-                blocked && calStyles.cellBlocked,
-              ]}
-            >
-              <Text style={[calStyles.cellText, blocked && calStyles.cellTextBlocked]}>
-                {day}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-      <View style={calStyles.legend}>
-        <View style={calStyles.legendItem}>
-          <View style={[calStyles.dot, { backgroundColor: "#fff", borderColor: "#eff6ff", borderWidth: 1 }]} />
-          <Text style={calStyles.legendText}>Available</Text>
-        </View>
-        <View style={calStyles.legendItem}>
-          <View style={[calStyles.dot, { backgroundColor: "#fef2f2", borderColor: "#dc2626", borderWidth: 1 }]} />
-          <Text style={calStyles.legendText}>Booked / Blocked</Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-const calStyles = StyleSheet.create({
-  container: {
-    backgroundColor: "#f9fafb",
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    marginTop: 10,
-  },
-  monthName: { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 12, textAlign: "center" },
-  dowRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  dowLabel: { width: "13%", textAlign: "center", fontSize: 12, fontWeight: "600", color: "#6b7280" },
-  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  cell: {
-    width: "13%",
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#f3f4f6",
-  },
-  cellEmpty: { width: "13%", height: 36 },
-  cellBlocked: { backgroundColor: "#fef2f2", borderColor: "#fecaca" },
-  cellText: { fontSize: 13, fontWeight: "500", color: "#111827" },
-  cellTextBlocked: { color: "#dc2626", textDecorationLine: "line-through" },
-  legend: { flexDirection: "row", justifyContent: "center", gap: 16, marginTop: 12, borderTopWidth: 1, borderTopColor: "#e5e7eb", paddingTop: 10 },
-  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
-  dot: { width: 12, height: 12, borderRadius: 6 },
-  legendText: { fontSize: 12, color: "#4b5563", fontWeight: "500" },
+const chip = StyleSheet.create({
+  wrap: { flexDirection: "row", alignItems: "center", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7, backgroundColor: "#F3F4F6", gap: 5, marginRight: 8 },
+  wrapAccent: { backgroundColor: GREEN_LIGHT, borderWidth: 1, borderColor: "#BBF7D0" },
+  icon: { fontSize: 13 },
+  label: { fontSize: 12, fontWeight: "600", color: MUTED },
+  labelAccent: { color: GREEN },
 });
 
-function ReviewsSection({ listingId }: { listingId: string }) {
-  const { data, isLoading } = useQuery<ReviewsData>({
-    queryKey: ["listing-reviews", listingId],
-    queryFn: async () => {
-      const res = await listingApi.get<{ data: ReviewsData }>(
-        `/listings/${listingId}/reviews?page=1&limit=5`
-      );
-      return res.data.data;
-    },
-    enabled: !!listingId,
-  });
-
-  const reviews = data?.reviews ?? [];
-  const total = data?.total ?? 0;
-  const avg = data?.averageRating;
-
-  const headerLabel = avg != null && total > 0
-    ? `★ ${avg.toFixed(1)} · ${total} ${total === 1 ? "review" : "reviews"}`
-    : total > 0
-      ? `${total} ${total === 1 ? "review" : "reviews"}`
-      : "";
-
+function InfoCard({ items }: { items: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; value: string }[] }) {
   return (
-    <View style={reviewStyles.sectionWrapper}>
-      <View style={reviewStyles.sectionHeader}>
-        <Text style={styles.sectionLabel}>Guest Reviews</Text>
-        {headerLabel ? (
-          <Text style={reviewStyles.avgLabel}>{headerLabel}</Text>
-        ) : null}
-      </View>
-
-      {isLoading ? (
-        <View style={reviewStyles.loadingBox}>
-          <ActivityIndicator size="small" color="#1B5E20" />
-        </View>
-      ) : reviews.length === 0 ? (
-        <Text style={reviewStyles.emptyText}>No reviews yet.</Text>
-      ) : (
-        <>
-          {/* Sentiment / Ratings Breakdown Stats */}
-          <View style={reviewStyles.breakdownContainer}>
-            <View style={reviewStyles.scoreCol}>
-              <Text style={reviewStyles.scoreBig}>{avg != null ? avg.toFixed(1) : "5.0"}</Text>
-              <View style={reviewStyles.starsRow}>
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <Text key={i} style={{ fontSize: 14, color: i < Math.round(avg ?? 5) ? "#fbbf24" : "#d1d5db" }}>★</Text>
-                ))}
-              </View>
-              <Text style={reviewStyles.scoreCount}>{total} reviews</Text>
-            </View>
-            <View style={reviewStyles.barsCol}>
-              {[5, 4, 3, 2, 1].map((stars) => {
-                const countOfStars = reviews.filter((r) => r.rating === stars).length;
-                const pct = total > 0 ? (countOfStars / reviews.length) * 100 : stars === 5 ? 85 : stars === 4 ? 10 : 5;
-                return (
-                  <View key={stars} style={reviewStyles.barRow}>
-                    <Text style={reviewStyles.barLabel}>{stars} ★</Text>
-                    <View style={reviewStyles.barBg}>
-                      <View style={[reviewStyles.barFill, { width: `${pct}%` }]} />
-                    </View>
-                    <Text style={reviewStyles.barPct}>{Math.round(pct)}%</Text>
-                  </View>
-                );
-              })}
-            </View>
+    <View style={ic.wrap}>
+      {items.map((item, i) => (
+        <View key={i} style={[ic.row, i < items.length - 1 && ic.rowBorder]}>
+          <View style={ic.iconWrap}>
+            <Ionicons name={item.icon} size={18} color={GREEN} />
           </View>
+          <View style={{ flex: 1 }}>
+            <Text style={ic.label}>{item.label}</Text>
+            <Text style={ic.value}>{item.value}</Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+const ic = StyleSheet.create({
+  wrap: { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1, borderColor: BORDER, overflow: "hidden" },
+  row: { flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 16, gap: 14 },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: BORDER },
+  iconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center" },
+  label: { fontSize: 11, color: MUTED, fontWeight: "500", marginBottom: 2 },
+  value: { fontSize: 14, color: TEXT, fontWeight: "600" },
+});
 
-          {reviews.map((r) => (
-            <View key={r.id} style={reviewStyles.card}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <StarRow rating={r.rating} />
-                <Text style={reviewStyles.reviewDate}>
-                  {new Date(r.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-                </Text>
-              </View>
-              {r.title ? (
-                <Text style={reviewStyles.reviewTitle}>{r.title}</Text>
-              ) : null}
-              {r.body ? (
-                <Text style={reviewStyles.reviewBody}>{r.body}</Text>
-              ) : null}
-              <View style={reviewStyles.reviewMeta}>
-                <Text style={reviewStyles.reviewerName}>Guest Traveler</Text>
-              </View>
+function AmenityPill({ amenityKey, label }: { amenityKey: string; label: string }) {
+  const icon = AMENITY_ICONS[amenityKey];
+  return (
+    <View style={ap.wrap}>
+      <View style={ap.iconWrap}>
+        {icon ? (
+          <Ionicons name={icon as any} size={18} color={GREEN} />
+        ) : (
+          <Ionicons name="checkmark" size={16} color={GREEN} />
+        )}
+      </View>
+      <Text style={ap.label}>{label}</Text>
+    </View>
+  );
+}
+const ap = StyleSheet.create({
+  wrap: { width: "48%", flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: "#fff", borderRadius: 12, borderWidth: 1, borderColor: BORDER, marginBottom: 8 },
+  iconWrap: { width: 32, height: 32, borderRadius: 8, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  label: { fontSize: 12, fontWeight: "600", color: TEXT, flex: 1 },
+});
 
-              {/* Provider Response Reply */}
-              {r.providerReply && (
-                <View style={reviewStyles.replyBox}>
-                  <View style={reviewStyles.replyHeader}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={13} color="#1B5E20" style={{ marginRight: 4 }} />
-                    <Text style={reviewStyles.replyHostLabel}>Host Response</Text>
-                  </View>
-                  <Text style={reviewStyles.replyBody}>{r.providerReply}</Text>
-                </View>
-              )}
-            </View>
-          ))}
-          {total > 5 && (
-            <Text style={reviewStyles.viewAllText}>View all {total} reviews</Text>
-          )}
-        </>
+function ReviewCard({ review }: { review: Review }) {
+  const d = (() => { try { return new Date(review.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }); } catch { return ""; } })();
+  return (
+    <View style={rv.card}>
+      <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+        <Stars n={review.rating} />
+        <Text style={rv.date}>{d}</Text>
+      </View>
+      {review.title ? <Text style={rv.title}>{review.title}</Text> : null}
+      {review.body ? <Text style={rv.body} numberOfLines={4}>{review.body}</Text> : null}
+      <Text style={rv.guest}>Guest Traveller</Text>
+      {review.providerReply && (
+        <View style={rv.reply}>
+          <Text style={rv.replyLabel}>🏨 Host response</Text>
+          <Text style={rv.replyBody}>{review.providerReply}</Text>
+        </View>
       )}
     </View>
   );
 }
-
-const reviewStyles = StyleSheet.create({
-  sectionWrapper: { marginBottom: 4 },
-  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  avgLabel: { fontSize: 14, color: "#374151", fontWeight: "600" },
-  card: {
-    backgroundColor: "#f9fafb",
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    marginBottom: 10,
-  },
-  reviewTitle: { fontSize: 14, fontWeight: "700", color: "#111827", marginBottom: 4 },
-  reviewBody: { fontSize: 13, color: "#374151", lineHeight: 19, marginBottom: 8 },
-  reviewMeta: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  reviewerName: { fontSize: 12, fontWeight: "600", color: "#6b7280" },
-  reviewDate: { fontSize: 12, color: "#9ca3af" },
-  loadingBox: { paddingVertical: 20, alignItems: "center" },
-  emptyText: { fontSize: 14, color: "#9ca3af", fontStyle: "italic" },
-  viewAllText: { fontSize: 14, color: "#1B5E20", fontWeight: "600", marginTop: 4 },
-
-  // Breakdown
-  breakdownContainer: {
-    flexDirection: "row",
-    backgroundColor: "#f9fafb",
-    borderRadius: 14,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    marginBottom: 16,
-    alignItems: "center",
-    gap: 16,
-  },
-  scoreCol: { alignItems: "center", justifyContent: "center", width: "35%" },
-  scoreBig: { fontSize: 32, fontWeight: "800", color: "#111827" },
-  starsRow: { flexDirection: "row", gap: 2, marginVertical: 4 },
-  scoreCount: { fontSize: 12, color: "#6b7280", fontWeight: "500" },
-  barsCol: { flex: 1, gap: 4 },
-  barRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  barLabel: { fontSize: 11, color: "#4b5563", width: 22, textAlign: "right", fontWeight: "500" },
-  barBg: { flex: 1, height: 6, backgroundColor: "#e5e7eb", borderRadius: 3, overflow: "hidden" },
-  barFill: { height: 6, backgroundColor: "#fbbf24", borderRadius: 3 },
-  barPct: { fontSize: 11, color: "#4b5563", width: 28, fontWeight: "500" },
-
-  // Reply Box
-  replyBox: {
-    marginTop: 10,
-    backgroundColor: "#eff6ff",
-    borderRadius: 8,
-    padding: 10,
-    borderLeftWidth: 3,
-    borderColor: "#1B5E20",
-  },
-  replyHeader: { flexDirection: "row", alignItems: "center", marginBottom: 4 },
-  replyHostLabel: { fontSize: 12, fontWeight: "700", color: "#1B5E20" },
+const rv = StyleSheet.create({
+  card: { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1, borderColor: BORDER, padding: 16, marginBottom: 10 },
+  date: { fontSize: 11, color: MUTED },
+  title: { fontSize: 14, fontWeight: "700", color: TEXT, marginBottom: 4 },
+  body: { fontSize: 13, color: "#374151", lineHeight: 20, marginBottom: 8 },
+  guest: { fontSize: 12, fontWeight: "600", color: MUTED },
+  reply: { marginTop: 10, backgroundColor: GREEN_LIGHT, borderRadius: 10, padding: 10 },
+  replyLabel: { fontSize: 12, fontWeight: "700", color: GREEN, marginBottom: 4 },
   replyBody: { fontSize: 12, color: "#374151", lineHeight: 17 },
 });
 
-// ── Main Component ─────────────────────────────────────────────────────────────
+// ── GalleryModal ─────────────────────────────────────────────────────────────
+interface GalleryModalProps {
+  photos: Photo[];
+  photoIdx: number;
+  setPhotoIdx: (idx: number) => void;
+  onClose: () => void;
+}
+function GalleryModal({ photos, photoIdx, setPhotoIdx, onClose }: GalleryModalProps) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ flex: 1, backgroundColor: "#000" }}>
+      <FlatList
+        data={photos}
+        keyExtractor={p => p.id}
+        horizontal pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={photoIdx}
+        getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
+        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => setPhotoIdx(Math.round(e.nativeEvent.contentOffset.x / W))}
+        scrollEventThrottle={16}
+        renderItem={({ item }) => (
+          <View style={{ width: W, flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ListingImage uri={item.cdnUrl} style={{ width: W, height: H * 0.7 }} resizeMode="contain" />
+          </View>
+        )}
+      />
+      {/* Counter */}
+      <View style={{ alignItems: "center", paddingBottom: Math.max(insets.bottom + 16, 40) }}>
+        <View style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6 }}>
+          <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>{photoIdx + 1} / {photos.length}</Text>
+        </View>
+      </View>
+      {/* Close button — absolutely positioned so it never gets covered */}
+      <TouchableOpacity
+        onPress={onClose}
+        activeOpacity={0.8}
+        style={{
+          position: "absolute",
+          top: insets.top + 12,
+          right: 16,
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: "rgba(0,0,0,0.55)",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 10,
+        }}
+      >
+        <Ionicons name="close" size={24} color="#fff" />
+      </TouchableOpacity>
+    </View>
+  );
+}
 
-export default function PublicListingDetailScreen() {
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+function Skeleton() {
+  return (
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
+      <View style={{ height: PHOTO_H, backgroundColor: "#E5E7EB" }} />
+      <View style={{ padding: 20, gap: 12 }}>
+        <View style={{ height: 28, width: "75%", backgroundColor: "#E5E7EB", borderRadius: 8 }} />
+        <View style={{ height: 18, width: "50%", backgroundColor: "#E5E7EB", borderRadius: 6 }} />
+        <View style={{ height: 36, width: "40%", backgroundColor: "#E5E7EB", borderRadius: 8 }} />
+        <View style={{ height: 1, backgroundColor: "#E5E7EB" }} />
+        <View style={{ height: 80, backgroundColor: "#E5E7EB", borderRadius: 12 }} />
+        <View style={{ height: 120, backgroundColor: "#E5E7EB", borderRadius: 12 }} />
+      </View>
+    </View>
+  );
+}
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
+export default function ListingDetailScreen() {
   const { id, checkIn, checkOut, guests, pickupDatetime, returnDatetime } = useLocalSearchParams<{
-    id: string;
-    checkIn?: string;
-    checkOut?: string;
-    guests?: string;
-    pickupDatetime?: string;
-    returnDatetime?: string;
+    id: string; checkIn?: string; checkOut?: string; guests?: string;
+    pickupDatetime?: string; returnDatetime?: string;
   }>();
 
   const router = useRouter();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
-  const accessToken = useAuthStore((s) => s.accessToken);
-  const insets = useSafeAreaInsets();
 
-  const [photoIndex, setPhotoIndex] = useState(0);
+  const [photoIdx, setPhotoIdx] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
-  const [amenitiesExpanded, setAmenitiesExpanded] = useState(false);
-  const [fullscreenVisible, setFullscreenVisible] = useState(false);
+  const [amenExpanded, setAmenExpanded] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
-  // ── Fetch availability ───────────────────────────────────────────────────
-  const { data: availabilityData } = useQuery<{ unavailableRanges: { start: string; end: string }[] }>({
-    queryKey: ["listing-availability", id],
+  // ── Data ──
+  const { data: listing, isLoading, isError } = useQuery<PublicListing>({
+    queryKey: ["listing-full", id],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: { unavailableRanges: any[] } }>(`/listings/${id}/availability`);
+      const res = await listingApi.get<{ data: PublicListing }>(`/listings/${id}/public`);
+      return res.data.data;
+    },
+    enabled: !!id, staleTime: 0, gcTime: 5 * 60_000,
+  });
+
+  const { data: availability } = useQuery({
+    queryKey: ["availability", id],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: { unavailableRanges: { start: string; end: string }[] } }>(`/listings/${id}/availability`);
       return res.data.data;
     },
     enabled: !!id,
   });
 
-  // ── Fetch listing ──────────────────────────────────────────────────────────
-
-  const { data: listing, isLoading, isError } = useQuery<PublicListing>({
-    // New key — breaks old stale cache from the /public endpoint version
-    queryKey: ["listing-full", id],
+  const { data: reviewsData } = useQuery<ReviewsData>({
+    queryKey: ["reviews", id],
     queryFn: async () => {
-      const endpoint = `/listings/${id}/public`;
-      console.log(`[Listing Detail Query] API Endpoint Called: ${endpoint}`);
-      console.log(`[Listing Detail Query] Listing ID: ${id}`);
-      const res = await listingApi.get<{ data: PublicListing }>(endpoint);
-      const returnedData = res.data.data;
-      const returnedPrimaryPhotoUrl = (returnedData as any).primaryPhotoUrl ?? returnedData.photos?.[0]?.cdnUrl ?? null;
-      const returnedPhotoGalleryUrls = returnedData.photos?.map((p: any) => p.cdnUrl) ?? [];
-      console.log(`[Listing Detail Query] Returned primaryPhotoUrl: ${returnedPrimaryPhotoUrl}`);
-      console.log(`[Listing Detail Query] Returned photo gallery URLs:`, returnedPhotoGalleryUrls);
-      return returnedData;
+      const res = await listingApi.get<{ data: ReviewsData }>(`/listings/${id}/reviews?page=1&limit=5`);
+      return res.data.data;
     },
     enabled: !!id,
-    // Presigned S3 URLs expire — always treat listing data as stale so we re-fetch fresh URLs
-    staleTime: 0,
-    gcTime: 5 * 60_000,
   });
 
-  // ── Favourite toggle ───────────────────────────────────────────────────────
-
-  const favMutation = useMutation({
+  const favMut = useMutation({
     mutationFn: async ({ isFav }: { isFav: boolean }) => {
-      if (isFav) {
-        await listingApi.delete(`/guests/me/favourites/${id}`);
-      } else {
-        await listingApi.post("/guests/me/favourites", { listingId: id });
-      }
+      if (isFav) { await listingApi.delete(`/guests/me/favourites/${id}`); }
+      else { await listingApi.post("/guests/me/favourites", { listingId: id }); }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["listing-full", id] });
-      qc.invalidateQueries({ queryKey: ["favourites"] });
-    },
-    onError: () => {
-      Alert.alert("Error", "Could not update saved status. Please try again.");
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["listing-full", id] }); },
+    onError: () => Alert.alert("Error", "Could not update saved status."),
   });
 
-  // ── Derived values ─────────────────────────────────────────────────────────
-
-  if (isLoading) return <LoadingSkeleton />;
-
+  // ── States ──
+  if (isLoading) return <Skeleton />;
   if (isError || !listing) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={60} color="#dc2626" />
-          <Text style={styles.errorTitle}>Listing not found</Text>
-          <Text style={styles.errorSubtitle}>This listing is no longer available.</Text>
-          <TouchableOpacity style={styles.errorBtn} onPress={() => router.back()}>
-            <Text style={styles.errorBtnText}>Back to search</Text>
-          </TouchableOpacity>
-        </View>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff", alignItems: "center", justifyContent: "center", padding: 32 }}>
+        <Ionicons name="alert-circle-outline" size={56} color="#DC2626" />
+        <Text style={{ fontSize: 20, fontWeight: "700", color: TEXT, marginTop: 16, marginBottom: 8 }}>Listing not found</Text>
+        <Text style={{ fontSize: 14, color: MUTED, textAlign: "center", marginBottom: 24 }}>This listing is no longer available.</Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: GREEN, borderRadius: 12, paddingHorizontal: 28, paddingVertical: 13 }}>
+          <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>Go back</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -646,667 +354,490 @@ export default function PublicListingDetailScreen() {
   const isCar = listing.category === "car";
   const isHotel = listing.category === "hotel";
   const isApartment = listing.category === "apartment";
+  const isProvider = user?.userType === "provider";
 
   const photos = [...(listing.photos ?? [])].sort((a, b) => a.position - b.position);
-  const totalPhotos = photos.length;
-
-  const priceLabel = isCar
-    ? `${listing.currency ?? ""} ${(listing.pricePerNight ?? 0).toLocaleString()} / day`
-    : `${listing.currency ?? ""} ${(listing.pricePerNight ?? 0).toLocaleString()} / night`;
-
-  const isProvider = user?.userType === "provider";
-  const isOwner = isProvider && (user as any)?.id && listing && (listing as any).providerId === (user as any)?.id;
-
-  // Dates
-  const hasDates = isCar
-    ? !!(pickupDatetime && returnDatetime)
-    : !!(checkIn && checkOut);
-
-  const datesLabel = (() => {
-    if (isCar && pickupDatetime && returnDatetime) {
-      const days = daysBetween(pickupDatetime, returnDatetime);
-      return `${formatDateWithTime(pickupDatetime)} → ${formatDateWithTime(returnDatetime)} (${days} day${days !== 1 ? "s" : ""})`;
-    }
-    if (!isCar && checkIn && checkOut) {
-      const nights = nightsBetween(checkIn, checkOut);
-      return `${formatDate(checkIn)} → ${formatDate(checkOut)} (${nights} night${nights !== 1 ? "s" : ""})`;
-    }
-    return null;
-  })();
-
-  // Predefined Amenities
-  const standardAmenitiesList: string[] = (() => {
-    if (!listing.amenities) return [];
-    if (Array.isArray(listing.amenities)) {
-      return listing.amenities
-        .map((a: any) => {
-          const key = a?.amenityKey ?? a;
-          if (typeof key === "string") {
-            return key.includes(":") ? key.split(":")[1] : key;
-          }
-          return null;
-        })
-        .filter(Boolean) as string[];
-    } else if (typeof listing.amenities === "object") {
-      return Object.values(listing.amenities)
-        .flat()
-        .map((a: any) => {
-          const key = a?.amenityKey ?? a;
-          if (typeof key === "string") {
-            return key.includes(":") ? key.split(":")[1] : key;
-          }
-          return null;
-        })
-        .filter(Boolean) as string[];
-    }
-    return [];
-  })();
-
-  const customAmenitiesList: string[] = (() => {
-    if (!listing.customAmenities) return [];
-    if (Array.isArray(listing.customAmenities)) {
-      return listing.customAmenities.map((a: any) => a?.label ?? a).filter(Boolean) as string[];
-    }
-    return [];
-  })();
-
-  const allAmenities: { label: string; isCustom: boolean }[] = [
-    ...standardAmenitiesList.map((key) => ({
-      label: AMENITY_LABELS[key] ?? key.replace(/_/g, " "),
-      isCustom: false,
-    })),
-    ...customAmenitiesList.map((lbl) => ({
-      label: lbl,
-      isCustom: true,
-    })),
-  ];
-  const MAX_AMENITIES = 10;
-  const visibleAmenities = amenitiesExpanded ? allAmenities : allAmenities.slice(0, MAX_AMENITIES);
-
-  // Category display label
-  const categoryLabel =
-    listing.category.charAt(0).toUpperCase() + listing.category.slice(1);
-
-  // Location string
-  const locationParts = [listing.town, listing.country].filter(Boolean);
-  const locationStr = locationParts.join(", ");
-
-  // Sub-title line (hotel / apartment / car)
-  const subTitle = (() => {
-    if (isHotel && listing.starRating) {
-      return "★".repeat(listing.starRating) + "☆".repeat(5 - listing.starRating);
-    }
-    if (isApartment) {
-      const beds = listing.bedrooms ?? 0;
-      const baths = listing.bathrooms ?? 0;
-      const guests2 = listing.maxGuests ?? 0;
-      return `${beds} bed · ${baths} bath · up to ${guests2} guests`;
-    }
-    if (isCar) {
-      const make = listing.carMake ?? "";
-      const model = listing.carModel ?? "";
-      const year = listing.carYear ?? "";
-      const trans = listing.transmission
-        ? listing.transmission.charAt(0).toUpperCase() + listing.transmission.slice(1)
-        : "";
-      const seatsCount = listing.seats ?? 0;
-      return `${make} ${model} ${year} · ${trans} · ${seatsCount} seats`.trim();
-    }
-    return null;
-  })();
-
-  function handleBookNow() {
-    if (!hasDates) return;
-    if (!user) {
-      Alert.alert(
-        "Sign in required",
-        "You need to be signed in to book a listing.",
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Sign In", onPress: () => router.push("/(auth)/login") },
-        ]
-      );
-      return;
-    }
-    if (isCar) {
-      router.push({
-        pathname: "/book/[listingId]",
-        params: { listingId: id, pickupDatetime, returnDatetime, listingTitle: listing.name ?? "" },
-      });
-    } else {
-      router.push({
-        pathname: "/book/[listingId]",
-        params: { listingId: id, checkIn, checkOut, guests, listingTitle: listing.name ?? "" },
-      });
-    }
-  }
-
-  function handlePhotoScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    setPhotoIndex(index);
-  }
-
+  const rate = isCar ? Number(listing.pricePerDay ?? 0) : Number(listing.pricePerNight ?? 0);
+  const rateLabel = isCar ? "per day" : "per night";
   const isFav = listing.isFavourited ?? false;
 
-  // Pricing Breakout Calculations
-  const pricingBreakout = (() => {
-    if (!hasDates || !listing.pricePerNight && !listing.pricePerDay) return null;
+  const hasDates = isCar ? !!(pickupDatetime && returnDatetime) : !!(checkIn && checkOut);
 
-    const rate = isCar ? Number(listing.pricePerDay ?? listing.pricePerNight ?? 0) : Number(listing.pricePerNight ?? 0);
-    const count = isCar
-      ? (pickupDatetime && returnDatetime ? daysBetween(pickupDatetime, returnDatetime) : 1)
-      : (checkIn && checkOut ? nightsBetween(checkIn, checkOut) : 1);
-
-    const base = rate * count;
-
-    let discount = 0;
-    if (!isCar && listing.longStayEnabled && listing.longStayMinNights != null && count >= listing.longStayMinNights) {
-      const discountValue = Number(listing.longStayDiscountValue ?? 0);
-      if (listing.longStayDiscountType === "percentage") {
-        discount = base * (discountValue / 100);
-      } else {
-        discount = discountValue * count;
-      }
+  const datesStr = (() => {
+    if (isCar && pickupDatetime && returnDatetime) {
+      const d = days(pickupDatetime, returnDatetime);
+      return `${fmtDT(pickupDatetime)} → ${fmtDT(returnDatetime)} · ${d} day${d !== 1 ? "s" : ""}`;
     }
+    if (!isCar && checkIn && checkOut) {
+      const n = nights(checkIn, checkOut);
+      return `${fmt(checkIn)} → ${fmt(checkOut)} · ${n} night${n !== 1 ? "s" : ""}`;
+    }
+    return null;
+  })();
 
+  // Pricing
+  const pricingBreakout = (() => {
+    if (!hasDates || !rate) return null;
+    const count = isCar && pickupDatetime && returnDatetime ? days(pickupDatetime, returnDatetime)
+      : !isCar && checkIn && checkOut ? nights(checkIn, checkOut) : 1;
+    const base = rate * count;
+    let discount = 0;
+    if (!isCar && listing.longStayEnabled && listing.longStayMinNights && count >= listing.longStayMinNights) {
+      const v = Number(listing.longStayDiscountValue ?? 0);
+      discount = listing.longStayDiscountType === "percentage" ? base * (v / 100) : v * count;
+    }
     const serviceFee = base * 0.05;
     const tax = base * 0.10;
     const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee ? Number(listing.deliveryFee) : 0;
     const total = base - discount + serviceFee + tax + delivery;
-
-    return {
-      rate,
-      count,
-      base,
-      discount,
-      serviceFee,
-      tax,
-      delivery,
-      total,
-    };
+    return { rate, count, base, discount, serviceFee, tax, delivery, total };
   })();
 
-  // Dynamic host parameters - safely mapping backend-provided fields if returned by the APIs
-  const hostName = (listing as any).provider?.name || (listing as any).host?.name || "Zika Verified Host";
-  const hostAvatar = (listing as any).provider?.avatarUrl || (listing as any).host?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop";
-  const hostRating = (listing as any).provider?.rating || (listing as any).host?.rating || "4.9";
-  const hostBookings = (listing as any).provider?.bookingsCount || (listing as any).host?.bookingsCount || "128";
-  const hostJoinDate = (listing as any).provider?.joinDate || (listing as any).host?.joinDate || "2024";
-  const hostResponseRate = (listing as any).provider?.responseRate || (listing as any).host?.responseRate || "99%";
-  const hostResponseTime = (listing as any).provider?.responseTime || (listing as any).host?.responseTime || "Within 1 hour";
+  // Amenities
+  const amenityKeys: string[] = (() => {
+    if (!listing.amenities) return [];
+    if (Array.isArray(listing.amenities)) {
+      return listing.amenities.map((a: any) => {
+        const k = a?.amenityKey ?? a;
+        if (typeof k === "string") return k.includes(":") ? k.split(":")[1]! : k;
+        return null;
+      }).filter(Boolean) as string[];
+    }
+    if (typeof listing.amenities === "object") {
+      return Object.values(listing.amenities as Record<string, any[]>).flat().map((a: any) => {
+        const k = a?.amenityKey ?? a;
+        if (typeof k === "string") return k.includes(":") ? k.split(":")[1]! : k;
+        return null;
+      }).filter(Boolean) as string[];
+    }
+    return [];
+  })();
+
+  const customAmenities: string[] = Array.isArray(listing.customAmenities)
+    ? listing.customAmenities.map((a: any) => a?.label ?? a).filter(Boolean) as string[]
+    : [];
+
+  const allAmenities: { key: string; label: string }[] = [
+    ...amenityKeys.map(k => ({ key: k, label: AMENITY_LABELS[k] ?? k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) })),
+    ...customAmenities.map(l => ({ key: l, label: l })),
+  ];
+  const visAmenities = amenExpanded ? allAmenities : allAmenities.slice(0, 8);
+
+  // Category chips
+  const categoryChips = (() => {
+    if (isHotel) {
+      const chips: { icon: string; label: string; accent?: boolean }[] = [
+        { icon: "🏨", label: "Hotel", accent: true },
+      ];
+      if (listing.starRating) chips.push({ icon: "⭐", label: `${listing.starRating} Stars` });
+      if (listing.roomType) chips.push({ icon: "🛏️", label: listing.roomType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) });
+      if (listing.unitCount) chips.push({ icon: "🏢", label: `${listing.unitCount} Units` });
+      return chips;
+    }
+    if (isApartment) {
+      return [
+        { icon: "🏠", label: "Apartment", accent: true },
+        ...(listing.bedrooms ? [{ icon: "🛏️", label: `${listing.bedrooms} Bed` }] : []),
+        ...(listing.bathrooms ? [{ icon: "🚿", label: `${listing.bathrooms} Bath` }] : []),
+        ...(listing.maxGuests ? [{ icon: "👥", label: `${listing.maxGuests} Guests` }] : []),
+      ];
+    }
+    return [
+      { icon: "🚗", label: "Car", accent: true },
+      ...(listing.transmission ? [{ icon: "⚙️", label: listing.transmission.charAt(0).toUpperCase() + listing.transmission.slice(1) }] : []),
+      ...(listing.seats ? [{ icon: "💺", label: `${listing.seats} Seats` }] : []),
+      ...(listing.fuelType ? [{ icon: "⛽", label: listing.fuelType.charAt(0).toUpperCase() + listing.fuelType.slice(1) }] : []),
+    ];
+  })();
+
+  // Detail card rows
+  const detailRows = (() => {
+    if (isHotel || isApartment) {
+      const rows: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; value: string }[] = [];
+      if (listing.checkinTime) rows.push({ icon: "log-in-outline", label: "Check-in from", value: listing.checkinTime });
+      if (listing.checkoutTime) rows.push({ icon: "log-out-outline", label: "Check-out by", value: listing.checkoutTime });
+      rows.push({ icon: "flame-outline", label: "Smoking", value: listing.smokingAllowed ? "Allowed" : "Not allowed" });
+      rows.push({ icon: "paw-outline", label: "Pets", value: listing.petsAllowed ? "Allowed" : "Not allowed" });
+      if (isApartment && listing.minStayNights) rows.push({ icon: "moon-outline", label: "Min stay", value: `${listing.minStayNights} night${listing.minStayNights !== 1 ? "s" : ""}` });
+      if (isApartment && listing.longStayEnabled && listing.longStayMinNights && listing.longStayDiscountValue) {
+        rows.push({ icon: "pricetag-outline", label: "Long-stay discount", value: `${listing.longStayDiscountType === "percentage" ? `${listing.longStayDiscountValue}% off` : `${listing.currency} ${listing.longStayDiscountValue} off`} for ${listing.longStayMinNights}+ nights` });
+      }
+      return rows;
+    }
+    const rows: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; value: string }[] = [];
+    if (listing.minDriverAge) rows.push({ icon: "person-outline", label: "Min driver age", value: `${listing.minDriverAge} years` });
+    rows.push({ icon: "speedometer-outline", label: "Mileage", value: listing.mileagePolicy === "unlimited" ? "Unlimited" : listing.mileageLimitKm ? `${listing.mileageLimitKm} km/day` : "See host" });
+    if (listing.fuelType) rows.push({ icon: "car-outline", label: "Fuel type", value: listing.fuelType.charAt(0).toUpperCase() + listing.fuelType.slice(1) });
+    rows.push({ icon: "navigate-outline", label: "Delivery", value: listing.deliveryAvailable ? `Yes · within ${listing.deliveryRadiusKm ?? "?"}km` : "Not available" });
+    return rows;
+  })();
+
+  const reviews = reviewsData?.reviews ?? [];
+  const totalReviews = reviewsData?.total ?? 0;
+  const avgRating = reviewsData?.averageRating;
+  const locationStr = [listing.town, listing.country].filter(Boolean).join(", ");
+
+  function handleBook() {
+    if (!user) {
+      Alert.alert("Sign in required", "You need to be signed in to book.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
+      ]);
+      return;
+    }
+    if (isCar) {
+      router.push({ pathname: "/book/[listingId]", params: { listingId: id, pickupDatetime, returnDatetime } });
+    } else {
+      router.push({ pathname: "/book/[listingId]", params: { listingId: id, checkIn, checkOut, guests } });
+    }
+  }
+
+  const curr = listing.currency ?? "USD";
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    <View style={{ flex: 1, backgroundColor: "#fff" }}>
 
-        {/* ── Photo area ──────────────────────────────────────────────────── */}
-        <View style={styles.photoContainer}>
-          {totalPhotos > 0 ? (
+      {/* ══ OVERLAY BUTTONS — outside ScrollView so FlatList never blocks them ══ */}
+      <View style={s.overlayTop} pointerEvents="box-none">
+        <TouchableOpacity style={s.circleBtn} onPress={() => router.back()} activeOpacity={0.85}>
+          <Ionicons name="arrow-back" size={20} color={TEXT} />
+        </TouchableOpacity>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          {user && !isProvider && (
+            <TouchableOpacity
+              style={s.circleBtn}
+              onPress={() => favMut.mutate({ isFav })}
+              disabled={favMut.isPending}
+              activeOpacity={0.85}
+            >
+              {favMut.isPending ? (
+                <ActivityIndicator size="small" color="#DC2626" />
+              ) : (
+                <Ionicons name={isFav ? "heart" : "heart-outline"} size={20} color={isFav ? "#DC2626" : TEXT} />
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* ══ CONTENT ══ */}
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+
+        {/* ── Hero Photos ── */}
+        <View style={{ height: PHOTO_H, backgroundColor: "#E5E7EB" }}>
+          {photos.length > 0 ? (
             <>
               <FlatList
                 data={photos}
-                keyExtractor={(p) => p.id}
-                horizontal
-                pagingEnabled
+                keyExtractor={p => p.id}
+                horizontal pagingEnabled
                 showsHorizontalScrollIndicator={false}
-                onScroll={handlePhotoScroll}
                 scrollEventThrottle={16}
-                renderItem={({ item: photo }) => {
-                  return (
-                    <TouchableOpacity activeOpacity={0.95} onPress={() => setFullscreenVisible(true)}>
-                      <ListingImage
-                        uri={photo.cdnUrl}
-                        style={styles.photo}
-                        resizeMode="cover"
-                      />
-                    </TouchableOpacity>
-                  );
+                onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+                  setPhotoIdx(Math.round(e.nativeEvent.contentOffset.x / W));
                 }}
+                renderItem={({ item }) => (
+                  <TouchableOpacity activeOpacity={0.95} onPress={() => setGalleryOpen(true)}>
+                    <ListingImage uri={item.cdnUrl} style={{ width: W, height: PHOTO_H }} resizeMode="cover" />
+                  </TouchableOpacity>
+                )}
               />
-              {/* Photo counter */}
-              <View style={styles.photoCounter}>
-                <Text style={styles.photoCounterText}>{photoIndex + 1}/{totalPhotos}</Text>
+              {/* Photo counter pill */}
+              <View style={s.photoPill}>
+                <Ionicons name="images-outline" size={11} color="#fff" />
+                <Text style={s.photoPillText}>{photoIdx + 1} / {photos.length}</Text>
               </View>
             </>
           ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="image-outline" size={48} color="#9ca3af" />
-              <Text style={styles.photoPlaceholderText}>No photos</Text>
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+              <Ionicons name="image-outline" size={48} color={MUTED} />
+              <Text style={{ color: MUTED, fontSize: 13, marginTop: 8 }}>No photos available</Text>
             </View>
           )}
+        </View>
 
-          {/* Back button overlaid on photos */}
-          <TouchableOpacity
-            style={[styles.backButton, { top: insets.top + 10 }]}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={22} color="#fff" />
-          </TouchableOpacity>
+        {/* ── Title card ── */}
+        <View style={s.titleCard}>
+          {/* Category + location row */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <View style={[s.catBadge, isCar && { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" }, isApartment && { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" }]}>
+              <Text style={[s.catBadgeText, isCar && { color: "#C2410C" }, isApartment && { color: GREEN }]}>
+                {isCar ? "🚗 Car" : isApartment ? "🏠 Apartment" : "🏨 Hotel"}
+              </Text>
+            </View>
+            {avgRating != null && totalReviews > 0 && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Ionicons name="star" size={14} color="#F59E0B" />
+                <Text style={{ fontSize: 13, fontWeight: "700", color: TEXT }}>{avgRating.toFixed(1)}</Text>
+                <Text style={{ fontSize: 12, color: MUTED }}>({totalReviews})</Text>
+              </View>
+            )}
+          </View>
 
-          {/* Favourite button overlaid on photos */}
-          {user && !isProvider && (
-            <TouchableOpacity
-              style={[styles.favButton, { top: insets.top + 10 }]}
-              onPress={() => favMutation.mutate({ isFav })}
-              disabled={favMutation.isPending}
-            >
-              <Ionicons
-                name={isFav ? "heart" : "heart-outline"}
-                size={24}
-                color={isFav ? "#dc2626" : "#fff"}
-              />
+          <Text style={s.title}>{listing.name ?? "Untitled listing"}</Text>
+
+          {locationStr ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6, marginBottom: 14 }}>
+              <Ionicons name="location" size={14} color={GREEN} />
+              <Text style={{ fontSize: 13, color: MUTED, fontWeight: "500" }}>{locationStr}</Text>
+            </View>
+          ) : null}
+
+          {/* Spec chips */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+            {categoryChips.map((c, i) => (
+              <Chip key={i} icon={c.icon} label={c.label} accent={c.accent} />
+            ))}
+          </ScrollView>
+
+          {/* Price */}
+          <View style={s.priceRow}>
+            <View>
+              <Text style={s.priceAmount}>{curr} {rate.toLocaleString()}</Text>
+              <Text style={s.priceUnit}>{rateLabel}</Text>
+            </View>
+            <View style={s.bestDeal}>
+              <Ionicons name="pricetag" size={11} color={GREEN} />
+              <Text style={s.bestDealText}>Best Price</Text>
+            </View>
+          </View>
+
+          {isCar && listing.deliveryAvailable && listing.deliveryFee ? (
+            <Text style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>
+              + {curr} {listing.deliveryFee} delivery available
+            </Text>
+          ) : null}
+        </View>
+
+        {/* ── Long-stay promo ── */}
+        {listing.longStayEnabled && (
+          <View style={s.promoBanner}>
+            <View style={s.promoIcon}>
+              <Ionicons name="gift" size={18} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.promoTitle}>Long-Stay Discount 🎉</Text>
+              <Text style={s.promoSub}>Book {listing.longStayMinNights ?? 7}+ nights and save {listing.longStayDiscountValue ?? 0}{listing.longStayDiscountType === "percentage" ? "%" : ` ${curr}`} automatically.</Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Dates ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Your {isCar ? "Rental Period" : "Stay"}</Text>
+          {datesStr ? (
+            <View style={s.datesPill}>
+              <Ionicons name="calendar-outline" size={16} color={GREEN} />
+              <Text style={s.datesText}>{datesStr}</Text>
+            </View>
+          ) : (
+            <TouchableOpacity style={s.selectDatesCard} onPress={() => router.back()}>
+              <Ionicons name="calendar-outline" size={20} color={GREEN} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: TEXT }}>Select {isCar ? "pickup & return" : "check-in & check-out"}</Text>
+                <Text style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Tap to go back and choose dates</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={MUTED} />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Fullscreen Photo Modal */}
-        <Modal visible={fullscreenVisible} transparent={false} animationType="fade" onRequestClose={() => setFullscreenVisible(false)}>
-          <SafeAreaView style={styles.fullscreenModal}>
-            <View style={styles.fullscreenHeader}>
-              <TouchableOpacity style={styles.fullscreenCloseBtn} onPress={() => setFullscreenVisible(false)}>
-                <Ionicons name="close" size={26} color="#fff" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.fullscreenContent}>
-              <FlatList
-                data={photos}
-                keyExtractor={(p) => p.id}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                initialScrollIndex={photoIndex}
-                getItemLayout={(data, index) => ({
-                  length: SCREEN_WIDTH,
-                  offset: SCREEN_WIDTH * index,
-                  index,
-                })}
-                onScroll={(e) => {
-                  const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-                  setPhotoIndex(index);
-                }}
-                renderItem={({ item: photo }) => {
-                  return (
-                    <View style={styles.fullscreenPhotoWrapper}>
-                      <ListingImage
-                        uri={photo.cdnUrl}
-                        style={styles.fullscreenPhoto}
-                        resizeMode="contain"
-                      />
-                    </View>
-                  );
-                }}
-              />
-              <View style={styles.fullscreenCounter}>
-                <Text style={styles.fullscreenCounterText}>{photoIndex + 1} / {totalPhotos}</Text>
+        {/* ── Pricing breakdown ── */}
+        {pricingBreakout && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Price Breakdown</Text>
+            <View style={s.breakCard}>
+              <View style={s.breakRow}>
+                <Text style={s.breakLabel}>{curr} {pricingBreakout.rate.toLocaleString()} × {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}</Text>
+                <Text style={s.breakVal}>{curr} {pricingBreakout.base.toLocaleString()}</Text>
               </View>
-            </View>
-          </SafeAreaView>
-        </Modal>
-
-        {/* ── Content ─────────────────────────────────────────────────────── */}
-        <View style={styles.content}>
-
-          {/* Title */}
-          <Text style={styles.listingName}>{listing.name ?? "Untitled listing"}</Text>
-
-          {/* Category badge + location */}
-          <View style={styles.categoryRow}>
-            <View style={styles.categoryBadge}>
-              <Text style={styles.categoryBadgeText}>{categoryLabel}</Text>
-            </View>
-            {locationStr ? (
-              <Text style={styles.locationText}> · {locationStr}</Text>
-            ) : null}
-          </View>
-
-          {/* Sub-title: stars / beds / car spec */}
-          {subTitle ? (
-            <Text style={styles.subTitle}>{subTitle}</Text>
-          ) : null}
-
-          {/* Red Promotion Banner */}
-          {listing.longStayEnabled && (
-            <View style={styles.promoBanner}>
-              <View style={styles.promoIconContainer}>
-                <Ionicons name="gift" size={18} color="#fff" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.promoTitle}>Long-stay Discount Active!</Text>
-                <Text style={styles.promoText}>
-                  Book {listing.longStayMinNights ?? 7}+ nights and get a {listing.longStayDiscountValue ? Number(listing.longStayDiscountValue) : 0}% discount automatically.
-                </Text>
-              </View>
-            </View>
-          )}
-
-          {/* Price */}
-          <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
-            <Text style={styles.price}>{priceLabel}</Text>
-            <View style={styles.offerBadge}>
-              <Text style={styles.offerBadgeText}>Best Offer</Text>
-            </View>
-          </View>
-
-          {isCar && listing.deliveryAvailable && listing.deliveryFee != null && (
-            <Text style={styles.deliveryFee}>
-              + {listing.currency ?? ""} {listing.deliveryFee.toLocaleString()} delivery
-            </Text>
-          )}
-
-          {/* Dates section */}
-          <View style={styles.datesSection}>
-            <Text style={styles.sectionLabel}>Your dates</Text>
-            {datesLabel ? (
-              <View style={styles.datePill}>
-                <Ionicons name="calendar-outline" size={15} color="#1B5E20" style={{ marginRight: 6 }} />
-                <Text style={styles.datePillText}>{datesLabel}</Text>
-              </View>
-            ) : (
-              <View style={styles.noDatesBox}>
-                <Ionicons name="calendar-outline" size={16} color="#6b7280" style={{ marginRight: 6 }} />
-                <Text style={styles.noDatesText}>Return to search to select dates.</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Pricing Breakout Card */}
-          {pricingBreakout && (
-            <View style={styles.breakoutCard}>
-              <Text style={styles.breakoutTitle}>Price Breakdown</Text>
-              <View style={styles.breakoutRow}>
-                <Text style={styles.breakoutLabel}>
-                  {listing.currency} {pricingBreakout.rate.toLocaleString()} x {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}
-                </Text>
-                <Text style={styles.breakoutValue}>
-                  {listing.currency} {pricingBreakout.base.toLocaleString()}
-                </Text>
-              </View>
-
               {pricingBreakout.discount > 0 && (
-                <View style={styles.breakoutRow}>
-                  <Text style={[styles.breakoutLabel, { color: "#dc2626" }]}>Long-stay promotion</Text>
-                  <Text style={[styles.breakoutValue, { color: "#dc2626" }]}>
-                    - {listing.currency} {pricingBreakout.discount.toLocaleString()}
-                  </Text>
+                <View style={s.breakRow}>
+                  <Text style={[s.breakLabel, { color: "#DC2626" }]}>Long-stay discount</Text>
+                  <Text style={[s.breakVal, { color: "#DC2626" }]}>−{curr} {pricingBreakout.discount.toLocaleString()}</Text>
                 </View>
               )}
-
-              {isCar && pricingBreakout.delivery > 0 && (
-                <View style={styles.breakoutRow}>
-                  <Text style={styles.breakoutLabel}>Delivery fee</Text>
-                  <Text style={styles.breakoutValue}>
-                    {listing.currency} {pricingBreakout.delivery.toLocaleString()}
-                  </Text>
+              {pricingBreakout.delivery > 0 && (
+                <View style={s.breakRow}>
+                  <Text style={s.breakLabel}>Delivery fee</Text>
+                  <Text style={s.breakVal}>{curr} {pricingBreakout.delivery.toLocaleString()}</Text>
                 </View>
               )}
-
-              <View style={styles.breakoutRow}>
-                <Text style={styles.breakoutLabel}>Zika service fee (5%)</Text>
-                <Text style={styles.breakoutValue}>
-                  {listing.currency} {pricingBreakout.serviceFee.toLocaleString()}
-                </Text>
+              <View style={s.breakRow}>
+                <Text style={s.breakLabel}>Service fee (5%)</Text>
+                <Text style={s.breakVal}>{curr} {pricingBreakout.serviceFee.toLocaleString()}</Text>
               </View>
-
-              <View style={styles.breakoutRow}>
-                <Text style={styles.breakoutLabel}>Local taxes (10%)</Text>
-                <Text style={styles.breakoutValue}>
-                  {listing.currency} {pricingBreakout.tax.toLocaleString()}
-                </Text>
+              <View style={s.breakRow}>
+                <Text style={s.breakLabel}>Local taxes (10%)</Text>
+                <Text style={s.breakVal}>{curr} {pricingBreakout.tax.toLocaleString()}</Text>
               </View>
-
-              <View style={styles.breakoutDivider} />
-
-              <View style={[styles.breakoutRow, { marginBottom: 0 }]}>
-                <Text style={styles.breakoutTotalLabel}>Total Price</Text>
-                <Text style={styles.breakoutTotalValue}>
-                  {listing.currency} {pricingBreakout.total.toLocaleString()}
-                </Text>
+              <View style={[s.breakRow, { borderTopWidth: 1, borderTopColor: BORDER, marginTop: 4, paddingTop: 12 }]}>
+                <Text style={s.breakTotal}>Total</Text>
+                <Text style={s.breakTotalVal}>{curr} {pricingBreakout.total.toLocaleString()}</Text>
               </View>
             </View>
-          )}
-
-          <View style={styles.divider} />
-
-          {/* Description */}
-          {listing.description ? (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Description</Text>
-              <Text
-                style={styles.descriptionText}
-                numberOfLines={descExpanded ? undefined : 4}
-              >
-                {listing.description}
-              </Text>
-              <TouchableOpacity onPress={() => setDescExpanded((v) => !v)}>
-                <Text style={styles.readMoreText}>{descExpanded ? "Show less" : "Read more"}</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-
-          <View style={styles.divider} />
-
-          {/* Amenities */}
-          {allAmenities.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>What's included</Text>
-              <View style={styles.amenityGrid}>
-                {visibleAmenities.map((a, i) => (
-                  <View key={i} style={styles.amenityChip}>
-                    <Ionicons name="checkmark-circle-outline" size={14} color="#1B5E20" style={{ marginRight: 4 }} />
-                    <Text style={styles.amenityChipText}>{a.label}</Text>
-                  </View>
-                ))}
-              </View>
-              {allAmenities.length > MAX_AMENITIES && (
-                <TouchableOpacity onPress={() => setAmenitiesExpanded((v) => !v)}>
-                  <Text style={styles.readMoreText}>
-                    {amenitiesExpanded
-                      ? "Show less"
-                      : `Show all ${allAmenities.length} amenities`}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          )}
-
-          <View style={styles.divider} />
-
-          {/* Property details */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Property details</Text>
-            {(isHotel || isApartment) && (
-              <>
-                {listing.checkinTime ? (
-                  <DetailRow icon="log-in-outline" label="Check-in from" value={listing.checkinTime} />
-                ) : null}
-                {listing.checkoutTime ? (
-                  <DetailRow icon="log-out-outline" label="Check-out by" value={listing.checkoutTime} />
-                ) : null}
-                <DetailRow
-                  icon="flame-outline"
-                  label="Smoking"
-                  value={listing.smokingAllowed ? "Allowed" : "Not allowed"}
-                />
-                <DetailRow
-                  icon="paw-outline"
-                  label="Pets"
-                  value={listing.petsAllowed ? "Allowed" : "Not allowed"}
-                />
-                {isApartment && listing.minStayNights ? (
-                  <DetailRow
-                    icon="moon-outline"
-                    label="Minimum stay"
-                    value={`${listing.minStayNights} night${listing.minStayNights !== 1 ? "s" : ""}`}
-                  />
-                ) : null}
-                {isApartment && listing.longStayEnabled && listing.longStayMinNights != null && listing.longStayDiscountValue != null && (
-                  <DetailRow
-                    icon="pricetag-outline"
-                    label="Long-stay discount"
-                    value={
-                      listing.longStayDiscountType === "percentage"
-                        ? `${listing.longStayDiscountValue}% off for ${listing.longStayMinNights}+ nights`
-                        : `${listing.currency ?? ""} ${listing.longStayDiscountValue} off for ${listing.longStayMinNights}+ nights`
-                    }
-                  />
-                )}
-              </>
-            )}
-            {isCar && (
-              <>
-                {listing.minDriverAge != null && (
-                  <DetailRow icon="person-outline" label="Minimum driver age" value={`${listing.minDriverAge} years`} />
-                )}
-                <DetailRow
-                  icon="speedometer-outline"
-                  label="Mileage"
-                  value={
-                    listing.mileagePolicy === "unlimited"
-                      ? "Unlimited"
-                      : listing.mileageLimitKm != null
-                        ? `${listing.mileageLimitKm} km/day`
-                        : "See host"
-                  }
-                />
-                {listing.fuelType ? (
-                  <DetailRow
-                    icon="car-outline"
-                    label="Fuel"
-                    value={listing.fuelType.charAt(0).toUpperCase() + listing.fuelType.slice(1)}
-                  />
-                ) : null}
-                <DetailRow
-                  icon="navigate-outline"
-                  label="Delivery"
-                  value={
-                    listing.deliveryAvailable
-                      ? `Available within ${listing.deliveryRadiusKm ?? "?"}km for ${listing.currency ?? ""} ${listing.deliveryFee ?? "?"}`
-                      : "Not available"
-                  }
-                />
-              </>
-            )}
           </View>
+        )}
 
-          {/* Host Card Section */}
-          <View style={styles.divider} />
-          <View style={styles.hostCard}>
-            <ListingImage
-              uri={hostAvatar}
-              style={styles.hostAvatar}
-            />
-            <View style={styles.hostInfo}>
-              <Text style={styles.hostTitle}>Hosted by {hostName}</Text>
-              <Text style={styles.hostStats}>
-                ★ {hostRating} · {hostBookings} bookings · Joined {hostJoinDate}
-              </Text>
-              <Text style={styles.hostResponse}>
-                Response Rate: {hostResponseRate} · Response Time: {hostResponseTime}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.hostContactBtn} onPress={() => Alert.alert("Message Host", "Host messaging is not available in guest review mode.")}>
-              <Ionicons name="chatbubble-ellipses-outline" size={20} color="#1B5E20" />
+        {/* ── Description ── */}
+        {listing.description ? (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>About this {listing.category}</Text>
+            <Text style={s.descText} numberOfLines={descExpanded ? undefined : 4}>{listing.description}</Text>
+            <TouchableOpacity onPress={() => setDescExpanded(v => !v)} style={s.readMore}>
+              <Text style={s.readMoreText}>{descExpanded ? "Show less ↑" : "Read more ↓"}</Text>
             </TouchableOpacity>
           </View>
+        ) : null}
 
-          <View style={styles.divider} />
-
-          {/* Cancellation policy */}
-          {listing.cancellationPolicy && (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Cancellation policy</Text>
-              <View style={[styles.cancelBadge, { backgroundColor: `${cancellationBadgeColor(listing.cancellationPolicy)}18` }]}>
-                <Text style={[styles.cancelBadgeText, { color: cancellationBadgeColor(listing.cancellationPolicy) }]}>
-                  {listing.cancellationPolicy.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-                </Text>
-              </View>
-              <Text style={styles.cancelDescription}>{cancellationText(listing.cancellationPolicy)}</Text>
+        {/* ── Amenities ── */}
+        {allAmenities.length > 0 && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>What's included</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" }}>
+              {visAmenities.map((a, i) => <AmenityPill key={i} amenityKey={a.key} label={a.label} />)}
             </View>
-          )}
-
-          <View style={styles.divider} />
-
-          {/* Visual Availability Calendar */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Date Availability</Text>
-            <InlineCalendar unavailableRanges={availabilityData?.unavailableRanges ?? []} currency={listing.currency ?? "USD"} />
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Guest Reviews */}
-          <View style={styles.section}>
-            <ReviewsSection listingId={id} />
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Location section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Location</Text>
-            {listing.lat && listing.lng ? (
-              <View style={styles.mapCard}>
-                <View style={[styles.detailMap, { backgroundColor: "#f3f4f6", alignItems: "center", justifyContent: "center", paddingHorizontal: 16 }]}>
-                  <View style={{ backgroundColor: "#e8f5e9", width: 50, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-                    <Ionicons name="location" size={24} color="#1B5E20" />
-                  </View>
-                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#111827", textAlign: "center" }}>
-                    {listing.name ?? "Property Location"}
-                  </Text>
-                  <Text style={{ fontSize: 11, color: "#6b7280", textAlign: "center", marginTop: 4, paddingHorizontal: 20 }}>
-                    {[listing.address, listing.town, listing.country].filter(Boolean).join(", ")}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.openInMapsBtn}
-                  onPress={() => {
-                    const lat = Number(listing.lat);
-                    const lng = Number(listing.lng);
-                    const label = encodeURIComponent(listing.name ?? "Listing");
-                    const url = Platform.select({
-                      ios: `maps://app?daddr=${lat},${lng}&q=${label}`,
-                      android: `google.navigation:q=${lat},${lng}`,
-                    }) || "";
-                    Linking.openURL(url).catch(() => {
-                      Alert.alert("Error", "Could not open map navigation.");
-                    });
-                  }}
-                >
-                  <Ionicons name="navigate-circle" size={18} color="#fff" style={{ marginRight: 6 }} />
-                  <Text style={styles.openInMapsBtnText}>Navigate to Property</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.mapPlaceholder}>
-                <Text style={styles.mapPlaceholderText}>
-                  {[listing.town, listing.country].filter(Boolean).join(", ") || "Location not specified"}
+            {allAmenities.length > 8 && (
+              <TouchableOpacity onPress={() => setAmenExpanded(v => !v)} style={[s.readMore, { marginTop: 4 }]}>
+                <Text style={s.readMoreText}>
+                  {amenExpanded ? "Show less ↑" : `Show all ${allAmenities.length} amenities ↓`}
                 </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {/* ── Property details ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>{isCar ? "Car Details" : "Property Details"}</Text>
+          <InfoCard items={detailRows} />
+        </View>
+
+        {/* ── Host card ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Your Host</Text>
+          <View style={s.hostCard}>
+            <View style={s.hostAvatar}>
+              <Ionicons name="person" size={24} color={GREEN} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.hostName}>Zika Verified Host</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                  <Ionicons name="star" size={12} color="#F59E0B" />
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: TEXT }}>4.9</Text>
+                </View>
+                <Text style={{ fontSize: 12, color: MUTED }}>· Response within 1h</Text>
+              </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 }}>
+                <View style={s.verifiedBadge}>
+                  <Ionicons name="shield-checkmark" size={10} color={GREEN} />
+                  <Text style={s.verifiedText}>Verified</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ── Cancellation ── */}
+        {listing.cancellationPolicy && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Cancellation Policy</Text>
+            <View style={[s.cancelCard, { borderLeftColor: cancelColor(listing.cancellationPolicy) }]}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <View style={[s.cancelDot, { backgroundColor: cancelColor(listing.cancellationPolicy) }]} />
+                <Text style={[s.cancelPolicyName, { color: cancelColor(listing.cancellationPolicy) }]}>
+                  {listing.cancellationPolicy.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                </Text>
+              </View>
+              <Text style={s.cancelDesc}>{cancelText(listing.cancellationPolicy)}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* ── Reviews ── */}
+        <View style={s.section}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <Text style={s.sectionTitle}>Guest Reviews</Text>
+            {avgRating != null && totalReviews > 0 && (
+              <View style={{ alignItems: "center" }}>
+                <Text style={{ fontSize: 24, fontWeight: "900", color: TEXT }}>{avgRating.toFixed(1)}</Text>
+                <Stars n={Math.round(avgRating)} size={12} />
+                <Text style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{totalReviews} review{totalReviews !== 1 ? "s" : ""}</Text>
               </View>
             )}
           </View>
+          {reviews.length === 0 ? (
+            <View style={{ alignItems: "center", paddingVertical: 24, backgroundColor: BG, borderRadius: 16 }}>
+              <Ionicons name="chatbubble-outline" size={32} color={MUTED} />
+              <Text style={{ fontSize: 14, color: MUTED, marginTop: 8 }}>No reviews yet</Text>
+            </View>
+          ) : reviews.map(r => <ReviewCard key={r.id} review={r} />)}
+        </View>
 
-          {/* Bottom padding so sticky bar doesn't hide content */}
-          <View style={{ height: 100 }} />
+        {/* ── Location ── */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Location</Text>
+          {listing.address ? (
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12, padding: 14, backgroundColor: BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER }}>
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <Ionicons name="location" size={18} color={GREEN} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: TEXT }}>{listing.address}</Text>
+                {locationStr ? <Text style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{locationStr}</Text> : null}
+              </View>
+            </View>
+          ) : null}
+          {listing.lat && listing.lng ? (
+            <View style={{ borderRadius: 16, overflow: "hidden", height: 180, borderWidth: 1, borderColor: BORDER }}>
+              {MapView && Marker ? (
+                <MapView
+                  style={{ flex: 1 }}
+                  initialRegion={{ latitude: Number(listing.lat), longitude: Number(listing.lng), latitudeDelta: 0.012, longitudeDelta: 0.012 }}
+                  scrollEnabled={false} zoomEnabled={false}
+                >
+                  <Marker coordinate={{ latitude: Number(listing.lat), longitude: Number(listing.lng) }} title={listing.name ?? ""} />
+                </MapView>
+              ) : (
+                <View style={{ flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="map-outline" size={40} color={MUTED} />
+                  <Text style={{ fontSize: 13, color: MUTED, marginTop: 8 }}>Map unavailable</Text>
+                </View>
+              )}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
-      {/* ── Sticky bottom bar ─────────────────────────────────────────────── */}
-      <View style={styles.stickyBar}>
-        <View style={styles.stickyPrice}>
-          <Text style={styles.stickyPriceLabel}>{priceLabel}</Text>
-        </View>
+      {/* ══ FULLSCREEN GALLERY MODAL ══ */}
+      <Modal visible={galleryOpen} transparent={false} animationType="fade" onRequestClose={() => setGalleryOpen(false)}>
+        <GalleryModal
+          photos={photos}
+          photoIdx={photoIdx}
+          setPhotoIdx={setPhotoIdx}
+          onClose={() => setGalleryOpen(false)}
+        />
+      </Modal>
 
+      {/* ══ STICKY BOTTOM BAR ══ */}
+      <View style={s.stickyBar}>
+        <View>
+          <Text style={s.stickyRate}>{curr} {rate.toLocaleString()}</Text>
+          <Text style={s.stickyUnit}>{rateLabel}</Text>
+        </View>
         {isProvider ? (
-          <View style={styles.bookBtnDisabled}>
-            <Text style={styles.bookBtnDisabledText}>Provider account</Text>
+          <View style={s.providerBtn}>
+            <Text style={s.providerBtnText}>Provider view</Text>
           </View>
         ) : !hasDates ? (
-          <TouchableOpacity style={styles.selectDatesBtn} onPress={() => router.back()}>
-            <Text style={styles.selectDatesBtnText}>Select dates</Text>
+          <TouchableOpacity style={s.selectDatesBtn} onPress={() => router.back()}>
+            <Text style={s.selectDatesBtnText}>Select dates</Text>
           </TouchableOpacity>
         ) : (
-          <TouchableOpacity style={styles.bookBtn} onPress={handleBookNow}>
-            <Text style={styles.bookBtnText}>Book Now</Text>
+          <TouchableOpacity style={s.bookBtn} onPress={handleBook} activeOpacity={0.88}>
+            <Text style={s.bookBtnText}>Reserve Now</Text>
+            <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
         )}
       </View>
@@ -1314,252 +845,105 @@ export default function PublicListingDetailScreen() {
   );
 }
 
-// ── Detail row sub-component ──────────────────────────────────────────────────
-
-function DetailRow({ icon, label, value }: { icon: React.ComponentProps<typeof Ionicons>["name"]; label: string; value: string }) {
-  return (
-    <View style={styles.detailRow}>
-      <Ionicons name={icon} size={16} color="#6b7280" style={styles.detailIcon} />
-      <Text style={styles.detailLabel}>{label}:</Text>
-      <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-}
-
 // ── Styles ────────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  scrollContent: { flexGrow: 1 },
-
-  // Photos
-  photoContainer: { width: SCREEN_WIDTH, height: PHOTO_HEIGHT, position: "relative", backgroundColor: "#e5e7eb" },
-  photo: { width: SCREEN_WIDTH, height: PHOTO_HEIGHT },
-  photoPlaceholder: {
-    width: SCREEN_WIDTH,
-    height: PHOTO_HEIGHT,
-    backgroundColor: "#e5e7eb",
-    alignItems: "center",
-    justifyContent: "center",
+const s = StyleSheet.create({
+  // Overlay buttons — live OUTSIDE the ScrollView
+  overlayTop: {
+    position: "absolute", top: 0, left: 0, right: 0,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingTop: Platform.OS === "ios" ? 56 : 42,
+    zIndex: 999, elevation: 999,
   },
-  photoPlaceholderText: { color: "#9ca3af", fontSize: 14, marginTop: 8 },
-  photoCounter: {
-    position: "absolute",
-    bottom: 12,
-    right: 14,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    zIndex: 10,
-  },
-  photoCounterText: { color: "#fff", fontSize: 12, fontWeight: "600" },
-  backButton: {
-    position: "absolute",
-    top: 14,
-    left: 14,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
-  },
-  favButton: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
+  circleBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: "#fff",
+    alignItems: "center", justifyContent: "center",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
   },
 
-  // Content
-  content: { paddingHorizontal: 18, paddingTop: 18, backgroundColor: "#fff" },
-  listingName: { fontSize: 22, fontWeight: "700", color: "#111827", marginBottom: 8, lineHeight: 28 },
-
-  categoryRow: { flexDirection: "row", alignItems: "center", marginBottom: 8, flexWrap: "wrap" },
-  categoryBadge: {
-    backgroundColor: "#eff6ff",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
+  // Photo counter
+  photoPill: {
+    position: "absolute", bottom: 14, right: 14,
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 14,
+    paddingHorizontal: 10, paddingVertical: 5,
   },
-  categoryBadgeText: { fontSize: 12, fontWeight: "600", color: "#1B5E20" },
-  locationText: { fontSize: 14, color: "#6b7280", flexShrink: 1 },
+  photoPillText: { color: "#fff", fontSize: 12, fontWeight: "700" },
 
-  subTitle: { fontSize: 14, color: "#374151", marginBottom: 12 },
+  // Title card
+  titleCard: {
+    backgroundColor: "#fff", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8,
+  },
+  title: { fontSize: 24, fontWeight: "800", color: TEXT, lineHeight: 30 },
+  catBadge: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#EFF6FF", borderWidth: 1, borderColor: "#BFDBFE",
+    borderRadius: 20, paddingHorizontal: 12, paddingVertical: 5,
+    alignSelf: "flex-start",
+  },
+  catBadgeText: { fontSize: 12, fontWeight: "700", color: "#1D4ED8" },
+  priceRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 },
+  priceAmount: { fontSize: 28, fontWeight: "900", color: GREEN },
+  priceUnit: { fontSize: 13, color: MUTED, fontWeight: "500", marginTop: 2 },
+  bestDeal: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: GREEN_LIGHT, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: "#BBF7D0" },
+  bestDealText: { fontSize: 11, fontWeight: "700", color: GREEN },
 
-  price: { fontSize: 24, fontWeight: "800", color: "#111827" },
-  deliveryFee: { fontSize: 13, color: "#6b7280", marginBottom: 8 },
+  // Promo
+  promoBanner: { flexDirection: "row", alignItems: "center", gap: 12, marginHorizontal: 20, marginVertical: 12, backgroundColor: "#FEF2F2", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#FECACA" },
+  promoIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  promoTitle: { fontSize: 14, fontWeight: "800", color: "#DC2626", marginBottom: 2 },
+  promoSub: { fontSize: 12, color: "#991B1B", lineHeight: 17 },
+
+  // Sections
+  section: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: BORDER },
+  sectionTitle: { fontSize: 18, fontWeight: "800", color: TEXT, marginBottom: 14, letterSpacing: -0.3 },
 
   // Dates
-  datesSection: { marginTop: 12, marginBottom: 4 },
-  datePill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#eff6ff",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    alignSelf: "flex-start",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-  },
-  datePillText: { fontSize: 14, color: "#1B5E20", fontWeight: "500" },
-  noDatesBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f9fafb",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  noDatesText: { fontSize: 13, color: "#6b7280" },
+  datesPill: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: GREEN_LIGHT, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#BBF7D0" },
+  datesText: { fontSize: 13, fontWeight: "600", color: GREEN, flex: 1 },
+  selectDatesCard: { flexDirection: "row", alignItems: "center", backgroundColor: BG, borderRadius: 14, padding: 16, borderWidth: 1.5, borderColor: GREEN, borderStyle: "dashed" },
 
-  divider: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 20 },
+  // Price breakdown
+  breakCard: { backgroundColor: BG, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: BORDER },
+  breakRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  breakLabel: { fontSize: 13, color: "#4B5563", fontWeight: "500" },
+  breakVal: { fontSize: 13, color: TEXT, fontWeight: "600" },
+  breakTotal: { fontSize: 15, fontWeight: "800", color: TEXT },
+  breakTotalVal: { fontSize: 16, fontWeight: "900", color: GREEN },
 
-  section: { marginBottom: 4 },
-  sectionLabel: { fontSize: 16, fontWeight: "700", color: "#111827", marginBottom: 12 },
+  // Description
+  descText: { fontSize: 14, color: "#374151", lineHeight: 22 },
+  readMore: { marginTop: 10 },
+  readMoreText: { fontSize: 14, color: GREEN, fontWeight: "700" },
 
-  descriptionText: { fontSize: 14, color: "#374151", lineHeight: 22 },
-  readMoreText: { fontSize: 14, color: "#1B5E20", fontWeight: "600", marginTop: 8 },
-
-  // Amenities
-  amenityGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
-  amenityChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f9fafb",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    width: "47%",
-  },
-  amenityChipText: { fontSize: 13, color: "#374151", flexShrink: 1 },
-
-  // Property details
-  detailRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#f3f4f6" },
-  detailIcon: { marginRight: 8 },
-  detailLabel: { fontSize: 13, color: "#6b7280", width: 150 },
-  detailValue: { fontSize: 13, color: "#111827", fontWeight: "500", flex: 1 },
+  // Host
+  hostCard: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: BG, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: BORDER },
+  hostAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center" },
+  hostName: { fontSize: 15, fontWeight: "700", color: TEXT },
+  verifiedBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: GREEN_LIGHT, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  verifiedText: { fontSize: 11, fontWeight: "700", color: GREEN },
 
   // Cancellation
-  cancelBadge: { alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 4, marginBottom: 10 },
-  cancelBadgeText: { fontSize: 13, fontWeight: "600" },
-  cancelDescription: { fontSize: 13, color: "#374151", lineHeight: 20 },
-
-  // Map placeholder
-  mapPlaceholder: {
-    height: 200,
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  mapPlaceholderText: { fontSize: 15, color: "#6b7280", fontWeight: "500" },
-
-  // Error
-  errorContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
-  errorTitle: { fontSize: 20, fontWeight: "700", color: "#111827", marginTop: 16, marginBottom: 8 },
-  errorSubtitle: { fontSize: 14, color: "#6b7280", textAlign: "center", marginBottom: 24 },
-  errorBtn: { backgroundColor: "#1B5E20", borderRadius: 12, paddingHorizontal: 28, paddingVertical: 12 },
-  errorBtnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
+  cancelCard: { backgroundColor: BG, borderRadius: 14, padding: 16, borderLeftWidth: 4, borderWidth: 1, borderColor: BORDER },
+  cancelDot: { width: 10, height: 10, borderRadius: 5 },
+  cancelPolicyName: { fontSize: 14, fontWeight: "700" },
+  cancelDesc: { fontSize: 13, color: "#374151", lineHeight: 20 },
 
   // Sticky bar
   stickyBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#e5e7eb",
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    paddingBottom: 24,
-    gap: 12,
+    position: "absolute", bottom: 0, left: 0, right: 0,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: BORDER,
+    paddingHorizontal: 20, paddingTop: 14, paddingBottom: Platform.OS === "ios" ? 30 : 18,
+    shadowColor: "#000", shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 8,
   },
-  stickyPrice: { flex: 1 },
-  stickyPriceLabel: { fontSize: 16, fontWeight: "700", color: "#111827" },
-  bookBtn: {
-    backgroundColor: "#1B5E20",
-    borderRadius: 12,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-  },
+  stickyRate: { fontSize: 20, fontWeight: "900", color: GREEN },
+  stickyUnit: { fontSize: 11, color: MUTED, fontWeight: "500" },
+  bookBtn: { flexDirection: "row", alignItems: "center", backgroundColor: GREEN, borderRadius: 16, paddingHorizontal: 24, paddingVertical: 14 },
   bookBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
-  bookBtnDisabled: {
-    backgroundColor: "#f3f4f6",
-    borderRadius: 12,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  bookBtnDisabledText: { color: "#9ca3af", fontWeight: "600", fontSize: 14 },
-  selectDatesBtn: {
-    borderWidth: 2,
-    borderColor: "#1B5E20",
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  selectDatesBtnText: { color: "#1B5E20", fontWeight: "700", fontSize: 15 },
-
-  // Fullscreen Photo Modal
-  fullscreenModal: { flex: 1, backgroundColor: "#000" },
-  fullscreenHeader: { height: 50, flexDirection: "row", justifyContent: "flex-end", alignItems: "center", paddingHorizontal: 16, paddingTop: 10 },
-  fullscreenCloseBtn: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  fullscreenContent: { flex: 1, justifyContent: "center", alignItems: "center", position: "relative" },
-  fullscreenPhotoWrapper: { width: SCREEN_WIDTH, height: "100%", justifyContent: "center", alignItems: "center" },
-  fullscreenPhoto: { width: SCREEN_WIDTH, height: "80%" },
-  fullscreenCounter: { position: "absolute", bottom: 40, backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6 },
-  fullscreenCounterText: { color: "#fff", fontSize: 14, fontWeight: "700" },
-
-  // Red Promotion Banner
-  promoBanner: { flexDirection: "row", backgroundColor: "#fef2f2", borderWidth: 1, borderColor: "#fecaca", borderRadius: 12, padding: 12, gap: 10, marginVertical: 14, alignItems: "center" },
-  promoIconContainer: { backgroundColor: "#dc2626", width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  promoTitle: { fontSize: 14, fontWeight: "700", color: "#dc2626", marginBottom: 2 },
-  promoText: { fontSize: 12, color: "#991b1b", lineHeight: 16 },
-
-  // Offer Badges
-  offerBadge: { backgroundColor: "#eff6ff", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: "#bfdbfe" },
-  offerBadgeText: { fontSize: 11, fontWeight: "700", color: "#1B5E20" },
-
-  // Pricing Breakout Card
-  breakoutCard: { backgroundColor: "#fafafa", borderRadius: 14, borderWidth: 1, borderColor: "#e5e7eb", padding: 16, marginVertical: 16 },
-  breakoutTitle: { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 12 },
-  breakoutRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  breakoutLabel: { fontSize: 13, color: "#4b5563", fontWeight: "500" },
-  breakoutValue: { fontSize: 13, color: "#111827", fontWeight: "600" },
-  breakoutDivider: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 10 },
-  breakoutTotalLabel: { fontSize: 15, fontWeight: "800", color: "#111827" },
-  breakoutTotalValue: { fontSize: 16, fontWeight: "800", color: "#1B5E20" },
-
-  // Host Card
-  hostCard: { flexDirection: "row", alignItems: "center", backgroundColor: "#f9fafb", borderRadius: 14, padding: 16, borderWidth: 1, borderColor: "#e5e7eb", gap: 12, marginVertical: 4 },
-  hostAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: "#e5e7eb" },
-  hostInfo: { flex: 1 },
-  hostTitle: { fontSize: 14, fontWeight: "700", color: "#111827" },
-  hostStats: { fontSize: 12, color: "#4b5563", marginTop: 2 },
-  hostResponse: { fontSize: 11, color: "#6b7280", marginTop: 2 },
-  hostContactBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#fff", borderWidth: 1, borderColor: "#e5e7eb", alignItems: "center", justifyContent: "center" },
-
-  // Map Card
-  mapCard: { position: "relative", borderRadius: 14, overflow: "hidden", borderWidth: 1, borderColor: "#e5e7eb", height: 200, marginTop: 10 },
-  detailMap: { flex: 1 },
-  openInMapsBtn: { position: "absolute", bottom: 12, right: 12, backgroundColor: "#1B5E20", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.2, shadowRadius: 1.5, elevation: 2 },
-  openInMapsBtnText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  selectDatesBtn: { borderWidth: 2, borderColor: GREEN, borderRadius: 16, paddingHorizontal: 20, paddingVertical: 13 },
+  selectDatesBtnText: { color: GREEN, fontWeight: "700", fontSize: 14 },
+  providerBtn: { backgroundColor: BG, borderRadius: 16, paddingHorizontal: 18, paddingVertical: 13, borderWidth: 1, borderColor: BORDER },
+  providerBtnText: { color: MUTED, fontWeight: "600", fontSize: 13 },
 });

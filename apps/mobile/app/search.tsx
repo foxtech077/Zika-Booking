@@ -432,7 +432,7 @@ export default function SearchScreen() {
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [ratingMin, setRatingMin] = useState<number | null>(null);
-  const [radiusKm, setRadiusKm] = useState(hasRawCoords ? 25 : 25);
+  const [radiusKm, setRadiusKm] = useState(500);
   const [onlyPromotions, setOnlyPromotions] = useState(false);
 
   // Hotel specifics
@@ -492,28 +492,25 @@ export default function SearchScreen() {
   };
 
   // ── Step 1: Geocode (falls back to local city map when API requires auth) ──
-  // When placeName is empty or raw GPS coords are supplied, skip geocoding entirely.
-  const {
-    data: geoFromApi,
-    isLoading: geoLoading,
-    isError: geoError,
-    refetch: retryGeo,
-  } = useQuery<GeoResult>({
+  const { data: geo } = useQuery<GeoResult | null>({
     queryKey: ["geocode", placeName],
     queryFn: async () => {
+      if (!placeName) return null;
       try {
         const res = await listingApi.get<{ data: GeoResult }>(`/geocode?address=${encodeURIComponent(placeName)}`);
         return res.data.data;
       } catch {
+        // Fall back to known city coordinates
         const key = placeName.trim().toLowerCase();
         const fallback = CITY_COORDS[key];
         if (fallback) return fallback;
         const prefixMatch = Object.keys(CITY_COORDS).find(k => key.startsWith(k) || k.startsWith(key.split(",")[0].trim()));
         if (prefixMatch) return CITY_COORDS[prefixMatch]!;
-        throw new Error("Location not found");
+        // Return null → search.tsx will use global fallback (lat=0,lng=0,radius=20000)
+        return null;
       }
     },
-    enabled: !!placeName.trim() && !hasRawCoords,
+    enabled: true,
     retry: 0,
     staleTime: 5 * 60_000,
   });
@@ -580,18 +577,18 @@ export default function SearchScreen() {
   } = useQuery<SearchResponse["data"]>({
     queryKey: searchQueryKey,
     queryFn: async () => {
-      if (!geo && placeName.trim()) throw new Error("No geo data");
-
-      const searchLat = geo?.lat ?? 0;
-      const searchLng = geo?.lng ?? 0;
+      // When geo is unavailable (keyword search), use global centre + large radius
+      const effectiveLat = geo?.lat ?? 0;
+      const effectiveLng = geo?.lng ?? 0;
+      const effectiveRadius = geo ? radiusKm : 20000;
 
       const qp = new URLSearchParams({
         category,
-        lat: String(searchLat),
-        lng: String(searchLng),
+        lat: String(effectiveLat),
+        lng: String(effectiveLng),
         radius_km: String(effectiveRadius),
         sort: sortParamMap[sort],
-        limit: "20",
+        limit: "50",
       });
 
       if (priceMin) qp.set("price_min", priceMin);
@@ -628,7 +625,20 @@ export default function SearchScreen() {
       const res = await listingApi.get<SearchResponse>(`/search?${qp.toString()}`);
       const incoming = res.data.data;
 
-      const filteredResults = (incoming.results ?? []).filter((r) => r.listingType === category);
+      let filteredResults = (incoming.results ?? []).filter((r) => r.listingType === category);
+
+      // When no geo (keyword/global search), apply client-side text filter
+      if (!geo && searchInput.trim()) {
+        const kw = searchInput.trim().toLowerCase();
+        filteredResults = filteredResults.filter((r) =>
+          (r.title ?? "").toLowerCase().includes(kw) ||
+          (r.city ?? "").toLowerCase().includes(kw) ||
+          (r.countryCode ?? "").toLowerCase().includes(kw) ||
+          (r.carMake ?? "").toLowerCase().includes(kw) ||
+          (r.carModel ?? "").toLowerCase().includes(kw)
+        );
+      }
+
       if (!cursor) {
         setAllResults(filteredResults);
       } else {
@@ -641,7 +651,7 @@ export default function SearchScreen() {
 
       return incoming;
     },
-    enabled: !!geo,
+    enabled: true,
     retry: 1,
     staleTime: 30_000,
   });
@@ -732,38 +742,7 @@ export default function SearchScreen() {
     );
   };
 
-  // ── Render: geo loading (only when a named place is being looked up) ──
-  if (geoLoading && placeName.trim() && !hasRawCoords) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={PRIMARY} />
-          <Text style={styles.centerText}>Finding {placeName}...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ── Render: geo error (only when a named place was requested but not found) ──
-  if (placeName.trim() && !hasRawCoords && (geoError || (!geoLoading && !geoFromApi))) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <Ionicons name="location-outline" size={48} color={BORDER} />
-          <Text style={styles.errorTitle}>Location not found</Text>
-          <Text style={styles.errorSub}>
-            We could not locate "{placeName}". Try a different city or country name.
-          </Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => void retryGeo()}>
-            <Text style={styles.retryBtnText}>Retry</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backBtnText}>Go back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // Geo is optional — if unavailable, search falls back to global (lat=0,lng=0,radius=20000)
 
   const isFirstLoad = searchLoading && allResults.length === 0;
   const isLoadingMore = searchFetching && allResults.length > 0;
@@ -825,12 +804,9 @@ export default function SearchScreen() {
         <View style={styles.resultCount}>
           <Ionicons name="search" size={13} color={MUTED} />
           <Text style={styles.resultCountText}>
-            {(() => {
-              const locationLabel = geo?.town && geo.town !== "Anywhere" ? ` near ${geo.town}` : "";
-              return totalCount > 0
-                ? `${totalCount.toLocaleString()} listing${totalCount !== 1 ? "s" : ""}${locationLabel}`
-                : `No listings found${locationLabel}`;
-            })()}
+            {totalCount > 0
+              ? `${allResults.length.toLocaleString()} listing${allResults.length !== 1 ? "s" : ""} ${geo ? `near ${geo.town}` : placeName ? `matching "${placeName}"` : "found"}`
+              : `No listings found${geo ? ` near ${geo.town}` : placeName ? ` for "${placeName}"` : ""}`}
           </Text>
         </View>
       )}
@@ -856,56 +832,163 @@ export default function SearchScreen() {
 
       {/* ── Results List ── */}
       {!isFirstLoad && !searchError && (
-        <FlatList
-          data={allResults}
-          keyExtractor={(item) => item.id}
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <ResultCard
-              item={item}
-              category={category}
-              checkIn={checkIn}
-              checkOut={checkOut}
-              guests={guests}
-              pickupDatetime={pickupDatetime}
-              returnDatetime={returnDatetime}
-              onFavouriteToggle={handleFavouriteToggle}
-              favouriteLoading={favouriteLoading}
-              photoUrl={photoMap[item.id]}
-            />
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="home-outline" size={52} color={BORDER} />
-              <Text style={styles.emptyTitle}>No listings found</Text>
-              <Text style={styles.emptySub}>
-                No listings match your filter criteria. Try resetting filters or adjusting your search.
-              </Text>
-              <TouchableOpacity style={styles.backBtn} onPress={handleResetFilters}>
-                <Text style={styles.backBtnText}>Reset all filters</Text>
-              </TouchableOpacity>
-            </View>
-          }
-          ListFooterComponent={
-            allResults.length > 0 ? (
-              <View style={styles.footer}>
-                {isLoadingMore && (
-                  <ActivityIndicator size="small" color={PRIMARY} style={{ marginBottom: 12 }} />
-                )}
-                {hasNextPage && !isLoadingMore && (
-                  <TouchableOpacity style={styles.loadMoreBtn} onPress={handleLoadMore}>
-                    <Text style={styles.loadMoreText}>Load more</Text>
-                  </TouchableOpacity>
-                )}
-                {!hasNextPage && allResults.length > 0 && (
-                  <Text style={styles.endText}>All listings loaded</Text>
-                )}
+        showMapView ? (
+          <View style={styles.mapContainer}>
+            {MapView ? (
+              <>
+                <MapView
+                  style={styles.map}
+                  initialRegion={{
+                    latitude: geo ? Number(geo.lat) : -1.286389,
+                    longitude: geo ? Number(geo.lng) : 36.817223,
+                    latitudeDelta: radiusKm ? radiusKm / 40 : 0.0922,
+                    longitudeDelta: radiusKm ? radiusKm / 40 : 0.0421,
+                  }}
+                  region={mapRegion ?? undefined}
+                  onRegionChangeComplete={(r: any) => setMapRegion(r)}
+                >
+                  {/* Center Search Marker */}
+                  {geo && Marker && (
+                    <Marker
+                      coordinate={{ latitude: Number(geo.lat), longitude: Number(geo.lng) }}
+                      title="Search Center"
+                      pinColor="#dc2626"
+                    />
+                  )}
+
+                  {/* Listings Markers */}
+                  {allResults.map((item) => {
+                    const coords = getListingCoordinates(item, geo ? Number(geo.lat) : -1.286389, geo ? Number(geo.lng) : 36.817223);
+                    const itemPrice = category === "car" ? item.dailyRate : item.nightlyRate;
+                    if (!Marker) return null;
+                    return (
+                      <Marker
+                        key={item.id}
+                        coordinate={coords}
+                        onPress={() => setSelectedListing(item)}
+                      >
+                        <View style={styles.priceMarker}>
+                          <Text style={styles.priceMarkerText}>
+                            {item.currency} {itemPrice ? itemPrice.toLocaleString() : ""}
+                          </Text>
+                        </View>
+                      </Marker>
+                    );
+                  })}
+                </MapView>
+
+                {/* My Location Button */}
+                <TouchableOpacity style={styles.myLocationBtn} onPress={centerOnUserLocation}>
+                  <Ionicons name="locate" size={22} color={PRIMARY} />
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View style={[styles.map, styles.center, { backgroundColor: "#fff", paddingHorizontal: 24 }]}>
+                <View style={{ backgroundColor: "#eff6ff", width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+                  <Ionicons name="map-outline" size={40} color={PRIMARY} />
+                </View>
+                <Text style={[styles.errorTitle, { fontSize: 20 }]}>Interactive Map Unavailable</Text>
+                <Text style={[styles.errorSub, { maxWidth: 300, marginBottom: 24 }]}>
+                  The native map module is missing on this client. Switch to List View to browse all properties.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.retryBtn, { marginTop: 0 }]}
+                  onPress={() => setShowMapView(false)}
+                >
+                  <Text style={styles.retryBtnText}>View as List</Text>
+                </TouchableOpacity>
               </View>
-            ) : null
-          }
-        />
+            )}
+
+            {/* Selected Listing Card Preview Overlay */}
+            {selectedListing && (
+              <View style={styles.previewCardContainer}>
+                <ResultCard
+                  item={selectedListing}
+                  category={category}
+                  checkIn={checkIn}
+                  checkOut={checkOut}
+                  guests={guests}
+                  pickupDatetime={pickupDatetime}
+                  returnDatetime={returnDatetime}
+                  onFavouriteToggle={handleFavouriteToggle}
+                  favouriteLoading={favouriteLoading}
+                />
+                <TouchableOpacity
+                  style={styles.closePreviewBtn}
+                  onPress={() => setSelectedListing(null)}
+                >
+                  <Ionicons name="close" size={18} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        ) : (
+          <FlatList
+            data={allResults}
+            keyExtractor={(item) => item.id}
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+            renderItem={({ item }) => (
+              <ResultCard
+                item={item}
+                category={category}
+                checkIn={checkIn}
+                checkOut={checkOut}
+                guests={guests}
+                pickupDatetime={pickupDatetime}
+                returnDatetime={returnDatetime}
+                onFavouriteToggle={handleFavouriteToggle}
+                favouriteLoading={favouriteLoading}
+              />
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Ionicons name="home-outline" size={52} color={BORDER} />
+                <Text style={styles.emptyTitle}>No listings found</Text>
+                <Text style={styles.emptySub}>
+                  No listings match your filter criteria or search radius. Try resetting filters.
+                </Text>
+                <TouchableOpacity style={styles.backBtn} onPress={handleResetFilters}>
+                  <Text style={styles.backBtnText}>Reset all filters</Text>
+                </TouchableOpacity>
+              </View>
+            }
+            ListFooterComponent={
+              allResults.length > 0 ? (
+                <View style={styles.footer}>
+                  {isLoadingMore && (
+                    <ActivityIndicator size="small" color={PRIMARY} style={{ marginBottom: 12 }} />
+                  )}
+                  {hasNextPage && !isLoadingMore && (
+                    <TouchableOpacity style={styles.loadMoreBtn} onPress={handleLoadMore}>
+                      <Text style={styles.loadMoreText}>Load more</Text>
+                    </TouchableOpacity>
+                  )}
+                  {!hasNextPage && allResults.length > 0 && (
+                    <Text style={styles.endText}>All listings loaded</Text>
+                  )}
+                </View>
+              ) : null
+            }
+          />
+        )
+      )}
+
+      {/* Floating Map/List Toggle Button */}
+      {!isFirstLoad && !searchError && (
+        <TouchableOpacity
+          style={styles.floatingToggleBtn}
+          onPress={() => {
+            setShowMapView(!showMapView);
+            setSelectedListing(null);
+          }}
+          activeOpacity={0.9}
+        >
+          <Ionicons name={showMapView ? "list" : "map"} size={18} color="#fff" style={{ marginRight: 6 }} />
+          <Text style={styles.floatingToggleBtnText}>{showMapView ? "Show List" : "Show Map"}</Text>
+        </TouchableOpacity>
       )}
 
       {/* ─── Premium Filter Sheet Modal ─── */}
@@ -969,7 +1052,7 @@ export default function SearchScreen() {
             {/* SEARCH RADIUS */}
             <Text style={filterStyles.sectionTitle}>Search Radius (Distance)</Text>
             <View style={filterStyles.rowChips}>
-              {[5, 10, 25, 50].map((radius) => (
+              {[25, 100, 500, 2000].map((radius) => (
                 <TouchableOpacity
                   key={radius}
                   style={[filterStyles.chip, radiusKm === radius && filterStyles.chipActive]}

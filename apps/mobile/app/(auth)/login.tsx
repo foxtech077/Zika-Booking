@@ -218,7 +218,7 @@ try {
     }) ?? "",
     offlineAccess: true,
   });
-} catch { /* not available in Expo Go */ }
+}
 
 function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -228,6 +228,7 @@ function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
       if (!_GoogleSignin) {
         throw Object.assign(new Error("Expo Go"), { code: "EXPO_GO" });
       }
+      configureGoogleSignIn();
       await _GoogleSignin.hasPlayServices();
       const signInResult = await _GoogleSignin.signIn();
       const idToken = (signInResult as any).data?.idToken ?? (signInResult as any).idToken;

@@ -602,7 +602,7 @@ export default function ApartmentListingScreen() {
             <FormField
               label="Minimum Stay (nights)"
               value={form.minStayNights}
-              onChangeText={(t) => set("minStayNights", t.replace(/\D/g, "") || "1")}
+              onChangeText={(t) => set("minStayNights", t.replace(/\D/g, ""))}
               placeholder="1"
               keyboardType="numeric"
             />

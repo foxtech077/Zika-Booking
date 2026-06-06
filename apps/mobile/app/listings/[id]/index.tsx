@@ -75,15 +75,22 @@ const HOTEL_DOCS = [
 ];
 
 const CAR_DOCS = [
+  { key: "vehicle_registration", label: "Vehicle Registration", icon: "file-text" as const },
   { key: "insurance_certificate", label: "Insurance Certificate", icon: "shield" as const },
   { key: "roadworthiness_certificate", label: "Roadworthiness Certificate", icon: "check-circle" as const },
 ];
 
-const BODY_TYPES = [
-  { key: "sedan", label: "Sedan" }, { key: "suv", label: "SUV" },
-  { key: "minivan", label: "Minivan" }, { key: "pickup", label: "Pickup" },
-  { key: "van", label: "Van" }, { key: "convertible", label: "Convertible" },
-  { key: "sports", label: "Sports" }, { key: "other", label: "Other" },
+const CAR_CATEGORIES = [
+  { key: "Economy", label: "Economy" }, { key: "Compact", label: "Compact" },
+  { key: "SUV", label: "SUV" }, { key: "Minivan", label: "Minivan" },
+  { key: "Pickup", label: "Pickup" }, { key: "Luxury", label: "Luxury" },
+  { key: "Electric", label: "Electric" }, { key: "Convertible", label: "Convertible" },
+];
+
+const INSURANCE_TYPE_OPTIONS = [
+  { key: "basic", label: "Basic" }, { key: "standard", label: "Standard" },
+  { key: "comprehensive", label: "Comprehensive" }, { key: "premium", label: "Premium" },
+  { key: "basic_third_party", label: "Third Party" }, { key: "premium_zero_excess", label: "Zero Excess" },
 ];
 
 const TRANSMISSION_OPTIONS = [
@@ -138,12 +145,12 @@ type EditForm = {
   longStayDiscountType: "percentage" | "fixed"; longStayDiscountValue: string;
   // car
   carMake: string; carModel: string; carYear: string;
-  bodyType: string; colour: string; licencePlate: string;
+  carCategory: string; colour: string; licencePlate: string;
   odometerReading: string; seats: string; doors: string;
   transmission: string; fuelType: string; driveType: string;
   engineSize: string; airConditioning: boolean;
   mileagePolicy: string; mileageLimitKm: string;
-  fuelPolicy: string; securityDeposit: string;
+  fuelPolicy: string; insuranceType: string; securityDeposit: string;
   minDriverAge: string;
   roadsideAssistance: boolean; crossBorderAllowed: boolean;
   airportPickup: boolean; returnSameLocation: boolean;
@@ -166,12 +173,12 @@ const DEFAULTS: EditForm = {
   longStayEnabled: false, longStayMinNights: "7",
   longStayDiscountType: "percentage", longStayDiscountValue: "",
   carMake: "", carModel: "", carYear: "",
-  bodyType: "", colour: "", licencePlate: "",
+  carCategory: "", colour: "", licencePlate: "",
   odometerReading: "", seats: "5", doors: "4",
   transmission: "", fuelType: "", driveType: "",
   engineSize: "", airConditioning: true,
   mileagePolicy: "unlimited", mileageLimitKm: "",
-  fuelPolicy: "full_to_full", securityDeposit: "", minDriverAge: "21",
+  fuelPolicy: "full_to_full", insuranceType: "", securityDeposit: "", minDriverAge: "21",
   roadsideAssistance: false, crossBorderAllowed: false,
   airportPickup: false, returnSameLocation: true,
   deliveryAvailable: false, deliveryRadiusKm: "", deliveryFee: "",
@@ -216,7 +223,7 @@ export default function EditListingScreen() {
     setForm({
       name: listing.name ?? "",
       description: listing.description ?? "",
-      pricePerNight: String(listing.pricePerNight ?? ""),
+      pricePerNight: String(listing.pricePerDay ?? listing.pricePerNight ?? ""),
       currency: cur.code,
       currencySymbol: cur.symbol,
       country: listing.country ?? "",
@@ -245,7 +252,7 @@ export default function EditListingScreen() {
       carMake: listing.carMake ?? "",
       carModel: listing.carModel ?? "",
       carYear: String(listing.carYear ?? ""),
-      bodyType: listing.bodyType ?? "",
+      carCategory: listing.carCategory ?? "",
       colour: listing.colour ?? "",
       licencePlate: listing.licencePlate ?? "",
       odometerReading: String(listing.odometerReading ?? ""),
@@ -259,8 +266,9 @@ export default function EditListingScreen() {
       mileagePolicy: listing.mileagePolicy ?? "unlimited",
       mileageLimitKm: String(listing.mileageLimitKm ?? ""),
       fuelPolicy: listing.fuelPolicy ?? "full_to_full",
+      insuranceType: listing.insuranceType ?? "",
       securityDeposit: String(listing.securityDeposit ?? ""),
-      minDriverAge: String(listing.minDriverAge ?? "21"),
+      minDriverAge: String(listing.minimumDriverAge ?? "21"),
       roadsideAssistance: listing.roadsideAssistance ?? false,
       crossBorderAllowed: listing.crossBorderAllowed ?? false,
       airportPickup: listing.airportPickup ?? false,
@@ -426,11 +434,11 @@ export default function EditListingScreen() {
     switch (currentStep) {
       case 0: return {
         name: form.name, carMake: form.carMake, carModel: form.carModel,
-        carYear: parseInt(form.carYear, 10) || null, bodyType: form.bodyType || null,
+        carYear: parseInt(form.carYear, 10) || null, carCategory: form.carCategory || null,
         unitCount: parseInt(form.unitCount, 10) || null,
         colour: form.colour, licencePlate: form.licencePlate,
         odometerReading: parseInt(form.odometerReading, 10) || null,
-        pricePerNight: parseFloat(form.pricePerNight) || null,
+        pricePerDay: parseFloat(form.pricePerNight) || null,
         currency: form.currency, country: form.country?.trim()?.toUpperCase() || null,
       };
       case 1: return {
@@ -442,10 +450,11 @@ export default function EditListingScreen() {
       case 2: return {
         securityDeposit: parseFloat(form.securityDeposit) || null,
         minStayNights: parseInt(form.minStayNights, 10) || 1,
-        minDriverAge: parseInt(form.minDriverAge, 10) || null,
+        minimumDriverAge: parseInt(form.minDriverAge, 10) || null,
         mileagePolicy: form.mileagePolicy,
         mileageLimitKm: form.mileagePolicy === "limited" ? parseInt(form.mileageLimitKm, 10) || null : null,
-        fuelPolicy: form.fuelPolicy || null, cancellationPolicy: form.cancellationPolicy || null,
+        fuelPolicy: form.fuelPolicy || null, insuranceType: form.insuranceType || null,
+        cancellationPolicy: form.cancellationPolicy || null,
       };
       case 3: return {
         roadsideAssistance: form.roadsideAssistance, crossBorderAllowed: form.crossBorderAllowed,
@@ -694,7 +703,7 @@ export default function EditListingScreen() {
                 </View>
               </View>
               <FormField label="Minimum Stay (nights)" value={form.minStayNights}
-                onChangeText={(t) => set("minStayNights", t.replace(/\D/g, "") || "1")}
+                onChangeText={(t) => set("minStayNights", t.replace(/\D/g, ""))}
                 placeholder="1" keyboardType="numeric" />
               <RadioGroup label="Cancellation Policy" required options={CANCELLATION_OPTIONS}
                 selected={form.cancellationPolicy} onSelect={(k) => set("cancellationPolicy", k)} />
@@ -794,7 +803,7 @@ export default function EditListingScreen() {
                 </View>
               </View>
               <FormField label="Minimum Stay (nights)" value={form.minStayNights}
-                onChangeText={(t) => set("minStayNights", t.replace(/\D/g, "") || "1")}
+                onChangeText={(t) => set("minStayNights", t.replace(/\D/g, ""))}
                 placeholder="1" keyboardType="numeric" />
               <RadioGroup label="Cancellation Policy" required options={CANCELLATION_OPTIONS}
                 selected={form.cancellationPolicy} onSelect={(k) => set("cancellationPolicy", k)} />
@@ -881,8 +890,8 @@ export default function EditListingScreen() {
                     onChangeText={(t) => set("colour", t)} placeholder="Silver" />
                 </View>
               </View>
-              <ChipSelector label="Vehicle Category" required options={BODY_TYPES}
-                selected={form.bodyType} onSelect={(k) => set("bodyType", k)} error={errors.bodyType} />
+              <ChipSelector label="Vehicle Category" required options={CAR_CATEGORIES}
+                selected={form.carCategory} onSelect={(k) => set("carCategory", k)} error={errors.carCategory} />
               <FormField label="Number of Units" required
                 hint="How many vehicles of this type do you have?"
                 value={form.unitCount}
@@ -932,7 +941,7 @@ export default function EditListingScreen() {
               <View style={s.twoCol}>
                 <View style={{ flex: 1 }}>
                   <FormField label="Min Rental Days" value={form.minStayNights}
-                    onChangeText={(t) => set("minStayNights", t.replace(/\D/g, "") || "1")}
+                    onChangeText={(t) => set("minStayNights", t.replace(/\D/g, ""))}
                     placeholder="1" keyboardType="numeric" />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -950,6 +959,8 @@ export default function EditListingScreen() {
               )}
               <RadioGroup label="Fuel Policy" required options={FUEL_POLICY_OPTIONS}
                 selected={form.fuelPolicy} onSelect={(k) => set("fuelPolicy", k)} />
+              <ChipSelector label="Insurance Type" required options={INSURANCE_TYPE_OPTIONS}
+                selected={form.insuranceType} onSelect={(k) => set("insuranceType", k)} />
               <RadioGroup label="Cancellation Policy" required options={CANCELLATION_OPTIONS}
                 selected={form.cancellationPolicy} onSelect={(k) => set("cancellationPolicy", k)} />
             </View>
