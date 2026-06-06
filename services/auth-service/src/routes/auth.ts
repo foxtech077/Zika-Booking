@@ -193,7 +193,7 @@ export async function authRoutes(app: FastifyInstance) {
     // Email verification flow
     const plainToken = generateToken();
 
-    console.log("EMAIL VERIFICATION TOKEN:", plainToken);
+   // console.log("EMAIL VERIFICATION TOKEN:", plainToken);
 
     const expiresAt = new Date(
       Date.now() + 24 * 60 * 60 * 1000
@@ -279,7 +279,7 @@ export async function authRoutes(app: FastifyInstance) {
     </div>`
           : `
     <div style="margin-top:8px;padding:16px;background:#f0fdf4;border-radius:10px;font-size:14px;color:#166534;line-height:1.7;border:1px solid #bbf7d0">
-      ✅ Your email is verified!<br/>
+      Your email is verified!<br/>
       <strong>Open the ZikaBooking app on your phone</strong> and sign in.
     </div>`
         : `<p style="font-size:13px;color:#94a3b8;margin-top:8px">Please open the ZikaBooking app and sign in.</p>`;
@@ -325,14 +325,14 @@ export async function authRoutes(app: FastifyInstance) {
 
     // ── Validate token presence ────────────────────────────────────────────────
     if (!token || token.length !== 64) {
-      return html("❌", "Invalid Link", "This verification link is invalid or incomplete. Please request a new verification email from the app.", "#dc2626");
+      return html( "Invalid Link", "This verification link is invalid or incomplete. Please request a new verification email from the app.", "#dc2626");
     }
 
     // ── Rate limit ─────────────────────────────────────────────────────────────
     const ip = req.ip;
     const rlCount = await incrementCounter(`rl:verify:${ip}`, 60);
     if (rlCount > 10) {
-      return html("⏳", "Too Many Requests", "You've made too many requests. Please wait a moment and try again.", "#d97706");
+      return html( "Too Many Requests", "You've made too many requests. Please wait a moment and try again.", "#d97706");
     }
 
     const tokenHash = hashToken(token);
@@ -342,7 +342,7 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     if (!record || record.tokenType !== "email_verification") {
-      return html("❌", "Invalid Link", "This verification link is invalid. Please request a new verification email from the app.", "#dc2626");
+      return html( "Invalid Link", "This verification link is invalid. Please request a new verification email from the app.", "#dc2626");
     }
 
     if (record.used) {
@@ -603,14 +603,14 @@ export async function authRoutes(app: FastifyInstance) {
 
     if (!user || !passwordOk) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
 
-  if (user.status === "pending_verification") {
-  return sendError(
-    reply,
-    403,
-    "EMAIL_NOT_VERIFIED",
-    "Please verify your email address to sign in."
-  );
-}
+    if (user.status === "pending_verification") {
+      return sendError(
+        reply,
+        403,
+        "EMAIL_NOT_VERIFIED",
+        "Please verify your email address to sign in."
+      );
+    }
     if (user.status === "suspended") {
       return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended. Please contact support for assistance.");
     }
@@ -685,7 +685,7 @@ export async function authRoutes(app: FastifyInstance) {
     const { email } = parsed.data;
 
     const user = await prisma.user.findUnique({ where: { email } });
-   if (user && user.status === "active" && user.passwordHash) {
+    if (user && user.status === "active" && user.passwordHash) {
       const plainToken = generateToken();
 
       await prisma.verificationToken.create({
@@ -701,10 +701,10 @@ export async function authRoutes(app: FastifyInstance) {
       const resetUrl = `${webBase}/reset-password?token=${plainToken}`;
 
       try {
-  await sendPasswordResetEmail(email, resetUrl);  
-} catch (error) {
-  console.error("Email sending failed:", error);
-}
+        await sendPasswordResetEmail(email, plainToken);
+      } catch (error) {
+        console.error("Email sending failed:", error);
+      }
     }
 
     return sendSuccess(reply, 200, {
@@ -728,6 +728,8 @@ export async function authRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+
+
     const parsed = resetPasswordSchema.safeParse(req.body);
     if (!parsed.success) {
       console.log(JSON.stringify(parsed.error.format(), null, 2));
@@ -771,17 +773,23 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/oauth/google  (UC-1.6) ──────────────────────────────────────
-  app.post("/auth/oauth/google", { schema: { tags: ["User Auth"],body: {
+  app.post("/auth/oauth/google", {
+    schema: {
+      tags: ["User Auth"], body: {
         type: "object",
         required: ["idToken"],
         properties: {
           idToken: {
             type: "string",
-}}} } }, async (req: FastifyRequest, reply: FastifyReply) => {
+          }
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = googleOAuthSchema.safeParse(req.body);
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid payload.");
     const { idToken, userType, businessName, country } = parsed.data;
-  
+
     let googlePayload: { email: string; given_name?: string; family_name?: string; sub: string } | null = null;
     try {
       const client = new OAuth2Client();
@@ -848,7 +856,9 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/oauth/apple  (UC-1.7) ───────────────────────────────────────
-  app.post("/auth/oauth/apple", { schema: { tags: ["User Auth"],  body: {
+  app.post("/auth/oauth/apple", {
+    schema: {
+      tags: ["User Auth"], body: {
         type: "object",
         required: ["identityToken"],
         properties: {
@@ -863,23 +873,25 @@ export async function authRoutes(app: FastifyInstance) {
           // },
           // country: {
           //   type: "string"
-          }
-        }}} , async (req: FastifyRequest, reply: FastifyReply) => {
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = appleOAuthSchema.safeParse(req.body);
-   if (!parsed.success) {
-  console.log(
-    JSON.stringify(parsed.error.format(), null, 2)
-  );
+    if (!parsed.success) {
+      console.log(
+        JSON.stringify(parsed.error.format(), null, 2)
+      );
 
-  return reply.status(422).send({
-    success: false,
-    error: {
-      code: "VALIDATION_ERROR",
-      message: "Invalid payload",
-      details: parsed.error.flatten(),
-    },
-  });
-}
+      return reply.status(422).send({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid payload",
+          details: parsed.error.flatten(),
+        },
+      });
+    }
     const { identityToken, userType, businessName, country } = parsed.data;
 
     let appleSub: string;
@@ -934,7 +946,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   // ── POST /auth/account-type  (post-OAuth account type selection) ───────────
-  
+
 
 
   // app.post("/auth/account-type", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -968,30 +980,31 @@ export async function authRoutes(app: FastifyInstance) {
   // });
 
 
-  app.post("/auth/account-type", {schema: {
-        tags: ["User Auth"],
-        body: {
-          type: "object",
-          required: ["userType"],
-          properties: {
-            userType: {
-              type: "string",
-              enum: ["guest", "provider"],
-            },
-            businessName: {
-              type: "string",
-            },
-            country: {
-              type: "string",
-              minLength: 2,
-              maxLength: 2,
-              description: "2-letter ISO country code (e.g. IN, US)",
-            },
+  app.post("/auth/account-type", {
+    schema: {
+      tags: ["User Auth"],
+      body: {
+        type: "object",
+        required: ["userType"],
+        properties: {
+          userType: {
+            type: "string",
+            enum: ["guest", "provider"],
+          },
+          businessName: {
+            type: "string",
+          },
+          country: {
+            type: "string",
+            minLength: 2,
+            maxLength: 2,
+            description: "2-letter ISO country code (e.g. IN, US)",
           },
         },
       },
-      preHandler: [requireAuth],
     },
+    preHandler: [requireAuth],
+  },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const parsed = accountTypeSchema.safeParse(req.body);
 
@@ -1048,15 +1061,15 @@ export async function authRoutes(app: FastifyInstance) {
 
 
 
-//   //-----sample---
-// //   //app.get("/auth/oauth/google/url", async (req, reply) => {
-//   const authUrl = client.generateAuthUrl({
-//     access_type: "offline",
-//     scope: ["openid", "email", "profile"],
-//   });
+  //   //-----sample---
+  // //   //app.get("/auth/oauth/google/url", async (req, reply) => {
+  //   const authUrl = client.generateAuthUrl({
+  //     access_type: "offline",
+  //     scope: ["openid", "email", "profile"],
+  //   });
 
-//   return { authUrl };
-// });
+  //   return { authUrl };
+  // });
 
 
   // ── GET /auth/oauth/google/callback (Web OAuth Callback) ──────────────────
