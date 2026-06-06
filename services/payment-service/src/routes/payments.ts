@@ -40,7 +40,19 @@ async function fetchBooking(bookingId: string, authHeader: string) {
 export async function paymentRoutes(app: FastifyInstance) {
 
   // ── POST /payments/initiate ───────────────────────────────────────────────
-  app.post("/payments/initiate", { preHandler: [requireUser] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/payments/initiate", { preHandler: [requireUser],schema: {
+    tags: ["Payments"],
+    body: {
+      type: "object",
+      required: ["bookingId", "paymentProvider"],
+      properties: {
+        bookingId: { type: "string", format: "uuid" },
+        paymentProvider: { type: "string", enum: ["stripe", "tara"] },
+        paymentMethodId: { type: "string" },
+        mobileNumber: { type: "string" },
+      },
+    },
+  }, }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req as GuestRequest;
     const authHeader = req.headers.authorization ?? "";
 
@@ -153,7 +165,16 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   // ── GET /payments/:id/status ──────────────────────────────────────────────
-  app.get("/payments/:id/status", { preHandler: [requireUser] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/payments/:id/status", { preHandler: [requireUser],schema: {
+    tags: ["Payments"],
+    params: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string" },
+      },
+    },
+  }, }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req as GuestRequest;
     const authHeader = req.headers.authorization ?? "";
     const { id } = req.params as { id: string };
@@ -184,7 +205,18 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   // ── POST /payments/refunds (internal) ─────────────────────────────────────
-  app.post("/payments/refunds", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/payments/refunds",{ schema: {
+    tags: ["Payments"],
+    body: {
+      type: "object",
+      required: ["bookingId", "refundAmount"],
+      properties: {
+        bookingId: { type: "string", format: "uuid" },
+        refundAmount: { type: "number" },
+        reason: { type: "string" },
+      },
+    },
+  },}, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = refundSchema.safeParse(req.body);
     if (!parsed.success) {
       const fields: Record<string, string> = {};

@@ -96,7 +96,55 @@ export async function bookingRoutes(app: FastifyInstance) {
   const redis = getRedis();
 
   // ── POST /bookings/initiate — acquire reservation lock ─────────────────
-  app.post("/bookings/initiate", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/bookings/initiate", { preHandler: [requireProvider],schema: {
+    tags: ["Bookings"],
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
+
+    body: {
+      type: "object",
+      required: ["listingId"],
+      properties: {
+        listingId: {
+          type: "string",
+          format: "uuid",
+          description: "Listing ID",
+        },
+        checkIn: {
+          type: "string",
+          format: "date",
+          
+        },
+        checkOut: {
+          type: "string",
+          format: "date",
+         
+        },
+        pickupDatetime: {
+          type: "string",
+          format: "date-time",
+          
+        },
+        returnDatetime: {
+          type: "string",
+          format: "date-time",
+         
+        },
+        deliveryRequested: {
+          type: "boolean",
+         
+        },
+        guests: {
+          type: "integer",
+          minimum: 1,
+          
+        },
+      },
+    },
+  }, }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const body = req.body as {
       listingId: string;
@@ -225,7 +273,123 @@ export async function bookingRoutes(app: FastifyInstance) {
   });
 
   // ── POST /bookings — create pending_payment booking ───────────────────
-  app.post("/bookings", { schema: { tags: ["Bookings"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/bookings", { preHandler: [requireProvider],    schema: {
+    tags: ["Bookings"],
+    description:
+      "Creates a booking using a previously acquired reservation lock token.",
+
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
+
+    body: {
+      type: "object",
+      required: [
+        "lockToken",
+        "listingId",
+        "guestFirstName",
+        "guestLastName",
+        "guestEmail",
+      ],
+      properties: {
+        lockToken: {
+          type: "string",
+          description: "Reservation lock token",
+        },
+        listingId: {
+          type: "string",
+          format: "uuid",
+          description: "Listing ID",
+        },
+
+        checkIn: {
+          type: "string",
+          format: "date",
+          description: "Hotel/apartment check-in date",
+        },
+
+        checkOut: {
+          type: "string",
+          format: "date",
+          description: "Hotel/apartment check-out date",
+        },
+
+        pickupDatetime: {
+          type: "string",
+          format: "date-time",
+          description: "Car pickup datetime",
+        },
+
+        returnDatetime: {
+          type: "string",
+          format: "date-time",
+          description: "Car return datetime",
+        },
+
+        deliveryRequested: {
+          type: "boolean",
+          description: "Whether delivery is requested",
+        },
+
+        deliveryAddress: {
+          type: "string",
+          description: "Delivery address",
+        },
+
+        guestFirstName: {
+          type: "string",
+        },
+
+        guestLastName: {
+          type: "string",
+        },
+
+        guestEmail: {
+          type: "string",
+          format: "email",
+        },
+
+        guestPhone: {
+          type: "string",
+        },
+
+        adults: {
+          type: "integer",
+          minimum: 1,
+        },
+
+        children: {
+          type: "integer",
+          minimum: 0,
+        },
+
+        specialRequests: {
+          type: "string",
+        },
+
+        driverFirstName: {
+          type: "string",
+        },
+
+        driverLastName: {
+          type: "string",
+        },
+
+        driverAge: {
+          type: "integer",
+          minimum: 18,
+        },
+
+        voucherCode: {
+          type: "string",
+          description: "Optional voucher code",
+        },
+      },
+    },
+  },
+}, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const body = req.body as {
       lockToken: string;
@@ -403,17 +567,19 @@ export async function bookingRoutes(app: FastifyInstance) {
   app.patch("/bookings/:id/confirm", { schema: { tags: ["Bookings"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const { paymentId } = req.body as { paymentId?: string };
+    console.log("Type:", typeof id);
+    console.log("Received id:", id);
+      const booking = await prisma.booking.findUnique({ where: { id } });
+      console.log("booking result:", booking);
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      if (booking.status !== "pending_payment") {
+        return reply.status(409).send({ success: false, error: { code: "INVALID_STATUS", message: `Cannot confirm booking in status: ${booking.status}` } });
+      }
 
-    const booking = await prisma.booking.findUnique({ where: { id } });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    if (booking.status !== "pending_payment") {
-      return reply.status(409).send({ success: false, error: { code: "INVALID_STATUS", message: `Cannot confirm booking in status: ${booking.status}` } });
-    }
-
-    await prisma.booking.update({
-      where: { id },
-      data: { status: "confirmed", confirmedAt: new Date(), paymentId },
-    });
+      await prisma.booking.update({
+        where: { id },
+        data: { status: "confirmed", confirmedAt: new Date(), paymentId },
+      });
 
     await prisma.bookingStatusLog.create({
       data: { bookingId: id, fromStatus: "pending_payment", toStatus: "confirmed", actorType: "system" },
