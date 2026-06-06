@@ -1323,11 +1323,36 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       },
       response: {
-        200: ok({ type: "object", description: "Full booking object with statusLog and listing info" }),
-        404: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+  200: ok({
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      status: { type: "string" },
+      checkIn: { type: "string" },
+      checkOut: { type: "string" },
+      totalAmount: { type: "number" },
+
+      listing: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          country: { type: "string" },
+          category: { type: "string" }
+        }
       },
+
+      statusLog: {
+        type: "array",
+        items: {
+          type: "object"
+        }
+      }
+    }
+  }),
+  404: ErrorResponse,
+  401: ErrorResponse,
+  403: ErrorResponse,
+},
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };

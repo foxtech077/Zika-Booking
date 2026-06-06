@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
 import { withSignedPhotos } from "../lib/s3.js";
+import { DriveType } from "../generated/index.js";
 
 // ── Geo helper ────────────────────────────────────────────────────────────────
 
@@ -13,9 +14,9 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) *
+    Math.sin(dLng / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -108,7 +109,11 @@ export async function searchRoutes(app: FastifyInstance) {
             seats_min: { type: "integer", description: "Minimum number of seats" },
             mileage_policy: { type: "string", description: "Mileage policy filter" },
             car_category: { type: "string", description: "Car category (e.g. suv, sedan)" },
-            drive_type: { type: "string", description: "Drive type (e.g. 4wd, fwd)" },
+            drive_type: {
+              type: "string",
+              enum: ["2WD", "4WD", "AWD"],
+              description: "Drive type (2WD, 4WD, AWD)"
+            },
             air_conditioning: { type: "string", enum: ["true", "false"], description: "Air conditioning filter" },
             driver_age: { type: "integer", description: "Driver age for minimum age check" },
           },
@@ -184,7 +189,11 @@ export async function searchRoutes(app: FastifyInstance) {
       if (seatsMin !== undefined) where.seats = { gte: seatsMin };
       if (mileagePolicy) where.mileagePolicy = mileagePolicy;
       if (carCategory) where.carCategory = carCategory;
-      if (driveType) where.driveType = driveType;
+      if (driveType) {
+        if (driveType === "2WD") where.driveType = DriveType.TWO_WD;
+        else if (driveType === "4WD") where.driveType = DriveType.FOUR_WD;
+        else if (driveType === "AWD") where.driveType = DriveType.AWD;
+      }
       if (airConditioning !== undefined) where.airConditioning = airConditioning === "true";
       if (driverAge !== undefined) {
         where.OR = [
@@ -524,8 +533,8 @@ export async function searchRoutes(app: FastifyInstance) {
 
       await prisma.userFavourite.deleteMany({ where: { userId, listingId } });
       return sendSuccess(reply, 200, {
-  message: "Favourite removed successfully"
-});
+        message: "Favourite removed successfully"
+      });
     },
   );
 
@@ -625,9 +634,9 @@ export async function searchRoutes(app: FastifyInstance) {
         const toDelete = all.slice(20).map((r) => r.listingId);
         await prisma.userRecentlyViewed.deleteMany({ where: { userId, listingId: { in: toDelete } } });
       }
-return sendSuccess(reply, 200, {
-  message: "Recently viewed updated"
-});
+      return sendSuccess(reply, 200, {
+        message: "Recently viewed updated"
+      });
     },
   );
 
@@ -716,9 +725,9 @@ return sendSuccess(reply, 200, {
       }
 
       return sendSuccess(reply, 200, {
-  message: "Recently viewed imported successfully",
-  importedCount: items.slice(0, 20).length
-});
+        message: "Recently viewed imported successfully",
+        importedCount: items.slice(0, 20).length
+      });
     },
   );
 }
