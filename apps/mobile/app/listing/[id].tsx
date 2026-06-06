@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Alert, StyleSheet, Dimensions,
   NativeSyntheticEvent, NativeScrollEvent, Modal, Platform, Linking,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
@@ -210,6 +210,61 @@ const rv = StyleSheet.create({
   replyLabel: { fontSize: 12, fontWeight: "700", color: GREEN, marginBottom: 4 },
   replyBody: { fontSize: 12, color: "#374151", lineHeight: 17 },
 });
+
+// ── GalleryModal ─────────────────────────────────────────────────────────────
+interface GalleryModalProps {
+  photos: Photo[];
+  photoIdx: number;
+  setPhotoIdx: (idx: number) => void;
+  onClose: () => void;
+}
+function GalleryModal({ photos, photoIdx, setPhotoIdx, onClose }: GalleryModalProps) {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ flex: 1, backgroundColor: "#000" }}>
+      <FlatList
+        data={photos}
+        keyExtractor={p => p.id}
+        horizontal pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        initialScrollIndex={photoIdx}
+        getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
+        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => setPhotoIdx(Math.round(e.nativeEvent.contentOffset.x / W))}
+        scrollEventThrottle={16}
+        renderItem={({ item }) => (
+          <View style={{ width: W, flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ListingImage uri={item.cdnUrl} style={{ width: W, height: H * 0.7 }} resizeMode="contain" />
+          </View>
+        )}
+      />
+      {/* Counter */}
+      <View style={{ alignItems: "center", paddingBottom: Math.max(insets.bottom + 16, 40) }}>
+        <View style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6 }}>
+          <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>{photoIdx + 1} / {photos.length}</Text>
+        </View>
+      </View>
+      {/* Close button — absolutely positioned so it never gets covered */}
+      <TouchableOpacity
+        onPress={onClose}
+        activeOpacity={0.8}
+        style={{
+          position: "absolute",
+          top: insets.top + 12,
+          right: 16,
+          width: 44,
+          height: 44,
+          borderRadius: 22,
+          backgroundColor: "rgba(0,0,0,0.55)",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 10,
+        }}
+      >
+        <Ionicons name="close" size={24} color="#fff" />
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 function Skeleton() {
@@ -757,38 +812,12 @@ export default function ListingDetailScreen() {
 
       {/* ══ FULLSCREEN GALLERY MODAL ══ */}
       <Modal visible={galleryOpen} transparent={false} animationType="fade" onRequestClose={() => setGalleryOpen(false)}>
-        <View style={{ flex: 1, backgroundColor: "#000" }}>
-          {/* Close button inside modal — no ScrollView conflict */}
-          <SafeAreaView edges={["top"]}>
-            <View style={{ flexDirection: "row", justifyContent: "flex-end", padding: 12 }}>
-              <TouchableOpacity
-                style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" }}
-                onPress={() => setGalleryOpen(false)}
-              >
-                <Ionicons name="close" size={24} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-          <FlatList
-            data={photos}
-            keyExtractor={p => p.id}
-            horizontal pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            initialScrollIndex={photoIdx}
-            getItemLayout={(_, index) => ({ length: W, offset: W * index, index })}
-            onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => setPhotoIdx(Math.round(e.nativeEvent.contentOffset.x / W))}
-            renderItem={({ item }) => (
-              <View style={{ width: W, flex: 1, justifyContent: "center", alignItems: "center" }}>
-                <ListingImage uri={item.cdnUrl} style={{ width: W, height: H * 0.7 }} resizeMode="contain" />
-              </View>
-            )}
-          />
-          <View style={{ alignItems: "center", paddingBottom: 40 }}>
-            <View style={{ backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 6 }}>
-              <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>{photoIdx + 1} / {photos.length}</Text>
-            </View>
-          </View>
-        </View>
+        <GalleryModal
+          photos={photos}
+          photoIdx={photoIdx}
+          setPhotoIdx={setPhotoIdx}
+          onClose={() => setGalleryOpen(false)}
+        />
       </Modal>
 
       {/* ══ STICKY BOTTOM BAR ══ */}
