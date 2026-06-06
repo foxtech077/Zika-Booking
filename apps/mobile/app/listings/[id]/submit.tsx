@@ -98,11 +98,15 @@ export default function SubmitListingScreen() {
     { label: "Listing title", ok: !!listing.name },
     { label: "Car make and model", ok: !!listing.carMake && !!listing.carModel },
     { label: "Year of manufacture", ok: !!listing.carYear },
-    { label: "Daily rate & currency", ok: !!listing.pricePerNight && !!listing.currency },
-    { label: "Minimum driver age", ok: !!listing.minDriverAge },
+    { label: "Vehicle category", ok: !!listing.carCategory },
+    { label: "Daily rate & currency", ok: !!listing.pricePerDay && !!listing.currency },
+    { label: "Minimum driver age", ok: !!listing.minimumDriverAge },
+    { label: "Insurance type", ok: !!listing.insuranceType },
     { label: "Address & town", ok: !!listing.address && !!listing.town },
     { label: "Country", ok: !!listing.country },
     { label: "Cancellation policy", ok: !!listing.cancellationPolicy },
+    { label: "Vehicle registration doc", ok: docTypes.includes("vehicle_registration") },
+    { label: "Insurance certificate", ok: docTypes.includes("insurance_certificate") },
     { label: "At least 1 photo", ok: photoCount > 0 },
   ];
 
@@ -147,7 +151,7 @@ export default function SubmitListingScreen() {
               <Row label="Body type" value={listing.bodyType ?? "—"} />
               <Row label="Transmission" value={listing.transmission ?? "—"} />
               <Row label="Seats" value={listing.seats?.toString() ?? "—"} />
-              <Row label="Min driver age" value={listing.minDriverAge ? `${listing.minDriverAge} years` : "—"} />
+              <Row label="Min driver age" value={listing.minimumDriverAge ? `${listing.minimumDriverAge} years` : "—"} />
             </>
           ) : isApartment ? (
             <>

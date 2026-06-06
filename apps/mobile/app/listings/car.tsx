@@ -36,15 +36,24 @@ import {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const BODY_TYPES = [
-  { key: "sedan", label: "Sedan" },
-  { key: "suv", label: "SUV" },
-  { key: "minivan", label: "Minivan" },
-  { key: "pickup", label: "Pickup" },
-  { key: "van", label: "Van" },
-  { key: "convertible", label: "Convertible" },
-  { key: "sports", label: "Sports" },
-  { key: "other", label: "Other" },
+const CAR_CATEGORIES = [
+  { key: "Economy", label: "Economy" },
+  { key: "Compact", label: "Compact" },
+  { key: "SUV", label: "SUV" },
+  { key: "Minivan", label: "Minivan" },
+  { key: "Pickup", label: "Pickup" },
+  { key: "Luxury", label: "Luxury" },
+  { key: "Electric", label: "Electric" },
+  { key: "Convertible", label: "Convertible" },
+];
+
+const INSURANCE_TYPE_OPTIONS = [
+  { key: "basic", label: "Basic" },
+  { key: "standard", label: "Standard" },
+  { key: "comprehensive", label: "Comprehensive" },
+  { key: "premium", label: "Premium" },
+  { key: "basic_third_party", label: "Third Party" },
+  { key: "premium_zero_excess", label: "Zero Excess" },
 ];
 
 const TRANSMISSION_OPTIONS = [
@@ -84,6 +93,7 @@ const CANCELLATION_OPTIONS = [
 ];
 
 const CAR_DOCS = [
+  { key: "vehicle_registration", label: "Vehicle Registration", icon: "file-text" as const },
   { key: "insurance_certificate", label: "Insurance Certificate", icon: "shield" as const },
   { key: "roadworthiness_certificate", label: "Roadworthiness Certificate", icon: "check-circle" as const },
 ];
@@ -103,7 +113,7 @@ type CarForm = {
   carMake: string;
   carModel: string;
   carYear: string;
-  bodyType: string;
+  carCategory: string;
   unitCount: string;
   colour: string;
   licencePlate: string;
@@ -125,6 +135,7 @@ type CarForm = {
   mileagePolicy: string;
   mileageLimitKm: string;
   fuelPolicy: string;
+  insuranceType: string;
   securityDeposit: string;
   cancellationPolicy: string;
   // features
@@ -165,7 +176,7 @@ export default function CarListingScreen() {
     carMake: "",
     carModel: "",
     carYear: "",
-    bodyType: "",
+    carCategory: "",
     unitCount: "",   // starts empty — no hardcoded default
     colour: "",
     licencePlate: "",
@@ -185,6 +196,7 @@ export default function CarListingScreen() {
     mileagePolicy: "unlimited",
     mileageLimitKm: "",
     fuelPolicy: "full_to_full",
+    insuranceType: "",
     securityDeposit: "",
     cancellationPolicy: "moderate",
     roadsideAssistance: false,
@@ -219,7 +231,7 @@ export default function CarListingScreen() {
       carMake: listing.carMake ?? "",
       carModel: listing.carModel ?? "",
       carYear: String(listing.carYear ?? ""),
-      bodyType: listing.bodyType ?? "",
+      carCategory: listing.carCategory ?? "",
       unitCount: listing.unitCount != null ? String(listing.unitCount) : "",
       colour: listing.colour ?? "",
       licencePlate: listing.licencePlate ?? "",
@@ -231,14 +243,15 @@ export default function CarListingScreen() {
       driveType: listing.driveType ?? "",
       engineSize: listing.engineSize ?? "",
       airConditioning: listing.airConditioning ?? true,
-      pricePerNight: String(listing.pricePerNight ?? ""),
+      pricePerNight: String(listing.pricePerDay ?? listing.pricePerNight ?? ""),
       currency: cur.code,
       currencySymbol: cur.symbol,
       minStayNights: String(listing.minStayNights ?? "1"),
-      minDriverAge: String(listing.minDriverAge ?? "21"),
+      minDriverAge: String(listing.minimumDriverAge ?? "21"),
       mileagePolicy: listing.mileagePolicy ?? "unlimited",
       mileageLimitKm: String(listing.mileageLimitKm ?? ""),
       fuelPolicy: listing.fuelPolicy ?? "full_to_full",
+      insuranceType: listing.insuranceType ?? "",
       securityDeposit: String(listing.securityDeposit ?? ""),
       cancellationPolicy: listing.cancellationPolicy ?? "moderate",
       roadsideAssistance: listing.roadsideAssistance ?? false,
@@ -285,7 +298,7 @@ export default function CarListingScreen() {
         if (!form.carMake.trim()) e.carMake = "Make is required.";
         if (!form.carModel.trim()) e.carModel = "Model is required.";
         if (!form.carYear.trim()) e.carYear = "Year is required.";
-        if (!form.bodyType) e.bodyType = "Vehicle category is required.";
+        if (!form.carCategory) e.carCategory = "Vehicle category is required.";
         if (!form.unitCount.trim() || parseInt(form.unitCount, 10) < 1)
           e.unitCount = "Number of units is required (minimum 1).";
         if (!form.pricePerNight.trim() || parseFloat(form.pricePerNight) <= 0)
@@ -323,12 +336,12 @@ export default function CarListingScreen() {
           carMake: form.carMake,
           carModel: form.carModel,
           carYear: parseInt(form.carYear, 10) || null,
-          bodyType: form.bodyType || null,
+          carCategory: form.carCategory || null,
           unitCount: parseInt(form.unitCount, 10) || null,
           colour: form.colour,
           licencePlate: form.licencePlate,
           odometerReading: parseInt(form.odometerReading, 10) || null,
-          pricePerNight: parseFloat(form.pricePerNight) || null,
+          pricePerDay: parseFloat(form.pricePerNight) || null,
           currency: form.currency,
           country: form.country?.trim()?.toUpperCase() || null,
         };
@@ -346,10 +359,11 @@ export default function CarListingScreen() {
         return {
           securityDeposit: parseFloat(form.securityDeposit) || null,
           minStayNights: parseInt(form.minStayNights, 10) || 1,
-          minDriverAge: parseInt(form.minDriverAge, 10) || null,
+          minimumDriverAge: parseInt(form.minDriverAge, 10) || null,
           mileagePolicy: form.mileagePolicy,
           mileageLimitKm: form.mileagePolicy === "limited" ? parseInt(form.mileageLimitKm, 10) || null : null,
           fuelPolicy: form.fuelPolicy || null,
+          insuranceType: form.insuranceType || null,
           cancellationPolicy: form.cancellationPolicy || null,
         };
       case 3: // Features
@@ -665,10 +679,10 @@ export default function CarListingScreen() {
             <ChipSelector
               label="Vehicle Category"
               required
-              options={BODY_TYPES}
-              selected={form.bodyType}
-              onSelect={(k) => set("bodyType", k)}
-              error={errors.bodyType}
+              options={CAR_CATEGORIES}
+              selected={form.carCategory}
+              onSelect={(k) => set("carCategory", k)}
+              error={errors.carCategory}
             />
 
             <FormField
@@ -810,7 +824,7 @@ export default function CarListingScreen() {
                   label="Minimum Rental Days"
                   required
                   value={form.minStayNights}
-                  onChangeText={(t) => set("minStayNights", t.replace(/\D/g, "") || "1")}
+                  onChangeText={(t) => set("minStayNights", t.replace(/\D/g, ""))}
                   placeholder="1"
                   keyboardType="numeric"
                 />
@@ -854,6 +868,14 @@ export default function CarListingScreen() {
               options={FUEL_POLICY_OPTIONS}
               selected={form.fuelPolicy}
               onSelect={(k) => set("fuelPolicy", k)}
+            />
+
+            <ChipSelector
+              label="Insurance Type"
+              required
+              options={INSURANCE_TYPE_OPTIONS}
+              selected={form.insuranceType}
+              onSelect={(k) => set("insuranceType", k)}
             />
 
             <RadioGroup

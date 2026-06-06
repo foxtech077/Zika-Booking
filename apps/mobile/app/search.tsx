@@ -493,7 +493,7 @@ export default function SearchScreen() {
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [ratingMin, setRatingMin] = useState<number | null>(null);
-  const [radiusKm, setRadiusKm] = useState(25);
+  const [radiusKm, setRadiusKm] = useState(500);
   const [onlyPromotions, setOnlyPromotions] = useState(false);
 
   const [lastPlaceName, setLastPlaceName] = useState("");
@@ -555,29 +555,25 @@ export default function SearchScreen() {
   };
 
   // ── Step 1: Geocode (falls back to local city map when API requires auth) ──
-  const {
-    data: geo,
-    isLoading: geoLoading,
-    isError: geoError,
-    refetch: retryGeo,
-  } = useQuery<GeoResult>({
+  const { data: geo } = useQuery<GeoResult | null>({
     queryKey: ["geocode", placeName],
     queryFn: async () => {
+      if (!placeName) return null;
       try {
         const res = await listingApi.get<{ data: GeoResult }>(`/geocode?address=${encodeURIComponent(placeName)}`);
         return res.data.data;
       } catch {
-        // API may require auth — fall back to known city coordinates
+        // Fall back to known city coordinates
         const key = placeName.trim().toLowerCase();
         const fallback = CITY_COORDS[key];
         if (fallback) return fallback;
-        // Try prefix match (e.g. "Nairobi, Kenya" → "nairobi")
         const prefixMatch = Object.keys(CITY_COORDS).find(k => key.startsWith(k) || k.startsWith(key.split(",")[0].trim()));
         if (prefixMatch) return CITY_COORDS[prefixMatch]!;
-        throw new Error("Location not found");
+        // Return null → search.tsx will use global fallback (lat=0,lng=0,radius=20000)
+        return null;
       }
     },
-    enabled: !!placeName,
+    enabled: true,
     retry: 0,
     staleTime: 5 * 60_000,
   });
@@ -673,15 +669,18 @@ export default function SearchScreen() {
   } = useQuery<SearchResponse["data"]>({
     queryKey: searchQueryKey,
     queryFn: async () => {
-      if (!geo) throw new Error("No geo data");
+      // When geo is unavailable (keyword search), use global centre + large radius
+      const effectiveLat = geo?.lat ?? 0;
+      const effectiveLng = geo?.lng ?? 0;
+      const effectiveRadius = geo ? radiusKm : 20000;
 
       const qp = new URLSearchParams({
         category,
-        lat: String(geo.lat),
-        lng: String(geo.lng),
-        radius_km: String(radiusKm),
+        lat: String(effectiveLat),
+        lng: String(effectiveLng),
+        radius_km: String(effectiveRadius),
         sort: sortParamMap[sort],
-        limit: "20",
+        limit: "50",
       });
 
       if (priceMin) qp.set("price_min", priceMin);
@@ -718,7 +717,20 @@ export default function SearchScreen() {
       const res = await listingApi.get<SearchResponse>(`/search?${qp.toString()}`);
       const incoming = res.data.data;
 
-      const filteredResults = (incoming.results ?? []).filter((r) => r.listingType === category);
+      let filteredResults = (incoming.results ?? []).filter((r) => r.listingType === category);
+
+      // When no geo (keyword/global search), apply client-side text filter
+      if (!geo && searchInput.trim()) {
+        const kw = searchInput.trim().toLowerCase();
+        filteredResults = filteredResults.filter((r) =>
+          (r.title ?? "").toLowerCase().includes(kw) ||
+          (r.city ?? "").toLowerCase().includes(kw) ||
+          (r.countryCode ?? "").toLowerCase().includes(kw) ||
+          (r.carMake ?? "").toLowerCase().includes(kw) ||
+          (r.carModel ?? "").toLowerCase().includes(kw)
+        );
+      }
+
       if (!cursor) {
         setAllResults(filteredResults);
       } else {
@@ -731,7 +743,7 @@ export default function SearchScreen() {
 
       return incoming;
     },
-    enabled: !!geo,
+    enabled: true,
     retry: 1,
     staleTime: 30_000,
   });
@@ -783,38 +795,7 @@ export default function SearchScreen() {
     );
   };
 
-  // ── Render: geo loading ──
-  if (geoLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={PRIMARY} />
-          <Text style={styles.centerText}>Finding {placeName}...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ── Render: geo error ──
-  if (geoError || (!geoLoading && !geo)) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.center}>
-          <Ionicons name="location-outline" size={48} color={BORDER} />
-          <Text style={styles.errorTitle}>Location not found</Text>
-          <Text style={styles.errorSub}>
-            We could not locate "{placeName}". Try a different city or country name.
-          </Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => void retryGeo()}>
-            <Text style={styles.retryBtnText}>Retry</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Text style={styles.backBtnText}>Go back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+  // Geo is optional — if unavailable, search falls back to global (lat=0,lng=0,radius=20000)
 
   const isFirstLoad = searchLoading && allResults.length === 0;
   const isLoadingMore = searchFetching && allResults.length > 0;
@@ -879,8 +860,8 @@ export default function SearchScreen() {
           <Ionicons name="search" size={13} color={MUTED} />
           <Text style={styles.resultCountText}>
             {totalCount > 0
-              ? `${totalCount.toLocaleString()} listing${totalCount !== 1 ? "s" : ""} near ${geo?.town ?? placeName}`
-              : "0 listings found near " + (geo?.town ?? placeName)}
+              ? `${allResults.length.toLocaleString()} listing${allResults.length !== 1 ? "s" : ""} ${geo ? `near ${geo.town}` : placeName ? `matching "${placeName}"` : "found"}`
+              : `No listings found${geo ? ` near ${geo.town}` : placeName ? ` for "${placeName}"` : ""}`}
           </Text>
         </View>
       )}
@@ -913,8 +894,8 @@ export default function SearchScreen() {
                 <MapView
                   style={styles.map}
                   initialRegion={{
-                    latitude: geo?.lat ? Number(geo.lat) : -1.286389,
-                    longitude: geo?.lng ? Number(geo.lng) : 36.817223,
+                    latitude: geo ? Number(geo.lat) : -1.286389,
+                    longitude: geo ? Number(geo.lng) : 36.817223,
                     latitudeDelta: radiusKm ? radiusKm / 40 : 0.0922,
                     longitudeDelta: radiusKm ? radiusKm / 40 : 0.0421,
                   }}
@@ -932,7 +913,7 @@ export default function SearchScreen() {
 
                   {/* Listings Markers */}
                   {allResults.map((item) => {
-                    const coords = getListingCoordinates(item, geo?.lat ? Number(geo.lat) : -1.286389, geo?.lng ? Number(geo.lng) : 36.817223);
+                    const coords = getListingCoordinates(item, geo ? Number(geo.lat) : -1.286389, geo ? Number(geo.lng) : 36.817223);
                     const itemPrice = category === "car" ? item.dailyRate : item.nightlyRate;
                     if (!Marker) return null;
                     return (
@@ -1126,7 +1107,7 @@ export default function SearchScreen() {
             {/* SEARCH RADIUS */}
             <Text style={filterStyles.sectionTitle}>Search Radius (Distance)</Text>
             <View style={filterStyles.rowChips}>
-              {[5, 10, 25, 50].map((radius) => (
+              {[25, 100, 500, 2000].map((radius) => (
                 <TouchableOpacity
                   key={radius}
                   style={[filterStyles.chip, radiusKm === radius && filterStyles.chipActive]}

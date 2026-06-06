@@ -41,21 +41,15 @@ export default function MyListingsScreen() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
 
-  if (user?.userType !== "provider") {
-    return (
-      <SafeAreaView style={styles.center}>
-        <Text style={styles.emptyTitle}>Provider account required</Text>
-        <Text style={styles.emptySubtitle}>Listing management is only available to provider accounts.</Text>
-      </SafeAreaView>
-    );
-  }
-
+  // All hooks must be called unconditionally before any early return
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["myListings"],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: { listings: Listing[] } }>("/listings");
-      return res.data.data.listings;
+      const res = await listingApi.get("/listings");
+      const payload = res.data?.data ?? res.data;
+      return (Array.isArray(payload) ? payload : payload?.listings) as Listing[] ?? [];
     },
+    enabled: user?.userType === "provider",
   });
 
   const deleteMutation = useMutation({
@@ -71,6 +65,15 @@ export default function MyListingsScreen() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myListings"] }),
   });
+
+  if (user?.userType !== "provider") {
+    return (
+      <SafeAreaView style={styles.center}>
+        <Text style={styles.emptyTitle}>Provider account required</Text>
+        <Text style={styles.emptySubtitle}>Listing management is only available to provider accounts.</Text>
+      </SafeAreaView>
+    );
+  }
 
   function handleDelete(id: string) {
     Alert.alert("Delete Draft", "Delete this draft? This cannot be undone.", [
