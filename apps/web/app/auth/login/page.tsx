@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -171,10 +172,20 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-md w-full">
-        <Link href="/" className="text-2xl font-bold text-primary block mb-1">
-          ZikaBooking
-        </Link>
-        <p className="text-gray-500 text-sm mb-6">Sign in to your account</p>
+        <div className="flex flex-col items-center justify-center mb-6">
+          <Image
+            src="/images/kainook-logo.jpeg"
+            alt="Kainook Logo"
+            width={90}
+            height={90}
+            priority
+            className="mb-4"
+          />
+          <Link href="/" className="text-2xl font-bold text-primary block mb-1">
+            Kainook
+          </Link>
+          <p className="text-gray-500 text-sm">Sign in to your account</p>
+        </div>
 
         <form onSubmit={handleSubmit} noValidate>
           <FormField
