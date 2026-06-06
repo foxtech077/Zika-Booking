@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -6,844 +6,960 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Modal,
-  FlatList,
   Image,
   ActivityIndicator,
   Alert,
   Dimensions,
+  Modal,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
 import { listingApi } from "../../lib/listing-api";
+import { ListingImage } from "../../components/ListingImage";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PRIMARY = "#1a73e8";
+const { width: W } = Dimensions.get("window");
+const GREEN = "#1B5E20";
+const GREEN_LIGHT = "#F0FFF4";
+const GREEN_BORDER = "#BBF7D0";
 const TEXT = "#111827";
-const MUTED = "#6b7280";
-const BORDER = "#e5e7eb";
-const BG = "#f9fafb";
-
-const DAYS_OF_WEEK = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
-const DAY_ABBR = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MUTED = "#6B7280";
+const BORDER = "#E5E7EB";
 
 type Category = "hotels" | "apartments" | "cars";
 
-interface SearchForm {
-  location: string;
-  // hotels / apartments
-  checkIn: Date | null;
-  checkOut: Date | null;
-  guests: number;
-  // cars
-  pickupDate: Date | null;
-  pickupHour: number;
-  pickupMinute: number;
-  returnDate: Date | null;
-  returnHour: number;
-  returnMinute: number;
-}
-
-interface RecentListing {
-  listingId: string;
-  listing: {
-    id: string;
-    title: string;
-    category: string;
-    city: string;
-    nightlyRate: number;
-    currency: string;
-    primaryPhotoUrl: string | null;
-  };
-}
-
-// ─── Date helpers ─────────────────────────────────────────────────────────────
-
-function formatDisplayDate(d: Date): string {
-  return `${DAY_ABBR[d.getDay()]} ${d.getDate()} ${MONTH_SHORT[d.getMonth()]}`;
-}
-
-function toYMD(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function toLocalISOString(d: Date, hour: number, minute: number): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(hour).padStart(2, "0");
-  const min = String(minute).padStart(2, "0");
-  return `${y}-${m}-${day}T${h}:${min}:00.000Z`;
-}
-
-// ─── DatePickerModal ──────────────────────────────────────────────────────────
-
-interface DatePickerModalProps {
-  visible: boolean;
+interface SearchResult {
+  id: string;
+  listingType: string;
   title: string;
-  selectedDate: Date | null;
-  minDate?: Date | null;
-  onSelect: (d: Date) => void;
-  onClose: () => void;
-  /** cars mode: show time picker after date selection */
-  showTime?: boolean;
-  selectedHour?: number;
-  selectedMinute?: number;
-  onTimeChange?: (hour: number, minute: number) => void;
+  city: string;
+  countryCode: string;
+  distanceKm: number;
+  primaryPhotoUrl: string | null;
+  nightlyRate: number | null;
+  dailyRate: number | null;
+  currency: string;
+  starRating: number | null;
+  isAccredited: boolean;
+  longStayDiscountEnabled?: boolean;
+  carMake: string | null;
+  carModel: string | null;
+  carYear: number | null;
+  transmission: string | null;
+  seats: number | null;
 }
 
-const HOUR_OPTIONS = [0, 6, 9, 12, 15, 18, 21];
-const MINUTE_OPTIONS = [0, 30];
+interface SearchResponse {
+  data: { totalCount: number; nextCursor: string | null; results: SearchResult[] };
+}
+
+function fmtPrice(n: number | null, currency: string): string {
+  if (!n) return "";
+  return `${currency} ${n.toLocaleString()}`;
+}
+
+function fmtDate(d: Date | null): string {
+  if (!d) return "Select date";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+// ── Inline Date Picker Modal ──────────────────────────────────────────────────
+
+const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function DatePickerModal({
-  visible,
-  title,
-  selectedDate,
-  minDate,
-  onSelect,
-  onClose,
-  showTime = false,
-  selectedHour = 0,
-  selectedMinute = 0,
-  onTimeChange,
-}: DatePickerModalProps) {
-  const today = new Date();
-  const initialMonth = selectedDate ?? minDate ?? today;
-  const [viewYear, setViewYear] = useState(initialMonth.getFullYear());
-  const [viewMonth, setViewMonth] = useState(initialMonth.getMonth());
-  const [pickedDate, setPickedDate] = useState<Date | null>(selectedDate);
-  const [localHour, setLocalHour] = useState(selectedHour);
-  const [localMinute, setLocalMinute] = useState(selectedMinute);
+  visible, title, minDate, onSelect, onClose,
+}: {
+  visible: boolean; title: string; minDate?: Date;
+  onSelect: (d: Date) => void; onClose: () => void;
+}) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const [yr, setYr] = useState(today.getFullYear());
+  const [mo, setMo] = useState(today.getMonth());
 
-  function prevMonth() {
-    if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
-    else setViewMonth((m) => m - 1);
+  function prevMonth() { if (mo === 0) { setMo(11); setYr(y => y - 1); } else setMo(m => m - 1); }
+  function nextMonth() { if (mo === 11) { setMo(0); setYr(y => y + 1); } else setMo(m => m + 1); }
+
+  const firstDay = new Date(yr, mo, 1).getDay();
+  const daysInMonth = new Date(yr, mo + 1, 0).getDate();
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  function isDisabled(day: number) {
+    const d = new Date(yr, mo, day); d.setHours(0, 0, 0, 0);
+    if (d < today) return true;
+    if (minDate) { const m = new Date(minDate); m.setHours(0, 0, 0, 0); if (d <= m) return true; }
+    return false;
   }
-
-  function nextMonth() {
-    if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); }
-    else setViewMonth((m) => m + 1);
-  }
-
-  function buildCalendarDays(): (number | null)[] {
-    const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-    const cells: (number | null)[] = [];
-    for (let i = 0; i < firstDay; i++) cells.push(null);
-    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-    // pad to 42 cells (6 rows)
-    while (cells.length < 42) cells.push(null);
-    return cells;
-  }
-
-  function isDayDisabled(day: number): boolean {
-    if (!minDate) return false;
-    const d = new Date(viewYear, viewMonth, day);
-    const min = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate());
-    return d < min;
-  }
-
-  function isSelected(day: number): boolean {
-    if (!pickedDate) return false;
-    return pickedDate.getFullYear() === viewYear &&
-      pickedDate.getMonth() === viewMonth &&
-      pickedDate.getDate() === day;
-  }
-
-  function handleDayPress(day: number) {
-    if (isDayDisabled(day)) return;
-    const d = new Date(viewYear, viewMonth, day);
-    setPickedDate(d);
-  }
-
-  function handleConfirm() {
-    if (!pickedDate) return;
-    onSelect(pickedDate);
-    if (showTime && onTimeChange) onTimeChange(localHour, localMinute);
-    onClose();
-  }
-
-  const days = buildCalendarDays();
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={dpStyles.overlay}>
-        <View style={dpStyles.sheet}>
-          {/* Header */}
-          <View style={dpStyles.header}>
-            <Text style={dpStyles.headerTitle}>{title}</Text>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close" size={22} color={TEXT} />
-            </TouchableOpacity>
+      <TouchableOpacity style={dp.overlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity style={dp.sheet} activeOpacity={1} onPress={() => { }}>
+          <Text style={dp.title}>{title}</Text>
+          <View style={dp.navRow}>
+            <TouchableOpacity onPress={prevMonth} style={dp.navBtn}><Text style={dp.navArrow}>‹</Text></TouchableOpacity>
+            <Text style={dp.monthLabel}>{MONTHS[mo]} {yr}</Text>
+            <TouchableOpacity onPress={nextMonth} style={dp.navBtn}><Text style={dp.navArrow}>›</Text></TouchableOpacity>
           </View>
-
-          {/* Month navigation */}
-          <View style={dpStyles.monthNav}>
-            <TouchableOpacity onPress={prevMonth} style={dpStyles.navArrow}>
-              <Ionicons name="chevron-back" size={20} color={TEXT} />
-            </TouchableOpacity>
-            <Text style={dpStyles.monthLabel}>{MONTH_NAMES[viewMonth]} {viewYear}</Text>
-            <TouchableOpacity onPress={nextMonth} style={dpStyles.navArrow}>
-              <Ionicons name="chevron-forward" size={20} color={TEXT} />
-            </TouchableOpacity>
+          <View style={dp.dowRow}>
+            {DAYS.map(d => <Text key={d} style={dp.dow}>{d}</Text>)}
           </View>
-
-          {/* Day-of-week labels */}
-          <View style={dpStyles.dowRow}>
-            {DAYS_OF_WEEK.map((d) => (
-              <Text key={d} style={dpStyles.dowLabel}>{d}</Text>
-            ))}
-          </View>
-
-          {/* Calendar grid — 6 rows × 7 cols */}
-          <View style={dpStyles.grid}>
-            {days.map((day, idx) => {
-              if (!day) return <View key={`empty-${idx}`} style={dpStyles.dayCell} />;
-              const disabled = isDayDisabled(day);
-              const selected = isSelected(day);
+          <View style={dp.grid}>
+            {cells.map((day, i) => {
+              if (!day) return <View key={`e${i}`} style={dp.emptyCell} />;
+              const disabled = isDisabled(day);
               return (
                 <TouchableOpacity
-                  key={`day-${day}`}
-                  style={[dpStyles.dayCell, selected && dpStyles.dayCellSelected, disabled && dpStyles.dayCellDisabled]}
-                  onPress={() => handleDayPress(day)}
+                  key={day} style={[dp.cell, disabled && dp.cellDisabled]}
+                  onPress={() => { if (!disabled) { onSelect(new Date(yr, mo, day)); onClose(); } }}
                   disabled={disabled}
                 >
-                  <Text style={[dpStyles.dayText, selected && dpStyles.dayTextSelected, disabled && dpStyles.dayTextDisabled]}>
-                    {day}
-                  </Text>
+                  <Text style={[dp.cellText, disabled && dp.cellTextDisabled]}>{day}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
-
-          {/* Time picker (cars only) */}
-          {showTime && pickedDate && (
-            <View style={dpStyles.timeSection}>
-              <Text style={dpStyles.timeLabel}>Time</Text>
-              <View style={dpStyles.timeRow}>
-                <Text style={dpStyles.timeUnit}>Hour:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dpStyles.timeScroll}>
-                  {HOUR_OPTIONS.map((h) => (
-                    <TouchableOpacity
-                      key={h}
-                      style={[dpStyles.timeChip, localHour === h && dpStyles.timeChipSelected]}
-                      onPress={() => setLocalHour(h)}
-                    >
-                      <Text style={[dpStyles.timeChipText, localHour === h && dpStyles.timeChipTextSelected]}>
-                        {String(h).padStart(2, "0")}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={dpStyles.timeRow}>
-                <Text style={dpStyles.timeUnit}>Min:</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={dpStyles.timeScroll}>
-                  {MINUTE_OPTIONS.map((m) => (
-                    <TouchableOpacity
-                      key={m}
-                      style={[dpStyles.timeChip, localMinute === m && dpStyles.timeChipSelected]}
-                      onPress={() => setLocalMinute(m)}
-                    >
-                      <Text style={[dpStyles.timeChipText, localMinute === m && dpStyles.timeChipTextSelected]}>
-                        {String(m).padStart(2, "0")}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            </View>
-          )}
-
-          {/* Confirm */}
-          <TouchableOpacity
-            style={[dpStyles.confirmBtn, !pickedDate && dpStyles.confirmBtnDisabled]}
-            onPress={handleConfirm}
-            disabled={!pickedDate}
-          >
-            <Text style={dpStyles.confirmBtnText}>Confirm</Text>
+          <TouchableOpacity style={dp.cancelBtn} onPress={onClose}>
+            <Text style={dp.cancelText}>Cancel</Text>
           </TouchableOpacity>
-        </View>
-      </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
     </Modal>
   );
 }
 
-const { width: SCREEN_W } = Dimensions.get("window");
-const CELL_SIZE = Math.floor((SCREEN_W - 48) / 7);
-
-const dpStyles = StyleSheet.create({
+const dp = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingHorizontal: 16, paddingBottom: 32, paddingTop: 20 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
-  headerTitle: { fontSize: 17, fontWeight: "700", color: TEXT },
-  monthNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  navArrow: { padding: 8 },
-  monthLabel: { fontSize: 16, fontWeight: "600", color: TEXT },
-  dowRow: { flexDirection: "row", marginBottom: 4 },
-  dowLabel: { width: CELL_SIZE, textAlign: "center", fontSize: 12, fontWeight: "600", color: MUTED },
+  sheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  title: { fontSize: 17, fontWeight: "700", color: "#111827", textAlign: "center", marginBottom: 16 },
+  navRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  navBtn: { padding: 8 },
+  navArrow: { fontSize: 22, color: "#1B5E20", fontWeight: "700" },
+  monthLabel: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  dowRow: { flexDirection: "row", marginBottom: 8 },
+  dow: { width: "14.28%", textAlign: "center", fontSize: 12, fontWeight: "600", color: "#6B7280" },
   grid: { flexDirection: "row", flexWrap: "wrap" },
-  dayCell: { width: CELL_SIZE, height: CELL_SIZE, alignItems: "center", justifyContent: "center", borderRadius: CELL_SIZE / 2 },
-  dayCellSelected: { backgroundColor: PRIMARY },
-  dayCellDisabled: { opacity: 0.3 },
-  dayText: { fontSize: 14, color: TEXT },
-  dayTextSelected: { color: "#fff", fontWeight: "700" },
-  dayTextDisabled: { color: MUTED },
-  timeSection: { marginTop: 16, borderTopWidth: 1, borderTopColor: BORDER, paddingTop: 12 },
-  timeLabel: { fontSize: 14, fontWeight: "600", color: TEXT, marginBottom: 8 },
-  timeRow: { flexDirection: "row", alignItems: "center", marginBottom: 8 },
-  timeUnit: { fontSize: 13, color: MUTED, width: 36 },
-  timeScroll: { flex: 1 },
-  timeChip: { borderWidth: 1, borderColor: BORDER, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7, marginRight: 8 },
-  timeChipSelected: { backgroundColor: PRIMARY, borderColor: PRIMARY },
-  timeChipText: { fontSize: 14, color: TEXT },
-  timeChipTextSelected: { color: "#fff", fontWeight: "600" },
-  confirmBtn: { marginTop: 20, backgroundColor: PRIMARY, borderRadius: 12, paddingVertical: 14, alignItems: "center" },
-  confirmBtnDisabled: { opacity: 0.45 },
-  confirmBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  emptyCell: { width: "14.28%", height: 40 },
+  cell: { width: "14.28%", height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 },
+  cellDisabled: { opacity: 0.3 },
+  cellText: { fontSize: 14, fontWeight: "500", color: "#111827" },
+  cellTextDisabled: { color: "#9CA3AF" },
+  cancelBtn: { marginTop: 16, alignItems: "center", paddingVertical: 12 },
+  cancelText: { fontSize: 15, color: "#6B7280", fontWeight: "600" },
 });
 
-// ─── Main Screen ──────────────────────────────────────────────────────────────
+// ── Listing Card ──────────────────────────────────────────────────────────────
+
+function ListingCard({
+  item, onPress, width = 200, badgeLabel, badgeColor, photoUrl,
+}: {
+  item: SearchResult; onPress: () => void; width?: number;
+  badgeLabel?: string; badgeColor?: string; photoUrl?: string | null;
+}) {
+  const isCar = item.listingType === "car";
+  const rate = isCar ? item.dailyRate : item.nightlyRate;
+  const unit = isCar ? "day" : "night";
+  const [imgError, setImgError] = useState(false);
+  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
+  return (
+    <TouchableOpacity style={[c.card, { width }]} onPress={onPress} activeOpacity={0.85}>
+      <View>
+        {!imgError && displayPhoto ? (
+          <ListingImage uri={displayPhoto} style={c.photo} onError={() => setImgError(true)} />
+        ) : (
+          <View style={[c.photo, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+            <Text style={{ fontSize: 28 }}>{isCar ? "🚗" : "🏨"}</Text>
+          </View>
+        )}
+        {badgeLabel ? (
+          <View style={[c.badge, { backgroundColor: badgeColor ?? GREEN }]}>
+            <Text style={c.badgeText}>{badgeLabel}</Text>
+          </View>
+        ) : null}
+        {item.starRating != null && item.starRating > 0 ? (
+          <View style={c.ratingBadge}>
+            <Ionicons name="star" size={10} color="#F59E0B" />
+            <Text style={c.ratingText}>{item.starRating}</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={c.body}>
+        <Text style={c.title} numberOfLines={1}>{item.title}</Text>
+        <View style={c.row}>
+          <Ionicons name="location-outline" size={11} color={MUTED} />
+          <Text style={c.loc} numberOfLines={1}>
+            {item.city}{item.distanceKm != null ? ` · ${item.distanceKm.toFixed(1)}km` : ""}
+          </Text>
+        </View>
+        <Text style={c.price}>
+          {fmtPrice(rate, item.currency)}<Text style={c.priceUnit}>/{unit}</Text>
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const c = StyleSheet.create({
+  card: {
+    backgroundColor: "#fff", borderRadius: 14, overflow: "hidden",
+    borderWidth: 1, borderColor: BORDER,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+  },
+  photo: { width: "100%", height: 130 },
+  badge: {
+    position: "absolute", top: 10, left: 10,
+    borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4,
+  },
+  badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  ratingBadge: {
+    position: "absolute", top: 10, right: 10,
+    backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 10,
+    paddingHorizontal: 6, paddingVertical: 3,
+    flexDirection: "row", alignItems: "center", gap: 3,
+  },
+  ratingText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+  body: { padding: 10 },
+  title: { fontSize: 13, fontWeight: "700", color: TEXT, marginBottom: 3 },
+  row: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 5 },
+  loc: { fontSize: 11, color: MUTED, flex: 1 },
+  price: { fontSize: 14, fontWeight: "800", color: GREEN },
+  priceUnit: { fontSize: 10, fontWeight: "400", color: MUTED },
+});
+
+// ── Nearby Row ────────────────────────────────────────────────────────────────
+
+function NearbyCard({ item, onPress, photoUrl }: { item: SearchResult; onPress: () => void; photoUrl?: string | null }) {
+  const isCar = item.listingType === "car";
+  const rate = isCar ? item.dailyRate : item.nightlyRate;
+  const [imgError, setImgError] = useState(false);
+  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
+  return (
+    <TouchableOpacity style={nb.card} onPress={onPress} activeOpacity={0.85}>
+      {!imgError && displayPhoto ? (
+        <ListingImage uri={displayPhoto} style={nb.photo} onError={() => setImgError(true)} />
+      ) : (
+        <View style={[nb.photo, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+          <Text style={{ fontSize: 22 }}>{isCar ? "🚗" : "🏨"}</Text>
+        </View>
+      )}
+      <View style={nb.info}>
+        <Text style={nb.title} numberOfLines={1}>{item.title}</Text>
+        <View style={nb.row}>
+          <Ionicons name="location-outline" size={12} color={MUTED} />
+          <Text style={nb.loc}>{item.city} · {item.distanceKm?.toFixed(1)}km away</Text>
+        </View>
+        <Text style={nb.price}>
+          {fmtPrice(rate, item.currency)}<Text style={nb.unit}>/{isCar ? "day" : "night"}</Text>
+        </Text>
+      </View>
+      {item.starRating != null && item.starRating > 0 ? (
+        <View style={nb.star}>
+          <Ionicons name="star" size={12} color="#F59E0B" />
+          <Text style={nb.starText}>{item.starRating}</Text>
+        </View>
+      ) : null}
+    </TouchableOpacity>
+  );
+}
+
+const nb = StyleSheet.create({
+  card: {
+    flexDirection: "row", backgroundColor: "#fff", borderRadius: 14,
+    overflow: "hidden", borderWidth: 1, borderColor: BORDER, marginBottom: 10,
+  },
+  photo: { width: 80, height: 80 },
+  info: { flex: 1, padding: 10, justifyContent: "center" },
+  title: { fontSize: 14, fontWeight: "700", color: TEXT, marginBottom: 3 },
+  row: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 4 },
+  loc: { fontSize: 11, color: MUTED },
+  price: { fontSize: 13, fontWeight: "800", color: GREEN },
+  unit: { fontSize: 10, fontWeight: "400", color: MUTED },
+  star: { paddingRight: 12, alignItems: "center", justifyContent: "center", gap: 2 },
+  starText: { fontSize: 12, fontWeight: "700", color: TEXT },
+});
+
+// ── Section Header ────────────────────────────────────────────────────────────
+
+function SectionHeader({ title, subtitle, onMore }: {
+  title: string; subtitle?: string; onMore?: () => void;
+}) {
+  return (
+    <View style={sh.row}>
+      <View style={{ flex: 1 }}>
+        <Text style={sh.title}>{title}</Text>
+        {subtitle ? <Text style={sh.sub}>{subtitle}</Text> : null}
+      </View>
+      {onMore ? (
+        <TouchableOpacity onPress={onMore}>
+          <Text style={sh.more}>View More</Text>
+        </TouchableOpacity>
+      ) : null}
+    </View>
+  );
+}
+
+const sh = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "flex-start", marginBottom: 12, paddingHorizontal: 16 },
+  title: { fontSize: 17, fontWeight: "800", color: TEXT },
+  sub: { fontSize: 12, color: MUTED, marginTop: 2 },
+  more: { fontSize: 13, color: GREEN, fontWeight: "700" },
+});
+
+// ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const firstName = user?.firstName ?? "there";
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = user?.firstName ?? "Explorer";
+  const loyaltyPoints = user?.loyaltyPoints ?? 0;
+  const currentTier = user?.currentTier ?? "bronze";
 
   const [category, setCategory] = useState<Category>("hotels");
-  const [form, setForm] = useState<SearchForm>({
-    location: "",
-    checkIn: null,
-    checkOut: null,
-    guests: 2,
-    pickupDate: null,
-    pickupHour: 9,
-    pickupMinute: 0,
-    returnDate: null,
-    returnHour: 9,
-    returnMinute: 0,
-  });
+  const [location, setLocation] = useState("");
+  const [checkIn, setCheckIn] = useState<Date | null>(null);
+  const [checkOut, setCheckOut] = useState<Date | null>(null);
+  const [guests, setGuests] = useState(1);
+  const [datePicker, setDatePicker] = useState<"checkIn" | "checkOut" | null>(null);
 
-  type ActivePicker =
-    | "checkIn" | "checkOut"
-    | "pickupDate" | "returnDate"
-    | null;
-  const [activePicker, setActivePicker] = useState<ActivePicker>(null);
-
-  // ── Recently viewed ──
-  const { data: recentData, isLoading: recentLoading } = useQuery({
-    queryKey: ["recently-viewed"],
+  // ── API Queries ──────────────────────────────────────────────────────────
+  const { data: hotelsData, isLoading: hotelsLoading } = useQuery<SearchResult[]>({
+    queryKey: ["home-hotels"],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: { recentlyViewed: RecentListing[] } }>("/guests/me/recently-viewed");
-      return res.data.data.recentlyViewed ?? [];
+      const res = await listingApi.get<SearchResponse>(
+        "/search?category=hotel&lat=0&lng=0&radius_km=20000&sort=recommended&limit=30"
+      );
+      return res.data.data.results ?? [];
     },
-    enabled: !!user,
-    staleTime: 60_000,
+    staleTime: 60000,
   });
 
-  // ── Validation & search ──
-  const handleSearch = useCallback(() => {
-    const loc = form.location.trim();
-    if (!loc) {
-      Alert.alert("Location required", "Please enter a city or destination.");
+  const { data: apartmentsData, isLoading: aptsLoading } = useQuery<SearchResult[]>({
+    queryKey: ["home-apartments"],
+    queryFn: async () => {
+      const res = await listingApi.get<SearchResponse>(
+        "/search?category=apartment&lat=0&lng=0&radius_km=20000&sort=recommended&limit=30"
+      );
+      return res.data.data.results ?? [];
+    },
+    staleTime: 60000,
+  });
+
+  const { data: carsData, isLoading: carsLoading } = useQuery<SearchResult[]>({
+    queryKey: ["home-cars"],
+    queryFn: async () => {
+      const res = await listingApi.get<SearchResponse>(
+        "/search?category=car&lat=0&lng=0&radius_km=20000&sort=recommended&limit=30"
+      );
+      return res.data.data.results ?? [];
+    },
+    staleTime: 60000,
+  });
+
+  // ── Curated segments ─────────────────────────────────────────────────────
+  const bestOffers = [
+    ...(hotelsData ?? []).filter((h) => h.nightlyRate != null && h.nightlyRate <= 15000),
+    ...(apartmentsData ?? []).filter((a) => a.longStayDiscountEnabled),
+  ].slice(0, 8);
+
+  const recommended = [
+    ...(hotelsData ?? []).filter((h) => (h.starRating ?? 0) >= 4 || h.isAccredited),
+    ...(apartmentsData ?? []).filter((a) => a.isAccredited),
+  ].slice(0, 8);
+
+  const featured = (hotelsData ?? [])
+    .filter((h) => h.isAccredited || (h.starRating ?? 0) >= 5)
+    .slice(0, 3);
+
+  const nearbyAll = [
+    ...(hotelsData ?? []),
+    ...(apartmentsData ?? []),
+  ].sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 5);
+
+  const premiumCars = (carsData ?? []).slice(0, 6);
+
+  const trending = [
+    ...(hotelsData ?? []).slice(0, 2),
+    ...(apartmentsData ?? []).slice(0, 2),
+  ].slice(0, 4);
+
+  // ── Batch-fetch fresh photo URLs ─────────────────────────────────────────
+  // The /search index returns stale/null primaryPhotoUrl.
+  // GET /listings/{id} generates a fresh presigned S3 URL on every call.
+  // We fetch all displayed listing IDs in parallel so cards show real images.
+  const displayedIds = useMemo(() => {
+    const ids = new Set<string>();
+    [...bestOffers, ...recommended, ...featured, ...nearbyAll, ...premiumCars, ...trending]
+      .forEach((item) => ids.add(item.id));
+    return Array.from(ids);
+  }, [bestOffers, recommended, featured, nearbyAll, premiumCars, trending]);
+
+  const photoQueries = useQueries({
+    queries: displayedIds.map((id) => ({
+      // "photo-v2" key — avoids stale cache from previous attempts
+      queryKey: ["photo-v2", id],
+      queryFn: async (): Promise<string | null> => {
+        const endpoint = `/listings/${id}/public`;
+        console.log(`[Home Listing Cards] API Endpoint Called: ${endpoint}`);
+        console.log(`[Home Listing Cards] Listing ID: ${id}`);
+        try {
+          const res = await listingApi.get<{ data: { primaryPhotoUrl?: string; photos: Array<{ cdnUrl: string }> } }>(endpoint);
+          const returnedPrimaryPhotoUrl = res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
+          const returnedPhotoGalleryUrls = res.data.data?.photos?.map((p) => p.cdnUrl) ?? [];
+          console.log(`[Home Listing Cards] Returned primaryPhotoUrl: ${returnedPrimaryPhotoUrl}`);
+          console.log(`[Home Listing Cards] Returned photo gallery URLs:`, returnedPhotoGalleryUrls);
+          return returnedPrimaryPhotoUrl;
+        } catch (error) {
+          console.error(`[Home Listing Cards] Error fetching from ${endpoint}:`, error);
+          return null;
+        }
+      },
+      // staleTime: 0 so each session gets fresh presigned URLs (they expire)
+      staleTime: 0,
+      gcTime: 5 * 60_000,
+      retry: 0,
+    })),
+  });
+
+  const photoMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    photoQueries.forEach((q, i) => {
+      const id = displayedIds[i];
+      if (id && q.data) map[id] = q.data;
+    });
+    return map;
+  }, [photoQueries, displayedIds]);
+
+  function navToListing(id: string, isCar?: boolean) {
+    const params: Record<string, string> = {};
+    if (!isCar) {
+      if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
+      if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
+      params.guests = String(guests);
+    }
+    router.push({ pathname: `/listing/${id}` as any, params });
+  }
+
+  function handleSearch() {
+    if (!location.trim()) {
+      Alert.alert("Location required", "Please enter a city.");
       return;
     }
-
-    if (category === "hotels" || category === "apartments") {
-      if (!form.checkIn || !form.checkOut) {
-        Alert.alert("Dates required", "Please select check-in and check-out dates.");
-        return;
-      }
-      if (form.checkOut <= form.checkIn) {
-        Alert.alert("Invalid dates", "Check-out must be after check-in.");
-        return;
-      }
-      router.push({
-        pathname: "/search",
-        params: {
-          category: category === "hotels" ? "hotel" : "apartment",
-          placeName: loc,
-          checkIn: toYMD(form.checkIn),
-          checkOut: toYMD(form.checkOut),
-          guests: String(form.guests),
-        },
-      });
-    } else {
-      // cars
-      if (!form.pickupDate || !form.returnDate) {
-        Alert.alert("Dates required", "Please select pickup and return dates.");
-        return;
-      }
-      const pickupDt = toLocalISOString(form.pickupDate, form.pickupHour, form.pickupMinute);
-      const returnDt = toLocalISOString(form.returnDate, form.returnHour, form.returnMinute);
-      if (returnDt <= pickupDt) {
-        Alert.alert("Invalid dates", "Return must be after pickup.");
-        return;
-      }
-      router.push({
-        pathname: "/search",
-        params: {
-          category: "car",
-          placeName: loc,
-          pickupDatetime: pickupDt,
-          returnDatetime: returnDt,
-        },
-      });
+    const apiCat = category === "cars" ? "car" : category === "apartments" ? "apartment" : "hotel";
+    const params: Record<string, string> = { category: apiCat, placeName: location, guests: String(guests) };
+    if (category !== "cars") {
+      if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
+      if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
     }
-  }, [form, category, router]);
-
-  // ── Date picker helpers ──
-  function openPicker(field: ActivePicker) {
-    setActivePicker(field);
+    router.push({ pathname: "/search", params });
   }
 
-  function getPickerProps(): DatePickerModalProps {
-    const base = {
-      visible: activePicker !== null,
-      onClose: () => setActivePicker(null),
-      onSelect: (_d: Date) => {},
-      title: "",
-      selectedDate: null as Date | null,
-    };
-
-    if (activePicker === "checkIn") {
-      return {
-        ...base,
-        title: "Select check-in",
-        selectedDate: form.checkIn,
-        minDate: new Date(),
-        onSelect: (d) => setForm((f) => ({ ...f, checkIn: d, checkOut: f.checkOut && f.checkOut <= d ? null : f.checkOut })),
-      };
-    }
-    if (activePicker === "checkOut") {
-      return {
-        ...base,
-        title: "Select check-out",
-        selectedDate: form.checkOut,
-        minDate: form.checkIn ? new Date(form.checkIn.getTime() + 86400000) : new Date(),
-        onSelect: (d) => setForm((f) => ({ ...f, checkOut: d })),
-      };
-    }
-    if (activePicker === "pickupDate") {
-      return {
-        ...base,
-        title: "Select pickup date & time",
-        selectedDate: form.pickupDate,
-        minDate: new Date(),
-        showTime: true,
-        selectedHour: form.pickupHour,
-        selectedMinute: form.pickupMinute,
-        onSelect: (d) => setForm((f) => ({
-          ...f,
-          pickupDate: d,
-          returnDate: f.returnDate && toYMD(f.returnDate) <= toYMD(d) ? null : f.returnDate,
-        })),
-        onTimeChange: (h, m) => setForm((f) => ({ ...f, pickupHour: h, pickupMinute: m })),
-      };
-    }
-    if (activePicker === "returnDate") {
-      const minReturn = form.pickupDate ? new Date(form.pickupDate.getTime() + 86400000) : new Date();
-      return {
-        ...base,
-        title: "Select return date & time",
-        selectedDate: form.returnDate,
-        minDate: minReturn,
-        showTime: true,
-        selectedHour: form.returnHour,
-        selectedMinute: form.returnMinute,
-        onSelect: (d) => setForm((f) => ({ ...f, returnDate: d })),
-        onTimeChange: (h, m) => setForm((f) => ({ ...f, returnHour: h, returnMinute: m })),
-      };
-    }
-    return base;
+  function tierColor() {
+    const map: Record<string, string> = { bronze: "#CD7F32", silver: "#9CA3AF", gold: "#F59E0B", diamond: "#60A5FA" };
+    return map[currentTier] ?? "#9CA3AF";
   }
 
-  const pickerProps = getPickerProps();
+  const allLoading = hotelsLoading || aptsLoading || carsLoading;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={s.container}>
       <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+        style={s.scroll}
+        contentContainerStyle={s.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* ── App bar ── */}
-        <View style={styles.appBar}>
+        {/* ── Header ── */}
+        <View style={s.header}>
           <View>
-            <Text style={styles.brand}>ZikaBooking</Text>
-            <Text style={styles.greeting}>{greeting}, {firstName}</Text>
+            <Text style={s.brand}>KAINOOK</Text>
+            <Text style={s.greeting}>{greeting}, {firstName} 👋</Text>
           </View>
-          <Ionicons name="person-circle-outline" size={36} color={PRIMARY} />
+          <TouchableOpacity style={s.iconBtn}>
+            <Ionicons name="notifications-outline" size={22} color={TEXT} />
+          </TouchableOpacity>
         </View>
 
-        {/* ── Category selector ── */}
-        <View style={styles.categoryRow}>
+        {/* ── Category Tabs ── */}
+        <View style={s.tabsRow}>
           {(["hotels", "apartments", "cars"] as Category[]).map((cat) => (
             <TouchableOpacity
               key={cat}
-              style={[styles.categoryChip, category === cat && styles.categoryChipActive]}
+              style={[s.tab, category === cat && s.tabActive]}
               onPress={() => setCategory(cat)}
             >
-              <Ionicons
-                name={cat === "hotels" ? "business-outline" : cat === "apartments" ? "home-outline" : "car-outline"}
-                size={15}
-                color={category === cat ? PRIMARY : MUTED}
-                style={styles.categoryIcon}
-              />
-              <Text style={[styles.categoryChipText, category === cat && styles.categoryChipTextActive]}>
+              <Text style={[s.tabText, category === cat && s.tabTextActive]}>
                 {cat.charAt(0).toUpperCase() + cat.slice(1)}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* ── Search form card ── */}
-        <View style={styles.formCard}>
+        {/* ── Search Card ── */}
+        <View style={s.searchCard}>
           {/* Location */}
-          <View style={styles.fieldRow}>
-            <Ionicons name="location-outline" size={18} color={MUTED} style={styles.fieldIcon} />
+          <View style={s.searchRow}>
+            <Ionicons name="location-outline" size={18} color={GREEN} style={{ marginRight: 10 }} />
             <TextInput
-              style={styles.locationInput}
-              placeholder={category === "cars" ? "Pickup location" : "Where are you going?"}
+              style={s.locationInput}
+              value={location}
+              onChangeText={setLocation}
+              placeholder="Where to?"
               placeholderTextColor={MUTED}
-              value={form.location}
-              onChangeText={(t) => setForm((f) => ({ ...f, location: t }))}
-              returnKeyType="done"
             />
           </View>
 
-          <View style={styles.divider} />
-
-          {/* Hotels / Apartments form */}
-          {(category === "hotels" || category === "apartments") && (
-            <>
-              <View style={styles.dateRow}>
-                <TouchableOpacity style={styles.datePicker} onPress={() => openPicker("checkIn")}>
-                  <Ionicons name="calendar-outline" size={16} color={MUTED} />
-                  <View style={styles.dateTexts}>
-                    <Text style={styles.datePickerLabel}>Check-in</Text>
-                    <Text style={[styles.datePickerValue, !form.checkIn && styles.datePickerPlaceholder]}>
-                      {form.checkIn ? formatDisplayDate(form.checkIn) : "Select date"}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                <View style={styles.dateSep} />
-
-                <TouchableOpacity style={styles.datePicker} onPress={() => openPicker("checkOut")}>
-                  <Ionicons name="calendar-outline" size={16} color={MUTED} />
-                  <View style={styles.dateTexts}>
-                    <Text style={styles.datePickerLabel}>Check-out</Text>
-                    <Text style={[styles.datePickerValue, !form.checkOut && styles.datePickerPlaceholder]}>
-                      {form.checkOut ? formatDisplayDate(form.checkOut) : "Select date"}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.divider} />
-
-              {/* Guests stepper */}
-              <View style={styles.guestRow}>
-                <Ionicons name="people-outline" size={18} color={MUTED} />
-                <Text style={styles.guestLabel}>Guests</Text>
-                <View style={styles.stepper}>
-                  <TouchableOpacity
-                    style={[styles.stepperBtn, form.guests <= 1 && styles.stepperBtnDisabled]}
-                    onPress={() => setForm((f) => ({ ...f, guests: Math.max(1, f.guests - 1) }))}
-                    disabled={form.guests <= 1}
-                  >
-                    <Text style={styles.stepperBtnText}>−</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.stepperValue}>{form.guests}</Text>
-                  <TouchableOpacity
-                    style={[styles.stepperBtn, form.guests >= 16 && styles.stepperBtnDisabled]}
-                    onPress={() => setForm((f) => ({ ...f, guests: Math.min(16, f.guests + 1) }))}
-                    disabled={form.guests >= 16}
-                  >
-                    <Text style={styles.stepperBtnText}>+</Text>
-                  </TouchableOpacity>
+          {/* Dates — only for hotels/apartments */}
+          {category !== "cars" && (
+            <View style={s.datesRow}>
+              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("checkIn")} activeOpacity={0.7}>
+                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.dateBtnLabel}>Check-in</Text>
+                  <Text style={[s.dateBtnValue, !checkIn && s.dateBtnPlaceholder]}>{fmtDate(checkIn)}</Text>
                 </View>
-              </View>
-            </>
+              </TouchableOpacity>
+              <View style={s.dateDivider} />
+              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("checkOut")} activeOpacity={0.7}>
+                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.dateBtnLabel}>Check-out</Text>
+                  <Text style={[s.dateBtnValue, !checkOut && s.dateBtnPlaceholder]}>{fmtDate(checkOut)}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           )}
 
-          {/* Cars form */}
-          {category === "cars" && (
-            <>
-              <TouchableOpacity style={styles.dateRowSingle} onPress={() => openPicker("pickupDate")}>
-                <Ionicons name="calendar-outline" size={16} color={MUTED} />
-                <View style={styles.dateTexts}>
-                  <Text style={styles.datePickerLabel}>Pickup date & time</Text>
-                  <Text style={[styles.datePickerValue, !form.pickupDate && styles.datePickerPlaceholder]}>
-                    {form.pickupDate
-                      ? `${formatDisplayDate(form.pickupDate)} at ${String(form.pickupHour).padStart(2, "0")}:${String(form.pickupMinute).padStart(2, "0")}`
-                      : "Select date & time"}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={MUTED} />
+          {/* Guests */}
+          <View style={s.guestsRow}>
+            <Ionicons name="people-outline" size={16} color={MUTED} style={{ marginRight: 8 }} />
+            <Text style={s.guestsLabel}>Guests</Text>
+            <View style={s.guestsCounter}>
+              <TouchableOpacity
+                style={s.guestBtn}
+                onPress={() => setGuests(g => Math.max(1, g - 1))}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={s.guestBtnText}>−</Text>
               </TouchableOpacity>
-
-              <View style={styles.divider} />
-
-              <TouchableOpacity style={styles.dateRowSingle} onPress={() => openPicker("returnDate")}>
-                <Ionicons name="calendar-outline" size={16} color={MUTED} />
-                <View style={styles.dateTexts}>
-                  <Text style={styles.datePickerLabel}>Return date & time</Text>
-                  <Text style={[styles.datePickerValue, !form.returnDate && styles.datePickerPlaceholder]}>
-                    {form.returnDate
-                      ? `${formatDisplayDate(form.returnDate)} at ${String(form.returnHour).padStart(2, "0")}:${String(form.returnMinute).padStart(2, "0")}`
-                      : "Select date & time"}
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={MUTED} />
+              <Text style={s.guestCount}>{guests}</Text>
+              <TouchableOpacity
+                style={s.guestBtn}
+                onPress={() => setGuests(g => Math.min(20, g + 1))}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={s.guestBtnText}>+</Text>
               </TouchableOpacity>
-            </>
-          )}
+            </View>
+          </View>
         </View>
 
-        {/* ── Search button ── */}
-        <TouchableOpacity style={styles.searchBtn} onPress={handleSearch} activeOpacity={0.85}>
+        <TouchableOpacity style={s.searchBtn} onPress={handleSearch} activeOpacity={0.85}>
           <Ionicons name="search" size={18} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={styles.searchBtnText}>Search</Text>
+          <Text style={s.searchBtnText}>Search {category === "cars" ? "Cars" : "Stays"}</Text>
         </TouchableOpacity>
 
-        {/* ── Recently viewed ── */}
-        {user && (
-          <View style={styles.recentSection}>
-            <Text style={styles.sectionTitle}>Recently viewed</Text>
-            {recentLoading ? (
-              <ActivityIndicator size="small" color={PRIMARY} style={{ marginTop: 12 }} />
-            ) : !recentData || recentData.length === 0 ? (
-              <View style={styles.emptyRecent}>
-                <Ionicons name="time-outline" size={32} color={BORDER} />
-                <Text style={styles.emptyRecentText}>No recent searches</Text>
-                <Text style={styles.emptyRecentSub}>Listings you view will appear here.</Text>
+        {/* Date picker modals */}
+        <DatePickerModal
+          visible={datePicker === "checkIn"}
+          title="Select Check-in Date"
+          onSelect={d => { setCheckIn(d); if (checkOut && d >= checkOut) setCheckOut(null); }}
+          onClose={() => setDatePicker(null)}
+        />
+        <DatePickerModal
+          visible={datePicker === "checkOut"}
+          title="Select Check-out Date"
+          minDate={checkIn ?? undefined}
+          onSelect={d => setCheckOut(d)}
+          onClose={() => setDatePicker(null)}
+        />
+
+        {/* ── KAI-Points ── */}
+        {user ? (
+          <View style={s.loyaltyCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.loyaltyLabel}>KAI-Points Balance</Text>
+              <Text style={s.loyaltyPoints}>{loyaltyPoints.toLocaleString()} <Text style={s.loyaltyPtSuffix}>KAI-Points</Text></Text>
+              <View style={s.tierRow}>
+                <View style={[s.tierDot, { backgroundColor: tierColor() }]} />
+                <Text style={s.tierLabel}>{currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} Member</Text>
               </View>
-            ) : (
-              <FlatList
-                data={recentData}
-                keyExtractor={(item) => item.listingId}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.recentList}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={styles.recentCard}
-                    onPress={() => router.push(`/listing/${item.listing.id}`)}
-                    activeOpacity={0.82}
-                  >
-                    {item.listing.primaryPhotoUrl ? (
-                      <Image
-                        source={{ uri: item.listing.primaryPhotoUrl }}
-                        style={styles.recentCardPhoto}
-                        resizeMode="cover"
-                      />
-                    ) : (
-                      <View style={[styles.recentCardPhoto, styles.recentCardPhotoPlaceholder]} />
-                    )}
-                    <View style={styles.recentCardBody}>
-                      <Text style={styles.recentCardTitle} numberOfLines={1}>{item.listing.title}</Text>
-                      <Text style={styles.recentCardCity} numberOfLines={1}>{item.listing.city}</Text>
-                      <Text style={styles.recentCardPrice}>
-                        {item.listing.currency} {item.listing.nightlyRate?.toLocaleString()}/night
+            </View>
+            <Ionicons name="diamond-outline" size={32} color="rgba(255,255,255,0.25)" />
+          </View>
+        ) : null}
+
+        {/* ── Promo Banner ── */}
+        <View style={s.promoBanner}>
+          <View style={s.promoTag}><Text style={s.promoTagText}>Exclusive Reward</Text></View>
+          <Text style={s.promoTitle}>15% Off Your Next Stay</Text>
+          <TouchableOpacity onPress={() => Alert.alert("Voucher Copied!", 'Use code "EXPLORER24" at checkout.')}>
+            <Text style={s.promoCode}>Use Code: EXPLORER24</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* ── Browse by Category ── */}
+        <View style={s.section}>
+          <SectionHeader title="Browse by Category" />
+          <View style={s.catRow}>
+            {[
+              { label: "Hotels", icon: "🏨", route: "/browse/hotels", color: "#EFF6FF", border: "#BFDBFE" },
+              { label: "Apartments", icon: "🏠", route: "/browse/apartments", color: "#F0FDF4", border: "#BBF7D0" },
+              { label: "Cars", icon: "🚗", route: "/browse/cars", color: "#FFF7ED", border: "#FED7AA" },
+            ].map((cat) => (
+              <TouchableOpacity
+                key={cat.label}
+                style={[s.catCard, { backgroundColor: cat.color, borderColor: cat.border }]}
+                onPress={() => router.push(cat.route as any)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.catIcon}>{cat.icon}</Text>
+                <Text style={s.catLabel}>{cat.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        {/* ── Best Offers ── */}
+        <View style={s.section}>
+          <SectionHeader
+            title="Best Offers & Deals"
+            onMore={() => router.push("/browse/hotels" as any)}
+          />
+          {allLoading ? (
+            <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
+          ) : bestOffers.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
+              {bestOffers.map((item, idx) => (
+                <View key={item.id} style={{ marginRight: idx < bestOffers.length - 1 ? 12 : 0 }}>
+                  <ListingCard
+                    item={item} width={200}
+                    badgeLabel={item.longStayDiscountEnabled ? "LONG STAY" : "BEST DEAL"}
+                    badgeColor={item.longStayDiscountEnabled ? "#8B5CF6" : "#DC2626"}
+                    photoUrl={photoMap[item.id]}
+                    onPress={() => navToListing(item.id, false)}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          ) : null}
+        </View>
+
+        {/* ── Recommended Stays ── */}
+        <View style={s.section}>
+          <SectionHeader
+            title="Recommended Stays"
+            subtitle="Top-rated gems selected just for you"
+            onMore={() => router.push("/browse/hotels" as any)}
+          />
+          {hotelsLoading ? (
+            <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
+          ) : recommended.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
+              {recommended.map((item, idx) => (
+                <View key={item.id} style={{ marginRight: idx < recommended.length - 1 ? 12 : 0 }}>
+                  <ListingCard item={item} width={210} badgeLabel="TOP RATED" badgeColor="#F59E0B"
+                    photoUrl={photoMap[item.id]}
+                    onPress={() => navToListing(item.id, false)} />
+                </View>
+              ))}
+            </ScrollView>
+          ) : null}
+        </View>
+
+        {/* ── Featured Stays ── */}
+        {featured.length > 0 ? (
+          <View style={s.section}>
+            <SectionHeader title="Featured Stays" />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
+              {featured.map((item) => (
+                <TouchableOpacity key={item.id} style={s.featuredCard} onPress={() => navToListing(item.id, false)} activeOpacity={0.88}>
+                  {(photoMap[item.id] ?? item.primaryPhotoUrl) ? (
+                    <ListingImage uri={photoMap[item.id] ?? item.primaryPhotoUrl} style={s.featuredPhoto} />
+                  ) : (
+                    <View style={[s.featuredPhoto, { backgroundColor: "#D1FAE5" }]} />
+                  )}
+                  <View style={s.featuredOverlay}>
+                    <View style={s.featuredBadgeWrap}>
+                      <Text style={s.featuredBadgeText}>FEATURED & EXCLUSIVE</Text>
+                    </View>
+                    <Text style={s.featuredTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={s.featuredLoc}>{item.city}, {item.countryCode}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                      <Text style={s.featuredPrice}>
+                        {fmtPrice(item.nightlyRate, item.currency)}<Text style={{ fontSize: 12, fontWeight: "400" }}>/night</Text>
                       </Text>
+                      <View style={s.featuredBtn}>
+                        <Text style={s.featuredBtnText}>Book</Text>
+                      </View>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+
+        {/* ── Stays Nearby ── */}
+        <View style={s.section}>
+          <SectionHeader
+            title="Stays Nearby"
+            subtitle="Based on your location"
+            onMore={() => router.push("/browse/hotels" as any)}
+          />
+          {hotelsLoading || aptsLoading ? (
+            <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
+          ) : nearbyAll.length > 0 ? (
+            <View style={{ paddingHorizontal: 16 }}>
+              {nearbyAll.map((item) => (
+                <NearbyCard key={item.id} item={item} photoUrl={photoMap[item.id]} onPress={() => navToListing(item.id, item.listingType === "car")} />
+              ))}
+            </View>
+          ) : null}
+        </View>
+
+        {/* ── Premium Cars ── */}
+        {premiumCars.length > 0 ? (
+          <View style={s.section}>
+            <SectionHeader
+              title="Premium Rental Cars"
+              subtitle="Arrive in style with our luxury fleet"
+              onMore={() => router.push("/browse/cars" as any)}
+            />
+            {carsLoading ? (
+              <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
+                {premiumCars.map((item, idx) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[c.card, { width: 220, marginRight: idx < premiumCars.length - 1 ? 12 : 0 }]}
+                    onPress={() => navToListing(item.id, true)}
+                    activeOpacity={0.85}
+                  >
+                    {(photoMap[item.id] ?? item.primaryPhotoUrl) ? (
+                      <ListingImage uri={photoMap[item.id] ?? item.primaryPhotoUrl} style={[c.photo, { height: 140 }]} />
+                    ) : (
+                      <View style={[c.photo, { height: 140, backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+                        <Text style={{ fontSize: 28 }}>🚗</Text>
+                      </View>
+                    )}
+                    <View style={c.body}>
+                      <View style={s.carBadge}><Text style={s.carBadgeText}>LUXURY</Text></View>
+                      <Text style={c.title} numberOfLines={1}>{item.carMake} {item.carModel} {item.carYear}</Text>
+                      <Text style={{ fontSize: 11, color: MUTED, marginBottom: 4 }}>{item.transmission} · {item.seats} seats</Text>
+                      <Text style={c.price}>{fmtPrice(item.dailyRate, item.currency)}<Text style={c.priceUnit}>/day</Text></Text>
                     </View>
                   </TouchableOpacity>
-                )}
-              />
+                ))}
+              </ScrollView>
             )}
           </View>
-        )}
-      </ScrollView>
+        ) : null}
 
-      {/* ── Date picker modal ── */}
-      {activePicker && (
-        <DatePickerModal
-          {...pickerProps}
-          visible={activePicker !== null}
-          onClose={() => setActivePicker(null)}
-        />
-      )}
+        {/* ── Trending Now ── */}
+        {trending.length > 0 ? (
+          <View style={s.section}>
+            <SectionHeader title="Trending Now" />
+            <View style={s.trendGrid}>
+              {trending.map((item) => (
+                <TouchableOpacity key={item.id} style={s.trendCard} onPress={() => navToListing(item.id, false)} activeOpacity={0.85}>
+                  {(photoMap[item.id] ?? item.primaryPhotoUrl) ? (
+                    <ListingImage uri={photoMap[item.id] ?? item.primaryPhotoUrl} style={s.trendPhoto} />
+                  ) : (
+                    <View style={[s.trendPhoto, { backgroundColor: "#D1FAE5" }]} />
+                  )}
+                  <View style={s.trendOverlay}>
+                    <Text style={s.trendTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={s.trendPrice}>{fmtPrice(item.nightlyRate ?? item.dailyRate, item.currency)}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {/* ── CTA Banner ── */}
+        <View style={s.ctaBanner}>
+          <Text style={s.ctaTitle}>Unlock the{"\n"}Extraordinary</Text>
+          <Text style={s.ctaSub}>Kainook members enjoy exclusive stay credits and access to over 1,000 properties worldwide.</Text>
+          <TouchableOpacity style={s.ctaBtn}>
+            <Text style={s.ctaBtnText}>Explore Member Perks</Text>
+            <Ionicons name="arrow-forward" size={14} color={GREEN} style={{ marginLeft: 6 }} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ height: 80 }} />
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ── Styles ────────────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: BG },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#fff" },
   scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 40 },
+  scrollContent: { paddingBottom: 20 },
 
-  // App bar
-  appBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+  header: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14, backgroundColor: "#fff",
   },
-  brand: { fontSize: 22, fontWeight: "800", color: PRIMARY, letterSpacing: -0.5 },
+  brand: { fontSize: 22, fontWeight: "900", color: GREEN, letterSpacing: 1 },
   greeting: { fontSize: 13, color: MUTED, marginTop: 2 },
-
-  // Category chips
-  categoryRow: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 10,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: BORDER,
+  iconBtn: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: "#F9FAFB",
+    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: BORDER,
   },
-  categoryChip: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 9,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    backgroundColor: "#fff",
-  },
-  categoryChipActive: { borderColor: PRIMARY, backgroundColor: "#eff6ff" },
-  categoryIcon: { marginRight: 5 },
-  categoryChipText: { fontSize: 13, fontWeight: "500", color: MUTED },
-  categoryChipTextActive: { color: PRIMARY, fontWeight: "600" },
 
-  // Form card
-  formCard: {
-    margin: 16,
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: BORDER,
+  tabsRow: { flexDirection: "row", paddingHorizontal: 16, paddingBottom: 14, gap: 8 },
+  tab: {
+    paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20,
+    borderWidth: 1.5, borderColor: BORDER, backgroundColor: "#fff",
+  },
+  tabActive: { backgroundColor: GREEN, borderColor: GREEN },
+  tabText: { fontSize: 13, fontWeight: "600", color: MUTED },
+  tabTextActive: { color: "#fff" },
+
+  searchCard: {
+    marginHorizontal: 16, backgroundColor: "#fff", borderRadius: 14,
+    borderWidth: 1.5, borderColor: BORDER,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
   },
-  fieldRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  searchRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: BORDER,
   },
-  fieldIcon: { marginRight: 10 },
-  locationInput: { flex: 1, fontSize: 15, color: TEXT },
-  divider: { height: 1, backgroundColor: BORDER, marginHorizontal: 16 },
+  locationInput: { flex: 1, fontSize: 15, color: TEXT, fontWeight: "500" },
 
-  // Date row (hotels/apartments)
-  dateRow: { flexDirection: "row", alignItems: "stretch" },
-  datePicker: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 8,
+  datesRow: {
+    flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER,
   },
-  dateSep: { width: 1, backgroundColor: BORDER, marginVertical: 10 },
-  dateTexts: { flex: 1 },
-  datePickerLabel: { fontSize: 11, color: MUTED, fontWeight: "500", marginBottom: 2 },
-  datePickerValue: { fontSize: 14, color: TEXT, fontWeight: "500" },
-  datePickerPlaceholder: { color: MUTED, fontWeight: "400" },
+  dateBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  dateDivider: { width: 1, backgroundColor: BORDER, marginVertical: 8 },
+  dateBtnLabel: { fontSize: 11, color: MUTED, fontWeight: "600", marginBottom: 2 },
+  dateBtnValue: { fontSize: 13, fontWeight: "600", color: TEXT },
+  dateBtnPlaceholder: { color: MUTED, fontWeight: "400" },
 
-  // Date row (cars — full width)
-  dateRowSingle: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 10,
+  guestsRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 12,
   },
+  guestsLabel: { flex: 1, fontSize: 14, color: TEXT, fontWeight: "500" },
+  guestsCounter: { flexDirection: "row", alignItems: "center", gap: 16 },
+  guestBtn: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: GREEN,
+    alignItems: "center", justifyContent: "center",
+  },
+  guestBtnText: { fontSize: 20, color: "#fff", fontWeight: "700", lineHeight: 24 },
+  guestCount: { fontSize: 16, fontWeight: "700", color: TEXT, minWidth: 20, textAlign: "center" },
 
-  // Guest stepper
-  guestRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  guestLabel: { flex: 1, fontSize: 15, color: TEXT, fontWeight: "500" },
-  stepper: { flexDirection: "row", alignItems: "center", gap: 14 },
-  stepperBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: PRIMARY,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stepperBtnDisabled: { backgroundColor: BORDER },
-  stepperBtnText: { color: "#fff", fontSize: 20, fontWeight: "700", lineHeight: 24 },
-  stepperValue: { fontSize: 18, fontWeight: "700", color: TEXT, minWidth: 28, textAlign: "center" },
-
-  // Search button
   searchBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 16,
-    backgroundColor: PRIMARY,
-    borderRadius: 14,
-    paddingVertical: 16,
-    shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    marginHorizontal: 16, marginTop: 10, backgroundColor: GREEN,
+    borderRadius: 14, paddingVertical: 14,
   },
-  searchBtnText: { color: "#fff", fontSize: 17, fontWeight: "700" },
+  searchBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
-  // Recently viewed
-  recentSection: { marginTop: 28, paddingHorizontal: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: "700", color: TEXT, marginBottom: 12 },
-  recentList: { paddingRight: 16 },
+  loyaltyCard: {
+    flexDirection: "row", alignItems: "center",
+    marginHorizontal: 16, marginTop: 14,
+    backgroundColor: "#0D3B1E", borderRadius: 18, padding: 18,
+  },
+  loyaltyLabel: { fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: "600", marginBottom: 4 },
+  loyaltyPoints: { fontSize: 22, fontWeight: "900", color: "#fff" },
+  loyaltyPtSuffix: { fontSize: 12, fontWeight: "500", color: "rgba(255,255,255,0.7)" },
+  tierRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  tierDot: { width: 8, height: 8, borderRadius: 4 },
+  tierLabel: { fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: "600" },
 
-  recentCard: {
-    width: 160,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: BORDER,
-    marginRight: 12,
+  promoBanner: {
+    marginHorizontal: 16, marginTop: 12, backgroundColor: GREEN_LIGHT,
+    borderRadius: 14, padding: 16, borderWidth: 1, borderColor: GREEN_BORDER,
+  },
+  promoTag: {
+    backgroundColor: "#D1FAE5", borderRadius: 20, alignSelf: "flex-start",
+    paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8,
+  },
+  promoTagText: { fontSize: 10, fontWeight: "700", color: "#2E7D32" },
+  promoTitle: { fontSize: 20, fontWeight: "800", color: GREEN, marginBottom: 8 },
+  promoCode: {
+    fontSize: 14, fontWeight: "700", color: GREEN, backgroundColor: "#D1FAE5",
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, alignSelf: "flex-start",
     overflow: "hidden",
   },
-  recentCardPhoto: { width: "100%", height: 110 },
-  recentCardPhotoPlaceholder: { backgroundColor: "#e5e7eb" },
-  recentCardBody: { padding: 10 },
-  recentCardTitle: { fontSize: 13, fontWeight: "600", color: TEXT, marginBottom: 2 },
-  recentCardCity: { fontSize: 12, color: MUTED, marginBottom: 4 },
-  recentCardPrice: { fontSize: 12, color: PRIMARY, fontWeight: "600" },
 
-  // Empty state
-  emptyRecent: { alignItems: "center", paddingVertical: 28 },
-  emptyRecentText: { fontSize: 15, fontWeight: "600", color: MUTED, marginTop: 10 },
-  emptyRecentSub: { fontSize: 13, color: BORDER, marginTop: 4 },
+  section: { marginTop: 24 },
+  catRow: { flexDirection: "row", paddingHorizontal: 16, gap: 10 },
+  catCard: {
+    flex: 1, alignItems: "center", justifyContent: "center",
+    borderRadius: 14, borderWidth: 1.5, paddingVertical: 18,
+  },
+  catIcon: { fontSize: 28, marginBottom: 6 },
+  catLabel: { fontSize: 12, fontWeight: "700", color: TEXT },
+  carousel: { paddingHorizontal: 16, paddingBottom: 4 },
+
+  featuredCard: {
+    width: W - 56, borderRadius: 20, overflow: "hidden", marginRight: 12,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 5,
+  },
+  featuredPhoto: { width: "100%", height: 240 },
+  featuredOverlay: {
+    position: "absolute", bottom: 0, left: 0, right: 0,
+    backgroundColor: "rgba(0,0,0,0.55)", padding: 16,
+  },
+  featuredBadgeWrap: {
+    backgroundColor: "rgba(255,255,255,0.2)", alignSelf: "flex-start",
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8,
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.4)",
+  },
+  featuredBadgeText: { fontSize: 10, fontWeight: "700", color: "#fff", letterSpacing: 1 },
+  featuredTitle: { fontSize: 18, fontWeight: "800", color: "#fff", marginBottom: 4 },
+  featuredLoc: { fontSize: 12, color: "rgba(255,255,255,0.8)", marginBottom: 10 },
+  featuredPrice: { fontSize: 18, fontWeight: "800", color: "#fff" },
+  featuredBtn: { backgroundColor: "#fff", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  featuredBtnText: { fontSize: 12, fontWeight: "700", color: GREEN },
+
+  trendGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 16, gap: 10 },
+  trendCard: { width: (W - 48) / 2, borderRadius: 14, overflow: "hidden" },
+  trendPhoto: { width: "100%", height: 140 },
+  trendOverlay: {
+    position: "absolute", bottom: 0, left: 0, right: 0,
+    backgroundColor: "rgba(0,0,0,0.45)", padding: 10,
+  },
+  trendTitle: { color: "#fff", fontWeight: "700", fontSize: 12 },
+  trendPrice: { color: "#BBF7D0", fontWeight: "700", fontSize: 12, marginTop: 2 },
+
+  carBadge: {
+    backgroundColor: GREEN_LIGHT, borderRadius: 6, alignSelf: "flex-start",
+    paddingHorizontal: 7, paddingVertical: 3, marginBottom: 6,
+    borderWidth: 1, borderColor: GREEN_BORDER,
+  },
+  carBadgeText: { fontSize: 9, fontWeight: "800", color: "#2E7D32", letterSpacing: 0.8 },
+
+  ctaBanner: {
+    marginHorizontal: 16, marginTop: 24, backgroundColor: "#0D3B1E",
+    borderRadius: 20, padding: 24,
+  },
+  ctaTitle: { fontSize: 24, fontWeight: "900", color: "#fff", lineHeight: 30, marginBottom: 10 },
+  ctaSub: { fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 19, marginBottom: 20 },
+  ctaBtn: {
+    flexDirection: "row", alignItems: "center", backgroundColor: "#fff",
+    alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10,
+  },
+  ctaBtnText: { fontSize: 13, fontWeight: "700", color: GREEN },
 });

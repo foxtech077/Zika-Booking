@@ -41,6 +41,7 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -49,12 +50,15 @@
     scrollbar-width: thin;
     scrollbar-color: #e2e8f0 transparent;
   }
+
   .scrollbar-thin::-webkit-scrollbar {
     width: 5px;
   }
+
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
+
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background: #e2e8f0;
     border-radius: 3px;
@@ -96,9 +100,10 @@
   .card-lift {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
+
   .card-lift:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08), 0 4px 10px -6px rgba(0,0,0,0.04);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 4px 10px -6px rgba(0, 0, 0, 0.04);
   }
 
   /* Sidebar item active glow */
@@ -122,6 +127,7 @@
 .recharts-tooltip-wrapper {
   @apply shadow-card-md;
 }
+
 .recharts-default-tooltip {
   @apply rounded-xl border border-border bg-white text-sm !important;
 }

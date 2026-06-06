@@ -1,38 +1,39 @@
 {
-  "name": "zika-booking",
-  "private": true,
-  "version": "0.0.1",
-  "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "dev:auth": "turbo run dev --filter=@zika/auth-service",
-    "dev:listing": "turbo run dev --filter=@zika/listing-service",
-    "dev:web": "turbo run dev --filter=@zika/web",
-    "dev:admin": "turbo run dev --filter=@zika/admin",
-    "dev:provider": "turbo run dev --filter=@zika/provider",
-    "dev:mobile": "turbo run dev --filter=@zika/mobile",
-    "dev:backend": "turbo run dev --filter=@zika/auth-service --filter=@zika/listing-service",
-    "db:generate": "turbo run db:generate",
-    "db:migrate": "turbo run db:migrate",
-    "db:studio:auth": "turbo run db:studio --filter=@zika/auth-service",
-    "db:studio:listing": "turbo run db:studio --filter=@zika/listing-service",
-    "db:seed:auth": "turbo run db:seed --filter=@zika/auth-service",
-    "db:seed:all": "pnpm --filter @zika/auth-service db:seed:all"
-  },
-  "devDependencies": {
-    "prettier": "^3.4.2",
-    "prisma": "^7.8.0",
-    "turbo": "^2.3.3",
-    "typescript": "^5.7.3"
-  },
-  "engines": {
-    "node": ">=20.0.0",
-    "pnpm": ">=9.0.0"
-  },
-  "packageManager": "pnpm@10.33.2",
-  "dependencies": {
-    "@prisma/client": "^7.8.0"
-  }
+	"name": "zika-booking",
+	"private": true,
+	"version": "0.0.1",
+	"scripts": {
+		"dev": "turbo run dev",
+		"build": "turbo run build",
+		"lint": "turbo run lint",
+		"typecheck": "turbo run typecheck",
+		"dev:auth": "turbo run dev --filter=@zika/auth-service",
+		"dev:listing": "turbo run dev --filter=@zika/listing-service",
+		"dev:web": "turbo run dev --filter=@zika/web",
+		"dev:admin": "turbo run dev --filter=@zika/admin",
+		"dev:provider": "turbo run dev --filter=@zika/provider",
+		"dev:mobile": "turbo run dev --filter=@zika/mobile",
+		"dev:backend": "turbo run dev --filter=@zika/auth-service --filter=@zika/listing-service",
+		"db:generate": "turbo run db:generate",
+		"db:migrate": "turbo run db:migrate",
+		"db:studio:auth": "turbo run db:studio --filter=@zika/auth-service",
+		"db:studio:listing": "turbo run db:studio --filter=@zika/listing-service",
+		"db:seed:auth": "turbo run db:seed --filter=@zika/auth-service",
+		"db:seed:all": "tsx scripts/seed-all.ts"
+	},
+	"devDependencies": {
+		"prettier": "^3.4.2",
+		"prisma": "^7.8.0",
+		"tsx": "^4.21.0",
+		"turbo": "^2.3.3",
+		"typescript": "^5.7.3"
+	},
+	"engines": {
+		"node": ">=20.0.0",
+		"pnpm": ">=9.0.0"
+	},
+	"packageManager": "pnpm@10.33.2",
+	"dependencies": {
+		"@prisma/client": "^7.8.0"
+	}
 }

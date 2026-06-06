@@ -38,6 +38,14 @@ export async function createPresignedDownloadUrl(s3Key: string, expiresIn = 900)
   return getSignedUrl(s3, command, { expiresIn });
 }
 
+export async function withSignedPhotos<T extends { s3Key: string }>(
+  photos: T[],
+): Promise<(T & { cdnUrl: string })[]> {
+  return Promise.all(
+    photos.map(async (p) => ({ ...p, cdnUrl: await createPresignedDownloadUrl(p.s3Key) })),
+  );
+}
+
 export async function deleteObject(s3Key: string): Promise<void> {
   await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: s3Key }));
 }

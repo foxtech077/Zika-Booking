@@ -59,8 +59,9 @@ export default function LoginPage() {
       if (window.google && !gsiInitialized) {
         gsiInitialized = true;
         window.google.accounts.id.initialize({
-          client_id: "50229721645-fpi6euv7emir3h4n4pmr6hv9saqcfgcm.apps.googleusercontent.com",
+          client_id: "397191986681-clt35826mp608u6ptq9udm8m7c7dk80u.apps.googleusercontent.com",
           callback: handleGoogleCredentialResponse,
+
         });
 
         const btn = document.getElementById("google-signin-btn");

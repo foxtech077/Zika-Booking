@@ -13,18 +13,24 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
+import { useAuthStore } from "../../store/auth";
+import { ListingImage } from "../../components/ListingImage";
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type BookingStatus =
+  | "pending"
   | "confirmed"
   | "pending_payment"
+  | "active"
   | "completed"
   | "cancelled_by_guest"
   | "cancelled_by_provider"
-  | "cancelled_by_system";
+  | "cancelled_by_system"
+  | "refunded";
 
-type TabFilter = "upcoming" | "completed" | "cancelled";
+type TabFilter = "upcoming" | "active" | "completed" | "cancelled";
 
 interface BookingSummary {
   id: string;
@@ -73,12 +79,18 @@ function formatDateRange(booking: BookingSummary): string {
 
 function statusInfo(status: BookingStatus): { label: string; bg: string; textColor: string } {
   switch (status) {
+    case "pending":
+      return { label: "Pending", bg: "#fef3c7", textColor: "#92400e" };
     case "confirmed":
       return { label: "Confirmed", bg: "#dcfce7", textColor: "#16a34a" };
     case "pending_payment":
       return { label: "Pending Payment", bg: "#fef3c7", textColor: "#92400e" };
+    case "active":
+      return { label: "Active", bg: "#dbeafe", textColor: "#1d4ed8" };
     case "completed":
       return { label: "Completed", bg: "#f3f4f6", textColor: "#6b7280" };
+    case "refunded":
+      return { label: "Refunded", bg: "#f0fdf4", textColor: "#15803d" };
     case "cancelled_by_guest":
     case "cancelled_by_provider":
     case "cancelled_by_system":
@@ -103,11 +115,13 @@ function SkeletonCard() {
   );
 }
 
+
 // ── Booking card ──────────────────────────────────────────────────────────────
 
 function BookingCard({ booking }: { booking: BookingSummary }) {
   const router = useRouter();
   const { label, bg, textColor } = statusInfo(booking.status);
+  const [imgError, setImgError] = useState(false);
 
   return (
     <TouchableOpacity
@@ -115,8 +129,13 @@ function BookingCard({ booking }: { booking: BookingSummary }) {
       onPress={() => router.push(`/booking/${booking.id}` as any)}
       activeOpacity={0.7}
     >
-      {booking.listingPrimaryPhotoUrl ? (
-        <Image source={{ uri: booking.listingPrimaryPhotoUrl }} style={styles.cardThumb} />
+      {!imgError && booking.listingPrimaryPhotoUrl ? (
+        <ListingImage
+          uri={booking.listingPrimaryPhotoUrl}
+          style={styles.cardThumb}
+          resizeMode="cover"
+          onError={() => setImgError(true)}
+        />
       ) : (
         <View style={[styles.cardThumb, styles.cardThumbPlaceholder]} />
       )}
@@ -147,6 +166,7 @@ function BookingCard({ booking }: { booking: BookingSummary }) {
 function EmptyState({ tab }: { tab: TabFilter }) {
   const messages: Record<TabFilter, string> = {
     upcoming: "No upcoming bookings",
+    active: "No active bookings",
     completed: "No completed bookings",
     cancelled: "No cancelled bookings",
   };
@@ -161,6 +181,7 @@ function EmptyState({ tab }: { tab: TabFilter }) {
 
 const TABS: { key: TabFilter; label: string }[] = [
   { key: "upcoming", label: "Upcoming" },
+  { key: "active", label: "Active" },
   { key: "completed", label: "Completed" },
   { key: "cancelled", label: "Cancelled" },
 ];
