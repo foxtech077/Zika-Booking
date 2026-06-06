@@ -260,10 +260,10 @@ function buildPayload(s: CarState): Record<string, unknown> {
   p.transmission = normalizeTransmission(s.transmission);
   p.fuelType = normalizeFuelType(s.fuelType);
 
-  // The API currently validates driveType as 2WD/4WD/AWD, while Prisma exposes
-  // mapped 2WD and 4WD enum values as TWO_WD/FOUR_WD. Omitting preserves existing
-  // 2WD/4WD values instead of sending a value one layer will reject.
-  if (normalizeDriveType(s.driveType) === "AWD") p.driveType = "AWD";
+  // Normalize and always send backend enum (2WD/4WD/AWD).
+  // This ensures UI values are correctly mapped and explicitly sent to the API.
+  const _driveType = normalizeDriveType(s.driveType);
+  if (_driveType) p.driveType = _driveType;
 
   const seats = toNullableInt(s.seats);
   p.seats = seats !== null && seats >= 1 ? seats : null;
@@ -607,6 +607,7 @@ export function CarForm({ listingId, listing }: Props) {
                     value={s.driveType}
                     onChange={(e) => set("driveType", e.target.value)}
                     options={DRIVE_TYPE_OPTIONS}
+                    error={tried && !s.driveType ? "Drive type is required" : undefined}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
