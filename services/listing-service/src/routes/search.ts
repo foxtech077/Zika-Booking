@@ -65,8 +65,11 @@ async function getBookedListingIds(
 
 export async function searchRoutes(app: FastifyInstance) {
 
-  // ── GET /search ──────────────────────────────────────────────────────────
-  app.get("/search", { schema: { tags: ["Search"] }, preHandler: [optionalGuest] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // ── Shared search handler ─────────────────────────────────────────────────
+  // NOTE: The mobile app's listingApi has baseURL "https://api.kainook.com/listings",
+  // so calling .get("/search") resolves to /listings/search. We register the
+  // handler at both /search and /listings/search to cover both paths.
+  async function handleSearch(req: FastifyRequest, reply: FastifyReply) {
     const guestId = (req as GuestRequest).guestId;
     const q = req.query as Record<string, string>;
 
@@ -191,105 +194,72 @@ export async function searchRoutes(app: FastifyInstance) {
         where: { userId: guestId, listingId: { in: page.map((l) => l.id) } },
         select: { listingId: true },
       });
+      favouriteSet = new Set(favs.map((f) => f.listingId));
+    }
 
-      // Geo filter
-      const withDistance = candidates
-        .map((l) => ({
-          ...l,
-          distanceKm: haversineKm(lat, lng, Number(l.lat), Number(l.lng)),
-        }))
-        .filter((l) => l.distanceKm <= radiusKm);
+    // Log search
+    await prisma.searchLog.create({
+      data: {
+        userId: guestId ?? undefined,
+        category,
+        placeName,
+        lat,
+        lng,
+        radiusKm,
+        checkIn: checkIn ? new Date(checkIn) : undefined,
+        checkOut: checkOut ? new Date(checkOut) : undefined,
+        pickupDatetime: pickupDatetime ? new Date(pickupDatetime) : undefined,
+        returnDatetime: returnDatetime ? new Date(returnDatetime) : undefined,
+        guests,
+        sortApplied: sort,
+        resultCount: total,
+      },
+    }).catch(() => { /* non-critical */ });
 
-      // Availability filter (when dates provided)
-      const candidateIds = withDistance.map((l) => l.id);
-      const bookedIds = await getBookedListingIds(
-        candidateIds, checkIn, checkOut, pickupDatetime, returnDatetime,
-      );
-      const available = withDistance.filter((l) => !bookedIds.has(l.id));
+    const results = page.map((l) => ({
+      id: l.id,
+      listingType: l.category,
+      title: l.name,
+      city: l.town,
+      countryCode: l.country,
+      distanceKm: Math.round(l.distanceKm * 10) / 10,
+      primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
+      nightlyRate: l.category !== "car" && l.pricePerNight ? Number(l.pricePerNight) : null,
+      dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
+      currency: l.currency,
+      cancellationPolicy: l.cancellationPolicy,
+      // Hotel
+      starRating: l.starRating,
+      isAccredited: !!l.approvedAt,
+      roomType: l.roomType,
+      // Apartment
+      bedrooms: l.bedrooms,
+      bathrooms: l.bathrooms,
+      maxGuests: l.maxGuests,
+      longStayDiscountEnabled: l.longStayEnabled,
+      // Car
+      carMake: l.carMake,
+      carModel: l.carModel,
+      carYear: l.carYear,
+      transmission: l.transmission,
+      seats: l.seats,
+      mileagePolicy: l.mileagePolicy,
+      // Favourited
+      isFavourited: guestId ? favouriteSet.has(l.id) : undefined,
+    }));
 
-      // Sort
-      const sortPriceField = category === "car" ? "pricePerDay" : "pricePerNight";
-      let sorted = [...available];
-      if (sort === "price_asc") sorted.sort((a, b) => Number((a as any)[sortPriceField] ?? 0) - Number((b as any)[sortPriceField] ?? 0));
-      else if (sort === "price_desc") sorted.sort((a, b) => Number((b as any)[sortPriceField] ?? 0) - Number((a as any)[sortPriceField] ?? 0));
-      else if (sort === "distance") sorted.sort((a, b) => a.distanceKm - b.distanceKm);
-      else if (sort === "newest") sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-      else sorted.sort((a, b) => a.distanceKm - b.distanceKm); // recommended default = nearest
+    return sendSuccess(reply, 200, {
+      totalCount: total,
+      availableCount: available.length,
+      nextCursor,
+      results,
+    });
+  }
 
-      // Pagination (cursor = offset)
-      const total = sorted.length;
-      const page = sorted.slice(cursor, cursor + limit);
-      const nextCursor = cursor + limit < total ? String(cursor + limit) : null;
-
-      // Favourites enrichment
-      let favouriteSet = new Set<string>();
-      if (guestId) {
-        const favs = await prisma.userFavourite.findMany({
-          where: { userId: guestId, listingId: { in: page.map((l) => l.id) } },
-          select: { listingId: true },
-        });
-        favouriteSet = new Set(favs.map((f) => f.listingId));
-      }
-
-      // Log search
-      await prisma.searchLog.create({
-        data: {
-          userId: guestId ?? undefined,
-          category,
-          placeName,
-          lat,
-          lng,
-          radiusKm,
-          checkIn: checkIn ? new Date(checkIn) : undefined,
-          checkOut: checkOut ? new Date(checkOut) : undefined,
-          pickupDatetime: pickupDatetime ? new Date(pickupDatetime) : undefined,
-          returnDatetime: returnDatetime ? new Date(returnDatetime) : undefined,
-          guests,
-          sortApplied: sort,
-          resultCount: total,
-        },
-      }).catch(() => { /* non-critical */ });
-
-      const results = page.map((l) => ({
-        id: l.id,
-        listingType: l.category,
-        title: l.name,
-        city: l.town,
-        countryCode: l.country,
-        distanceKm: Math.round(l.distanceKm * 10) / 10,
-        primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
-        nightlyRate: l.category !== "car" && l.pricePerNight ? Number(l.pricePerNight) : null,
-        dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
-        currency: l.currency,
-        cancellationPolicy: l.cancellationPolicy,
-        // Hotel
-        starRating: l.starRating,
-        isAccredited: !!l.approvedAt,
-        roomType: l.roomType,
-        // Apartment
-        bedrooms: l.bedrooms,
-        bathrooms: l.bathrooms,
-        maxGuests: l.maxGuests,
-        longStayDiscountEnabled: l.longStayEnabled,
-        // Car
-        carMake: l.carMake,
-        carModel: l.carModel,
-        carYear: l.carYear,
-        transmission: l.transmission,
-        seats: l.seats,
-        mileagePolicy: l.mileagePolicy,
-        // Favourited
-        isFavourited: guestId ? favouriteSet.has(l.id) : undefined,
-      }));
-
-      return sendSuccess(reply, 200, {
-        totalCount: total,
-        availableCount: available.length,
-        nextCursor,
-        results,
-      });
-    },
-  );
+  // Register at /search (direct service calls) and /listings/search (mobile app via listingApi)
+  const searchOpts = { schema: { tags: ["Search"] }, preHandler: [optionalGuest] };
+  app.get("/search", searchOpts, handleSearch);
+  app.get("/listings/search", searchOpts, handleSearch);
 
   // ── GET /listings/:id/public — public listing detail ─────────────────────
   app.get(
@@ -509,9 +479,7 @@ export async function searchRoutes(app: FastifyInstance) {
       const { listingId } = req.params as { listingId: string };
 
       await prisma.userFavourite.deleteMany({ where: { userId, listingId } });
-      return sendSuccess(reply, 200, {
-  message: "Favourite removed successfully"
-});
+      return sendSuccess(reply, 200, { message: "Favourite removed successfully." });
     },
   );
 
@@ -611,9 +579,8 @@ export async function searchRoutes(app: FastifyInstance) {
         const toDelete = all.slice(20).map((r) => r.listingId);
         await prisma.userRecentlyViewed.deleteMany({ where: { userId, listingId: { in: toDelete } } });
       }
-return sendSuccess(reply, 200, {
-  message: "Recently viewed updated"
-});
+
+      return sendSuccess(reply, 200, { message: "Recently viewed updated." });
     },
   );
 
@@ -702,9 +669,9 @@ return sendSuccess(reply, 200, {
       }
 
       return sendSuccess(reply, 200, {
-  message: "Recently viewed imported successfully",
-  importedCount: items.slice(0, 20).length
-});
+        message: "Recently viewed imported successfully.",
+        importedCount: items.slice(0, 20).length,
+      });
     },
   );
 }
