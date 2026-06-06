@@ -311,6 +311,127 @@ const sh = StyleSheet.create({
   more: { fontSize: 13, color: GREEN, fontWeight: "700" },
 });
 
+// ── Featured Card ─────────────────────────────────────────────────────────────
+function FeaturedCard({
+  item, onPress, photoUrl,
+}: {
+  item: SearchResult; onPress: () => void; photoUrl?: string | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
+  return (
+    <TouchableOpacity style={s.featuredCard} onPress={onPress} activeOpacity={0.88}>
+      {!imgError && displayPhoto ? (
+        <ListingImage uri={displayPhoto} style={s.featuredPhoto} onError={() => setImgError(true)} />
+      ) : (
+        <View style={[s.featuredPhoto, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+          <Text style={{ fontSize: 36 }}>🏨</Text>
+        </View>
+      )}
+      <View style={s.featuredOverlay}>
+        <View style={s.featuredBadgeWrap}>
+          <Text style={s.featuredBadgeText}>FEATURED & EXCLUSIVE</Text>
+        </View>
+        <Text style={s.featuredTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={s.featuredLoc}>{item.city}, {item.countryCode}</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Text style={s.featuredPrice}>
+            {fmtPrice(item.nightlyRate, item.currency)}<Text style={{ fontSize: 12, fontWeight: "400" }}>/night</Text>
+          </Text>
+          <View style={s.featuredBtn}>
+            <Text style={s.featuredBtnText}>Book</Text>
+          </View>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ── Premium Car Card ──────────────────────────────────────────────────────────
+function PremiumCarCard({
+  item, onPress, photoUrl, isLast,
+}: {
+  item: SearchResult; onPress: () => void; photoUrl?: string | null; isLast: boolean;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
+  return (
+    <TouchableOpacity
+      style={[c.card, { width: 220, marginRight: isLast ? 0 : 12 }]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      {!imgError && displayPhoto ? (
+        <ListingImage uri={displayPhoto} style={[c.photo, { height: 140 }]} onError={() => setImgError(true)} />
+      ) : (
+        <View style={[c.photo, { height: 140, backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+          <Text style={{ fontSize: 28 }}>🚗</Text>
+        </View>
+      )}
+      <View style={c.body}>
+        <View style={s.carBadge}><Text style={s.carBadgeText}>LUXURY</Text></View>
+        <Text style={c.title} numberOfLines={1}>{item.carMake} {item.carModel} {item.carYear}</Text>
+        <Text style={{ fontSize: 11, color: MUTED, marginBottom: 4 }}>{item.transmission} · {item.seats} seats</Text>
+        <Text style={c.price}>{fmtPrice(item.dailyRate, item.currency)}<Text style={c.priceUnit}>/day</Text></Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ── Trending Card ─────────────────────────────────────────────────────────────
+function TrendingCard({
+  item, onPress, photoUrl,
+}: {
+  item: SearchResult; onPress: () => void; photoUrl?: string | null;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
+  return (
+    <TouchableOpacity style={s.trendCard} onPress={onPress} activeOpacity={0.85}>
+      {!imgError && displayPhoto ? (
+        <ListingImage uri={displayPhoto} style={s.trendPhoto} onError={() => setImgError(true)} />
+      ) : (
+        <View style={[s.trendPhoto, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+          <Text style={{ fontSize: 24 }}>🏨</Text>
+        </View>
+      )}
+      <View style={s.trendOverlay}>
+        <Text style={s.trendTitle} numberOfLines={1}>{item.title}</Text>
+        <Text style={s.trendPrice}>{fmtPrice(item.nightlyRate ?? item.dailyRate, item.currency)}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// Helper to format Date to YYYY-MM-DD in local time
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// Helper to format Date to ISO string with local timezone offset
+function formatLocalISOString(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const seconds = String(d.getSeconds()).padStart(2, "0");
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  
+  const offset = -d.getTimezoneOffset();
+  if (offset === 0) {
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}Z`;
+  }
+  const sign = offset > 0 ? "+" : "-";
+  const absOffset = Math.abs(offset);
+  const offsetHours = String(Math.floor(absOffset / 60)).padStart(2, "0");
+  const offsetMinutes = String(absOffset % 60).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}${sign}${offsetHours}:${offsetMinutes}`;
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
@@ -327,8 +448,10 @@ export default function HomeScreen() {
   const [location, setLocation] = useState("");
   const [checkIn, setCheckIn] = useState<Date | null>(null);
   const [checkOut, setCheckOut] = useState<Date | null>(null);
+  const [pickupDate, setPickupDate] = useState<Date | null>(null);
+  const [returnDate, setReturnDate] = useState<Date | null>(null);
   const [guests, setGuests] = useState(1);
-  const [datePicker, setDatePicker] = useState<"checkIn" | "checkOut" | null>(null);
+  const [datePicker, setDatePicker] = useState<"checkIn" | "checkOut" | "pickup" | "return" | null>(null);
 
   // ── API Queries ──────────────────────────────────────────────────────────
   const { data: hotelsData, isLoading: hotelsLoading } = useQuery<SearchResult[]>({
@@ -365,36 +488,39 @@ export default function HomeScreen() {
   });
 
   // ── Curated segments ─────────────────────────────────────────────────────
+  // listingType guard prevents mis-categorised listings (e.g. a listing whose
+  // name is "car") from polluting hotel / apartment sections.
   const bestOffers = [
-    ...(hotelsData ?? []).filter((h) => h.nightlyRate != null && h.nightlyRate <= 15000),
-    ...(apartmentsData ?? []).filter((a) => a.longStayDiscountEnabled),
+    ...(hotelsData ?? []).filter((h) => h.listingType !== "car" && h.nightlyRate != null && h.nightlyRate <= 15000),
+    ...(apartmentsData ?? []).filter((a) => a.listingType !== "car" && a.longStayDiscountEnabled),
   ].slice(0, 8);
 
   const recommended = [
-    ...(hotelsData ?? []).filter((h) => (h.starRating ?? 0) >= 4 || h.isAccredited),
-    ...(apartmentsData ?? []).filter((a) => a.isAccredited),
+    ...(hotelsData ?? []).filter((h) => h.listingType !== "car" && ((h.starRating ?? 0) >= 4 || h.isAccredited)),
+    ...(apartmentsData ?? []).filter((a) => a.listingType !== "car" && a.isAccredited),
   ].slice(0, 8);
 
   const featured = (hotelsData ?? [])
-    .filter((h) => h.isAccredited || (h.starRating ?? 0) >= 5)
+    .filter((h) => h.listingType !== "car" && (h.isAccredited || (h.starRating ?? 0) >= 5))
     .slice(0, 3);
 
   const nearbyAll = [
-    ...(hotelsData ?? []),
-    ...(apartmentsData ?? []),
+    ...(hotelsData ?? []).filter((h) => h.listingType !== "car"),
+    ...(apartmentsData ?? []).filter((a) => a.listingType !== "car"),
   ].sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 5);
 
-  const premiumCars = (carsData ?? []).slice(0, 6);
+  const premiumCars = (carsData ?? []).filter((c) => c.listingType === "car").slice(0, 6);
 
   const trending = [
-    ...(hotelsData ?? []).slice(0, 2),
-    ...(apartmentsData ?? []).slice(0, 2),
+    ...(hotelsData ?? []).filter((h) => h.listingType !== "car").slice(0, 2),
+    ...(apartmentsData ?? []).filter((a) => a.listingType !== "car").slice(0, 2),
   ].slice(0, 4);
 
   // ── Batch-fetch fresh photo URLs ─────────────────────────────────────────
-  // The /search index returns stale/null primaryPhotoUrl.
-  // GET /listings/{id} generates a fresh presigned S3 URL on every call.
-  // We fetch all displayed listing IDs in parallel so cards show real images.
+  // POST /listings/batch-summary is the public "Search" API designed for card
+  // display. It does not require provider auth, so traveler guests can call it.
+  // We fall back to individual GET /listings/{id}/public calls if the batch
+  // endpoint fails or returns no photo data.
   const displayedIds = useMemo(() => {
     const ids = new Set<string>();
     [...bestOffers, ...recommended, ...featured, ...nearbyAll, ...premiumCars, ...trending]
@@ -429,37 +555,66 @@ export default function HomeScreen() {
     })),
   });
 
-  const photoMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    photoQueries.forEach((q, i) => {
-      const id = displayedIds[i];
-      if (id && q.data) map[id] = q.data;
-    });
-    return map;
-  }, [photoQueries, displayedIds]);
+  const photoMap: Record<string, string> = Object.fromEntries(
+    displayedIds.flatMap((id, i) => {
+      const url = photoQueries[i]?.data;
+      return url ? [[id, url]] : [];
+    })
+  );
 
   function navToListing(id: string, isCar?: boolean) {
     const params: Record<string, string> = {};
     if (!isCar) {
-      if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
-      if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
+      if (checkIn) params.checkIn = formatLocalDate(checkIn);
+      if (checkOut) params.checkOut = formatLocalDate(checkOut);
       params.guests = String(guests);
+    } else {
+      if (pickupDate) params.pickupDatetime = formatLocalISOString(pickupDate);
+      if (returnDate) params.returnDatetime = formatLocalISOString(returnDate);
     }
     router.push({ pathname: `/listing/${id}` as any, params });
   }
 
   function handleSearch() {
-    if (!location.trim()) {
-      Alert.alert("Location required", "Please enter a city.");
-      return;
-    }
     const apiCat = category === "cars" ? "car" : category === "apartments" ? "apartment" : "hotel";
-    const params: Record<string, string> = { category: apiCat, placeName: location, guests: String(guests) };
+    const params: Record<string, string> = { category: apiCat, guests: String(guests) };
+    if (location.trim()) params.placeName = location.trim();
     if (category !== "cars") {
-      if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
-      if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
+      if (checkIn) params.checkIn = formatLocalDate(checkIn);
+      if (checkOut) params.checkOut = formatLocalDate(checkOut);
+    } else {
+      if (pickupDate) params.pickupDatetime = formatLocalISOString(pickupDate);
+      if (returnDate) params.returnDatetime = formatLocalISOString(returnDate);
     }
     router.push({ pathname: "/search", params });
+  }
+
+  function detectUserLocation() {
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          const apiCat = category === "cars" ? "car" : category === "apartments" ? "apartment" : "hotel";
+          const params: Record<string, string> = {
+            category: apiCat,
+            guests: String(guests),
+            geoLat: String(latitude),
+            geoLng: String(longitude),
+          };
+          if (category !== "cars") {
+            if (checkIn) params.checkIn = formatLocalDate(checkIn);
+            if (checkOut) params.checkOut = formatLocalDate(checkOut);
+          } else {
+            if (pickupDate) params.pickupDatetime = formatLocalISOString(pickupDate);
+            if (returnDate) params.returnDatetime = formatLocalISOString(returnDate);
+          }
+          router.push({ pathname: "/search", params });
+        },
+        () => Alert.alert("Location Error", "Could not get your location. Please enable location services.")
+      );
+    } else {
+      Alert.alert("Not supported", "Location detection is not available on this device.");
+    }
   }
 
   function tierColor() {
@@ -512,13 +667,16 @@ export default function HomeScreen() {
               style={s.locationInput}
               value={location}
               onChangeText={setLocation}
-              placeholder="Where to?"
+              placeholder="Anywhere (city, country…)"
               placeholderTextColor={MUTED}
             />
+            <TouchableOpacity onPress={detectUserLocation} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="navigate" size={18} color={GREEN} />
+            </TouchableOpacity>
           </View>
 
-          {/* Dates — only for hotels/apartments */}
-          {category !== "cars" && (
+          {/* Dates — Stays vs Cars */}
+          {category !== "cars" ? (
             <View style={s.datesRow}>
               <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("checkIn")} activeOpacity={0.7}>
                 <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
@@ -533,6 +691,24 @@ export default function HomeScreen() {
                 <View>
                   <Text style={s.dateBtnLabel}>Check-out</Text>
                   <Text style={[s.dateBtnValue, !checkOut && s.dateBtnPlaceholder]}>{fmtDate(checkOut)}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={s.datesRow}>
+              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("pickup")} activeOpacity={0.7}>
+                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.dateBtnLabel}>Pickup Date</Text>
+                  <Text style={[s.dateBtnValue, !pickupDate && s.dateBtnPlaceholder]}>{fmtDate(pickupDate)}</Text>
+                </View>
+              </TouchableOpacity>
+              <View style={s.dateDivider} />
+              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("return")} activeOpacity={0.7}>
+                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.dateBtnLabel}>Return Date</Text>
+                  <Text style={[s.dateBtnValue, !returnDate && s.dateBtnPlaceholder]}>{fmtDate(returnDate)}</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -564,7 +740,11 @@ export default function HomeScreen() {
 
         <TouchableOpacity style={s.searchBtn} onPress={handleSearch} activeOpacity={0.85}>
           <Ionicons name="search" size={18} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={s.searchBtnText}>Search {category === "cars" ? "Cars" : "Stays"}</Text>
+          <Text style={s.searchBtnText}>
+            {location.trim()
+              ? `Search ${category === "cars" ? "Cars" : "Stays"} in ${location}`
+              : `Browse All ${category === "cars" ? "Cars" : "Stays"}`}
+          </Text>
         </TouchableOpacity>
 
         {/* Date picker modals */}
@@ -579,6 +759,28 @@ export default function HomeScreen() {
           title="Select Check-out Date"
           minDate={checkIn ?? undefined}
           onSelect={d => setCheckOut(d)}
+          onClose={() => setDatePicker(null)}
+        />
+        <DatePickerModal
+          visible={datePicker === "pickup"}
+          title="Select Pickup Date"
+          onSelect={d => {
+            const dateWithTime = new Date(d);
+            dateWithTime.setHours(10, 0, 0, 0); // default to 10:00 AM
+            setPickupDate(dateWithTime);
+            if (returnDate && dateWithTime >= returnDate) setReturnDate(null);
+          }}
+          onClose={() => setDatePicker(null)}
+        />
+        <DatePickerModal
+          visible={datePicker === "return"}
+          title="Select Return Date"
+          minDate={pickupDate ?? undefined}
+          onSelect={d => {
+            const dateWithTime = new Date(d);
+            dateWithTime.setHours(10, 0, 0, 0); // default to 10:00 AM
+            setReturnDate(dateWithTime);
+          }}
           onClose={() => setDatePicker(null)}
         />
 
@@ -681,28 +883,12 @@ export default function HomeScreen() {
             <SectionHeader title="Featured Stays" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
               {featured.map((item) => (
-                <TouchableOpacity key={item.id} style={s.featuredCard} onPress={() => navToListing(item.id, false)} activeOpacity={0.88}>
-                  {(photoMap[item.id] ?? item.primaryPhotoUrl) ? (
-                    <ListingImage uri={photoMap[item.id] ?? item.primaryPhotoUrl} style={s.featuredPhoto} />
-                  ) : (
-                    <View style={[s.featuredPhoto, { backgroundColor: "#D1FAE5" }]} />
-                  )}
-                  <View style={s.featuredOverlay}>
-                    <View style={s.featuredBadgeWrap}>
-                      <Text style={s.featuredBadgeText}>FEATURED & EXCLUSIVE</Text>
-                    </View>
-                    <Text style={s.featuredTitle} numberOfLines={2}>{item.title}</Text>
-                    <Text style={s.featuredLoc}>{item.city}, {item.countryCode}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                      <Text style={s.featuredPrice}>
-                        {fmtPrice(item.nightlyRate, item.currency)}<Text style={{ fontSize: 12, fontWeight: "400" }}>/night</Text>
-                      </Text>
-                      <View style={s.featuredBtn}>
-                        <Text style={s.featuredBtnText}>Book</Text>
-                      </View>
-                    </View>
-                  </View>
-                </TouchableOpacity>
+                <FeaturedCard
+                  key={item.id}
+                  item={item}
+                  photoUrl={photoMap[item.id]}
+                  onPress={() => navToListing(item.id, false)}
+                />
               ))}
             </ScrollView>
           </View>
@@ -739,26 +925,13 @@ export default function HomeScreen() {
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
                 {premiumCars.map((item, idx) => (
-                  <TouchableOpacity
+                  <PremiumCarCard
                     key={item.id}
-                    style={[c.card, { width: 220, marginRight: idx < premiumCars.length - 1 ? 12 : 0 }]}
+                    item={item}
+                    photoUrl={photoMap[item.id]}
                     onPress={() => navToListing(item.id, true)}
-                    activeOpacity={0.85}
-                  >
-                    {(photoMap[item.id] ?? item.primaryPhotoUrl) ? (
-                      <ListingImage uri={photoMap[item.id] ?? item.primaryPhotoUrl} style={[c.photo, { height: 140 }]} />
-                    ) : (
-                      <View style={[c.photo, { height: 140, backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
-                        <Text style={{ fontSize: 28 }}>🚗</Text>
-                      </View>
-                    )}
-                    <View style={c.body}>
-                      <View style={s.carBadge}><Text style={s.carBadgeText}>LUXURY</Text></View>
-                      <Text style={c.title} numberOfLines={1}>{item.carMake} {item.carModel} {item.carYear}</Text>
-                      <Text style={{ fontSize: 11, color: MUTED, marginBottom: 4 }}>{item.transmission} · {item.seats} seats</Text>
-                      <Text style={c.price}>{fmtPrice(item.dailyRate, item.currency)}<Text style={c.priceUnit}>/day</Text></Text>
-                    </View>
-                  </TouchableOpacity>
+                    isLast={idx === premiumCars.length - 1}
+                  />
                 ))}
               </ScrollView>
             )}
@@ -771,17 +944,12 @@ export default function HomeScreen() {
             <SectionHeader title="Trending Now" />
             <View style={s.trendGrid}>
               {trending.map((item) => (
-                <TouchableOpacity key={item.id} style={s.trendCard} onPress={() => navToListing(item.id, false)} activeOpacity={0.85}>
-                  {(photoMap[item.id] ?? item.primaryPhotoUrl) ? (
-                    <ListingImage uri={photoMap[item.id] ?? item.primaryPhotoUrl} style={s.trendPhoto} />
-                  ) : (
-                    <View style={[s.trendPhoto, { backgroundColor: "#D1FAE5" }]} />
-                  )}
-                  <View style={s.trendOverlay}>
-                    <Text style={s.trendTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={s.trendPrice}>{fmtPrice(item.nightlyRate ?? item.dailyRate, item.currency)}</Text>
-                  </View>
-                </TouchableOpacity>
+                <TrendingCard
+                  key={item.id}
+                  item={item}
+                  photoUrl={photoMap[item.id]}
+                  onPress={() => navToListing(item.id, false)}
+                />
               ))}
             </View>
           </View>

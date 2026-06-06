@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,7 +12,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
@@ -38,6 +38,19 @@ interface LockState {
   lockToken: string;
   expiresAt: string; // ISO
   pricingPreview: PricingPreview;
+}
+
+interface PendingBooking {
+  id: string;
+  reference: string;
+  status: string;
+  listingTitle: string;
+  totalAmount: number;
+  currency: string;
+  checkIn?: string;
+  checkOut?: string;
+  pickupDatetime?: string;
+  returnDatetime?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -123,6 +136,7 @@ export default function BookingFlowScreen() {
     pickupDatetime?: string;
     returnDatetime?: string;
     guests?: string;
+    listingTitle?: string;
   }>();
 
   const {
@@ -132,6 +146,7 @@ export default function BookingFlowScreen() {
     pickupDatetime,
     returnDatetime,
     guests,
+    listingTitle,
   } = params;
 
   const isCar = !!pickupDatetime;
@@ -143,8 +158,16 @@ export default function BookingFlowScreen() {
   // ── Lock state ────────────────────────────────────────────────────────────
   const [lockState, setLockState] = useState<LockState | null>(null);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [lockErrorMessage, setLockErrorMessage] = useState<string | null>(null);
   const [lockLoading, setLockLoading] = useState(true);
   const [expiredModal, setExpiredModal] = useState(false);
+  const [lockRetryKey, setLockRetryKey] = useState(0);
+
+  // ── Pending-payment bookings (shown when 429 occurs) ──────────────────────
+  const [pendingBookings, setPendingBookings] = useState<PendingBooking[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [discardingId, setDiscardingId] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   // ── Guest Details form ────────────────────────────────────────────────────
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
@@ -185,10 +208,56 @@ export default function BookingFlowScreen() {
     }
   }, [isExpired, step]);
 
-  // ── Initiate lock on mount ────────────────────────────────────────────────
+  // ── Fetch pending-payment bookings from backend ───────────────────────────
+  const fetchPendingBookings = useCallback(async () => {
+    setPendingLoading(true);
+    try {
+      const res = await listingApi.get<{ data: { bookings: any[] } }>(
+        "/guests/me/bookings?status=upcoming&cursor=0"
+      );
+      const all: any[] = res.data.data.bookings ?? [];
+      setPendingBookings(
+        all
+          .filter((b) => b.status === "pending_payment")
+          .map((b) => ({
+            id: b.id,
+            reference: b.reference,
+            status: b.status,
+            listingTitle: b.listingTitle,
+            totalAmount: b.totalAmount,
+            currency: b.currency,
+            checkIn: b.checkIn,
+            checkOut: b.checkOut,
+            pickupDatetime: b.pickupDatetime,
+            returnDatetime: b.returnDatetime,
+          }))
+      );
+    } catch {
+      // silent — user can still use "View My Bookings" fallback
+    } finally {
+      setPendingLoading(false);
+    }
+  }, []);
+
+  // ── Discard a single pending-payment booking ──────────────────────────────
+  async function handleDiscardPending(bookingId: string) {
+    setDiscardingId(bookingId);
+    try {
+      await listingApi.patch(`/bookings/${bookingId}/fail`, { failureReason: "Cancelled by guest" });
+      setPendingBookings((prev) => prev.filter((b) => b.id !== bookingId));
+    } catch (err: any) {
+      Alert.alert("Error", err?.response?.data?.message ?? "Could not discard booking. Please try again.");
+    } finally {
+      setDiscardingId(null);
+    }
+  }
+
+  // ── Initiate lock — runs on mount and on retry ────────────────────────────
   useEffect(() => {
     async function initiateLock() {
       setLockLoading(true);
+      setLockError(null);
+      setLockErrorMessage(null);
       try {
         const body: Record<string, unknown> = {
           listingId,
@@ -226,22 +295,36 @@ export default function BookingFlowScreen() {
           pricingPreview: mapped,
         });
       } catch (err: any) {
+        console.warn("LOCK INITIATION ERROR:", JSON.stringify(err?.response?.data), "status:", err?.response?.status, "msg:", err?.message);
         const status = err?.response?.status;
-        const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
-        if (code === "LISTING_UNAVAILABLE") {
+        const code = err?.response?.data?.error?.code ?? err?.response?.data?.code ?? err?.response?.data?.errors?.[0]?.code;
+        const errMsg =
+          err?.response?.data?.error?.message ??
+          err?.response?.data?.message ??
+          err?.response?.data?.errors?.[0]?.message ??
+          err?.message;
+        if (code === "LISTING_UNAVAILABLE" || code === "LISTING_NOT_AVAILABLE") {
           setLockError("unavailable");
-        } else if (status === 401 || code === "NO_TOKEN" || code === "INVALID_TOKEN") {
+        } else if (status === 401 || code === "NO_TOKEN" || code === "INVALID_TOKEN" || code === "UNAUTHORIZED") {
           setLockError("auth");
+        } else if (status === 404) {
+          setLockError("unavailable");
+        } else if (status === 429) {
+          setLockError("pending_limit");
+          void fetchPendingBookings();
         } else {
           setLockError("generic");
+          const statusHint = status ? ` (HTTP ${status})` : "";
+          setLockErrorMessage(errMsg ? `${errMsg}${statusHint}` : `Unable to secure this reservation${statusHint}. The listing may not be available for booking yet. Please go back and try again.`);
         }
       } finally {
         setLockLoading(false);
+        setRetrying(false);
       }
     }
     void initiateLock();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [lockRetryKey]);
 
   // ── Renew lock mutation ───────────────────────────────────────────────────
   const renewMutation = useMutation({
@@ -326,7 +409,10 @@ export default function BookingFlowScreen() {
     if (isCar) {
       if (!driverFirstName.trim()) return "Driver first name is required.";
       if (!driverLastName.trim()) return "Driver last name is required.";
-      if (!driverAge.trim() || isNaN(parseInt(driverAge, 10))) return "Driver age is required.";
+      const parsedAge = parseInt(driverAge, 10);
+      if (!driverAge.trim() || isNaN(parsedAge)) return "Driver age is required.";
+      if (parsedAge < 18) return "Driver must be at least 18 years old.";
+      if (parsedAge > 120) return "Please enter a valid driver age.";
       if (deliveryRequested && !deliveryAddress.trim()) return "Delivery address is required.";
     }
     return null;
@@ -404,6 +490,7 @@ export default function BookingFlowScreen() {
   if (lockLoading) {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#1a73e8" />
           <Text style={styles.loadingText}>Securing your reservation...</Text>
@@ -416,6 +503,7 @@ export default function BookingFlowScreen() {
   if (lockError === "unavailable") {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <Ionicons name="close-circle" size={64} color="#dc2626" />
           <Text style={styles.errorTitle}>Listing Unavailable</Text>
@@ -433,6 +521,7 @@ export default function BookingFlowScreen() {
   if (lockError === "auth") {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <Ionicons name="lock-closed" size={64} color="#1a73e8" />
           <Text style={styles.errorTitle}>Sign in to book</Text>
@@ -450,14 +539,111 @@ export default function BookingFlowScreen() {
     );
   }
 
+  if (lockError === "pending_limit") {
+    const allCleared = !pendingLoading && pendingBookings.length === 0;
+    return (
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {/* Header */}
+          <View style={styles.pendingHeader}>
+            <Ionicons name="time-outline" size={52} color="#f59e0b" />
+            <Text style={styles.errorTitle}>Bookings Awaiting Payment</Text>
+            <Text style={styles.errorBody}>
+              You have one or more bookings waiting for payment. Complete payment or discard them below to create a new booking.
+            </Text>
+          </View>
+
+          {/* Pending bookings list from backend */}
+          {pendingLoading ? (
+            <ActivityIndicator color="#1a73e8" style={{ marginVertical: 24 }} />
+          ) : pendingBookings.length > 0 ? (
+            <View style={styles.pendingList}>
+              {pendingBookings.map((b) => {
+                const dateStr = b.checkIn && b.checkOut
+                  ? `${b.checkIn} – ${b.checkOut}`
+                  : b.pickupDatetime
+                    ? new Date(b.pickupDatetime).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                    : "";
+                return (
+                  <View key={b.id} style={styles.pendingCard}>
+                    <View style={{ flex: 1, marginRight: 12 }}>
+                      <Text style={styles.pendingCardTitle} numberOfLines={1}>{b.listingTitle}</Text>
+                      <Text style={styles.pendingCardRef}>{b.reference}</Text>
+                      {dateStr ? <Text style={styles.pendingCardDate}>{dateStr}</Text> : null}
+                      <Text style={styles.pendingCardAmount}>
+                        {b.currency} {b.totalAmount?.toLocaleString()}
+                      </Text>
+                    </View>
+                    <View style={styles.pendingCardBtns}>
+                      <TouchableOpacity
+                        style={styles.pendingPayBtn}
+                        onPress={() => router.push({ pathname: "/pay/[bookingId]", params: { bookingId: b.id } })}
+                      >
+                        <Text style={styles.pendingPayBtnText}>Pay</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.pendingDiscardBtn}
+                        onPress={() => void handleDiscardPending(b.id)}
+                        disabled={discardingId === b.id}
+                      >
+                        {discardingId === b.id
+                          ? <ActivityIndicator size="small" color="#dc2626" />
+                          : <Text style={styles.pendingDiscardBtnText}>Discard</Text>
+                        }
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {/* After all discarded — retry lock */}
+          {allCleared && (
+            <View style={styles.pendingRetryBox}>
+              <Ionicons name="checkmark-circle-outline" size={28} color="#16a34a" />
+              <Text style={styles.pendingRetryText}>All cleared! You can now create your booking.</Text>
+              <TouchableOpacity
+                style={[styles.primaryBtn, retrying && styles.primaryBtnDisabled, { marginTop: 8 }]}
+                onPress={() => { setRetrying(true); setLockRetryKey((k) => k + 1); }}
+                disabled={retrying}
+              >
+                {retrying
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.primaryBtnText}>Try Booking Again</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Fallback navigation */}
+          {!allCleared && (
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => router.replace("/(tabs)/bookings" as any)}
+            >
+              <Text style={styles.primaryBtnText}>View My Bookings</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={[styles.secondaryBtn, { marginTop: 8 }]} onPress={() => router.back()}>
+            <Text style={styles.secondaryBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   if (lockError === "generic") {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <Ionicons name="warning" size={64} color="#f59e0b" />
           <Text style={styles.errorTitle}>Could not secure reservation</Text>
           <Text style={styles.errorBody}>
-            An error occurred while trying to reserve this listing. Please go back and try again.
+            {lockErrorMessage}
           </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => router.back()}>
             <Text style={styles.primaryBtnText}>Go Back</Text>
@@ -471,6 +657,9 @@ export default function BookingFlowScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Dynamic header title */}
+      <Stack.Screen options={{ title: listingTitle ? listingTitle : "Book", headerBackTitle: "Back" }} />
+
       {/* Step indicator */}
       <StepIndicator current={step} />
 
@@ -517,7 +706,10 @@ export default function BookingFlowScreen() {
             </Text>
             <TouchableOpacity
               style={styles.primaryBtn}
-              onPress={() => router.push("/(tabs)")}
+              onPress={() => {
+                setExpiredModal(false);
+                router.replace("/(tabs)");
+              }}
             >
               <Text style={styles.primaryBtnText}>Search Again</Text>
             </TouchableOpacity>
@@ -792,17 +984,32 @@ export default function BookingFlowScreen() {
                   autoCapitalize="characters"
                   editable={!voucherCode}
                 />
-                <TouchableOpacity
-                  style={[styles.promoBtn, (!!voucherCode || voucherLoading) && styles.promoBtnDisabled]}
-                  onPress={handleApplyVoucher}
-                  disabled={!!voucherCode || voucherLoading}
-                >
-                  {voucherLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.promoBtnText}>{voucherCode ? "Applied" : "Apply"}</Text>
-                  )}
-                </TouchableOpacity>
+                {voucherCode ? (
+                  <TouchableOpacity
+                    style={[styles.promoBtn, { backgroundColor: "#dc2626" }]}
+                    onPress={() => {
+                      setVoucherCode("");
+                      setVoucherInput("");
+                      setVoucherDiscount(null);
+                      setVoucherMessage(null);
+                      setVoucherError(null);
+                    }}
+                  >
+                    <Text style={styles.promoBtnText}>Remove</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.promoBtn, voucherLoading && styles.promoBtnDisabled]}
+                    onPress={handleApplyVoucher}
+                    disabled={voucherLoading}
+                  >
+                    {voucherLoading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.promoBtnText}>Apply</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
               {voucherMessage && voucherDiscount != null && (
                 <Text style={styles.promoSuccess}>
@@ -1119,6 +1326,53 @@ const styles = StyleSheet.create({
   },
   primaryBtnDisabled: { opacity: 0.5 },
   primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+
+  // ── Pending-limit screen ──────────────────────────────────────────────────
+  pendingHeader: { alignItems: "center", paddingTop: 24, paddingBottom: 16, gap: 10 },
+  pendingList: { gap: 12, marginBottom: 20 },
+  pendingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    padding: 14,
+  },
+  pendingCardTitle: { fontSize: 14, fontWeight: "700", color: "#111827", marginBottom: 2 },
+  pendingCardRef: { fontSize: 11, color: "#6b7280", fontFamily: "monospace", marginBottom: 2 },
+  pendingCardDate: { fontSize: 12, color: "#374151", marginBottom: 2 },
+  pendingCardAmount: { fontSize: 13, fontWeight: "700", color: "#1a73e8" },
+  pendingCardBtns: { gap: 8 },
+  pendingPayBtn: {
+    backgroundColor: "#1a73e8",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  pendingPayBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  pendingDiscardBtn: {
+    borderWidth: 1.5,
+    borderColor: "#dc2626",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+    minWidth: 72,
+  },
+  pendingDiscardBtnText: { color: "#dc2626", fontWeight: "700", fontSize: 13 },
+  pendingRetryBox: {
+    alignItems: "center",
+    backgroundColor: "#f0fdf4",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    padding: 20,
+    marginBottom: 16,
+    gap: 6,
+  },
+  pendingRetryText: { fontSize: 14, color: "#15803d", fontWeight: "600", textAlign: "center" },
   secondaryBtn: {
     borderWidth: 1,
     borderColor: "#d1d5db",

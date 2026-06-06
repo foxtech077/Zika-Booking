@@ -5,6 +5,7 @@ import { AppState, type AppStateStatus } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { StripeProvider } from "@stripe/stripe-react-native";
 import axios from "axios";
 import { useAuthStore } from "../store/auth";
 
@@ -126,14 +127,19 @@ export default function RootLayout() {
   if (!isHydrated) return null;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <StatusBar style="auto" />
-      <Stack
-        screenOptions={({ route }) => ({
-          headerShown: false,
-          ...(screenOptionsByName[route.name] ?? {}),
-        })}
-      />
-    </QueryClientProvider>
+    <StripeProvider
+      publishableKey={process.env["EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY"] ?? ""}
+      merchantIdentifier="merchant.com.zikabooking.app"
+    >
+      <QueryClientProvider client={queryClient}>
+        <StatusBar style="auto" />
+        <Stack
+          screenOptions={({ route }) => ({
+            headerShown: false,
+            ...(screenOptionsByName[route.name] ?? {}),
+          })}
+        />
+      </QueryClientProvider>
+    </StripeProvider>
   );
 }
