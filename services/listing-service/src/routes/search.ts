@@ -120,53 +120,39 @@ export async function searchRoutes(app: FastifyInstance) {
           required: ["category", "lat", "lng"],
         },
       },
-      preHandler: [optionalGuest],
-    },
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as GuestRequest).guestId;
-      const q = req.query as Record<string, string>;
+      take: 500,
+    });
 
-      const category = q["category"] as string | undefined;
-      const lat = parseFloat(q["lat"] ?? "");
-      const lng = parseFloat(q["lng"] ?? "");
-      const placeName = q["place_name"] ?? "";
-      const radiusKm = parseInt(q["radius_km"] ?? "25", 10);
-      const checkIn = q["check_in"];
-      const checkOut = q["check_out"];
-      const pickupDatetime = q["pickup_datetime"];
-      const returnDatetime = q["return_datetime"];
-      const guests = q["guests"] ? parseInt(q["guests"], 10) : undefined;
-      const sort = q["sort"] ?? "recommended";
-      const limit = Math.min(parseInt(q["limit"] ?? "20", 10), 50);
-      const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
+    // Geo filter
+    const withDistance = candidates
+      .map((l) => ({
+        ...l,
+        distanceKm: l.lat != null && l.lng != null
+          ? haversineKm(lat, lng, Number(l.lat), Number(l.lng))
+          : 0,
+      }))
+      .filter((l) => l.lat == null || l.lng == null || l.distanceKm <= radiusKm);
 
-      // Filters
-      const priceMin = q["price_min"] ? parseFloat(q["price_min"]) : undefined;
-      const priceMax = q["price_max"] ? parseFloat(q["price_max"]) : undefined;
-      const ratingMin = q["rating_min"] ? parseFloat(q["rating_min"]) : undefined;
-      const cancellationPolicy = q["cancellation_policy"];
-      const amenityIds = q["amenity_ids"] ? q["amenity_ids"].split(",") : undefined;
-      // Hotel filters
-      const starRatings = q["star_rating"] ? q["star_rating"].split(",").map(Number) : undefined;
-      // Apartment filters
-      const bedroomsMin = q["bedrooms_min"] ? parseInt(q["bedrooms_min"], 10) : undefined;
-      const maxGuestsMin = q["max_guests_min"] ? parseInt(q["max_guests_min"], 10) : undefined;
-      const longStayDiscount = q["long_stay_discount"] === "true";
-      // Car filters
-      const transmission = q["transmission"];
-      const seatsMin = q["seats_min"] ? parseInt(q["seats_min"], 10) : undefined;
-      const mileagePolicy = q["mileage_policy"];
-      const carCategory = q["car_category"];
-      const driveType = q["drive_type"];
-      const airConditioning = q["air_conditioning"];
-      const driverAge = q["driver_age"] ? parseInt(q["driver_age"], 10) : undefined;
+    // Availability filter (when dates provided)
+    const candidateIds = withDistance.map((l) => l.id);
+    const bookedIds = await getBookedListingIds(
+      candidateIds, checkIn, checkOut, pickupDatetime, returnDatetime,
+    );
+    const available = withDistance.filter((l) => !bookedIds.has(l.id));
 
-      if (!category || isNaN(lat) || isNaN(lng)) {
-        return sendError(reply, 400, "INVALID_PARAMS", "category, lat, and lng are required.");
-      }
+    // Sort
+    const sortPriceField = category === "car" ? "pricePerDay" : "pricePerNight";
+    let sorted = [...available];
+    if (sort === "price_asc") sorted.sort((a, b) => Number((a as any)[sortPriceField] ?? 0) - Number((b as any)[sortPriceField] ?? 0));
+    else if (sort === "price_desc") sorted.sort((a, b) => Number((b as any)[sortPriceField] ?? 0) - Number((a as any)[sortPriceField] ?? 0));
+    else if (sort === "distance") sorted.sort((a, b) => a.distanceKm - b.distanceKm);
+    else if (sort === "newest") sorted.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    else sorted.sort((a, b) => a.distanceKm - b.distanceKm); // recommended default = nearest
 
-      // Determine valid statuses per category
-      const validStatuses = category === "hotel" ? ["approved"] : ["active"];
+    // Pagination (cursor = offset)
+    const total = sorted.length;
+    const page = sorted.slice(cursor, cursor + limit);
+    const nextCursor = cursor + limit < total ? String(cursor + limit) : null;
 
       // Build Prisma where clause
       const where: any = {
@@ -730,4 +716,3 @@ export async function searchRoutes(app: FastifyInstance) {
       });
     },
   );
-}
