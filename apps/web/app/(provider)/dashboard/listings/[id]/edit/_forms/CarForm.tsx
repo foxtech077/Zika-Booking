@@ -24,28 +24,28 @@ import { DocumentUploader, type ExistingDocument } from "../../../components/Doc
 // ── Enums (values must match backend Zod enum exactly) ───────────────────────
 
 const CAR_CATEGORIES = [
-  { value: "Economy",     label: "Economy" },
-  { value: "Compact",     label: "Compact" },
-  { value: "SUV",         label: "SUV" },
-  { value: "Minivan",     label: "Minivan" },
-  { value: "Pickup",      label: "Pickup" },
-  { value: "Luxury",      label: "Luxury" },
-  { value: "Electric",    label: "Electric" },
+  { value: "Economy", label: "Economy" },
+  { value: "Compact", label: "Compact" },
+  { value: "SUV", label: "SUV" },
+  { value: "Minivan", label: "Minivan" },
+  { value: "Pickup", label: "Pickup" },
+  { value: "Luxury", label: "Luxury" },
+  { value: "Electric", label: "Electric" },
   { value: "Convertible", label: "Convertible" },
 ];
 
 const TRANSMISSION_OPTIONS = [
   { value: "automatic", label: "Automatic" },
-  { value: "manual",    label: "Manual" },
+  { value: "manual", label: "Manual" },
   { value: "semi_auto", label: "Semi-Automatic" },
 ];
 
 const FUEL_TYPE_OPTIONS = [
-  { value: "petrol",   label: "Petrol / Gasoline" },
-  { value: "diesel",   label: "Diesel" },
+  { value: "petrol", label: "Petrol / Gasoline" },
+  { value: "diesel", label: "Diesel" },
   { value: "electric", label: "Electric" },
-  { value: "hybrid",   label: "Hybrid" },
-  { value: "lpg",      label: "LPG" },
+  { value: "hybrid", label: "Hybrid" },
+  { value: "lpg", label: "LPG" },
 ];
 
 // Backend accepts: "2WD" | "4WD" | "AWD"
@@ -57,30 +57,30 @@ const DRIVE_TYPE_OPTIONS = [
 
 const MILEAGE_POLICY_OPTIONS = [
   { value: "unlimited", label: "Unlimited Mileage" },
-  { value: "limited",   label: "Limited Mileage" },
+  { value: "limited", label: "Limited Mileage" },
 ];
 
 const FUEL_POLICY_OPTIONS = [
-  { value: "full_to_full",  label: "Full to Full" },
-  { value: "same_to_same",  label: "Same to Same" },
-  { value: "free_tank",     label: "Free Tank" },
+  { value: "full_to_full", label: "Full to Full" },
+  { value: "same_to_same", label: "Same to Same" },
+  { value: "free_tank", label: "Free Tank" },
   { value: "full_to_empty", label: "Full to Empty" },
-  { value: "pre_purchase",  label: "Pre-purchase" },
+  { value: "pre_purchase", label: "Pre-purchase" },
 ];
 
 const INSURANCE_TYPE_OPTIONS = [
-  { value: "basic",               label: "Basic" },
-  { value: "standard",            label: "Standard" },
-  { value: "premium",             label: "Premium" },
-  { value: "comprehensive",       label: "Comprehensive" },
-  { value: "basic_third_party",   label: "Basic Third Party" },
+  { value: "basic", label: "Basic" },
+  { value: "standard", label: "Standard" },
+  { value: "premium", label: "Premium" },
+  { value: "comprehensive", label: "Comprehensive" },
+  { value: "basic_third_party", label: "Basic Third Party" },
   { value: "premium_zero_excess", label: "Premium Zero Excess" },
 ];
 
 const CANCELLATION_POLICIES = [
   { value: "flexible", label: "Flexible – free cancellation up to 24 h" },
   { value: "moderate", label: "Moderate – free cancellation up to 5 days" },
-  { value: "strict",   label: "Strict – no refund within 14 days" },
+  { value: "strict", label: "Strict – no refund within 14 days" },
 ];
 
 const CURRENCIES = [
@@ -142,42 +142,42 @@ function normalizeDriveType(v: unknown): string {
 function initState(l: Listing): CarState {
   const a = l as any;
   return {
-    name:               l.name        ?? "",
-    description:        l.description ?? "",
-    carMake:            l.carMake     ?? "",
-    carModel:           l.carModel    ?? "",
-    carYear:            l.carYear     ? String(l.carYear) : String(new Date().getFullYear()),
-    carCategory:        a.carCategory ?? "Economy",
-    licencePlate:       a.licencePlate     ?? "",
-    odometerReading:    a.odometerReading  != null ? String(a.odometerReading) : "",
-    unitCount:          l.unitCount        ? String(l.unitCount) : "1",
-    address:            l.address          ?? "",
-    lat:                a.lat              ?? null,
-    lng:                a.lng              ?? null,
-    town:               l.town             ?? "",
-    country:            l.country          ?? "",
-    transmission:       l.transmission     ?? "automatic",
-    fuelType:           l.fuelType         ?? "petrol",
-    driveType:          normalizeDriveType(a.driveType),
-    seats:              l.seats            ? String(l.seats) : "5",
-    doors:              l.doors            ? String(l.doors) : "4",
-    airConditioning:    a.airConditioning  ?? true,
-    pricePerDay:        l.pricePerDay      ? String(l.pricePerDay) : "",
-    currency:           l.currency         ?? "USD",
+    name: l.name ?? "",
+    description: l.description ?? "",
+    carMake: l.carMake ?? "",
+    carModel: l.carModel ?? "",
+    carYear: l.carYear ? String(l.carYear) : String(new Date().getFullYear()),
+    carCategory: a.carCategory ?? "Economy",
+    licencePlate: a.licencePlate ?? "",
+    odometerReading: a.odometerReading != null ? String(a.odometerReading) : "",
+    unitCount: l.unitCount ? String(l.unitCount) : "1",
+    address: l.address ?? "",
+    lat: a.lat ?? null,
+    lng: a.lng ?? null,
+    town: l.town ?? "",
+    country: l.country ?? "",
+    transmission: l.transmission ?? "automatic",
+    fuelType: l.fuelType ?? "petrol",
+    driveType: normalizeDriveType(a.driveType),
+    seats: l.seats ? String(l.seats) : "5",
+    doors: l.doors ? String(l.doors) : "4",
+    airConditioning: a.airConditioning ?? true,
+    pricePerDay: l.pricePerDay ? String(l.pricePerDay) : "",
+    currency: l.currency ?? "USD",
     cancellationPolicy: l.cancellationPolicy ?? "flexible",
-    mileagePolicy:      l.mileagePolicy    ?? "unlimited",
-    mileageLimitKm:     l.mileageLimitKm   != null ? String(l.mileageLimitKm) : "",
-    extraKmRate:        a.extraKmRate      != null ? String(a.extraKmRate)     : "",
-    fuelPolicy:         a.fuelPolicy       ?? "full_to_full",
-    insuranceType:      a.insuranceType    ?? "standard",
-    minimumDriverAge:   a.minimumDriverAge != null ? String(a.minimumDriverAge) : "21",
-    securityDeposit:    a.securityDeposit  != null ? String(a.securityDeposit)  : "",
-    deliveryEnabled:    a.deliveryEnabled  ?? false,
-    deliveryRadiusKm:   a.deliveryRadiusKm != null ? String(a.deliveryRadiusKm) : "",
-    deliveryFee:        a.deliveryFee      != null ? String(a.deliveryFee)      : "",
+    mileagePolicy: l.mileagePolicy ?? "unlimited",
+    mileageLimitKm: l.mileageLimitKm != null ? String(l.mileageLimitKm) : "",
+    extraKmRate: a.extraKmRate != null ? String(a.extraKmRate) : "",
+    fuelPolicy: a.fuelPolicy ?? "full_to_full",
+    insuranceType: a.insuranceType ?? "standard",
+    minimumDriverAge: a.minimumDriverAge != null ? String(a.minimumDriverAge) : "21",
+    securityDeposit: a.securityDeposit != null ? String(a.securityDeposit) : "",
+    deliveryEnabled: a.deliveryEnabled ?? false,
+    deliveryRadiusKm: a.deliveryRadiusKm != null ? String(a.deliveryRadiusKm) : "",
+    deliveryFee: a.deliveryFee != null ? String(a.deliveryFee) : "",
     roadsideAssistance: a.roadsideAssistance ?? false,
     crossBorderAllowed: a.crossBorderAllowed ?? false,
-    airportPickup:      a.airportPickup     ?? false,
+    airportPickup: a.airportPickup ?? false,
     returnSameLocation: a.returnSameLocation ?? true,
   };
 }
@@ -187,63 +187,63 @@ function initState(l: Listing): CarState {
 function buildPayload(s: CarState): Record<string, unknown> {
   const p: Record<string, unknown> = {};
 
-  if (s.name.trim())        p.name         = s.name.trim();
-  if (s.description.trim()) p.description  = s.description.trim();
-  if (s.carMake.trim())     p.carMake      = s.carMake.trim();
-  if (s.carModel.trim())    p.carModel     = s.carModel.trim();
+  if (s.name.trim()) p.name = s.name.trim();
+  if (s.description.trim()) p.description = s.description.trim();
+  if (s.carMake.trim()) p.carMake = s.carMake.trim();
+  if (s.carModel.trim()) p.carModel = s.carModel.trim();
   const year = Number(s.carYear);
-  if (year >= 1990)         p.carYear      = year;
-  if (s.carCategory)        p.carCategory  = s.carCategory;
+  if (year >= 1990) p.carYear = year;
+  if (s.carCategory) p.carCategory = s.carCategory;
   if (s.licencePlate.trim()) p.licencePlate = s.licencePlate.trim().toUpperCase();
   if (s.odometerReading !== "") p.odometerReading = Number(s.odometerReading);
   const units = Number(s.unitCount);
-  if (units >= 1)           p.unitCount    = units;
+  if (units >= 1) p.unitCount = units;
 
-  if (s.address.trim())     p.address      = s.address.trim();
-  if (s.lat !== null)       p.lat          = s.lat;
-  if (s.lng !== null)       p.lng          = s.lng;
-  if (s.town.trim())        p.town         = s.town.trim();
-  if (s.country.trim())     p.country      = s.country.trim();
+  if (s.address.trim()) p.address = s.address.trim();
+  if (s.lat !== null) p.lat = s.lat;
+  if (s.lng !== null) p.lng = s.lng;
+  if (s.town.trim()) p.town = s.town.trim();
+  if (s.country.trim()) p.country = s.country.trim();
 
-  if (s.transmission)       p.transmission = s.transmission;
-  if (s.fuelType)           p.fuelType     = s.fuelType;
-  
+  if (s.transmission) p.transmission = s.transmission;
+  if (s.fuelType) p.fuelType = s.fuelType;
+
   // NOTE: driveType is intentionally omitted because the backend Zod schema 
   // strictly requires "2WD", but Prisma strictly requires "TWO_WD", 
   // causing an unresolvable conflict on the backend.
-  
+
   const seats = Number(s.seats);
-  if (seats >= 1)           p.seats        = seats;
+  if (seats >= 1) p.seats = seats;
   const doors = Number(s.doors);
-  if (doors >= 2)           p.doors        = doors;
+  if (doors >= 2) p.doors = doors;
   p.airConditioning = s.airConditioning;
 
   const price = Number(s.pricePerDay);
-  if (price > 0)            p.pricePerDay  = price;
-  if (s.currency)           p.currency     = s.currency;
+  if (price > 0) p.pricePerDay = price;
+  if (s.currency) p.currency = s.currency;
   if (s.cancellationPolicy) p.cancellationPolicy = s.cancellationPolicy;
-  if (s.mileagePolicy)      p.mileagePolicy = s.mileagePolicy;
+  if (s.mileagePolicy) p.mileagePolicy = s.mileagePolicy;
 
   if (s.mileagePolicy === "limited") {
     if (s.mileageLimitKm !== "") p.mileageLimitKm = Number(s.mileageLimitKm);
-    if (s.extraKmRate    !== "") p.extraKmRate    = Number(s.extraKmRate);
+    if (s.extraKmRate !== "") p.extraKmRate = Number(s.extraKmRate);
   }
 
-  if (s.fuelPolicy)      p.fuelPolicy     = s.fuelPolicy;
-  if (s.insuranceType)   p.insuranceType  = s.insuranceType;
+  if (s.fuelPolicy) p.fuelPolicy = s.fuelPolicy;
+  if (s.insuranceType) p.insuranceType = s.insuranceType;
   const age = Number(s.minimumDriverAge);
-  if (age >= 16)         p.minimumDriverAge = age;
+  if (age >= 16) p.minimumDriverAge = age;
   if (s.securityDeposit !== "") p.securityDeposit = Number(s.securityDeposit);
 
   p.deliveryEnabled = s.deliveryEnabled;
   if (s.deliveryEnabled) {
     if (s.deliveryRadiusKm !== "") p.deliveryRadiusKm = Number(s.deliveryRadiusKm);
-    if (s.deliveryFee      !== "") p.deliveryFee      = Number(s.deliveryFee);
+    if (s.deliveryFee !== "") p.deliveryFee = Number(s.deliveryFee);
   }
 
   p.roadsideAssistance = s.roadsideAssistance;
   p.crossBorderAllowed = s.crossBorderAllowed;
-  p.airportPickup      = s.airportPickup;
+  p.airportPickup = s.airportPickup;
   p.returnSameLocation = s.returnSameLocation;
 
   return p;
@@ -259,34 +259,34 @@ function validateStep(step: Step, s: CarState): string[] {
   switch (step) {
     case "vehicle":
       return [
-        !s.name.trim()       && "Listing title is required.",
-        !s.carMake.trim()    && "Vehicle make is required.",
-        !s.carModel.trim()   && "Vehicle model is required.",
+        !s.name.trim() && "Listing title is required.",
+        !s.carMake.trim() && "Vehicle make is required.",
+        !s.carModel.trim() && "Vehicle model is required.",
         !(Number(s.carYear) >= 1990 && Number(s.carYear) <= currentYear) && `Vehicle year must be 1990–${currentYear}.`,
-        !s.carCategory       && "Vehicle category is required.",
+        !s.carCategory && "Vehicle category is required.",
         !s.licencePlate.trim() && "Licence plate is required.",
         s.odometerReading === "" && "Odometer reading is required.",
-        !s.address.trim()    && "Pickup address is required.",
-        !s.town.trim()       && "Town is required — geocode the address.",
-        !s.country.trim()    && "Country is required — geocode the address.",
+        !s.address.trim() && "Pickup address is required.",
+        !s.town.trim() && "Town is required — geocode the address.",
+        !s.country.trim() && "Country is required — geocode the address.",
       ].filter(Boolean) as string[];
     case "specs":
       return [
         !s.transmission && "Transmission type is required.",
-        !s.fuelType     && "Fuel type is required.",
-        !s.driveType    && "Drive type is required.",
+        !s.fuelType && "Fuel type is required.",
+        !s.driveType && "Drive type is required.",
         !(Number(s.seats) >= 1) && "Seats must be at least 1.",
         !(Number(s.doors) >= 2) && "Doors must be at least 2.",
       ].filter(Boolean) as string[];
     case "pricing":
       return [
         !(Number(s.pricePerDay) > 0) && "Daily rate must be greater than 0.",
-        !s.currency                  && "Currency is required.",
-        !s.cancellationPolicy        && "Cancellation policy is required.",
-        !s.mileagePolicy             && "Mileage policy is required.",
+        !s.currency && "Currency is required.",
+        !s.cancellationPolicy && "Cancellation policy is required.",
+        !s.mileagePolicy && "Mileage policy is required.",
         s.mileagePolicy === "limited" && !s.mileageLimitKm && "Mileage limit is required for limited mileage.",
-        !s.fuelPolicy                && "Fuel policy is required.",
-        !s.insuranceType             && "Insurance type is required.",
+        !s.fuelPolicy && "Fuel policy is required.",
+        !s.insuranceType && "Insurance type is required.",
         s.deliveryEnabled && !s.deliveryRadiusKm && "Delivery radius is required when delivery is enabled.",
       ].filter(Boolean) as string[];
     default:
@@ -295,10 +295,10 @@ function validateStep(step: Step, s: CarState): string[] {
 }
 
 const STEPS: FormStep[] = [
-  { id: "vehicle", label: "Vehicle Info",       sublabel: "Make, model, location & ID" },
-  { id: "specs",   label: "Specifications",     sublabel: "Engine, transmission & features" },
-  { id: "pricing", label: "Pricing & Policy",   sublabel: "Daily rate, mileage & extras" },
-  { id: "media",   label: "Media & Documents",  sublabel: "Photos & vehicle documents" },
+  { id: "vehicle", label: "Vehicle Info", sublabel: "Make, model, location & ID" },
+  { id: "specs", label: "Specifications", sublabel: "Engine, transmission & features" },
+  { id: "pricing", label: "Pricing & Policy", sublabel: "Daily rate, mileage & extras" },
+  { id: "media", label: "Media & Documents", sublabel: "Photos & vehicle documents" },
 ];
 
 const apiErr = (e: any) => {
@@ -318,25 +318,25 @@ interface Props { listingId: string; listing: Listing; }
 
 export function CarForm({ listingId, listing }: Props) {
   const router = useRouter();
-  const qc     = useQueryClient();
+  const qc = useQueryClient();
 
   const { data: current } = useQuery<any>({
-    queryKey:    ["listing-edit", listingId],
-    queryFn:     () => listingApi.get(`/listings/${listingId}`).then((r) => r.data.data ?? r.data),
+    queryKey: ["listing-edit", listingId],
+    queryFn: () => listingApi.get(`/listings/${listingId}`).then((r) => r.data.data ?? r.data),
     initialData: listing,
-    staleTime:   30_000,
+    staleTime: 30_000,
   });
 
-  const [s, setS]         = useState<CarState>(() => initState(listing));
-  const [step, setStep]   = useState<Step>("vehicle");
-  const [ok, setOk]       = useState("");
-  const [err, setErr]     = useState("");
+  const [s, setS] = useState<CarState>(() => initState(listing));
+  const [step, setStep] = useState<Step>("vehicle");
+  const [ok, setOk] = useState("");
+  const [err, setErr] = useState("");
   const [tried, setTried] = useState(false);
 
   const set = (k: keyof CarState, v: unknown) => setS((p) => ({ ...p, [k]: v }));
 
   const isComplete = (id: string) => validateStep(id as Step, s).length === 0;
-  const isLocked   = (id: string) => {
+  const isLocked = (id: string) => {
     const idx = STEPS.findIndex((t) => t.id === id);
     if (idx <= 0) return false;
     return STEPS.slice(0, idx).some((t) => !isComplete(t.id));
@@ -344,7 +344,7 @@ export function CarForm({ listingId, listing }: Props) {
 
   const flash = (msg: string, type: "ok" | "err") => {
     if (type === "ok") { setOk(msg); setErr(""); setTimeout(() => setOk(""), 3500); }
-    else               { setErr(msg); setOk(""); }
+    else { setErr(msg); setOk(""); }
   };
 
   const refetch = () => {
@@ -354,20 +354,20 @@ export function CarForm({ listingId, listing }: Props) {
 
   const saveMut = useMutation({
     mutationFn: () => listingApi.patch(`/listings/${listingId}`, buildPayload(s)),
-    onSuccess:  () => { refetch(); flash("Changes saved.", "ok"); },
-    onError:    (e: any) => flash(apiErr(e), "err"),
+    onSuccess: () => { refetch(); flash("Changes saved.", "ok"); },
+    onError: (e: any) => flash(apiErr(e), "err"),
   });
 
   const activateMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/activate`),
-    onSuccess:  (r: any) => { refetch(); flash(r.data?.data?.message ?? "Car rental is now live!", "ok"); },
-    onError:    (e: any) => flash(apiErr(e), "err"),
+    onSuccess: (r: any) => { refetch(); flash(r.data?.data?.message ?? "Car rental is now live!", "ok"); },
+    onError: (e: any) => flash(apiErr(e), "err"),
   });
 
   const deactivateMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/deactivate`),
-    onSuccess:  () => { refetch(); flash("Listing deactivated.", "ok"); },
-    onError:    (e: any) => flash(apiErr(e), "err"),
+    onSuccess: () => { refetch(); flash("Listing deactivated.", "ok"); },
+    onError: (e: any) => flash(apiErr(e), "err"),
   });
 
   const handleNext = (e: React.FormEvent) => {
@@ -377,17 +377,17 @@ export function CarForm({ listingId, listing }: Props) {
     setTried(false); setErr("");
     saveMut.mutate(undefined, {
       onSuccess: () => {
-        const idx  = STEPS.findIndex((t) => t.id === step);
+        const idx = STEPS.findIndex((t) => t.id === step);
         const next = STEPS[idx + 1];
         if (next) setStep(next.id as Step);
       },
     });
   };
 
-  const photos: ExistingPhoto[]    = (current?.photos    ?? []) as ExistingPhoto[];
-  const docs:   ExistingDocument[] = (current?.documents ?? []) as ExistingDocument[];
+  const photos: ExistingPhoto[] = (current?.photos ?? []) as ExistingPhoto[];
+  const docs: ExistingDocument[] = (current?.documents ?? []) as ExistingDocument[];
   const status = current?.status ?? listing.status;
-  const title  = current?.name  ?? listing.name ?? "Untitled Vehicle";
+  const title = current?.name ?? listing.name ?? "Untitled Vehicle";
 
   return (
     <div className="max-w-5xl mx-auto space-y-5 animate-fade-in pb-16">
@@ -406,8 +406,8 @@ export function CarForm({ listingId, listing }: Props) {
         <div className="ml-auto"><Badge label={status} status={status} /></div>
       </div>
 
-      {ok  && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
-      {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark" ><AlertCircle className="w-4 h-4 text-danger shrink-0"  />{err}</div>}
+      {ok && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
+      {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark" ><AlertCircle className="w-4 h-4 text-danger shrink-0" />{err}</div>}
 
       <FormShell
         steps={STEPS}
@@ -513,8 +513,8 @@ export function CarForm({ listingId, listing }: Props) {
                     onGeocoded={(r) => setS((p) => ({ ...p, lat: r.lat, lng: r.lng, town: r.town, country: r.country }))}
                     errors={tried ? {
                       address: !s.address.trim() ? "Pickup address is required." : undefined,
-                      town:    !s.town.trim()    ? "Town is required."           : undefined,
-                      country: !s.country.trim() ? "Country is required."        : undefined,
+                      town: !s.town.trim() ? "Town is required." : undefined,
+                      country: !s.country.trim() ? "Country is required." : undefined,
                     } : undefined}
                   />
                 </div>
@@ -576,7 +576,7 @@ export function CarForm({ listingId, listing }: Props) {
                     {([
                       ["roadsideAssistance", "Roadside Assistance"],
                       ["crossBorderAllowed", "Cross-Border Allowed"],
-                      ["airportPickup",      "Airport Pickup"],
+                      ["airportPickup", "Airport Pickup"],
                       ["returnSameLocation", "Return to Same Location"],
                     ] as const).map(([key, label]) => (
                       <label key={key} className="flex items-center gap-2 cursor-pointer select-none">
@@ -643,12 +643,12 @@ export function CarForm({ listingId, listing }: Props) {
                   />
                 )}
                 <div className="grid grid-cols-2 gap-4">
-                  <Select label="Fuel Policy"     value={s.fuelPolicy}     onChange={(e) => set("fuelPolicy",     e.target.value)} options={FUEL_POLICY_OPTIONS} />
-                  <Select label="Insurance Type"  value={s.insuranceType}  onChange={(e) => set("insuranceType",  e.target.value)} options={INSURANCE_TYPE_OPTIONS} />
+                  <Select label="Fuel Policy" value={s.fuelPolicy} onChange={(e) => set("fuelPolicy", e.target.value)} options={FUEL_POLICY_OPTIONS} />
+                  <Select label="Insurance Type" value={s.insuranceType} onChange={(e) => set("insuranceType", e.target.value)} options={INSURANCE_TYPE_OPTIONS} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <Input label="Min Driver Age"     type="number" min="16" max="100" value={s.minimumDriverAge} onChange={(e) => set("minimumDriverAge", e.target.value)} />
-                  <Input label="Security Deposit"   type="number" min="0"            value={s.securityDeposit}  onChange={(e) => set("securityDeposit",  e.target.value)} placeholder="0.00" />
+                  <Input label="Min Driver Age" type="number" min="16" max="100" value={s.minimumDriverAge} onChange={(e) => set("minimumDriverAge", e.target.value)} />
+                  <Input label="Security Deposit" type="number" min="0" value={s.securityDeposit} onChange={(e) => set("securityDeposit", e.target.value)} placeholder="0.00" />
                 </div>
 
                 {/* Delivery */}
@@ -717,7 +717,7 @@ export function CarForm({ listingId, listing }: Props) {
               <Button type="button" variant="outline" onClick={() => router.push("/dashboard/listings")}>Exit</Button>
               {step !== "vehicle" && (
                 <Button type="button" variant="secondary" onClick={() => {
-                  const idx  = STEPS.findIndex((t) => t.id === step);
+                  const idx = STEPS.findIndex((t) => t.id === step);
                   const prev = STEPS[idx - 1];
                   if (prev) { setTried(false); setStep(prev.id as Step); }
                 }}>← Back</Button>

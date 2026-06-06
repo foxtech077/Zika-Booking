@@ -25,6 +25,14 @@ import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
+import {
+  DiscountSection,
+  initDiscountState,
+  appendDiscountPayload,
+  validateDiscount,
+  type DiscountState,
+  type DiscountField,
+} from "./shared/DiscountSection";
 
 // ── Enums (values match backend exactly) ────────────────────────────────────
 
@@ -62,7 +70,7 @@ type HotelState = {
   lng: number | null;
   town: string;
   country: string;
-  claimedStarRating: string;
+  // claimedStarRating intentionally omitted — ratings are set by traveller reviews only.
   pricePerNight: string;
   currency: string;
   minStayNights: string;
@@ -76,7 +84,7 @@ type HotelState = {
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
-};
+} & DiscountState;
 
 function initState(l: Listing): HotelState {
   return {
@@ -87,7 +95,7 @@ function initState(l: Listing): HotelState {
     lng:                (l as any).lng ?? null,
     town:               l.town ?? "",
     country:            l.country ?? "",
-    claimedStarRating:  l.claimedStarRating ? String(l.claimedStarRating) : "",
+    // claimedStarRating intentionally excluded — ratings come from traveller reviews.
     pricePerNight:      l.pricePerNight ? String(l.pricePerNight) : "",
     currency:           l.currency ?? "USD",
     minStayNights:      l.minStayNights ? String(l.minStayNights) : "1",
@@ -102,6 +110,7 @@ function initState(l: Listing): HotelState {
     customAmenities:    ((l as any).customAmenities ?? []).map((a: any) =>
                           typeof a === "string" ? a : (a?.label ?? "")),
     customInput:        "",
+    ...initDiscountState(l as any),
   };
 }
 
@@ -116,8 +125,8 @@ function buildPayload(s: HotelState): Record<string, unknown> {
   if (s.lng !== null)       p.lng         = s.lng;
   if (s.town.trim())        p.town        = s.town.trim();
   if (s.country.trim())     p.country     = s.country.trim();
-  const rating = Number(s.claimedStarRating);
-  if (rating >= 1 && rating <= 5) p.claimedStarRating = rating;
+  // claimedStarRating intentionally excluded from payload — ratings are read-only
+  // and must only originate from traveller reviews, not from provider input.
   const price = Number(s.pricePerNight);
   if (price > 0)            p.pricePerNight = price;
   if (s.currency)           p.currency    = s.currency;
@@ -133,6 +142,7 @@ function buildPayload(s: HotelState): Record<string, unknown> {
   if (units >= 1) p.unitCount = units;
   p.amenities       = groupAmenities(s.selectedAmenities);
   p.customAmenities = s.customAmenities;
+  appendDiscountPayload(p, s);
   return p;
 }
 
@@ -157,6 +167,8 @@ function validateStep(step: Step, s: HotelState): string[] {
         !s.checkinTime                 && "Check-in time is required.",
         !s.checkoutTime                && "Check-out time is required.",
         !s.cancellationPolicy          && "Cancellation policy is required.",
+        // Discount validation — only blocks when discount is enabled
+        ...validateDiscount(s, s.pricePerNight),
       ].filter(Boolean) as string[];
     case "rooms":
       return [
@@ -376,15 +388,7 @@ export function HotelForm({ listingId, listing }: Props) {
                     country: !s.country.trim() ? "Country is required." : undefined,
                   } : undefined}
                 />
-                <Input
-                  label="Claimed Star Rating (1–5, optional)"
-                  type="number"
-                  min="1"
-                  max="5"
-                  value={s.claimedStarRating}
-                  onChange={(e) => set("claimedStarRating", e.target.value)}
-                  placeholder="1–5"
-                />
+                {/* Star rating is read-only and set by traveller reviews — not editable by providers. */}
               </div>
             )}
 
@@ -464,8 +468,21 @@ export function HotelForm({ listingId, listing }: Props) {
                     <span className="text-sm text-slate-700">Pets Allowed</span>
                   </label>
                 </div>
+                <DiscountSection
+                  discountEnabled={s.discountEnabled}
+                  discountType={s.discountType}
+                  discountValue={s.discountValue}
+                  discountStartDate={s.discountStartDate}
+                  discountEndDate={s.discountEndDate}
+                  basePrice={s.pricePerNight}
+                  currency={s.currency}
+                  priceLabel="night"
+                  tried={tried}
+                  onChange={(field: DiscountField, value) => set(field, value)}
+                />
               </div>
             )}
+
 
             {/* ── Rooms step ── */}
             {step === "rooms" && (

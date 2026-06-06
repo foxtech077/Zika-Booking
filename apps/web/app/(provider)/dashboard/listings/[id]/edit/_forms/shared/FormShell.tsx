@@ -25,9 +25,9 @@ export function FormShell({
 }: FormShellProps) {
   const isSubmitted = status && !["draft", "rejected"].includes(status);
   const currentIndex = steps.findIndex((s) => s.id === activeStep);
-  
+
   const done = isSubmitted ? steps.length : (currentIndex >= 0 ? currentIndex : 0);
-  const pct  = Math.round((done / steps.length) * 100);
+  const pct = Math.round((done / steps.length) * 100);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
@@ -53,8 +53,12 @@ export function FormShell({
         <Card padding="none" className="py-2 border border-border shadow-sm">
           {steps.map((step, idx) => {
             const locked   = isLocked(step.id);
-            const complete = isComplete(step.id);
-            const active   = activeStep === step.id;
+            // A step shows ✓ ONLY if it's strictly BEHIND the active step AND passes validation.
+            // Steps at or ahead of the active step always show their number,
+            // even if isComplete() returns true due to default values.
+            const isPast     = idx < currentIndex;
+            const complete   = isPast && isComplete(step.id);
+            const active     = activeStep === step.id;
             return (
               <button
                 key={step.id}
@@ -65,7 +69,7 @@ export function FormShell({
                   "w-full text-left flex items-start gap-3.5 px-4 py-3.5 border-l-2 transition-all duration-200 group relative",
                   active  ? "border-primary bg-primary-50" : "border-transparent",
                   !locked && !active ? "hover:bg-slate-50 cursor-pointer" : "",
-                  locked ? "opacity-50 cursor-not-allowed bg-slate-50/50" : "",
+                  locked  ? "opacity-50 cursor-not-allowed bg-slate-50/50" : "",
                 )}
               >
                 <div className={cn(
@@ -75,6 +79,7 @@ export function FormShell({
                   : !locked  ? "border-slate-300 bg-white text-slate-500 group-hover:border-slate-400"
                   :            "border-slate-200 bg-slate-100 text-slate-400",
                 )}>
+                  {/* Always show the number when active or ahead; show ✓ only for past+complete steps */}
                   {complete && !active
                     ? <span className="text-[10px] font-bold">✓</span>
                     : <span className="text-xs font-bold">{idx + 1}</span>}
@@ -82,7 +87,9 @@ export function FormShell({
                 <div className="min-w-0">
                   <p className={cn(
                     "text-xs font-bold",
-                    active ? "text-primary-800" : complete ? "text-emerald-800" : "text-slate-700",
+                    active    ? "text-primary-800"
+                    : complete ? "text-emerald-800"
+                    :            "text-slate-700",
                   )}>
                     {step.label}
                   </p>

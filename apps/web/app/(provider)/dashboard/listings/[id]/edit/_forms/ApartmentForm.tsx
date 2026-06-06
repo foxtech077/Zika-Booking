@@ -21,6 +21,14 @@ import { FormShell, type FormStep } from "./shared/FormShell";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
+import {
+  DiscountSection,
+  initDiscountState,
+  appendDiscountPayload,
+  validateDiscount,
+  type DiscountState,
+  type DiscountField,
+} from "./shared/DiscountSection";
 
 // ── Enums ────────────────────────────────────────────────────────────────────
 
@@ -91,7 +99,7 @@ type ApartmentState = {
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
-};
+} & DiscountState;
 
 function initState(l: Listing): ApartmentState {
   const a = l as any;
@@ -132,6 +140,7 @@ function initState(l: Listing): ApartmentState {
     selectedAmenities:   flattenGroupedAmenities(a.amenities),
     customAmenities:     (a.customAmenities ?? []).map((x: any) => typeof x === "string" ? x : (x?.label ?? "")),
     customInput:         "",
+    ...initDiscountState(a),
   };
 }
 
@@ -196,6 +205,7 @@ function buildPayload(s: ApartmentState): Record<string, unknown> {
 
   p.amenities       = groupAmenities(s.selectedAmenities);
   p.customAmenities = s.customAmenities;
+  appendDiscountPayload(p, s);
 
   return p;
 }
@@ -221,6 +231,8 @@ function validateStep(step: Step, s: ApartmentState): string[] {
         !s.checkinTime                 && "Check-in time is required.",
         !s.checkoutTime                && "Check-out time is required.",
         !s.cancellationPolicy          && "Cancellation policy is required.",
+        // Discount validation — only blocks when discount is enabled
+        ...validateDiscount(s, s.pricePerNight),
       ].filter(Boolean) as string[];
     case "details":
       return [
