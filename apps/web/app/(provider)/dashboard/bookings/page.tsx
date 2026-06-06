@@ -37,14 +37,25 @@ type SelectOption = {
 // Status Config
 const bookingStatusConfig: Record<string, { label: string; color: string }> = {
     pending: { label: "Pending", color: "#eab308" },
-    pending_payment: { label: "Pending Payment", color: "#eab308" },
+    pending_payment: { label: "Pending", color: "#eab308" },
     confirmed: { label: "Confirmed", color: "#22c55e" },
     cancelled: { label: "Cancelled", color: "#ef4444" },
-    cancelled_by_guest: { label: "Cancelled", color: "#ef4444" },
-    cancelled_by_provider: { label: "Cancelled", color: "#ef4444" },
+    cancelled_by_guest: { label: "Cancelled by Guest", color: "#ef4444" },
+    cancelled_by_provider: { label: "Cancelled by Provider", color: "#ef4444" },
+    cancelled_by_system: { label: "Cancelled by System", color: "#ef4444" },
     completed: { label: "Completed", color: "#3b82f6" },
     failed: { label: "Failed", color: "#f97316" },
 };
+
+const cancellationStatusValues = [
+    "cancelled_by_guest",
+    "cancelled_by_provider",
+    "cancelled_by_system",
+];
+
+function isCancellationStatusFilter(statusFilter: string) {
+    return statusFilter === "cancelled" || cancellationStatusValues.includes(statusFilter);
+}
 
 const paymentStatusConfig: Record<string, { label: string; color: string }> = {
     paid: { label: "Paid", color: "#22c55e" },
@@ -55,12 +66,13 @@ const paymentStatusConfig: Record<string, { label: string; color: string }> = {
 
 const bookingStatusOptions: SelectOption[] = [
     { value: "", label: "All Status" },
-    { value: "pending_payment", label: "Pending Payment" },
+    { value: "pending_payment", label: "Pending" },
     { value: "confirmed", label: "Confirmed" },
-    { value: "cancelled_by_guest", label: "Cancelled (Guest)" },
-    { value: "cancelled_by_provider", label: "Cancelled (Provider)" },
-    { value: "cancelled_by_system", label: "Cancelled (System)" },
     { value: "completed", label: "Completed" },
+    { value: "cancelled", label: "Cancelled" },
+    { value: "cancelled_by_guest", label: "Cancelled by Guest" },
+    { value: "cancelled_by_provider", label: "Cancelled by Provider" },
+    { value: "cancelled_by_system", label: "Cancelled by System" },
 ];
 
 const paymentStatusOptions: SelectOption[] = [
@@ -133,6 +145,47 @@ async function fetchProviderBookings(params: Record<string, string>) {
         bookings,
         total: Number(data.total ?? bookings.length),
     };
+}
+
+async function fetchAllProviderBookings(params: Record<string, string>) {
+    const limit = 50;
+    const firstPage = await fetchProviderBookings({ ...params, offset: "0", limit: String(limit) });
+    const bookings = [...firstPage.bookings];
+
+    for (let offset = limit; offset < firstPage.total; offset += limit) {
+        const page = await fetchProviderBookings({ ...params, offset: String(offset), limit: String(limit) });
+        bookings.push(...page.bookings);
+    }
+
+    return bookings;
+}
+
+async function fetchProviderBookingsByStatusFilter(params: Record<string, string>, statusFilter: string) {
+    if (!isCancellationStatusFilter(statusFilter)) {
+        return fetchProviderBookings(statusFilter ? { ...params, status: statusFilter } : params);
+    }
+
+    const offset = Math.max(0, Number(params.offset ?? "0"));
+    const limit = Math.max(1, Number(params.limit ?? "20"));
+    const baseParams: Record<string, string> = { ...params };
+    delete baseParams.status;
+    delete baseParams.offset;
+    delete baseParams.limit;
+
+    const cancellationStatuses = statusFilter === "cancelled" ? cancellationStatusValues : [statusFilter];
+    const bookings = (await fetchAllProviderBookings(baseParams))
+        .filter((booking) => cancellationStatuses.includes(booking.status))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return {
+        bookings: bookings.slice(offset, offset + limit),
+        total: bookings.length,
+    };
+}
+
+function bookingLoadErrorMessage(err: any) {
+    if (err.response?.status === 401) return "Session expired. Please log in again.";
+    return "Unable to load bookings. Please try again.";
 }
 
 // Status Badge Component
@@ -551,7 +604,6 @@ export default function BookingsPage() {
         limit: String(limit),
     };
     if (search) requestParams.search = search;
-    if (bookingStatus) requestParams.status = bookingStatus;
 
     let filterStartDate = "";
     let filterEndDate = "";
@@ -582,9 +634,13 @@ export default function BookingsPage() {
             setError(null);
 
             try {
-                return await fetchProviderBookings(requestParams);
+                return await fetchProviderBookingsByStatusFilter(requestParams, bookingStatus);
             } catch (err: any) {
-                setError(err.response?.status === 401 ? "Session expired. Please log in again." : err.message);
+                if (isCancellationStatusFilter(bookingStatus) && err.response?.status === 400) {
+                    return { bookings: [], total: 0 };
+                }
+
+                setError(bookingLoadErrorMessage(err));
                 throw err;
             }
         },
@@ -625,7 +681,7 @@ export default function BookingsPage() {
             {
                 queryKey: ["provider-bookings-summary", "cancelled"],
                 queryFn: async () => {
-                    const result = await fetchProviderBookings({ offset: "0", limit: "1", status: "cancelled" });
+                    const result = await fetchProviderBookingsByStatusFilter({ offset: "0", limit: "1" }, "cancelled");
                     return result.total;
                 },
                 staleTime: 60000,
@@ -765,13 +821,7 @@ export default function BookingsPage() {
             };
         }
         if (bookingStatus) {
-            const statusLabelMap: Record<string, string> = {
-                pending_payment: "Pending Payment",
-                confirmed: "Confirmed",
-                completed: "Completed",
-                cancelled: "Cancelled",
-            };
-            const statusLabel = statusLabelMap[bookingStatus] || bookingStatus;
+            const statusLabel = bookingStatusConfig[bookingStatus]?.label || bookingStatus;
             return {
                 title: `No ${statusLabel} bookings`,
                 description: `You don't have any bookings with status: ${statusLabel}`,
@@ -1005,7 +1055,7 @@ export default function BookingsPage() {
                                 aria-label="Search bookings"
                                 placeholder="Search by booking ID, name, or email"
                                 value={searchInput}
-                                onChange={(e) => { setSearchInput(e.target.value); }}
+                                onChange={(e) => { setError(null); setSearchInput(e.target.value); }}
                                 className="h-12 w-full rounded-[14px] border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-800 shadow-sm transition placeholder:text-slate-400 hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
                             />
                         </div>
@@ -1014,21 +1064,21 @@ export default function BookingsPage() {
                             value={bookingStatus}
                             options={bookingStatusOptions}
                             ariaLabel="Filter bookings by status"
-                            onChange={(nextValue) => { setBookingStatus(nextValue); setOffset(0); }}
+                            onChange={(nextValue) => { setError(null); setBookingStatus(nextValue); setOffset(0); }}
                         />
 
                         <CustomSelect
                             value={paymentStatus}
                             options={paymentStatusOptions}
                             ariaLabel="Filter bookings by payment status"
-                            onChange={(nextValue) => { setPaymentStatus(nextValue); setOffset(0); }}
+                            onChange={(nextValue) => { setError(null); setPaymentStatus(nextValue); setOffset(0); }}
                         />
 
                         <CustomSelect
                             value={dateFilter}
                             options={dateFilterOptions}
                             ariaLabel="Filter bookings by date range"
-                            onChange={(nextValue) => { setDateFilter(nextValue); setOffset(0); }}
+                            onChange={(nextValue) => { setError(null); setDateFilter(nextValue); setOffset(0); }}
                         />
                     </div>
 
