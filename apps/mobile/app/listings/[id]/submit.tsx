@@ -31,13 +31,7 @@ export default function SubmitListingScreen() {
     },
     onSuccess: () => {
       if (isAutoActivate) {
-        const titleMsg = isCar ? "Your vehicle is live!" : "You're live!";
-        const bodyMsg = isCar
-          ? "Your car rental is now visible to guests."
-          : "Your apartment is now visible to guests.";
-        Alert.alert(titleMsg, bodyMsg, [
-          { text: "View my listings", onPress: () => router.replace("/listings" as any) },
-        ]);
+        router.replace("/(provider)" as any);
       } else {
         Alert.alert(
           "Submitted!",

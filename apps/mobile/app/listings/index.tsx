@@ -18,6 +18,21 @@ interface Listing {
   photos: { cdnUrl: string }[];
 }
 
+function normalizeListingsResponse(responseData: any): Listing[] {
+  const candidates = [
+    responseData,
+    responseData?.data,
+    responseData?.data?.listings,
+    responseData?.listings,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+
+  return [];
+}
+
 const STATUS_COLOR: Record<string, string> = {
   draft: "#6b7280",
   pending_review: "#d97706",
@@ -46,11 +61,12 @@ export default function MyListingsScreen() {
     queryKey: ["myListings"],
     queryFn: async () => {
       const res = await listingApi.get("/listings");
-      const payload = res.data?.data ?? res.data;
-      return (Array.isArray(payload) ? payload : payload?.listings) as Listing[] ?? [];
+      return normalizeListingsResponse(res.data);
     },
     enabled: user?.userType === "provider",
   });
+
+  const listings = Array.isArray(data) ? data : [];
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -99,14 +115,14 @@ export default function MyListingsScreen() {
           <Text style={styles.addButtonText}>+ Add new listing</Text>
         </TouchableOpacity>
 
-        {(!data || data.length === 0) && !isLoading && (
+        {listings.length === 0 && !isLoading && (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No listings yet</Text>
             <Text style={styles.emptySubtitle}>Add your first hotel, apartment, or car rental listing.</Text>
           </View>
         )}
 
-        {data?.map((listing) => (
+        {listings.map((listing) => (
           <View key={listing.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>

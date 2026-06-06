@@ -50,6 +50,17 @@ interface ReviewItem {
 }
 interface ReviewsData { averageRating: number | null; totalReviews: number; reviews: ReviewItem[]; }
 
+function asArray<T = any>(value: any, ...nestedKeys: string[]): T[] {
+  if (Array.isArray(value)) return value;
+
+  for (const key of nestedKeys) {
+    const nested = value?.[key];
+    if (Array.isArray(nested)) return nested;
+  }
+
+  return [];
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmtMoney(n: number, currency = "USD") {
   if (n >= 1_000_000) return `${currency} ${(n / 1_000_000).toFixed(1)}M`;
@@ -248,7 +259,7 @@ export default function ProviderHomeScreen() {
     queryKey: ["providerListingsForSync"],
     queryFn: async () => {
       const res = await listingApi.get<{ data: { listings: Array<{ id: string; name: string | null }> } }>("/listings", { params: { limit: "1" } });
-      return res.data.data.listings;
+      return asArray<{ id: string; name: string | null }>(res.data?.data, "listings");
     },
   });
 
@@ -259,7 +270,7 @@ export default function ProviderHomeScreen() {
     queryFn: async () => {
       if (!firstListingId) return null;
       const res = await listingApi.get<{ data: { feeds: any[] } }>(`/listings/${firstListingId}/ical-feeds`);
-      return res.data.data.feeds;
+      return asArray(res.data?.data, "feeds");
     },
     enabled: !!firstListingId,
   });
@@ -269,7 +280,7 @@ export default function ProviderHomeScreen() {
     queryFn: async () => {
       if (!firstListingId) return null;
       const res = await listingApi.get<{ data: { blockedDates: any[] } }>(`/listings/${firstListingId}/blocked-dates`);
-      return res.data.data.blockedDates;
+      return asArray(res.data?.data, "blockedDates");
     },
     enabled: !!firstListingId,
   });
@@ -281,10 +292,15 @@ export default function ProviderHomeScreen() {
     return "Good Evening";
   };
 
-  const connectedFeedsCount = feedsData?.filter((f: any) => f.isActive).length ?? 0;
+  const feeds = Array.isArray(feedsData) ? feedsData : [];
+  const blockedDates = Array.isArray(blockedDatesData) ? blockedDatesData : [];
+  const recentBookings = Array.isArray(data?.recentBookings) ? data.recentBookings : [];
+  const monthlyRevenue = Array.isArray(data?.monthlyRevenue) ? data.monthlyRevenue : [];
+  const reviewItems = Array.isArray(reviewsData?.reviews) ? reviewsData.reviews : [];
+  const connectedFeedsCount = feeds.filter((f: any) => f.isActive).length;
   const getLastSyncTime = () => {
-    if (!feedsData || feedsData.length === 0) return "Never";
-    const times = feedsData.map((f: any) => f.lastSyncedAt ? new Date(f.lastSyncedAt).getTime() : 0).filter((t: number) => t > 0);
+    if (feeds.length === 0) return "Never";
+    const times = feeds.map((f: any) => f.lastSyncedAt ? new Date(f.lastSyncedAt).getTime() : 0).filter((t: number) => t > 0);
     if (times.length === 0) return "Never";
     const latest = new Date(Math.max(...times));
     const diff = Math.floor((Date.now() - latest.getTime()) / 60000);
@@ -295,13 +311,13 @@ export default function ProviderHomeScreen() {
     return latest.toLocaleDateString("en", { day: "numeric", month: "short" });
   };
   const getSyncHealth = () => {
-    if (!feedsData || feedsData.length === 0) return { label: "Not Connected", color: MUTED, status: "inactive" };
-    if (feedsData.some((f: any) => f.isActive && f.lastError)) return { label: "Action Needed", color: "#DC2626", status: "error" };
+    if (feeds.length === 0) return { label: "Not Connected", color: MUTED, status: "inactive" };
+    if (feeds.some((f: any) => f.isActive && f.lastError)) return { label: "Action Needed", color: "#DC2626", status: "error" };
     return { label: "Syncing", color: GREEN, status: "healthy" };
   };
   const health = getSyncHealth();
 
-  const rev = data?.monthlyRevenue ?? [];
+  const rev = monthlyRevenue;
   const lastMonthRev = rev.length >= 2 ? (rev[rev.length - 2]?.revenue ?? 0) : 0;
   const mom = data && rev.length >= 2 ? momPct(data.thisMonthEarnings, lastMonthRev) : null;
   const badge = user ? getStatusBadge(user.status) : null;
@@ -468,8 +484,8 @@ export default function ProviderHomeScreen() {
         )}
 
         {/* ── Revenue chart ─────────────────────────────────────────────── */}
-        {(data?.monthlyRevenue?.length ?? 0) > 0 && (
-          <RevenueBar data={data!.monthlyRevenue} currency={currency} />
+        {monthlyRevenue.length > 0 && (
+          <RevenueBar data={monthlyRevenue} currency={currency} />
         )}
 
         {/* ── Channel sync ─────────────────────────────────────────────── */}
@@ -505,7 +521,7 @@ export default function ProviderHomeScreen() {
               </View>
               <View style={s.syncStatDivider} />
               <View style={s.syncStat}>
-                <Text style={s.syncStatVal}>{blockedDatesData?.length ?? 0}</Text>
+                <Text style={s.syncStatVal}>{blockedDates.length}</Text>
                 <Text style={s.syncStatLabel}>Blocked Dates</Text>
               </View>
             </View>
@@ -516,13 +532,13 @@ export default function ProviderHomeScreen() {
         <View>
           <SectionLabel title="Recent Bookings" linkLabel="View All →" onLink={() => router.push("/(provider)/bookings" as any)} />
           <View style={s.card}>
-            {!data?.recentBookings?.length ? (
+            {recentBookings.length === 0 ? (
               <View style={s.emptyBox}>
                 <Text style={{ fontSize: 32, marginBottom: 8 }}>📋</Text>
                 <Text style={s.emptyTitle}>No bookings yet</Text>
                 <Text style={s.emptySub}>Your upcoming bookings will appear here</Text>
               </View>
-            ) : data.recentBookings.map((b, i) => {
+            ) : recentBookings.map((b, i) => {
               const sc = statusColors(b.status);
               const dateStr = b.checkIn
                 ? `${fmtDate(b.checkIn)} – ${b.checkOut ? fmtDate(b.checkOut) : "?"}`
@@ -577,8 +593,8 @@ export default function ProviderHomeScreen() {
                   {/* Rating bars */}
                   <View style={{ flex: 1, gap: 4 }}>
                     {[5,4,3,2,1].map(star => {
-                      const cnt = reviewsData.reviews.filter(r => r.rating === star).length;
-                      const pct = reviewsData.reviews.length > 0 ? (cnt / reviewsData.reviews.length) * 100 : star === 5 ? 70 : 10;
+                      const cnt = reviewItems.filter(r => r.rating === star).length;
+                      const pct = reviewItems.length > 0 ? (cnt / reviewItems.length) * 100 : star === 5 ? 70 : 10;
                       return (
                         <View key={star} style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                           <Text style={{ fontSize: 10, color: MUTED, width: 14, textAlign: "right" }}>{star}</Text>
@@ -592,13 +608,13 @@ export default function ProviderHomeScreen() {
                 </View>
               ) : null}
 
-              {reviewsData.reviews.length === 0 ? (
+              {reviewItems.length === 0 ? (
                 <View style={s.emptyBox}>
                   <Text style={{ fontSize: 32, marginBottom: 8 }}>⭐</Text>
                   <Text style={s.emptyTitle}>No reviews yet</Text>
                   <Text style={s.emptySub}>Your first guest reviews will appear here</Text>
                 </View>
-              ) : reviewsData.reviews.slice(0, 2).map((r, i) => (
+              ) : reviewItems.slice(0, 2).map((r, i) => (
                 <View key={r.id} style={[s.reviewRow, i > 0 && s.reviewBorder]}>
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                     <Text style={s.reviewGuest}>{r.guestName}</Text>
