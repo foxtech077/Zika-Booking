@@ -62,7 +62,9 @@ export default function AccreditationPage() {
   const [docLoading, setDocLoading] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
 
-  const params = { country, slaStatus, page: String(page), limit: "20" };
+  const params = Object.fromEntries(
+    Object.entries({ country, slaStatus, page: String(page), limit: "20" }).filter(([, v]) => v !== "")
+  );
   const { data, isLoading } = useQuery({
     queryKey: ["accreditation-queue", params],
     queryFn: () => fetchQueue(params),
@@ -72,17 +74,21 @@ export default function AccreditationPage() {
   const tasks: ListingReviewTask[] = data?.tasks ?? [];
   const total: number = data?.total ?? 0;
 
+  // Resolve the listing ID from either the top-level field or the nested listing object
+  const getListingId = (task: ListingReviewTask) => task.listingId ?? task.listing?.id;
+
   // Load full listing detail when task selected
+  const resolvedListingId = selectedTask ? getListingId(selectedTask) : undefined;
   const { data: detail, isLoading: loadingDetail } = useQuery({
-    queryKey: ["listing-review-detail", selectedTask?.listingId],
-    queryFn: () => fetchDetail(selectedTask!.listingId),
-    enabled: !!selectedTask,
+    queryKey: ["listing-review-detail", resolvedListingId],
+    queryFn: () => fetchDetail(resolvedListingId!),
+    enabled: !!selectedTask && !!resolvedListingId,
   });
 
   const approveMut = useMutation({
     mutationFn: ({ id, rating, note }: { id: string; rating: number; note?: string }) =>
       listingApi.post(`/admin/listings/${id}/approve`, { starRating: rating, adminNote: note }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["accreditation-queue"] }); setSelectedTask(null); setShowApproveModal(false); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["accreditation-queue"] }); setSelectedTask(null); setShowApproveModal(false); setAdminNote(""); },
   });
 
   const rejectMut = useMutation({
@@ -99,12 +105,14 @@ export default function AccreditationPage() {
   async function viewDocument(docId: string) {
     if (!selectedTask) return;
     if (activeDocId === docId && docUrl) return;
+    const listingId = getListingId(selectedTask);
+    if (!listingId) return;
     
     setDocLoading(true);
     setDocError(null);
     try {
       const res = await listingApi.get<{ data: { url: string; fileType: string } }>(
-        `/admin/listings/${selectedTask.listingId}/documents/${docId}`
+        `/admin/listings/${listingId}/documents/${docId}`
       );
       setDocUrl(res.data.data);
       setActiveDocId(docId);
@@ -380,7 +388,7 @@ export default function AccreditationPage() {
               variant="primary"
               size="sm"
               loading={approveMut.isPending}
-              onClick={() => selectedTask && approveMut.mutate({ id: selectedTask.listingId, rating: parseInt(starRating), note: adminNote })}
+              onClick={() => { if (selectedTask) { const id = getListingId(selectedTask); if (id) approveMut.mutate({ id, rating: parseInt(starRating), note: adminNote }); } }}
               leftIcon={<CheckCircle className="h-4 w-4" />}
             >
               Approve & Publish
@@ -421,7 +429,7 @@ export default function AccreditationPage() {
               variant="danger"
               size="sm"
               loading={rejectMut.isPending}
-              onClick={() => selectedTask && rejectMut.mutate({ id: selectedTask.listingId, reasons, providerNote, adminNote })}
+              onClick={() => { if (selectedTask) { const id = getListingId(selectedTask); if (id) rejectMut.mutate({ id, reasons, providerNote, adminNote }); } }}
               leftIcon={<XCircle className="h-4 w-4" />}
             >
               Reject listing

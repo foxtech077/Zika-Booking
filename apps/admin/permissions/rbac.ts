@@ -131,36 +131,36 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     group: "Overview",
     items: [
-      { label: "Dashboard",     href: "/dashboard",              icon: "LayoutDashboard", permission: "view_dashboard" },
+      { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", permission: "view_dashboard" },
     ],
   },
   {
     group: "Operations",
     items: [
-      { label: "Users",          href: "/dashboard/users",         icon: "Users",           permission: "view_users" },
-      { label: "Accreditation",  href: "/dashboard/accreditation", icon: "BadgeCheck",      permission: "view_accreditation" },
-      { label: "Listings",       href: "/dashboard/listings",      icon: "Building2",       permission: "view_listings" },
-      { label: "Bookings",       href: "/dashboard/bookings",      icon: "CalendarDays",    permission: "view_bookings" },
-      { label: "Reviews",        href: "/dashboard/reviews",       icon: "Star",            permission: "view_reviews" },
-      { label: "Messaging",      href: "/dashboard/messaging",     icon: "MessageSquare",   permission: "view_messaging" },
-      { label: "Channel Sync",   href: "/dashboard/channel",       icon: "Cable",           permission: "view_channel" },
+      { label: "Users", href: "/dashboard/users", icon: "Users", permission: "view_users" },
+      { label: "Accreditation", href: "/dashboard/accreditation", icon: "BadgeCheck", permission: "view_accreditation" },
+      { label: "Listings", href: "/dashboard/listings", icon: "Building2", permission: "view_listings" },
+      { label: "Bookings", href: "/dashboard/bookings", icon: "CalendarDays", permission: "view_bookings" },
+      { label: "Reviews", href: "/dashboard/reviews", icon: "Star", permission: "view_reviews" },
+      { label: "Messaging", href: "/dashboard/messaging", icon: "MessageSquare", permission: "view_messaging" },
+      { label: "Channel Sync", href: "/dashboard/channel", icon: "Cable", permission: "view_channel" },
     ],
   },
   {
     group: "Finance",
     items: [
-      { label: "Finance",        href: "/dashboard/finance",       icon: "DollarSign",      permission: "view_finance" },
-      { label: "Commission",     href: "/dashboard/commission",    icon: "Percent",         permission: "view_commission" },
-      { label: "Vouchers",       href: "/dashboard/vouchers",      icon: "Ticket",          permission: "view_vouchers" },
+      { label: "Finance", href: "/dashboard/finance", icon: "DollarSign", permission: "view_finance" },
+      { label: "Commission", href: "/dashboard/commission", icon: "Percent", permission: "view_commission" },
+      { label: "Vouchers", href: "/dashboard/vouchers", icon: "Ticket", permission: "view_vouchers" },
     ],
   },
   {
     group: "Administration",
     items: [
-      { label: "Roles & Admins", href: "/dashboard/roles",         icon: "ShieldCheck",     permission: "view_roles" },
-      { label: "Audit Trail",    href: "/dashboard/audit",         icon: "ClipboardList",   permission: "view_audit" },
-      { label: "Reports",        href: "/dashboard/reports",       icon: "BarChart3",       permission: "view_reports" },
-      { label: "Settings",       href: "/dashboard/settings",      icon: "Settings",        permission: "view_settings" },
+      { label: "Roles & Admins", href: "/dashboard/roles", icon: "ShieldCheck", permission: "view_roles" },
+      { label: "Audit Trail", href: "/dashboard/audit", icon: "ClipboardList", permission: "view_audit" },
+      { label: "Reports", href: "/dashboard/reports", icon: "BarChart3", permission: "view_reports" },
+      { label: "Settings", href: "/dashboard/settings", icon: "Settings", permission: "view_settings" },
     ],
   },
 ];

@@ -11,6 +11,8 @@ import { Button } from "@/components/ui/Button";
 import { StatCard, RevenueBarChart } from "@/components/charts/Charts";
 import { formatDate, formatCurrency, formatNumber } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
 
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -37,6 +39,8 @@ function buildRevenueChart(bookings: Booking[]) {
 }
 
 export default function FinancePage() {
+  const { user } = useAuthStore();
+  const canExport = canAccess(user?.role, "manage_finance");
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("confirmed");
   const [currency, setCurrency] = useState("");
@@ -150,14 +154,16 @@ export default function FinancePage() {
         title="Finance"
         description="Revenue, commission, and provider payout overview"
         action={
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={exportCsv}
-            leftIcon={<Download className="h-4 w-4" />}
-          >
-            Export CSV
-          </Button>
+          canExport ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={exportCsv}
+              leftIcon={<Download className="h-4 w-4" />}
+            >
+              Export CSV
+            </Button>
+          ) : undefined
         }
       />
 
@@ -226,14 +232,16 @@ export default function FinancePage() {
             },
           ]}
           actions={
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={exportCsv}
-              leftIcon={<Download className="h-3.5 w-3.5" />}
-            >
-              Export
-            </Button>
+            canExport ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={exportCsv}
+                leftIcon={<Download className="h-3.5 w-3.5" />}
+              >
+                Export
+              </Button>
+            ) : undefined
           }
         />
         <DataTable
