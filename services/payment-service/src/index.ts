@@ -30,7 +30,7 @@ async function build() {
           description: "Local development server",
         },
         {
-          url: "https://kainook.duckdns.org/api/payments",
+          url: "https://api.kainook.com/payments",
           description: "Production server",
         },
       ],

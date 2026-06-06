@@ -6,6 +6,7 @@ import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
 import { FormField } from "../../components/ui/FormField";
 import { Button } from "../../components/ui/Button";
+import { handleRoleAndStatusRedirect } from "./login";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 
 export default function ResetPasswordScreen() {
@@ -27,7 +28,7 @@ export default function ResetPasswordScreen() {
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
       Alert.alert("Success", "Your password has been updated. You're now signed in.");
-      router.replace("/(tabs)");
+      handleRoleAndStatusRedirect(data.user);
     },
     onError: (err: unknown) => {
       const data = (err as { error?: { code?: string; message?: string; fields?: Record<string, string> } }).error;

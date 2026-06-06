@@ -8,7 +8,7 @@ export default function RootPage() {
   useEffect(() => {
     const token = sessionStorage.getItem("zika:access_token");
     if (!token) {
-      router.replace("/traveller");
+      router.replace("/auth/login");
       return;
     }
     // Decode the JWT payload (base64) to get userType without an extra API call
@@ -16,7 +16,7 @@ export default function RootPage() {
       const payload = JSON.parse(atob(token.split(".")[1] ?? ""));
       router.replace(payload.type === "provider" ? "/dashboard" : "/traveller");
     } catch {
-      router.replace("/traveller");
+      router.replace("/auth/login");
     }
   }, [router]);
 

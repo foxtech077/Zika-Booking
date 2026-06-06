@@ -9,6 +9,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import { getRedis } from "./lib/redis";
 import { authRoutes } from "./routes/auth";
 import { adminAuthRoutes, adminUserRoutes, adminOperatorRoutes } from "./routes/admin-auth";
+import { startTokenPurger } from "./lib/tokenPurger.js";
 
 const PORT = Number(process.env["AUTH_SERVICE_PORT"] ?? 3001);
 const HOST = process.env["AUTH_SERVICE_HOST"] ?? "0.0.0.0";
@@ -30,7 +31,7 @@ async function build() {
           description: "Local development server",
         },
         {
-          url: "https://kainook.duckdns.org/api",
+          url: "https://api.kainook.com",
           description: "Production server",
         },
       ],
@@ -124,6 +125,7 @@ async function main() {
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Auth Service] listening on ${HOST}:${PORT}`);
+    startTokenPurger();
   } catch (err) {
     app.log.error(err);
     process.exit(1);

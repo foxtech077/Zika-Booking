@@ -2,10 +2,88 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 export async function reviewRoutes(app: FastifyInstance) {
   // ── POST /reviews — guest submits a review ────────────────────────────
-  app.post("/reviews", { schema: { tags: ["Reviews"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/reviews", {
+    schema: {
+      tags: ["Reviews"],
+      body: {
+        type: "object",
+        required: ["bookingId", "rating"],
+        properties: {
+          bookingId: { type: "string" },
+          rating: { type: "integer", minimum: 1, maximum: 5 },
+          title: { type: "string", maxLength: 100 },
+          body: { type: "string", maxLength: 2000 }
+        }
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                reviewId: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["reviewId", "message"]
+            }
+          },
+          required: ["success", "data"]
+        },
+        400: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        },
+        404: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        },
+        409: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        }
+      }
+    },
+    preHandler: [requireProvider]
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
     const body = req.body as {
       bookingId: string;
@@ -53,9 +131,9 @@ export async function reviewRoutes(app: FastifyInstance) {
           data: { consecutiveNegative: 0 },
         });
       } else if (body.rating <= 2) {
-        // Check last 2 reviews for this listing
+        // FIX: exclude the newly created review so we check the 2 most recent *prior* reviews
         const lastTwoReviews = await prisma.listingReview.findMany({
-          where: { listingId: listing.id, isHidden: false },
+          where: { listingId: listing.id, isHidden: false, id: { not: review.id } },
           orderBy: { createdAt: "desc" },
           take: 2,
         });
@@ -83,7 +161,80 @@ export async function reviewRoutes(app: FastifyInstance) {
   });
 
   // ── GET /listings/:id/reviews — public paginated reviews ─────────────
-  app.get("/listings/:id/reviews", { schema: { tags: ["Reviews"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/listings/:id/reviews", {
+    schema: {
+      tags: ["Reviews"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      querystring: {
+        type: "object",
+        properties: {
+          page: { type: "string", pattern: "^[0-9]+$" },
+          limit: { type: "string", pattern: "^[0-9]+$" }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                total: { type: "integer" },
+                page: { type: "integer" },
+                limit: { type: "integer" },
+                totalPages: { type: "integer" },
+                averageRating: { type: "number", nullable: true },
+                reviews: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      guestId: { type: "string" },
+                      rating: { type: "integer" },
+                      title: { type: "string", nullable: true },
+                      body: { type: "string", nullable: true },
+                      providerReply: { type: "string", nullable: true },
+                      providerRepliedAt: { type: "string", nullable: true },
+                      createdAt: { type: "string" }
+                    },
+                    required: [
+                      "id", "guestId", "rating", "title", "body",
+                      "providerReply", "providerRepliedAt", "createdAt"
+                    ]
+                  }
+                }
+              },
+              required: ["total", "page", "limit", "totalPages", "averageRating", "reviews"]
+            }
+          },
+          required: ["success", "data"]
+        },
+        404: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const q = req.query as Record<string, string>;
     const page = Math.max(1, parseInt(q["page"] ?? "1", 10));
@@ -129,7 +280,72 @@ export async function reviewRoutes(app: FastifyInstance) {
   });
 
   // ── POST /reviews/:id/reply — provider replies to a review ────────────
-  app.post("/reviews/:id/reply", { schema: { tags: ["Reviews"] }, preHandler: [requireProviderRole] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/reviews/:id/reply", {
+    schema: {
+      tags: ["Reviews"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["reply"],
+        properties: {
+          reply: { type: "string", maxLength: 2000 }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        },
+        400: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        },
+        404: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        }
+      }
+    },
+    preHandler: [requireProviderRole]
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const providerId = (req as ProviderRequest).providerId;
     const { id } = req.params as { id: string };
     const body = req.body as { reply: string };
@@ -160,7 +376,51 @@ export async function reviewRoutes(app: FastifyInstance) {
   });
 
   // ── GET /reviews/me — guest's own reviews ────────────────────────────
-  app.get("/reviews/me", { schema: { tags: ["Reviews"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/reviews/me", {
+    schema: {
+      tags: ["Reviews"],
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                reviews: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      id: { type: "string" },
+                      listingId: { type: "string" },
+                      listingName: { type: "string" },
+                      bookingId: { type: "string" },
+                      rating: { type: "integer" },
+                      title: { type: "string", nullable: true },
+                      body: { type: "string", nullable: true },
+                      providerReply: { type: "string", nullable: true },
+                      providerRepliedAt: { type: "string", nullable: true },
+                      isHidden: { type: "boolean" },
+                      createdAt: { type: "string" }
+                    },
+                    required: [
+                      "id", "listingId", "listingName", "bookingId", "rating",
+                      "title", "body", "providerReply", "providerRepliedAt",
+                      "isHidden", "createdAt"
+                    ]
+                  }
+                }
+              },
+              required: ["reviews"]
+            }
+          },
+          required: ["success", "data"]
+        }
+      }
+    },
+    preHandler: [requireProvider]
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const guestId = (req as ProviderRequest).providerId;
 
     const reviews = await prisma.listingReview.findMany({
@@ -173,7 +433,7 @@ export async function reviewRoutes(app: FastifyInstance) {
       reviews: reviews.map((r) => ({
         id: r.id,
         listingId: r.listingId,
-        listingName: r.listing.name,
+        listingName: r.listing.name ?? "",
         bookingId: r.bookingId,
         rating: r.rating,
         title: r.title,
@@ -187,13 +447,73 @@ export async function reviewRoutes(app: FastifyInstance) {
   });
 
   // ── PATCH /reviews/:id/hide — admin hide/unhide a review ─────────────
-  app.patch("/reviews/:id/hide", { schema: { tags: ["Admin Reviews"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const adminKey = req.headers["x-admin-key"];
-    const expectedKey = process.env["ADMIN_JWT_SECRET"];
-    if (!adminKey || adminKey !== expectedKey) {
-      return sendError(reply, 401, "UNAUTHORIZED", "Invalid admin key.");
-    }
-
+  app.patch("/reviews/:id/hide", {
+    schema: {
+      tags: ["Admin Reviews"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" }
+        }
+      },
+      body: {
+        type: "object",
+        required: ["hidden"],
+        properties: {
+          hidden: { type: "boolean" },
+          reason: { type: "string", maxLength: 500 }
+        }
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" }
+              },
+              required: ["message"]
+            }
+          },
+          required: ["success", "data"]
+        },
+        400: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        },
+        404: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" }
+              },
+              required: ["code", "message"]
+            }
+          },
+          required: ["success", "error"]
+        }
+      }
+    },
+    preHandler: [requireAdmin]
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
     const body = req.body as { hidden: boolean; reason?: string };
 
