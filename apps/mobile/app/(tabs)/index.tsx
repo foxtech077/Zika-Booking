@@ -403,6 +403,35 @@ function TrendingCard({
   );
 }
 
+// Helper to format Date to YYYY-MM-DD in local time
+function formatLocalDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// Helper to format Date to ISO string with local timezone offset
+function formatLocalISOString(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const seconds = String(d.getSeconds()).padStart(2, "0");
+  const ms = String(d.getMilliseconds()).padStart(3, "0");
+  
+  const offset = -d.getTimezoneOffset();
+  if (offset === 0) {
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}Z`;
+  }
+  const sign = offset > 0 ? "+" : "-";
+  const absOffset = Math.abs(offset);
+  const offsetHours = String(Math.floor(absOffset / 60)).padStart(2, "0");
+  const offsetMinutes = String(absOffset % 60).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}${sign}${offsetHours}:${offsetMinutes}`;
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
@@ -536,12 +565,12 @@ export default function HomeScreen() {
   function navToListing(id: string, isCar?: boolean) {
     const params: Record<string, string> = {};
     if (!isCar) {
-      if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
-      if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
+      if (checkIn) params.checkIn = formatLocalDate(checkIn);
+      if (checkOut) params.checkOut = formatLocalDate(checkOut);
       params.guests = String(guests);
     } else {
-      if (pickupDate) params.pickupDatetime = pickupDate.toISOString();
-      if (returnDate) params.returnDatetime = returnDate.toISOString();
+      if (pickupDate) params.pickupDatetime = formatLocalISOString(pickupDate);
+      if (returnDate) params.returnDatetime = formatLocalISOString(returnDate);
     }
     router.push({ pathname: `/listing/${id}` as any, params });
   }
@@ -551,11 +580,11 @@ export default function HomeScreen() {
     const params: Record<string, string> = { category: apiCat, guests: String(guests) };
     if (location.trim()) params.placeName = location.trim();
     if (category !== "cars") {
-      if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
-      if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
+      if (checkIn) params.checkIn = formatLocalDate(checkIn);
+      if (checkOut) params.checkOut = formatLocalDate(checkOut);
     } else {
-      if (pickupDate) params.pickupDatetime = pickupDate.toISOString();
-      if (returnDate) params.returnDatetime = returnDate.toISOString();
+      if (pickupDate) params.pickupDatetime = formatLocalISOString(pickupDate);
+      if (returnDate) params.returnDatetime = formatLocalISOString(returnDate);
     }
     router.push({ pathname: "/search", params });
   }
@@ -573,11 +602,11 @@ export default function HomeScreen() {
             geoLng: String(longitude),
           };
           if (category !== "cars") {
-            if (checkIn) params.checkIn = checkIn.toISOString().split("T")[0]!;
-            if (checkOut) params.checkOut = checkOut.toISOString().split("T")[0]!;
+            if (checkIn) params.checkIn = formatLocalDate(checkIn);
+            if (checkOut) params.checkOut = formatLocalDate(checkOut);
           } else {
-            if (pickupDate) params.pickupDatetime = pickupDate.toISOString();
-            if (returnDate) params.returnDatetime = returnDate.toISOString();
+            if (pickupDate) params.pickupDatetime = formatLocalISOString(pickupDate);
+            if (returnDate) params.returnDatetime = formatLocalISOString(returnDate);
           }
           router.push({ pathname: "/search", params });
         },

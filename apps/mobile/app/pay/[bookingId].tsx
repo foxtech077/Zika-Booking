@@ -373,7 +373,6 @@ export default function PaymentScreen() {
       });
 
       const { paymentId } = res.data.data;
-      setCurrentPaymentId(paymentId);
       setAttemptCount((c) => c + 1);
 
       setView("tara_waiting");

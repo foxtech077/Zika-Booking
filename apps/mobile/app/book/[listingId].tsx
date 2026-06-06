@@ -12,7 +12,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
@@ -136,6 +136,7 @@ export default function BookingFlowScreen() {
     pickupDatetime?: string;
     returnDatetime?: string;
     guests?: string;
+    listingTitle?: string;
   }>();
 
   const {
@@ -145,6 +146,7 @@ export default function BookingFlowScreen() {
     pickupDatetime,
     returnDatetime,
     guests,
+    listingTitle,
   } = params;
 
   const isCar = !!pickupDatetime;
@@ -488,6 +490,7 @@ export default function BookingFlowScreen() {
   if (lockLoading) {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#1a73e8" />
           <Text style={styles.loadingText}>Securing your reservation...</Text>
@@ -500,6 +503,7 @@ export default function BookingFlowScreen() {
   if (lockError === "unavailable") {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <Ionicons name="close-circle" size={64} color="#dc2626" />
           <Text style={styles.errorTitle}>Listing Unavailable</Text>
@@ -517,6 +521,7 @@ export default function BookingFlowScreen() {
   if (lockError === "auth") {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <Ionicons name="lock-closed" size={64} color="#1a73e8" />
           <Text style={styles.errorTitle}>Sign in to book</Text>
@@ -538,6 +543,7 @@ export default function BookingFlowScreen() {
     const allCleared = !pendingLoading && pendingBookings.length === 0;
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           {/* Header */}
           <View style={styles.pendingHeader}>
@@ -632,6 +638,7 @@ export default function BookingFlowScreen() {
   if (lockError === "generic") {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <Ionicons name="warning" size={64} color="#f59e0b" />
           <Text style={styles.errorTitle}>Could not secure reservation</Text>
@@ -650,6 +657,9 @@ export default function BookingFlowScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Dynamic header title */}
+      <Stack.Screen options={{ title: listingTitle ? listingTitle : "Book", headerBackTitle: "Back" }} />
+
       {/* Step indicator */}
       <StepIndicator current={step} />
 

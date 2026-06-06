@@ -16,7 +16,7 @@ import {
   Platform,
   Linking,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
@@ -565,6 +565,7 @@ export default function PublicListingDetailScreen() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
+  const insets = useSafeAreaInsets();
 
   const [photoIndex, setPhotoIndex] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -615,7 +616,7 @@ export default function PublicListingDetailScreen() {
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["public-listing", id] });
+      qc.invalidateQueries({ queryKey: ["listing-full", id] });
       qc.invalidateQueries({ queryKey: ["favourites"] });
     },
     onError: () => {
@@ -770,12 +771,12 @@ export default function PublicListingDetailScreen() {
     if (isCar) {
       router.push({
         pathname: "/book/[listingId]",
-        params: { listingId: id, pickupDatetime, returnDatetime },
+        params: { listingId: id, pickupDatetime, returnDatetime, listingTitle: listing.name ?? "" },
       });
     } else {
       router.push({
         pathname: "/book/[listingId]",
-        params: { listingId: id, checkIn, checkOut, guests },
+        params: { listingId: id, checkIn, checkOut, guests, listingTitle: listing.name ?? "" },
       });
     }
   }
@@ -875,14 +876,17 @@ export default function PublicListingDetailScreen() {
           )}
 
           {/* Back button overlaid on photos */}
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={[styles.backButton, { top: insets.top + 10 }]}
+            onPress={() => router.back()}
+          >
             <Ionicons name="arrow-back" size={22} color="#fff" />
           </TouchableOpacity>
 
           {/* Favourite button overlaid on photos */}
           {user && !isProvider && (
             <TouchableOpacity
-              style={styles.favButton}
+              style={[styles.favButton, { top: insets.top + 10 }]}
               onPress={() => favMutation.mutate({ isFav })}
               disabled={favMutation.isPending}
             >
