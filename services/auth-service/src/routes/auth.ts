@@ -110,18 +110,18 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const passwordHash = await hashPassword(password);
-    const isDev = process.env["NODE_ENV"] !== "production";
+    const skipVerification = process.env["SKIP_EMAIL_VERIFICATION"] === "true";
     const user = await prisma.user.create({
       data: {
         firstName, lastName, email, passwordHash,
         userType: userType as "guest" | "provider",
         businessName: businessName ?? null,
         country: country ?? null,
-        ...(isDev ? { status: "active", emailVerified: true, emailVerifiedAt: new Date() } : {}),
+        ...(skipVerification ? { status: "active", emailVerified: true, emailVerifiedAt: new Date() } : {}),
       },
     });
 
-    if (isDev) {
+    if (skipVerification) {
       const tokens = await issueTokens(reply, user.id, user.userType, "active");
       return sendSuccess(reply, 201, { user: publicUser(user), tokens });
     }
@@ -132,10 +132,18 @@ export async function authRoutes(app: FastifyInstance) {
       data: { userId: user.id, tokenHash: hashToken(plainToken), tokenType: "email_verification", expiresAt },
     });
 
-    await sendVerificationEmail(email, plainToken).catch(() => null);
-    await prisma.emailLog.create({
-      data: { userId: user.id, type: "verification", recipient: email, status: "sent", sentAt: new Date() },
-    });
+    try {
+      await sendVerificationEmail(email, plainToken);
+      await prisma.emailLog.create({
+        data: { userId: user.id, type: "verification", recipient: email, status: "sent", sentAt: new Date() },
+      });
+    } catch (error) {
+      console.error("[Auth] Verification email delivery failed", error);
+      await prisma.emailLog.create({
+        data: { userId: user.id, type: "verification", recipient: email, status: "failed", sentAt: new Date() },
+      });
+      return sendError(reply, 503, "EMAIL_DELIVERY_FAILED", "We could not send the verification email. Please try again in a few minutes.");
+    }
 
     return sendSuccess(reply, 201, { message: "Registration successful. Please check your email to verify your account." });
   });
@@ -238,10 +246,19 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     await setCooldown(cooldownKey, 60);
-    await sendVerificationEmail(email, plainToken).catch(() => null);
-    await prisma.emailLog.create({
-      data: { userId: user.id, type: "verification_resend", recipient: email, status: "sent", sentAt: new Date() },
-    });
+
+    try {
+      await sendVerificationEmail(email, plainToken);
+      await prisma.emailLog.create({
+        data: { userId: user.id, type: "verification_resend", recipient: email, status: "sent", sentAt: new Date() },
+      });
+    } catch (error) {
+      console.error("[Auth] Resend verification email delivery failed", error);
+      await prisma.emailLog.create({
+        data: { userId: user.id, type: "verification_resend", recipient: email, status: "failed", sentAt: new Date() },
+      });
+      return sendError(reply, 503, "EMAIL_DELIVERY_FAILED", "We could not resend the verification email. Please try again in a few minutes.");
+    }
 
     return sendSuccess(reply, 200, { message: "Verification email resent. Please check your inbox." });
   });

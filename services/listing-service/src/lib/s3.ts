@@ -2,9 +2,9 @@ import { S3Client, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
-const REGION = process.env["AWS_REGION"] ?? "us-east-1";
-const BUCKET = process.env["S3_BUCKET_NAME"] ?? "zika-listings";
-const CDN_BASE = process.env["S3_CDN_BASE_URL"] ?? `https://${BUCKET}.s3.${REGION}.amazonaws.com`;
+const REGION = process.env["AWS_REGION"] ?? "af-south-1";
+const BUCKET = process.env["S3_BUCKET_NAME"] ?? "zika-storage";
+const CDN_BASE = process.env["S3_CDN_BASE_URL"] ?? "https://zika-storage.s3.af-south-1.amazonaws.com";
 
 const s3 = new S3Client({
   region: REGION,

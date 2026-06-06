@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { registerSchema } from "@zika/validators";
 import { api, storeToken } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 import { FormField } from "@/components/ui/FormField";
 import { Button } from "@/components/ui/Button";
 import type { ApiResponse, AuthResponse } from "@zika/types";
@@ -15,6 +16,7 @@ type FieldErrors = Record<string, string | undefined> & { general?: string };
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { setSession } = useAuthStore();
   const [userType, setUserType] = useState<UserType>("guest");
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "",
@@ -37,11 +39,20 @@ export default function RegisterPage() {
         businessName: userType === "provider" ? form.businessName : undefined,
         country: userType === "provider" ? form.country || undefined : undefined,
       };
-      const res = await api.post<ApiResponse<{ message: string }>>("/auth/register", payload);
+      const res = await api.post<ApiResponse<Partial<AuthResponse> & { message?: string }>>("/auth/register", payload);
       if (!res.data.success) throw res.data;
       return res.data.data;
     },
-    onSuccess: () => setSubmitted(true),
+    onSuccess: (data) => {
+      if (data?.tokens?.accessToken && data.user) {
+        storeToken(data.tokens.accessToken);
+        setSession(data.tokens.accessToken, data.user as any);
+        router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
+        return;
+      }
+
+      setSubmitted(true);
+    },
     onError: (err: any) => {
       const e = err.response?.data?.error;
       setErrors({ ...e?.fields, general: e?.fields ? undefined : e?.message });

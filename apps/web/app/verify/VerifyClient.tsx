@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { api, storeToken } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 
 type State = "loading" | "success" | "already_verified" | "expired" | "used" | "invalid" | "error";
@@ -13,6 +14,7 @@ export function VerifyClient() {
   const token = params.get("token");
   const [state, setState] = useState<State>("loading");
   const [email, setEmail] = useState<string | null>(null);
+  const { setSession } = useAuthStore();
 
   useEffect(() => {
     if (!token || token.length !== 64) { setState("invalid"); return; }
@@ -22,6 +24,7 @@ export function VerifyClient() {
         if (!res.data.success) { setState("error"); return; }
         const { tokens, user } = res.data.data;
         storeToken(tokens.accessToken);
+        setSession(tokens.accessToken, user as any);
         const msg = res.data.data.message;
         setState(msg.includes("already") ? "already_verified" : "success");
         setEmail(user.email);
@@ -35,7 +38,7 @@ export function VerifyClient() {
         else if (code === "INVALID_TOKEN") setState("invalid");
         else setState("error");
       });
-  }, [token, router]);
+  }, [token, router, setSession]);
 
   const content: Record<State, { icon: string; title: string; body: React.ReactNode }> = {
     loading: {
