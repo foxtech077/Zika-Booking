@@ -24,6 +24,36 @@ export type Listing = $Result.DefaultSelection<Prisma.$ListingPayload>
  */
 export type ListingReviewTask = $Result.DefaultSelection<Prisma.$ListingReviewTaskPayload>
 /**
+ * Model ListingModerationLog
+ * 
+ */
+export type ListingModerationLog = $Result.DefaultSelection<Prisma.$ListingModerationLogPayload>
+/**
+ * Model ListingBedConfig
+ * 
+ */
+export type ListingBedConfig = $Result.DefaultSelection<Prisma.$ListingBedConfigPayload>
+/**
+ * Model ListingBlockedDate
+ * 
+ */
+export type ListingBlockedDate = $Result.DefaultSelection<Prisma.$ListingBlockedDatePayload>
+/**
+ * Model ListingSeasonalPrice
+ * 
+ */
+export type ListingSeasonalPrice = $Result.DefaultSelection<Prisma.$ListingSeasonalPricePayload>
+/**
+ * Model ListingNearbyLandmark
+ * 
+ */
+export type ListingNearbyLandmark = $Result.DefaultSelection<Prisma.$ListingNearbyLandmarkPayload>
+/**
+ * Model ListingHouseRule
+ * 
+ */
+export type ListingHouseRule = $Result.DefaultSelection<Prisma.$ListingHouseRulePayload>
+/**
  * Model ListingPhoto
  * 
  */
@@ -147,7 +177,8 @@ export type LongStayDiscountType = (typeof LongStayDiscountType)[keyof typeof Lo
 
 export const Transmission: {
   manual: 'manual',
-  automatic: 'automatic'
+  automatic: 'automatic',
+  semi_auto: 'semi_auto'
 };
 
 export type Transmission = (typeof Transmission)[keyof typeof Transmission]
@@ -157,7 +188,8 @@ export const FuelType: {
   petrol: 'petrol',
   diesel: 'diesel',
   electric: 'electric',
-  hybrid: 'hybrid'
+  hybrid: 'hybrid',
+  lpg: 'lpg'
 };
 
 export type FuelType = (typeof FuelType)[keyof typeof FuelType]
@@ -197,10 +229,61 @@ export type CancellationPolicy = (typeof CancellationPolicy)[keyof typeof Cancel
 export const DocumentType: {
   business_licence: 'business_licence',
   operating_permit: 'operating_permit',
-  tourism_certificate: 'tourism_certificate'
+  tourism_certificate: 'tourism_certificate',
+  insurance_certificate: 'insurance_certificate',
+  roadworthiness_certificate: 'roadworthiness_certificate',
+  hotel_operating_permit: 'hotel_operating_permit',
+  tourism_authority_certificate: 'tourism_authority_certificate',
+  vehicle_registration: 'vehicle_registration'
 };
 
 export type DocumentType = (typeof DocumentType)[keyof typeof DocumentType]
+
+
+export const CarCategory: {
+  Economy: 'Economy',
+  Compact: 'Compact',
+  SUV: 'SUV',
+  Minivan: 'Minivan',
+  Pickup: 'Pickup',
+  Luxury: 'Luxury',
+  Electric: 'Electric',
+  Convertible: 'Convertible'
+};
+
+export type CarCategory = (typeof CarCategory)[keyof typeof CarCategory]
+
+
+export const DriveType: {
+  TWO_WD: 'TWO_WD',
+  FOUR_WD: 'FOUR_WD',
+  AWD: 'AWD'
+};
+
+export type DriveType = (typeof DriveType)[keyof typeof DriveType]
+
+
+export const InsuranceType: {
+  basic: 'basic',
+  standard: 'standard',
+  premium: 'premium',
+  comprehensive: 'comprehensive',
+  basic_third_party: 'basic_third_party',
+  premium_zero_excess: 'premium_zero_excess'
+};
+
+export type InsuranceType = (typeof InsuranceType)[keyof typeof InsuranceType]
+
+
+export const FuelPolicy: {
+  full_to_full: 'full_to_full',
+  same_to_same: 'same_to_same',
+  free_tank: 'free_tank',
+  full_to_empty: 'full_to_empty',
+  pre_purchase: 'pre_purchase'
+};
+
+export type FuelPolicy = (typeof FuelPolicy)[keyof typeof FuelPolicy]
 
 
 export const ReviewTaskStatus: {
@@ -211,6 +294,38 @@ export const ReviewTaskStatus: {
 };
 
 export type ReviewTaskStatus = (typeof ReviewTaskStatus)[keyof typeof ReviewTaskStatus]
+
+
+export const BedType: {
+  single: 'single',
+  double: 'double',
+  queen: 'queen',
+  king: 'king',
+  twin: 'twin'
+};
+
+export type BedType = (typeof BedType)[keyof typeof BedType]
+
+
+export const ApartmentType: {
+  entire_place: 'entire_place',
+  private_room: 'private_room',
+  shared_room: 'shared_room',
+  studio: 'studio',
+  loft: 'loft',
+  villa: 'villa',
+  townhouse: 'townhouse'
+};
+
+export type ApartmentType = (typeof ApartmentType)[keyof typeof ApartmentType]
+
+
+export const BlockedDateSource: {
+  manual: 'manual',
+  ical: 'ical'
+};
+
+export type BlockedDateSource = (typeof BlockedDateSource)[keyof typeof BlockedDateSource]
 
 
 export const BookingStatus: {
@@ -278,9 +393,37 @@ export type DocumentType = $Enums.DocumentType
 
 export const DocumentType: typeof $Enums.DocumentType
 
+export type CarCategory = $Enums.CarCategory
+
+export const CarCategory: typeof $Enums.CarCategory
+
+export type DriveType = $Enums.DriveType
+
+export const DriveType: typeof $Enums.DriveType
+
+export type InsuranceType = $Enums.InsuranceType
+
+export const InsuranceType: typeof $Enums.InsuranceType
+
+export type FuelPolicy = $Enums.FuelPolicy
+
+export const FuelPolicy: typeof $Enums.FuelPolicy
+
 export type ReviewTaskStatus = $Enums.ReviewTaskStatus
 
 export const ReviewTaskStatus: typeof $Enums.ReviewTaskStatus
+
+export type BedType = $Enums.BedType
+
+export const BedType: typeof $Enums.BedType
+
+export type ApartmentType = $Enums.ApartmentType
+
+export const ApartmentType: typeof $Enums.ApartmentType
+
+export type BlockedDateSource = $Enums.BlockedDateSource
+
+export const BlockedDateSource: typeof $Enums.BlockedDateSource
 
 export type BookingStatus = $Enums.BookingStatus
 
@@ -431,6 +574,66 @@ export class PrismaClient<
     * ```
     */
   get listingReviewTask(): Prisma.ListingReviewTaskDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.listingModerationLog`: Exposes CRUD operations for the **ListingModerationLog** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ListingModerationLogs
+    * const listingModerationLogs = await prisma.listingModerationLog.findMany()
+    * ```
+    */
+  get listingModerationLog(): Prisma.ListingModerationLogDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.listingBedConfig`: Exposes CRUD operations for the **ListingBedConfig** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ListingBedConfigs
+    * const listingBedConfigs = await prisma.listingBedConfig.findMany()
+    * ```
+    */
+  get listingBedConfig(): Prisma.ListingBedConfigDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.listingBlockedDate`: Exposes CRUD operations for the **ListingBlockedDate** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ListingBlockedDates
+    * const listingBlockedDates = await prisma.listingBlockedDate.findMany()
+    * ```
+    */
+  get listingBlockedDate(): Prisma.ListingBlockedDateDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.listingSeasonalPrice`: Exposes CRUD operations for the **ListingSeasonalPrice** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ListingSeasonalPrices
+    * const listingSeasonalPrices = await prisma.listingSeasonalPrice.findMany()
+    * ```
+    */
+  get listingSeasonalPrice(): Prisma.ListingSeasonalPriceDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.listingNearbyLandmark`: Exposes CRUD operations for the **ListingNearbyLandmark** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ListingNearbyLandmarks
+    * const listingNearbyLandmarks = await prisma.listingNearbyLandmark.findMany()
+    * ```
+    */
+  get listingNearbyLandmark(): Prisma.ListingNearbyLandmarkDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.listingHouseRule`: Exposes CRUD operations for the **ListingHouseRule** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more ListingHouseRules
+    * const listingHouseRules = await prisma.listingHouseRule.findMany()
+    * ```
+    */
+  get listingHouseRule(): Prisma.ListingHouseRuleDelegate<ExtArgs, ClientOptions>;
 
   /**
    * `prisma.listingPhoto`: Exposes CRUD operations for the **ListingPhoto** model.
@@ -1044,6 +1247,12 @@ export namespace Prisma {
   export const ModelName: {
     Listing: 'Listing',
     ListingReviewTask: 'ListingReviewTask',
+    ListingModerationLog: 'ListingModerationLog',
+    ListingBedConfig: 'ListingBedConfig',
+    ListingBlockedDate: 'ListingBlockedDate',
+    ListingSeasonalPrice: 'ListingSeasonalPrice',
+    ListingNearbyLandmark: 'ListingNearbyLandmark',
+    ListingHouseRule: 'ListingHouseRule',
     ListingPhoto: 'ListingPhoto',
     ListingDocument: 'ListingDocument',
     ListingAmenity: 'ListingAmenity',
@@ -1079,7 +1288,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "listing" | "listingReviewTask" | "listingPhoto" | "listingDocument" | "listingAmenity" | "listingCustomAmenity" | "userFavourite" | "userRecentlyViewed" | "searchLog" | "booking" | "bookingStatusLog" | "listingReview" | "commissionRate" | "voucher" | "voucherRedemption" | "icalFeed" | "icalBlockedDate" | "conversation" | "message"
+      modelProps: "listing" | "listingReviewTask" | "listingModerationLog" | "listingBedConfig" | "listingBlockedDate" | "listingSeasonalPrice" | "listingNearbyLandmark" | "listingHouseRule" | "listingPhoto" | "listingDocument" | "listingAmenity" | "listingCustomAmenity" | "userFavourite" | "userRecentlyViewed" | "searchLog" | "booking" | "bookingStatusLog" | "listingReview" | "commissionRate" | "voucher" | "voucherRedemption" | "icalFeed" | "icalBlockedDate" | "conversation" | "message"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -1228,6 +1437,450 @@ export namespace Prisma {
           count: {
             args: Prisma.ListingReviewTaskCountArgs<ExtArgs>
             result: $Utils.Optional<ListingReviewTaskCountAggregateOutputType> | number
+          }
+        }
+      }
+      ListingModerationLog: {
+        payload: Prisma.$ListingModerationLogPayload<ExtArgs>
+        fields: Prisma.ListingModerationLogFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ListingModerationLogFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ListingModerationLogFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload>
+          }
+          findFirst: {
+            args: Prisma.ListingModerationLogFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ListingModerationLogFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload>
+          }
+          findMany: {
+            args: Prisma.ListingModerationLogFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload>[]
+          }
+          create: {
+            args: Prisma.ListingModerationLogCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload>
+          }
+          createMany: {
+            args: Prisma.ListingModerationLogCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ListingModerationLogCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload>[]
+          }
+          delete: {
+            args: Prisma.ListingModerationLogDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload>
+          }
+          update: {
+            args: Prisma.ListingModerationLogUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload>
+          }
+          deleteMany: {
+            args: Prisma.ListingModerationLogDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ListingModerationLogUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ListingModerationLogUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload>[]
+          }
+          upsert: {
+            args: Prisma.ListingModerationLogUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingModerationLogPayload>
+          }
+          aggregate: {
+            args: Prisma.ListingModerationLogAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateListingModerationLog>
+          }
+          groupBy: {
+            args: Prisma.ListingModerationLogGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ListingModerationLogGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ListingModerationLogCountArgs<ExtArgs>
+            result: $Utils.Optional<ListingModerationLogCountAggregateOutputType> | number
+          }
+        }
+      }
+      ListingBedConfig: {
+        payload: Prisma.$ListingBedConfigPayload<ExtArgs>
+        fields: Prisma.ListingBedConfigFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ListingBedConfigFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ListingBedConfigFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload>
+          }
+          findFirst: {
+            args: Prisma.ListingBedConfigFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ListingBedConfigFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload>
+          }
+          findMany: {
+            args: Prisma.ListingBedConfigFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload>[]
+          }
+          create: {
+            args: Prisma.ListingBedConfigCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload>
+          }
+          createMany: {
+            args: Prisma.ListingBedConfigCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ListingBedConfigCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload>[]
+          }
+          delete: {
+            args: Prisma.ListingBedConfigDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload>
+          }
+          update: {
+            args: Prisma.ListingBedConfigUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload>
+          }
+          deleteMany: {
+            args: Prisma.ListingBedConfigDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ListingBedConfigUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ListingBedConfigUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload>[]
+          }
+          upsert: {
+            args: Prisma.ListingBedConfigUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBedConfigPayload>
+          }
+          aggregate: {
+            args: Prisma.ListingBedConfigAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateListingBedConfig>
+          }
+          groupBy: {
+            args: Prisma.ListingBedConfigGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ListingBedConfigGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ListingBedConfigCountArgs<ExtArgs>
+            result: $Utils.Optional<ListingBedConfigCountAggregateOutputType> | number
+          }
+        }
+      }
+      ListingBlockedDate: {
+        payload: Prisma.$ListingBlockedDatePayload<ExtArgs>
+        fields: Prisma.ListingBlockedDateFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ListingBlockedDateFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ListingBlockedDateFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload>
+          }
+          findFirst: {
+            args: Prisma.ListingBlockedDateFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ListingBlockedDateFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload>
+          }
+          findMany: {
+            args: Prisma.ListingBlockedDateFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload>[]
+          }
+          create: {
+            args: Prisma.ListingBlockedDateCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload>
+          }
+          createMany: {
+            args: Prisma.ListingBlockedDateCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ListingBlockedDateCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload>[]
+          }
+          delete: {
+            args: Prisma.ListingBlockedDateDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload>
+          }
+          update: {
+            args: Prisma.ListingBlockedDateUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload>
+          }
+          deleteMany: {
+            args: Prisma.ListingBlockedDateDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ListingBlockedDateUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ListingBlockedDateUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload>[]
+          }
+          upsert: {
+            args: Prisma.ListingBlockedDateUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingBlockedDatePayload>
+          }
+          aggregate: {
+            args: Prisma.ListingBlockedDateAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateListingBlockedDate>
+          }
+          groupBy: {
+            args: Prisma.ListingBlockedDateGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ListingBlockedDateGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ListingBlockedDateCountArgs<ExtArgs>
+            result: $Utils.Optional<ListingBlockedDateCountAggregateOutputType> | number
+          }
+        }
+      }
+      ListingSeasonalPrice: {
+        payload: Prisma.$ListingSeasonalPricePayload<ExtArgs>
+        fields: Prisma.ListingSeasonalPriceFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ListingSeasonalPriceFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ListingSeasonalPriceFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload>
+          }
+          findFirst: {
+            args: Prisma.ListingSeasonalPriceFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ListingSeasonalPriceFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload>
+          }
+          findMany: {
+            args: Prisma.ListingSeasonalPriceFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload>[]
+          }
+          create: {
+            args: Prisma.ListingSeasonalPriceCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload>
+          }
+          createMany: {
+            args: Prisma.ListingSeasonalPriceCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ListingSeasonalPriceCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload>[]
+          }
+          delete: {
+            args: Prisma.ListingSeasonalPriceDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload>
+          }
+          update: {
+            args: Prisma.ListingSeasonalPriceUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload>
+          }
+          deleteMany: {
+            args: Prisma.ListingSeasonalPriceDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ListingSeasonalPriceUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ListingSeasonalPriceUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload>[]
+          }
+          upsert: {
+            args: Prisma.ListingSeasonalPriceUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingSeasonalPricePayload>
+          }
+          aggregate: {
+            args: Prisma.ListingSeasonalPriceAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateListingSeasonalPrice>
+          }
+          groupBy: {
+            args: Prisma.ListingSeasonalPriceGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ListingSeasonalPriceGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ListingSeasonalPriceCountArgs<ExtArgs>
+            result: $Utils.Optional<ListingSeasonalPriceCountAggregateOutputType> | number
+          }
+        }
+      }
+      ListingNearbyLandmark: {
+        payload: Prisma.$ListingNearbyLandmarkPayload<ExtArgs>
+        fields: Prisma.ListingNearbyLandmarkFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ListingNearbyLandmarkFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ListingNearbyLandmarkFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload>
+          }
+          findFirst: {
+            args: Prisma.ListingNearbyLandmarkFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ListingNearbyLandmarkFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload>
+          }
+          findMany: {
+            args: Prisma.ListingNearbyLandmarkFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload>[]
+          }
+          create: {
+            args: Prisma.ListingNearbyLandmarkCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload>
+          }
+          createMany: {
+            args: Prisma.ListingNearbyLandmarkCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ListingNearbyLandmarkCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload>[]
+          }
+          delete: {
+            args: Prisma.ListingNearbyLandmarkDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload>
+          }
+          update: {
+            args: Prisma.ListingNearbyLandmarkUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload>
+          }
+          deleteMany: {
+            args: Prisma.ListingNearbyLandmarkDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ListingNearbyLandmarkUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ListingNearbyLandmarkUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload>[]
+          }
+          upsert: {
+            args: Prisma.ListingNearbyLandmarkUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingNearbyLandmarkPayload>
+          }
+          aggregate: {
+            args: Prisma.ListingNearbyLandmarkAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateListingNearbyLandmark>
+          }
+          groupBy: {
+            args: Prisma.ListingNearbyLandmarkGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ListingNearbyLandmarkGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ListingNearbyLandmarkCountArgs<ExtArgs>
+            result: $Utils.Optional<ListingNearbyLandmarkCountAggregateOutputType> | number
+          }
+        }
+      }
+      ListingHouseRule: {
+        payload: Prisma.$ListingHouseRulePayload<ExtArgs>
+        fields: Prisma.ListingHouseRuleFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.ListingHouseRuleFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.ListingHouseRuleFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload>
+          }
+          findFirst: {
+            args: Prisma.ListingHouseRuleFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.ListingHouseRuleFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload>
+          }
+          findMany: {
+            args: Prisma.ListingHouseRuleFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload>[]
+          }
+          create: {
+            args: Prisma.ListingHouseRuleCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload>
+          }
+          createMany: {
+            args: Prisma.ListingHouseRuleCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.ListingHouseRuleCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload>[]
+          }
+          delete: {
+            args: Prisma.ListingHouseRuleDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload>
+          }
+          update: {
+            args: Prisma.ListingHouseRuleUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload>
+          }
+          deleteMany: {
+            args: Prisma.ListingHouseRuleDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.ListingHouseRuleUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.ListingHouseRuleUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload>[]
+          }
+          upsert: {
+            args: Prisma.ListingHouseRuleUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$ListingHouseRulePayload>
+          }
+          aggregate: {
+            args: Prisma.ListingHouseRuleAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateListingHouseRule>
+          }
+          groupBy: {
+            args: Prisma.ListingHouseRuleGroupByArgs<ExtArgs>
+            result: $Utils.Optional<ListingHouseRuleGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.ListingHouseRuleCountArgs<ExtArgs>
+            result: $Utils.Optional<ListingHouseRuleCountAggregateOutputType> | number
           }
         }
       }
@@ -2587,6 +3240,12 @@ export namespace Prisma {
   export type GlobalOmitConfig = {
     listing?: ListingOmit
     listingReviewTask?: ListingReviewTaskOmit
+    listingModerationLog?: ListingModerationLogOmit
+    listingBedConfig?: ListingBedConfigOmit
+    listingBlockedDate?: ListingBlockedDateOmit
+    listingSeasonalPrice?: ListingSeasonalPriceOmit
+    listingNearbyLandmark?: ListingNearbyLandmarkOmit
+    listingHouseRule?: ListingHouseRuleOmit
     listingPhoto?: ListingPhotoOmit
     listingDocument?: ListingDocumentOmit
     listingAmenity?: ListingAmenityOmit
@@ -2689,11 +3348,17 @@ export namespace Prisma {
     amenities: number
     customAmenities: number
     reviewTasks: number
+    moderationLog: number
     favourites: number
     recentViews: number
     bookings: number
     reviews: number
     icalFeeds: number
+    bedConfigs: number
+    blockedDates: number
+    seasonalPrices: number
+    landmarks: number
+    houseRules: number
   }
 
   export type ListingCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -2702,11 +3367,17 @@ export namespace Prisma {
     amenities?: boolean | ListingCountOutputTypeCountAmenitiesArgs
     customAmenities?: boolean | ListingCountOutputTypeCountCustomAmenitiesArgs
     reviewTasks?: boolean | ListingCountOutputTypeCountReviewTasksArgs
+    moderationLog?: boolean | ListingCountOutputTypeCountModerationLogArgs
     favourites?: boolean | ListingCountOutputTypeCountFavouritesArgs
     recentViews?: boolean | ListingCountOutputTypeCountRecentViewsArgs
     bookings?: boolean | ListingCountOutputTypeCountBookingsArgs
     reviews?: boolean | ListingCountOutputTypeCountReviewsArgs
     icalFeeds?: boolean | ListingCountOutputTypeCountIcalFeedsArgs
+    bedConfigs?: boolean | ListingCountOutputTypeCountBedConfigsArgs
+    blockedDates?: boolean | ListingCountOutputTypeCountBlockedDatesArgs
+    seasonalPrices?: boolean | ListingCountOutputTypeCountSeasonalPricesArgs
+    landmarks?: boolean | ListingCountOutputTypeCountLandmarksArgs
+    houseRules?: boolean | ListingCountOutputTypeCountHouseRulesArgs
   }
 
   // Custom InputTypes
@@ -2758,6 +3429,13 @@ export namespace Prisma {
   /**
    * ListingCountOutputType without action
    */
+  export type ListingCountOutputTypeCountModerationLogArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingModerationLogWhereInput
+  }
+
+  /**
+   * ListingCountOutputType without action
+   */
   export type ListingCountOutputTypeCountFavouritesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: UserFavouriteWhereInput
   }
@@ -2788,6 +3466,41 @@ export namespace Prisma {
    */
   export type ListingCountOutputTypeCountIcalFeedsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     where?: IcalFeedWhereInput
+  }
+
+  /**
+   * ListingCountOutputType without action
+   */
+  export type ListingCountOutputTypeCountBedConfigsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingBedConfigWhereInput
+  }
+
+  /**
+   * ListingCountOutputType without action
+   */
+  export type ListingCountOutputTypeCountBlockedDatesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingBlockedDateWhereInput
+  }
+
+  /**
+   * ListingCountOutputType without action
+   */
+  export type ListingCountOutputTypeCountSeasonalPricesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingSeasonalPriceWhereInput
+  }
+
+  /**
+   * ListingCountOutputType without action
+   */
+  export type ListingCountOutputTypeCountLandmarksArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingNearbyLandmarkWhereInput
+  }
+
+  /**
+   * ListingCountOutputType without action
+   */
+  export type ListingCountOutputTypeCountHouseRulesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingHouseRuleWhereInput
   }
 
 
@@ -2934,6 +3647,7 @@ export namespace Prisma {
   export type ListingAvgAggregateOutputType = {
     unitCount: number | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     minStayNights: number | null
     lat: Decimal | null
     lng: Decimal | null
@@ -2950,11 +3664,32 @@ export namespace Prisma {
     seats: number | null
     doors: number | null
     mileageLimitKm: number | null
+    odometerReading: number | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    extraKmRate: Decimal | null
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
+    maxAdults: number | null
+    maxChildren: number | null
+    childPriceValue: Decimal | null
+    childFreeUnderAge: number | null
+    earlyCheckinFee: Decimal | null
+    lateCheckoutFee: Decimal | null
+    cleaningFee: Decimal | null
+    extraGuestFee: Decimal | null
+    extraGuestAfter: number | null
+    weeklyDiscount: Decimal | null
+    monthlyDiscount: Decimal | null
+    floorNumber: number | null
+    propertySizeM2: Decimal | null
   }
 
   export type ListingSumAggregateOutputType = {
     unitCount: number | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     minStayNights: number | null
     lat: Decimal | null
     lng: Decimal | null
@@ -2971,6 +3706,26 @@ export namespace Prisma {
     seats: number | null
     doors: number | null
     mileageLimitKm: number | null
+    odometerReading: number | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    extraKmRate: Decimal | null
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
+    maxAdults: number | null
+    maxChildren: number | null
+    childPriceValue: Decimal | null
+    childFreeUnderAge: number | null
+    earlyCheckinFee: Decimal | null
+    lateCheckoutFee: Decimal | null
+    cleaningFee: Decimal | null
+    extraGuestFee: Decimal | null
+    extraGuestAfter: number | null
+    weeklyDiscount: Decimal | null
+    monthlyDiscount: Decimal | null
+    floorNumber: number | null
+    propertySizeM2: Decimal | null
   }
 
   export type ListingMinAggregateOutputType = {
@@ -2982,6 +3737,7 @@ export namespace Prisma {
     unitCount: number | null
     description: string | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     currency: string | null
     minStayNights: number | null
     checkinTime: string | null
@@ -3025,9 +3781,54 @@ export namespace Prisma {
     doors: number | null
     mileagePolicy: $Enums.MileagePolicy | null
     mileageLimitKm: number | null
+    carCategory: $Enums.CarCategory | null
+    driveType: $Enums.DriveType | null
+    airConditioning: boolean | null
+    odometerReading: number | null
+    licencePlate: string | null
+    engineSize: string | null
+    colour: string | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    fuelPolicy: $Enums.FuelPolicy | null
+    extraKmRate: Decimal | null
+    roadsideAssistance: boolean | null
+    crossBorderAllowed: boolean | null
+    airportPickup: boolean | null
+    deliveryEnabled: boolean | null
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
+    pickupHoursFrom: string | null
+    pickupHoursTo: string | null
+    returnSameLocation: boolean | null
+    insuranceType: $Enums.InsuranceType | null
     updatedAt: Date | null
     createdAt: Date | null
     deletedAt: Date | null
+    featuredPhotoId: string | null
+    maxAdults: number | null
+    maxChildren: number | null
+    childrenAllowed: boolean | null
+    childPriceType: string | null
+    childPriceValue: Decimal | null
+    childFreeUnderAge: number | null
+    checkinRules: string | null
+    checkoutRules: string | null
+    earlyCheckinFee: Decimal | null
+    lateCheckoutFee: Decimal | null
+    cleaningFee: Decimal | null
+    extraGuestFee: Decimal | null
+    extraGuestAfter: number | null
+    weeklyDiscount: Decimal | null
+    monthlyDiscount: Decimal | null
+    instantBooking: boolean | null
+    selfCheckin: boolean | null
+    selfCheckinDetails: string | null
+    apartmentType: $Enums.ApartmentType | null
+    floorNumber: number | null
+    propertySizeM2: Decimal | null
+    securityDepositDue: string | null
   }
 
   export type ListingMaxAggregateOutputType = {
@@ -3039,6 +3840,7 @@ export namespace Prisma {
     unitCount: number | null
     description: string | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     currency: string | null
     minStayNights: number | null
     checkinTime: string | null
@@ -3082,9 +3884,54 @@ export namespace Prisma {
     doors: number | null
     mileagePolicy: $Enums.MileagePolicy | null
     mileageLimitKm: number | null
+    carCategory: $Enums.CarCategory | null
+    driveType: $Enums.DriveType | null
+    airConditioning: boolean | null
+    odometerReading: number | null
+    licencePlate: string | null
+    engineSize: string | null
+    colour: string | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    fuelPolicy: $Enums.FuelPolicy | null
+    extraKmRate: Decimal | null
+    roadsideAssistance: boolean | null
+    crossBorderAllowed: boolean | null
+    airportPickup: boolean | null
+    deliveryEnabled: boolean | null
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
+    pickupHoursFrom: string | null
+    pickupHoursTo: string | null
+    returnSameLocation: boolean | null
+    insuranceType: $Enums.InsuranceType | null
     updatedAt: Date | null
     createdAt: Date | null
     deletedAt: Date | null
+    featuredPhotoId: string | null
+    maxAdults: number | null
+    maxChildren: number | null
+    childrenAllowed: boolean | null
+    childPriceType: string | null
+    childPriceValue: Decimal | null
+    childFreeUnderAge: number | null
+    checkinRules: string | null
+    checkoutRules: string | null
+    earlyCheckinFee: Decimal | null
+    lateCheckoutFee: Decimal | null
+    cleaningFee: Decimal | null
+    extraGuestFee: Decimal | null
+    extraGuestAfter: number | null
+    weeklyDiscount: Decimal | null
+    monthlyDiscount: Decimal | null
+    instantBooking: boolean | null
+    selfCheckin: boolean | null
+    selfCheckinDetails: string | null
+    apartmentType: $Enums.ApartmentType | null
+    floorNumber: number | null
+    propertySizeM2: Decimal | null
+    securityDepositDue: string | null
   }
 
   export type ListingCountAggregateOutputType = {
@@ -3096,6 +3943,7 @@ export namespace Prisma {
     unitCount: number
     description: number
     pricePerNight: number
+    pricePerDay: number
     currency: number
     minStayNights: number
     checkinTime: number
@@ -3140,9 +3988,54 @@ export namespace Prisma {
     doors: number
     mileagePolicy: number
     mileageLimitKm: number
+    carCategory: number
+    driveType: number
+    airConditioning: number
+    odometerReading: number
+    licencePlate: number
+    engineSize: number
+    colour: number
+    securityDeposit: number
+    minimumDriverAge: number
+    minimumRentalDays: number
+    fuelPolicy: number
+    extraKmRate: number
+    roadsideAssistance: number
+    crossBorderAllowed: number
+    airportPickup: number
+    deliveryEnabled: number
+    deliveryRadiusKm: number
+    deliveryFee: number
+    pickupHoursFrom: number
+    pickupHoursTo: number
+    returnSameLocation: number
+    insuranceType: number
     updatedAt: number
     createdAt: number
     deletedAt: number
+    featuredPhotoId: number
+    maxAdults: number
+    maxChildren: number
+    childrenAllowed: number
+    childPriceType: number
+    childPriceValue: number
+    childFreeUnderAge: number
+    checkinRules: number
+    checkoutRules: number
+    earlyCheckinFee: number
+    lateCheckoutFee: number
+    cleaningFee: number
+    extraGuestFee: number
+    extraGuestAfter: number
+    weeklyDiscount: number
+    monthlyDiscount: number
+    instantBooking: number
+    selfCheckin: number
+    selfCheckinDetails: number
+    apartmentType: number
+    floorNumber: number
+    propertySizeM2: number
+    securityDepositDue: number
     _all: number
   }
 
@@ -3150,6 +4043,7 @@ export namespace Prisma {
   export type ListingAvgAggregateInputType = {
     unitCount?: true
     pricePerNight?: true
+    pricePerDay?: true
     minStayNights?: true
     lat?: true
     lng?: true
@@ -3166,11 +4060,32 @@ export namespace Prisma {
     seats?: true
     doors?: true
     mileageLimitKm?: true
+    odometerReading?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    extraKmRate?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
+    maxAdults?: true
+    maxChildren?: true
+    childPriceValue?: true
+    childFreeUnderAge?: true
+    earlyCheckinFee?: true
+    lateCheckoutFee?: true
+    cleaningFee?: true
+    extraGuestFee?: true
+    extraGuestAfter?: true
+    weeklyDiscount?: true
+    monthlyDiscount?: true
+    floorNumber?: true
+    propertySizeM2?: true
   }
 
   export type ListingSumAggregateInputType = {
     unitCount?: true
     pricePerNight?: true
+    pricePerDay?: true
     minStayNights?: true
     lat?: true
     lng?: true
@@ -3187,6 +4102,26 @@ export namespace Prisma {
     seats?: true
     doors?: true
     mileageLimitKm?: true
+    odometerReading?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    extraKmRate?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
+    maxAdults?: true
+    maxChildren?: true
+    childPriceValue?: true
+    childFreeUnderAge?: true
+    earlyCheckinFee?: true
+    lateCheckoutFee?: true
+    cleaningFee?: true
+    extraGuestFee?: true
+    extraGuestAfter?: true
+    weeklyDiscount?: true
+    monthlyDiscount?: true
+    floorNumber?: true
+    propertySizeM2?: true
   }
 
   export type ListingMinAggregateInputType = {
@@ -3198,6 +4133,7 @@ export namespace Prisma {
     unitCount?: true
     description?: true
     pricePerNight?: true
+    pricePerDay?: true
     currency?: true
     minStayNights?: true
     checkinTime?: true
@@ -3241,9 +4177,54 @@ export namespace Prisma {
     doors?: true
     mileagePolicy?: true
     mileageLimitKm?: true
+    carCategory?: true
+    driveType?: true
+    airConditioning?: true
+    odometerReading?: true
+    licencePlate?: true
+    engineSize?: true
+    colour?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    fuelPolicy?: true
+    extraKmRate?: true
+    roadsideAssistance?: true
+    crossBorderAllowed?: true
+    airportPickup?: true
+    deliveryEnabled?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
+    pickupHoursFrom?: true
+    pickupHoursTo?: true
+    returnSameLocation?: true
+    insuranceType?: true
     updatedAt?: true
     createdAt?: true
     deletedAt?: true
+    featuredPhotoId?: true
+    maxAdults?: true
+    maxChildren?: true
+    childrenAllowed?: true
+    childPriceType?: true
+    childPriceValue?: true
+    childFreeUnderAge?: true
+    checkinRules?: true
+    checkoutRules?: true
+    earlyCheckinFee?: true
+    lateCheckoutFee?: true
+    cleaningFee?: true
+    extraGuestFee?: true
+    extraGuestAfter?: true
+    weeklyDiscount?: true
+    monthlyDiscount?: true
+    instantBooking?: true
+    selfCheckin?: true
+    selfCheckinDetails?: true
+    apartmentType?: true
+    floorNumber?: true
+    propertySizeM2?: true
+    securityDepositDue?: true
   }
 
   export type ListingMaxAggregateInputType = {
@@ -3255,6 +4236,7 @@ export namespace Prisma {
     unitCount?: true
     description?: true
     pricePerNight?: true
+    pricePerDay?: true
     currency?: true
     minStayNights?: true
     checkinTime?: true
@@ -3298,9 +4280,54 @@ export namespace Prisma {
     doors?: true
     mileagePolicy?: true
     mileageLimitKm?: true
+    carCategory?: true
+    driveType?: true
+    airConditioning?: true
+    odometerReading?: true
+    licencePlate?: true
+    engineSize?: true
+    colour?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    fuelPolicy?: true
+    extraKmRate?: true
+    roadsideAssistance?: true
+    crossBorderAllowed?: true
+    airportPickup?: true
+    deliveryEnabled?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
+    pickupHoursFrom?: true
+    pickupHoursTo?: true
+    returnSameLocation?: true
+    insuranceType?: true
     updatedAt?: true
     createdAt?: true
     deletedAt?: true
+    featuredPhotoId?: true
+    maxAdults?: true
+    maxChildren?: true
+    childrenAllowed?: true
+    childPriceType?: true
+    childPriceValue?: true
+    childFreeUnderAge?: true
+    checkinRules?: true
+    checkoutRules?: true
+    earlyCheckinFee?: true
+    lateCheckoutFee?: true
+    cleaningFee?: true
+    extraGuestFee?: true
+    extraGuestAfter?: true
+    weeklyDiscount?: true
+    monthlyDiscount?: true
+    instantBooking?: true
+    selfCheckin?: true
+    selfCheckinDetails?: true
+    apartmentType?: true
+    floorNumber?: true
+    propertySizeM2?: true
+    securityDepositDue?: true
   }
 
   export type ListingCountAggregateInputType = {
@@ -3312,6 +4339,7 @@ export namespace Prisma {
     unitCount?: true
     description?: true
     pricePerNight?: true
+    pricePerDay?: true
     currency?: true
     minStayNights?: true
     checkinTime?: true
@@ -3356,9 +4384,54 @@ export namespace Prisma {
     doors?: true
     mileagePolicy?: true
     mileageLimitKm?: true
+    carCategory?: true
+    driveType?: true
+    airConditioning?: true
+    odometerReading?: true
+    licencePlate?: true
+    engineSize?: true
+    colour?: true
+    securityDeposit?: true
+    minimumDriverAge?: true
+    minimumRentalDays?: true
+    fuelPolicy?: true
+    extraKmRate?: true
+    roadsideAssistance?: true
+    crossBorderAllowed?: true
+    airportPickup?: true
+    deliveryEnabled?: true
+    deliveryRadiusKm?: true
+    deliveryFee?: true
+    pickupHoursFrom?: true
+    pickupHoursTo?: true
+    returnSameLocation?: true
+    insuranceType?: true
     updatedAt?: true
     createdAt?: true
     deletedAt?: true
+    featuredPhotoId?: true
+    maxAdults?: true
+    maxChildren?: true
+    childrenAllowed?: true
+    childPriceType?: true
+    childPriceValue?: true
+    childFreeUnderAge?: true
+    checkinRules?: true
+    checkoutRules?: true
+    earlyCheckinFee?: true
+    lateCheckoutFee?: true
+    cleaningFee?: true
+    extraGuestFee?: true
+    extraGuestAfter?: true
+    weeklyDiscount?: true
+    monthlyDiscount?: true
+    instantBooking?: true
+    selfCheckin?: true
+    selfCheckinDetails?: true
+    apartmentType?: true
+    floorNumber?: true
+    propertySizeM2?: true
+    securityDepositDue?: true
     _all?: true
   }
 
@@ -3457,6 +4530,7 @@ export namespace Prisma {
     unitCount: number | null
     description: string | null
     pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
     currency: string | null
     minStayNights: number
     checkinTime: string | null
@@ -3501,9 +4575,54 @@ export namespace Prisma {
     doors: number | null
     mileagePolicy: $Enums.MileagePolicy | null
     mileageLimitKm: number | null
+    carCategory: $Enums.CarCategory | null
+    driveType: $Enums.DriveType | null
+    airConditioning: boolean | null
+    odometerReading: number | null
+    licencePlate: string | null
+    engineSize: string | null
+    colour: string | null
+    securityDeposit: Decimal | null
+    minimumDriverAge: number | null
+    minimumRentalDays: number | null
+    fuelPolicy: $Enums.FuelPolicy | null
+    extraKmRate: Decimal | null
+    roadsideAssistance: boolean
+    crossBorderAllowed: boolean
+    airportPickup: boolean
+    deliveryEnabled: boolean
+    deliveryRadiusKm: number | null
+    deliveryFee: Decimal | null
+    pickupHoursFrom: string | null
+    pickupHoursTo: string | null
+    returnSameLocation: boolean
+    insuranceType: $Enums.InsuranceType | null
     updatedAt: Date
     createdAt: Date
     deletedAt: Date | null
+    featuredPhotoId: string | null
+    maxAdults: number | null
+    maxChildren: number | null
+    childrenAllowed: boolean
+    childPriceType: string | null
+    childPriceValue: Decimal | null
+    childFreeUnderAge: number | null
+    checkinRules: string | null
+    checkoutRules: string | null
+    earlyCheckinFee: Decimal | null
+    lateCheckoutFee: Decimal | null
+    cleaningFee: Decimal | null
+    extraGuestFee: Decimal | null
+    extraGuestAfter: number | null
+    weeklyDiscount: Decimal | null
+    monthlyDiscount: Decimal | null
+    instantBooking: boolean
+    selfCheckin: boolean
+    selfCheckinDetails: string | null
+    apartmentType: $Enums.ApartmentType | null
+    floorNumber: number | null
+    propertySizeM2: Decimal | null
+    securityDepositDue: string | null
     _count: ListingCountAggregateOutputType | null
     _avg: ListingAvgAggregateOutputType | null
     _sum: ListingSumAggregateOutputType | null
@@ -3534,6 +4653,7 @@ export namespace Prisma {
     unitCount?: boolean
     description?: boolean
     pricePerNight?: boolean
+    pricePerDay?: boolean
     currency?: boolean
     minStayNights?: boolean
     checkinTime?: boolean
@@ -3578,19 +4698,70 @@ export namespace Prisma {
     doors?: boolean
     mileagePolicy?: boolean
     mileageLimitKm?: boolean
+    carCategory?: boolean
+    driveType?: boolean
+    airConditioning?: boolean
+    odometerReading?: boolean
+    licencePlate?: boolean
+    engineSize?: boolean
+    colour?: boolean
+    securityDeposit?: boolean
+    minimumDriverAge?: boolean
+    minimumRentalDays?: boolean
+    fuelPolicy?: boolean
+    extraKmRate?: boolean
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: boolean
+    deliveryFee?: boolean
+    pickupHoursFrom?: boolean
+    pickupHoursTo?: boolean
+    returnSameLocation?: boolean
+    insuranceType?: boolean
     updatedAt?: boolean
     createdAt?: boolean
     deletedAt?: boolean
+    featuredPhotoId?: boolean
+    maxAdults?: boolean
+    maxChildren?: boolean
+    childrenAllowed?: boolean
+    childPriceType?: boolean
+    childPriceValue?: boolean
+    childFreeUnderAge?: boolean
+    checkinRules?: boolean
+    checkoutRules?: boolean
+    earlyCheckinFee?: boolean
+    lateCheckoutFee?: boolean
+    cleaningFee?: boolean
+    extraGuestFee?: boolean
+    extraGuestAfter?: boolean
+    weeklyDiscount?: boolean
+    monthlyDiscount?: boolean
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: boolean
+    apartmentType?: boolean
+    floorNumber?: boolean
+    propertySizeM2?: boolean
+    securityDepositDue?: boolean
     photos?: boolean | Listing$photosArgs<ExtArgs>
     documents?: boolean | Listing$documentsArgs<ExtArgs>
     amenities?: boolean | Listing$amenitiesArgs<ExtArgs>
     customAmenities?: boolean | Listing$customAmenitiesArgs<ExtArgs>
     reviewTasks?: boolean | Listing$reviewTasksArgs<ExtArgs>
+    moderationLog?: boolean | Listing$moderationLogArgs<ExtArgs>
     favourites?: boolean | Listing$favouritesArgs<ExtArgs>
     recentViews?: boolean | Listing$recentViewsArgs<ExtArgs>
     bookings?: boolean | Listing$bookingsArgs<ExtArgs>
     reviews?: boolean | Listing$reviewsArgs<ExtArgs>
     icalFeeds?: boolean | Listing$icalFeedsArgs<ExtArgs>
+    bedConfigs?: boolean | Listing$bedConfigsArgs<ExtArgs>
+    blockedDates?: boolean | Listing$blockedDatesArgs<ExtArgs>
+    seasonalPrices?: boolean | Listing$seasonalPricesArgs<ExtArgs>
+    landmarks?: boolean | Listing$landmarksArgs<ExtArgs>
+    houseRules?: boolean | Listing$houseRulesArgs<ExtArgs>
     _count?: boolean | ListingCountOutputTypeDefaultArgs<ExtArgs>
   }, ExtArgs["result"]["listing"]>
 
@@ -3603,6 +4774,7 @@ export namespace Prisma {
     unitCount?: boolean
     description?: boolean
     pricePerNight?: boolean
+    pricePerDay?: boolean
     currency?: boolean
     minStayNights?: boolean
     checkinTime?: boolean
@@ -3647,9 +4819,54 @@ export namespace Prisma {
     doors?: boolean
     mileagePolicy?: boolean
     mileageLimitKm?: boolean
+    carCategory?: boolean
+    driveType?: boolean
+    airConditioning?: boolean
+    odometerReading?: boolean
+    licencePlate?: boolean
+    engineSize?: boolean
+    colour?: boolean
+    securityDeposit?: boolean
+    minimumDriverAge?: boolean
+    minimumRentalDays?: boolean
+    fuelPolicy?: boolean
+    extraKmRate?: boolean
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: boolean
+    deliveryFee?: boolean
+    pickupHoursFrom?: boolean
+    pickupHoursTo?: boolean
+    returnSameLocation?: boolean
+    insuranceType?: boolean
     updatedAt?: boolean
     createdAt?: boolean
     deletedAt?: boolean
+    featuredPhotoId?: boolean
+    maxAdults?: boolean
+    maxChildren?: boolean
+    childrenAllowed?: boolean
+    childPriceType?: boolean
+    childPriceValue?: boolean
+    childFreeUnderAge?: boolean
+    checkinRules?: boolean
+    checkoutRules?: boolean
+    earlyCheckinFee?: boolean
+    lateCheckoutFee?: boolean
+    cleaningFee?: boolean
+    extraGuestFee?: boolean
+    extraGuestAfter?: boolean
+    weeklyDiscount?: boolean
+    monthlyDiscount?: boolean
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: boolean
+    apartmentType?: boolean
+    floorNumber?: boolean
+    propertySizeM2?: boolean
+    securityDepositDue?: boolean
   }, ExtArgs["result"]["listing"]>
 
   export type ListingSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
@@ -3661,6 +4878,7 @@ export namespace Prisma {
     unitCount?: boolean
     description?: boolean
     pricePerNight?: boolean
+    pricePerDay?: boolean
     currency?: boolean
     minStayNights?: boolean
     checkinTime?: boolean
@@ -3705,9 +4923,54 @@ export namespace Prisma {
     doors?: boolean
     mileagePolicy?: boolean
     mileageLimitKm?: boolean
+    carCategory?: boolean
+    driveType?: boolean
+    airConditioning?: boolean
+    odometerReading?: boolean
+    licencePlate?: boolean
+    engineSize?: boolean
+    colour?: boolean
+    securityDeposit?: boolean
+    minimumDriverAge?: boolean
+    minimumRentalDays?: boolean
+    fuelPolicy?: boolean
+    extraKmRate?: boolean
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: boolean
+    deliveryFee?: boolean
+    pickupHoursFrom?: boolean
+    pickupHoursTo?: boolean
+    returnSameLocation?: boolean
+    insuranceType?: boolean
     updatedAt?: boolean
     createdAt?: boolean
     deletedAt?: boolean
+    featuredPhotoId?: boolean
+    maxAdults?: boolean
+    maxChildren?: boolean
+    childrenAllowed?: boolean
+    childPriceType?: boolean
+    childPriceValue?: boolean
+    childFreeUnderAge?: boolean
+    checkinRules?: boolean
+    checkoutRules?: boolean
+    earlyCheckinFee?: boolean
+    lateCheckoutFee?: boolean
+    cleaningFee?: boolean
+    extraGuestFee?: boolean
+    extraGuestAfter?: boolean
+    weeklyDiscount?: boolean
+    monthlyDiscount?: boolean
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: boolean
+    apartmentType?: boolean
+    floorNumber?: boolean
+    propertySizeM2?: boolean
+    securityDepositDue?: boolean
   }, ExtArgs["result"]["listing"]>
 
   export type ListingSelectScalar = {
@@ -3719,6 +4982,7 @@ export namespace Prisma {
     unitCount?: boolean
     description?: boolean
     pricePerNight?: boolean
+    pricePerDay?: boolean
     currency?: boolean
     minStayNights?: boolean
     checkinTime?: boolean
@@ -3763,23 +5027,74 @@ export namespace Prisma {
     doors?: boolean
     mileagePolicy?: boolean
     mileageLimitKm?: boolean
+    carCategory?: boolean
+    driveType?: boolean
+    airConditioning?: boolean
+    odometerReading?: boolean
+    licencePlate?: boolean
+    engineSize?: boolean
+    colour?: boolean
+    securityDeposit?: boolean
+    minimumDriverAge?: boolean
+    minimumRentalDays?: boolean
+    fuelPolicy?: boolean
+    extraKmRate?: boolean
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: boolean
+    deliveryFee?: boolean
+    pickupHoursFrom?: boolean
+    pickupHoursTo?: boolean
+    returnSameLocation?: boolean
+    insuranceType?: boolean
     updatedAt?: boolean
     createdAt?: boolean
     deletedAt?: boolean
+    featuredPhotoId?: boolean
+    maxAdults?: boolean
+    maxChildren?: boolean
+    childrenAllowed?: boolean
+    childPriceType?: boolean
+    childPriceValue?: boolean
+    childFreeUnderAge?: boolean
+    checkinRules?: boolean
+    checkoutRules?: boolean
+    earlyCheckinFee?: boolean
+    lateCheckoutFee?: boolean
+    cleaningFee?: boolean
+    extraGuestFee?: boolean
+    extraGuestAfter?: boolean
+    weeklyDiscount?: boolean
+    monthlyDiscount?: boolean
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: boolean
+    apartmentType?: boolean
+    floorNumber?: boolean
+    propertySizeM2?: boolean
+    securityDepositDue?: boolean
   }
 
-  export type ListingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "providerId" | "category" | "name" | "roomType" | "unitCount" | "description" | "pricePerNight" | "currency" | "minStayNights" | "checkinTime" | "checkoutTime" | "cancellationPolicy" | "smokingAllowed" | "petsAllowed" | "address" | "lat" | "lng" | "town" | "country" | "claimedStarRating" | "starRating" | "status" | "submissionCount" | "submittedAt" | "approvedAt" | "approvedBy" | "rejectedAt" | "rejectedBy" | "rejectionReasons" | "rejectionNote" | "suspendedAt" | "suspendedBy" | "suspensionReason" | "consecutiveNegative" | "bedrooms" | "bathrooms" | "maxGuests" | "longStayEnabled" | "longStayMinNights" | "longStayDiscountType" | "longStayDiscountValue" | "activatedAt" | "carMake" | "carModel" | "carYear" | "transmission" | "fuelType" | "seats" | "doors" | "mileagePolicy" | "mileageLimitKm" | "updatedAt" | "createdAt" | "deletedAt", ExtArgs["result"]["listing"]>
+  export type ListingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "providerId" | "category" | "name" | "roomType" | "unitCount" | "description" | "pricePerNight" | "pricePerDay" | "currency" | "minStayNights" | "checkinTime" | "checkoutTime" | "cancellationPolicy" | "smokingAllowed" | "petsAllowed" | "address" | "lat" | "lng" | "town" | "country" | "claimedStarRating" | "starRating" | "status" | "submissionCount" | "submittedAt" | "approvedAt" | "approvedBy" | "rejectedAt" | "rejectedBy" | "rejectionReasons" | "rejectionNote" | "suspendedAt" | "suspendedBy" | "suspensionReason" | "consecutiveNegative" | "bedrooms" | "bathrooms" | "maxGuests" | "longStayEnabled" | "longStayMinNights" | "longStayDiscountType" | "longStayDiscountValue" | "activatedAt" | "carMake" | "carModel" | "carYear" | "transmission" | "fuelType" | "seats" | "doors" | "mileagePolicy" | "mileageLimitKm" | "carCategory" | "driveType" | "airConditioning" | "odometerReading" | "licencePlate" | "engineSize" | "colour" | "securityDeposit" | "minimumDriverAge" | "minimumRentalDays" | "fuelPolicy" | "extraKmRate" | "roadsideAssistance" | "crossBorderAllowed" | "airportPickup" | "deliveryEnabled" | "deliveryRadiusKm" | "deliveryFee" | "pickupHoursFrom" | "pickupHoursTo" | "returnSameLocation" | "insuranceType" | "updatedAt" | "createdAt" | "deletedAt" | "featuredPhotoId" | "maxAdults" | "maxChildren" | "childrenAllowed" | "childPriceType" | "childPriceValue" | "childFreeUnderAge" | "checkinRules" | "checkoutRules" | "earlyCheckinFee" | "lateCheckoutFee" | "cleaningFee" | "extraGuestFee" | "extraGuestAfter" | "weeklyDiscount" | "monthlyDiscount" | "instantBooking" | "selfCheckin" | "selfCheckinDetails" | "apartmentType" | "floorNumber" | "propertySizeM2" | "securityDepositDue", ExtArgs["result"]["listing"]>
   export type ListingInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     photos?: boolean | Listing$photosArgs<ExtArgs>
     documents?: boolean | Listing$documentsArgs<ExtArgs>
     amenities?: boolean | Listing$amenitiesArgs<ExtArgs>
     customAmenities?: boolean | Listing$customAmenitiesArgs<ExtArgs>
     reviewTasks?: boolean | Listing$reviewTasksArgs<ExtArgs>
+    moderationLog?: boolean | Listing$moderationLogArgs<ExtArgs>
     favourites?: boolean | Listing$favouritesArgs<ExtArgs>
     recentViews?: boolean | Listing$recentViewsArgs<ExtArgs>
     bookings?: boolean | Listing$bookingsArgs<ExtArgs>
     reviews?: boolean | Listing$reviewsArgs<ExtArgs>
     icalFeeds?: boolean | Listing$icalFeedsArgs<ExtArgs>
+    bedConfigs?: boolean | Listing$bedConfigsArgs<ExtArgs>
+    blockedDates?: boolean | Listing$blockedDatesArgs<ExtArgs>
+    seasonalPrices?: boolean | Listing$seasonalPricesArgs<ExtArgs>
+    landmarks?: boolean | Listing$landmarksArgs<ExtArgs>
+    houseRules?: boolean | Listing$houseRulesArgs<ExtArgs>
     _count?: boolean | ListingCountOutputTypeDefaultArgs<ExtArgs>
   }
   export type ListingIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {}
@@ -3793,11 +5108,17 @@ export namespace Prisma {
       amenities: Prisma.$ListingAmenityPayload<ExtArgs>[]
       customAmenities: Prisma.$ListingCustomAmenityPayload<ExtArgs>[]
       reviewTasks: Prisma.$ListingReviewTaskPayload<ExtArgs>[]
+      moderationLog: Prisma.$ListingModerationLogPayload<ExtArgs>[]
       favourites: Prisma.$UserFavouritePayload<ExtArgs>[]
       recentViews: Prisma.$UserRecentlyViewedPayload<ExtArgs>[]
       bookings: Prisma.$BookingPayload<ExtArgs>[]
       reviews: Prisma.$ListingReviewPayload<ExtArgs>[]
       icalFeeds: Prisma.$IcalFeedPayload<ExtArgs>[]
+      bedConfigs: Prisma.$ListingBedConfigPayload<ExtArgs>[]
+      blockedDates: Prisma.$ListingBlockedDatePayload<ExtArgs>[]
+      seasonalPrices: Prisma.$ListingSeasonalPricePayload<ExtArgs>[]
+      landmarks: Prisma.$ListingNearbyLandmarkPayload<ExtArgs>[]
+      houseRules: Prisma.$ListingHouseRulePayload<ExtArgs>[]
     }
     scalars: $Extensions.GetPayloadResult<{
       id: string
@@ -3808,6 +5129,7 @@ export namespace Prisma {
       unitCount: number | null
       description: string | null
       pricePerNight: Prisma.Decimal | null
+      pricePerDay: Prisma.Decimal | null
       currency: string | null
       minStayNights: number
       checkinTime: string | null
@@ -3852,9 +5174,54 @@ export namespace Prisma {
       doors: number | null
       mileagePolicy: $Enums.MileagePolicy | null
       mileageLimitKm: number | null
+      carCategory: $Enums.CarCategory | null
+      driveType: $Enums.DriveType | null
+      airConditioning: boolean | null
+      odometerReading: number | null
+      licencePlate: string | null
+      engineSize: string | null
+      colour: string | null
+      securityDeposit: Prisma.Decimal | null
+      minimumDriverAge: number | null
+      minimumRentalDays: number | null
+      fuelPolicy: $Enums.FuelPolicy | null
+      extraKmRate: Prisma.Decimal | null
+      roadsideAssistance: boolean
+      crossBorderAllowed: boolean
+      airportPickup: boolean
+      deliveryEnabled: boolean
+      deliveryRadiusKm: number | null
+      deliveryFee: Prisma.Decimal | null
+      pickupHoursFrom: string | null
+      pickupHoursTo: string | null
+      returnSameLocation: boolean
+      insuranceType: $Enums.InsuranceType | null
       updatedAt: Date
       createdAt: Date
       deletedAt: Date | null
+      featuredPhotoId: string | null
+      maxAdults: number | null
+      maxChildren: number | null
+      childrenAllowed: boolean
+      childPriceType: string | null
+      childPriceValue: Prisma.Decimal | null
+      childFreeUnderAge: number | null
+      checkinRules: string | null
+      checkoutRules: string | null
+      earlyCheckinFee: Prisma.Decimal | null
+      lateCheckoutFee: Prisma.Decimal | null
+      cleaningFee: Prisma.Decimal | null
+      extraGuestFee: Prisma.Decimal | null
+      extraGuestAfter: number | null
+      weeklyDiscount: Prisma.Decimal | null
+      monthlyDiscount: Prisma.Decimal | null
+      instantBooking: boolean
+      selfCheckin: boolean
+      selfCheckinDetails: string | null
+      apartmentType: $Enums.ApartmentType | null
+      floorNumber: number | null
+      propertySizeM2: Prisma.Decimal | null
+      securityDepositDue: string | null
     }, ExtArgs["result"]["listing"]>
     composites: {}
   }
@@ -4254,11 +5621,17 @@ export namespace Prisma {
     amenities<T extends Listing$amenitiesArgs<ExtArgs> = {}>(args?: Subset<T, Listing$amenitiesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingAmenityPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     customAmenities<T extends Listing$customAmenitiesArgs<ExtArgs> = {}>(args?: Subset<T, Listing$customAmenitiesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingCustomAmenityPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     reviewTasks<T extends Listing$reviewTasksArgs<ExtArgs> = {}>(args?: Subset<T, Listing$reviewTasksArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingReviewTaskPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    moderationLog<T extends Listing$moderationLogArgs<ExtArgs> = {}>(args?: Subset<T, Listing$moderationLogArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     favourites<T extends Listing$favouritesArgs<ExtArgs> = {}>(args?: Subset<T, Listing$favouritesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$UserFavouritePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     recentViews<T extends Listing$recentViewsArgs<ExtArgs> = {}>(args?: Subset<T, Listing$recentViewsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$UserRecentlyViewedPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     bookings<T extends Listing$bookingsArgs<ExtArgs> = {}>(args?: Subset<T, Listing$bookingsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$BookingPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     reviews<T extends Listing$reviewsArgs<ExtArgs> = {}>(args?: Subset<T, Listing$reviewsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingReviewPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     icalFeeds<T extends Listing$icalFeedsArgs<ExtArgs> = {}>(args?: Subset<T, Listing$icalFeedsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$IcalFeedPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    bedConfigs<T extends Listing$bedConfigsArgs<ExtArgs> = {}>(args?: Subset<T, Listing$bedConfigsArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    blockedDates<T extends Listing$blockedDatesArgs<ExtArgs> = {}>(args?: Subset<T, Listing$blockedDatesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    seasonalPrices<T extends Listing$seasonalPricesArgs<ExtArgs> = {}>(args?: Subset<T, Listing$seasonalPricesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    landmarks<T extends Listing$landmarksArgs<ExtArgs> = {}>(args?: Subset<T, Listing$landmarksArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+    houseRules<T extends Listing$houseRulesArgs<ExtArgs> = {}>(args?: Subset<T, Listing$houseRulesArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
     /**
      * Attaches callbacks for the resolution and/or rejection of the Promise.
      * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -4296,6 +5669,7 @@ export namespace Prisma {
     readonly unitCount: FieldRef<"Listing", 'Int'>
     readonly description: FieldRef<"Listing", 'String'>
     readonly pricePerNight: FieldRef<"Listing", 'Decimal'>
+    readonly pricePerDay: FieldRef<"Listing", 'Decimal'>
     readonly currency: FieldRef<"Listing", 'String'>
     readonly minStayNights: FieldRef<"Listing", 'Int'>
     readonly checkinTime: FieldRef<"Listing", 'String'>
@@ -4340,9 +5714,54 @@ export namespace Prisma {
     readonly doors: FieldRef<"Listing", 'Int'>
     readonly mileagePolicy: FieldRef<"Listing", 'MileagePolicy'>
     readonly mileageLimitKm: FieldRef<"Listing", 'Int'>
+    readonly carCategory: FieldRef<"Listing", 'CarCategory'>
+    readonly driveType: FieldRef<"Listing", 'DriveType'>
+    readonly airConditioning: FieldRef<"Listing", 'Boolean'>
+    readonly odometerReading: FieldRef<"Listing", 'Int'>
+    readonly licencePlate: FieldRef<"Listing", 'String'>
+    readonly engineSize: FieldRef<"Listing", 'String'>
+    readonly colour: FieldRef<"Listing", 'String'>
+    readonly securityDeposit: FieldRef<"Listing", 'Decimal'>
+    readonly minimumDriverAge: FieldRef<"Listing", 'Int'>
+    readonly minimumRentalDays: FieldRef<"Listing", 'Int'>
+    readonly fuelPolicy: FieldRef<"Listing", 'FuelPolicy'>
+    readonly extraKmRate: FieldRef<"Listing", 'Decimal'>
+    readonly roadsideAssistance: FieldRef<"Listing", 'Boolean'>
+    readonly crossBorderAllowed: FieldRef<"Listing", 'Boolean'>
+    readonly airportPickup: FieldRef<"Listing", 'Boolean'>
+    readonly deliveryEnabled: FieldRef<"Listing", 'Boolean'>
+    readonly deliveryRadiusKm: FieldRef<"Listing", 'Int'>
+    readonly deliveryFee: FieldRef<"Listing", 'Decimal'>
+    readonly pickupHoursFrom: FieldRef<"Listing", 'String'>
+    readonly pickupHoursTo: FieldRef<"Listing", 'String'>
+    readonly returnSameLocation: FieldRef<"Listing", 'Boolean'>
+    readonly insuranceType: FieldRef<"Listing", 'InsuranceType'>
     readonly updatedAt: FieldRef<"Listing", 'DateTime'>
     readonly createdAt: FieldRef<"Listing", 'DateTime'>
     readonly deletedAt: FieldRef<"Listing", 'DateTime'>
+    readonly featuredPhotoId: FieldRef<"Listing", 'String'>
+    readonly maxAdults: FieldRef<"Listing", 'Int'>
+    readonly maxChildren: FieldRef<"Listing", 'Int'>
+    readonly childrenAllowed: FieldRef<"Listing", 'Boolean'>
+    readonly childPriceType: FieldRef<"Listing", 'String'>
+    readonly childPriceValue: FieldRef<"Listing", 'Decimal'>
+    readonly childFreeUnderAge: FieldRef<"Listing", 'Int'>
+    readonly checkinRules: FieldRef<"Listing", 'String'>
+    readonly checkoutRules: FieldRef<"Listing", 'String'>
+    readonly earlyCheckinFee: FieldRef<"Listing", 'Decimal'>
+    readonly lateCheckoutFee: FieldRef<"Listing", 'Decimal'>
+    readonly cleaningFee: FieldRef<"Listing", 'Decimal'>
+    readonly extraGuestFee: FieldRef<"Listing", 'Decimal'>
+    readonly extraGuestAfter: FieldRef<"Listing", 'Int'>
+    readonly weeklyDiscount: FieldRef<"Listing", 'Decimal'>
+    readonly monthlyDiscount: FieldRef<"Listing", 'Decimal'>
+    readonly instantBooking: FieldRef<"Listing", 'Boolean'>
+    readonly selfCheckin: FieldRef<"Listing", 'Boolean'>
+    readonly selfCheckinDetails: FieldRef<"Listing", 'String'>
+    readonly apartmentType: FieldRef<"Listing", 'ApartmentType'>
+    readonly floorNumber: FieldRef<"Listing", 'Int'>
+    readonly propertySizeM2: FieldRef<"Listing", 'Decimal'>
+    readonly securityDepositDue: FieldRef<"Listing", 'String'>
   }
     
 
@@ -4851,6 +6270,30 @@ export namespace Prisma {
   }
 
   /**
+   * Listing.moderationLog
+   */
+  export type Listing$moderationLogArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    where?: ListingModerationLogWhereInput
+    orderBy?: ListingModerationLogOrderByWithRelationInput | ListingModerationLogOrderByWithRelationInput[]
+    cursor?: ListingModerationLogWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ListingModerationLogScalarFieldEnum | ListingModerationLogScalarFieldEnum[]
+  }
+
+  /**
    * Listing.favourites
    */
   export type Listing$favouritesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
@@ -4968,6 +6411,126 @@ export namespace Prisma {
     take?: number
     skip?: number
     distinct?: IcalFeedScalarFieldEnum | IcalFeedScalarFieldEnum[]
+  }
+
+  /**
+   * Listing.bedConfigs
+   */
+  export type Listing$bedConfigsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    where?: ListingBedConfigWhereInput
+    orderBy?: ListingBedConfigOrderByWithRelationInput | ListingBedConfigOrderByWithRelationInput[]
+    cursor?: ListingBedConfigWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ListingBedConfigScalarFieldEnum | ListingBedConfigScalarFieldEnum[]
+  }
+
+  /**
+   * Listing.blockedDates
+   */
+  export type Listing$blockedDatesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    where?: ListingBlockedDateWhereInput
+    orderBy?: ListingBlockedDateOrderByWithRelationInput | ListingBlockedDateOrderByWithRelationInput[]
+    cursor?: ListingBlockedDateWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ListingBlockedDateScalarFieldEnum | ListingBlockedDateScalarFieldEnum[]
+  }
+
+  /**
+   * Listing.seasonalPrices
+   */
+  export type Listing$seasonalPricesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    where?: ListingSeasonalPriceWhereInput
+    orderBy?: ListingSeasonalPriceOrderByWithRelationInput | ListingSeasonalPriceOrderByWithRelationInput[]
+    cursor?: ListingSeasonalPriceWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ListingSeasonalPriceScalarFieldEnum | ListingSeasonalPriceScalarFieldEnum[]
+  }
+
+  /**
+   * Listing.landmarks
+   */
+  export type Listing$landmarksArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    where?: ListingNearbyLandmarkWhereInput
+    orderBy?: ListingNearbyLandmarkOrderByWithRelationInput | ListingNearbyLandmarkOrderByWithRelationInput[]
+    cursor?: ListingNearbyLandmarkWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ListingNearbyLandmarkScalarFieldEnum | ListingNearbyLandmarkScalarFieldEnum[]
+  }
+
+  /**
+   * Listing.houseRules
+   */
+  export type Listing$houseRulesArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    where?: ListingHouseRuleWhereInput
+    orderBy?: ListingHouseRuleOrderByWithRelationInput | ListingHouseRuleOrderByWithRelationInput[]
+    cursor?: ListingHouseRuleWhereUniqueInput
+    take?: number
+    skip?: number
+    distinct?: ListingHouseRuleScalarFieldEnum | ListingHouseRuleScalarFieldEnum[]
   }
 
   /**
@@ -6143,6 +7706,6540 @@ export namespace Prisma {
      * Choose, which related nodes to fetch as well
      */
     include?: ListingReviewTaskInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model ListingModerationLog
+   */
+
+  export type AggregateListingModerationLog = {
+    _count: ListingModerationLogCountAggregateOutputType | null
+    _min: ListingModerationLogMinAggregateOutputType | null
+    _max: ListingModerationLogMaxAggregateOutputType | null
+  }
+
+  export type ListingModerationLogMinAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    action: string | null
+    actorId: string | null
+    actorRole: string | null
+    createdAt: Date | null
+  }
+
+  export type ListingModerationLogMaxAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    action: string | null
+    actorId: string | null
+    actorRole: string | null
+    createdAt: Date | null
+  }
+
+  export type ListingModerationLogCountAggregateOutputType = {
+    id: number
+    listingId: number
+    action: number
+    actorId: number
+    actorRole: number
+    metadata: number
+    createdAt: number
+    _all: number
+  }
+
+
+  export type ListingModerationLogMinAggregateInputType = {
+    id?: true
+    listingId?: true
+    action?: true
+    actorId?: true
+    actorRole?: true
+    createdAt?: true
+  }
+
+  export type ListingModerationLogMaxAggregateInputType = {
+    id?: true
+    listingId?: true
+    action?: true
+    actorId?: true
+    actorRole?: true
+    createdAt?: true
+  }
+
+  export type ListingModerationLogCountAggregateInputType = {
+    id?: true
+    listingId?: true
+    action?: true
+    actorId?: true
+    actorRole?: true
+    metadata?: true
+    createdAt?: true
+    _all?: true
+  }
+
+  export type ListingModerationLogAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingModerationLog to aggregate.
+     */
+    where?: ListingModerationLogWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingModerationLogs to fetch.
+     */
+    orderBy?: ListingModerationLogOrderByWithRelationInput | ListingModerationLogOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ListingModerationLogWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingModerationLogs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingModerationLogs.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ListingModerationLogs
+    **/
+    _count?: true | ListingModerationLogCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ListingModerationLogMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ListingModerationLogMaxAggregateInputType
+  }
+
+  export type GetListingModerationLogAggregateType<T extends ListingModerationLogAggregateArgs> = {
+        [P in keyof T & keyof AggregateListingModerationLog]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateListingModerationLog[P]>
+      : GetScalarType<T[P], AggregateListingModerationLog[P]>
+  }
+
+
+
+
+  export type ListingModerationLogGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingModerationLogWhereInput
+    orderBy?: ListingModerationLogOrderByWithAggregationInput | ListingModerationLogOrderByWithAggregationInput[]
+    by: ListingModerationLogScalarFieldEnum[] | ListingModerationLogScalarFieldEnum
+    having?: ListingModerationLogScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ListingModerationLogCountAggregateInputType | true
+    _min?: ListingModerationLogMinAggregateInputType
+    _max?: ListingModerationLogMaxAggregateInputType
+  }
+
+  export type ListingModerationLogGroupByOutputType = {
+    id: string
+    listingId: string
+    action: string
+    actorId: string
+    actorRole: string
+    metadata: JsonValue
+    createdAt: Date
+    _count: ListingModerationLogCountAggregateOutputType | null
+    _min: ListingModerationLogMinAggregateOutputType | null
+    _max: ListingModerationLogMaxAggregateOutputType | null
+  }
+
+  type GetListingModerationLogGroupByPayload<T extends ListingModerationLogGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ListingModerationLogGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ListingModerationLogGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ListingModerationLogGroupByOutputType[P]>
+            : GetScalarType<T[P], ListingModerationLogGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ListingModerationLogSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    action?: boolean
+    actorId?: boolean
+    actorRole?: boolean
+    metadata?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingModerationLog"]>
+
+  export type ListingModerationLogSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    action?: boolean
+    actorId?: boolean
+    actorRole?: boolean
+    metadata?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingModerationLog"]>
+
+  export type ListingModerationLogSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    action?: boolean
+    actorId?: boolean
+    actorRole?: boolean
+    metadata?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingModerationLog"]>
+
+  export type ListingModerationLogSelectScalar = {
+    id?: boolean
+    listingId?: boolean
+    action?: boolean
+    actorId?: boolean
+    actorRole?: boolean
+    metadata?: boolean
+    createdAt?: boolean
+  }
+
+  export type ListingModerationLogOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "action" | "actorId" | "actorRole" | "metadata" | "createdAt", ExtArgs["result"]["listingModerationLog"]>
+  export type ListingModerationLogInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingModerationLogIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingModerationLogIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+
+  export type $ListingModerationLogPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ListingModerationLog"
+    objects: {
+      listing: Prisma.$ListingPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      listingId: string
+      /**
+       * approved | rejected | star_rating_updated | suspended | reinstated | escalated
+       */
+      action: string
+      actorId: string
+      actorRole: string
+      /**
+       * Action-specific payload, e.g. { oldRating, newRating, reason, reasons, note }
+       */
+      metadata: Prisma.JsonValue
+      createdAt: Date
+    }, ExtArgs["result"]["listingModerationLog"]>
+    composites: {}
+  }
+
+  type ListingModerationLogGetPayload<S extends boolean | null | undefined | ListingModerationLogDefaultArgs> = $Result.GetResult<Prisma.$ListingModerationLogPayload, S>
+
+  type ListingModerationLogCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ListingModerationLogFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ListingModerationLogCountAggregateInputType | true
+    }
+
+  export interface ListingModerationLogDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ListingModerationLog'], meta: { name: 'ListingModerationLog' } }
+    /**
+     * Find zero or one ListingModerationLog that matches the filter.
+     * @param {ListingModerationLogFindUniqueArgs} args - Arguments to find a ListingModerationLog
+     * @example
+     * // Get one ListingModerationLog
+     * const listingModerationLog = await prisma.listingModerationLog.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ListingModerationLogFindUniqueArgs>(args: SelectSubset<T, ListingModerationLogFindUniqueArgs<ExtArgs>>): Prisma__ListingModerationLogClient<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ListingModerationLog that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ListingModerationLogFindUniqueOrThrowArgs} args - Arguments to find a ListingModerationLog
+     * @example
+     * // Get one ListingModerationLog
+     * const listingModerationLog = await prisma.listingModerationLog.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ListingModerationLogFindUniqueOrThrowArgs>(args: SelectSubset<T, ListingModerationLogFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ListingModerationLogClient<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingModerationLog that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingModerationLogFindFirstArgs} args - Arguments to find a ListingModerationLog
+     * @example
+     * // Get one ListingModerationLog
+     * const listingModerationLog = await prisma.listingModerationLog.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ListingModerationLogFindFirstArgs>(args?: SelectSubset<T, ListingModerationLogFindFirstArgs<ExtArgs>>): Prisma__ListingModerationLogClient<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingModerationLog that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingModerationLogFindFirstOrThrowArgs} args - Arguments to find a ListingModerationLog
+     * @example
+     * // Get one ListingModerationLog
+     * const listingModerationLog = await prisma.listingModerationLog.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ListingModerationLogFindFirstOrThrowArgs>(args?: SelectSubset<T, ListingModerationLogFindFirstOrThrowArgs<ExtArgs>>): Prisma__ListingModerationLogClient<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ListingModerationLogs that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingModerationLogFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ListingModerationLogs
+     * const listingModerationLogs = await prisma.listingModerationLog.findMany()
+     * 
+     * // Get first 10 ListingModerationLogs
+     * const listingModerationLogs = await prisma.listingModerationLog.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const listingModerationLogWithIdOnly = await prisma.listingModerationLog.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ListingModerationLogFindManyArgs>(args?: SelectSubset<T, ListingModerationLogFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ListingModerationLog.
+     * @param {ListingModerationLogCreateArgs} args - Arguments to create a ListingModerationLog.
+     * @example
+     * // Create one ListingModerationLog
+     * const ListingModerationLog = await prisma.listingModerationLog.create({
+     *   data: {
+     *     // ... data to create a ListingModerationLog
+     *   }
+     * })
+     * 
+     */
+    create<T extends ListingModerationLogCreateArgs>(args: SelectSubset<T, ListingModerationLogCreateArgs<ExtArgs>>): Prisma__ListingModerationLogClient<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ListingModerationLogs.
+     * @param {ListingModerationLogCreateManyArgs} args - Arguments to create many ListingModerationLogs.
+     * @example
+     * // Create many ListingModerationLogs
+     * const listingModerationLog = await prisma.listingModerationLog.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ListingModerationLogCreateManyArgs>(args?: SelectSubset<T, ListingModerationLogCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ListingModerationLogs and returns the data saved in the database.
+     * @param {ListingModerationLogCreateManyAndReturnArgs} args - Arguments to create many ListingModerationLogs.
+     * @example
+     * // Create many ListingModerationLogs
+     * const listingModerationLog = await prisma.listingModerationLog.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ListingModerationLogs and only return the `id`
+     * const listingModerationLogWithIdOnly = await prisma.listingModerationLog.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ListingModerationLogCreateManyAndReturnArgs>(args?: SelectSubset<T, ListingModerationLogCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ListingModerationLog.
+     * @param {ListingModerationLogDeleteArgs} args - Arguments to delete one ListingModerationLog.
+     * @example
+     * // Delete one ListingModerationLog
+     * const ListingModerationLog = await prisma.listingModerationLog.delete({
+     *   where: {
+     *     // ... filter to delete one ListingModerationLog
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ListingModerationLogDeleteArgs>(args: SelectSubset<T, ListingModerationLogDeleteArgs<ExtArgs>>): Prisma__ListingModerationLogClient<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ListingModerationLog.
+     * @param {ListingModerationLogUpdateArgs} args - Arguments to update one ListingModerationLog.
+     * @example
+     * // Update one ListingModerationLog
+     * const listingModerationLog = await prisma.listingModerationLog.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ListingModerationLogUpdateArgs>(args: SelectSubset<T, ListingModerationLogUpdateArgs<ExtArgs>>): Prisma__ListingModerationLogClient<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ListingModerationLogs.
+     * @param {ListingModerationLogDeleteManyArgs} args - Arguments to filter ListingModerationLogs to delete.
+     * @example
+     * // Delete a few ListingModerationLogs
+     * const { count } = await prisma.listingModerationLog.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ListingModerationLogDeleteManyArgs>(args?: SelectSubset<T, ListingModerationLogDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingModerationLogs.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingModerationLogUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ListingModerationLogs
+     * const listingModerationLog = await prisma.listingModerationLog.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ListingModerationLogUpdateManyArgs>(args: SelectSubset<T, ListingModerationLogUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingModerationLogs and returns the data updated in the database.
+     * @param {ListingModerationLogUpdateManyAndReturnArgs} args - Arguments to update many ListingModerationLogs.
+     * @example
+     * // Update many ListingModerationLogs
+     * const listingModerationLog = await prisma.listingModerationLog.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ListingModerationLogs and only return the `id`
+     * const listingModerationLogWithIdOnly = await prisma.listingModerationLog.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ListingModerationLogUpdateManyAndReturnArgs>(args: SelectSubset<T, ListingModerationLogUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ListingModerationLog.
+     * @param {ListingModerationLogUpsertArgs} args - Arguments to update or create a ListingModerationLog.
+     * @example
+     * // Update or create a ListingModerationLog
+     * const listingModerationLog = await prisma.listingModerationLog.upsert({
+     *   create: {
+     *     // ... data to create a ListingModerationLog
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ListingModerationLog we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ListingModerationLogUpsertArgs>(args: SelectSubset<T, ListingModerationLogUpsertArgs<ExtArgs>>): Prisma__ListingModerationLogClient<$Result.GetResult<Prisma.$ListingModerationLogPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ListingModerationLogs.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingModerationLogCountArgs} args - Arguments to filter ListingModerationLogs to count.
+     * @example
+     * // Count the number of ListingModerationLogs
+     * const count = await prisma.listingModerationLog.count({
+     *   where: {
+     *     // ... the filter for the ListingModerationLogs we want to count
+     *   }
+     * })
+    **/
+    count<T extends ListingModerationLogCountArgs>(
+      args?: Subset<T, ListingModerationLogCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ListingModerationLogCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ListingModerationLog.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingModerationLogAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ListingModerationLogAggregateArgs>(args: Subset<T, ListingModerationLogAggregateArgs>): Prisma.PrismaPromise<GetListingModerationLogAggregateType<T>>
+
+    /**
+     * Group by ListingModerationLog.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingModerationLogGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ListingModerationLogGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ListingModerationLogGroupByArgs['orderBy'] }
+        : { orderBy?: ListingModerationLogGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ListingModerationLogGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetListingModerationLogGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ListingModerationLog model
+   */
+  readonly fields: ListingModerationLogFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ListingModerationLog.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ListingModerationLogClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    listing<T extends ListingDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ListingDefaultArgs<ExtArgs>>): Prisma__ListingClient<$Result.GetResult<Prisma.$ListingPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ListingModerationLog model
+   */
+  interface ListingModerationLogFieldRefs {
+    readonly id: FieldRef<"ListingModerationLog", 'String'>
+    readonly listingId: FieldRef<"ListingModerationLog", 'String'>
+    readonly action: FieldRef<"ListingModerationLog", 'String'>
+    readonly actorId: FieldRef<"ListingModerationLog", 'String'>
+    readonly actorRole: FieldRef<"ListingModerationLog", 'String'>
+    readonly metadata: FieldRef<"ListingModerationLog", 'Json'>
+    readonly createdAt: FieldRef<"ListingModerationLog", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ListingModerationLog findUnique
+   */
+  export type ListingModerationLogFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingModerationLog to fetch.
+     */
+    where: ListingModerationLogWhereUniqueInput
+  }
+
+  /**
+   * ListingModerationLog findUniqueOrThrow
+   */
+  export type ListingModerationLogFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingModerationLog to fetch.
+     */
+    where: ListingModerationLogWhereUniqueInput
+  }
+
+  /**
+   * ListingModerationLog findFirst
+   */
+  export type ListingModerationLogFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingModerationLog to fetch.
+     */
+    where?: ListingModerationLogWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingModerationLogs to fetch.
+     */
+    orderBy?: ListingModerationLogOrderByWithRelationInput | ListingModerationLogOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingModerationLogs.
+     */
+    cursor?: ListingModerationLogWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingModerationLogs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingModerationLogs.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingModerationLogs.
+     */
+    distinct?: ListingModerationLogScalarFieldEnum | ListingModerationLogScalarFieldEnum[]
+  }
+
+  /**
+   * ListingModerationLog findFirstOrThrow
+   */
+  export type ListingModerationLogFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingModerationLog to fetch.
+     */
+    where?: ListingModerationLogWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingModerationLogs to fetch.
+     */
+    orderBy?: ListingModerationLogOrderByWithRelationInput | ListingModerationLogOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingModerationLogs.
+     */
+    cursor?: ListingModerationLogWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingModerationLogs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingModerationLogs.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingModerationLogs.
+     */
+    distinct?: ListingModerationLogScalarFieldEnum | ListingModerationLogScalarFieldEnum[]
+  }
+
+  /**
+   * ListingModerationLog findMany
+   */
+  export type ListingModerationLogFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingModerationLogs to fetch.
+     */
+    where?: ListingModerationLogWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingModerationLogs to fetch.
+     */
+    orderBy?: ListingModerationLogOrderByWithRelationInput | ListingModerationLogOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ListingModerationLogs.
+     */
+    cursor?: ListingModerationLogWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingModerationLogs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingModerationLogs.
+     */
+    skip?: number
+    distinct?: ListingModerationLogScalarFieldEnum | ListingModerationLogScalarFieldEnum[]
+  }
+
+  /**
+   * ListingModerationLog create
+   */
+  export type ListingModerationLogCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    /**
+     * The data needed to create a ListingModerationLog.
+     */
+    data: XOR<ListingModerationLogCreateInput, ListingModerationLogUncheckedCreateInput>
+  }
+
+  /**
+   * ListingModerationLog createMany
+   */
+  export type ListingModerationLogCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ListingModerationLogs.
+     */
+    data: ListingModerationLogCreateManyInput | ListingModerationLogCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ListingModerationLog createManyAndReturn
+   */
+  export type ListingModerationLogCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * The data used to create many ListingModerationLogs.
+     */
+    data: ListingModerationLogCreateManyInput | ListingModerationLogCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingModerationLog update
+   */
+  export type ListingModerationLogUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    /**
+     * The data needed to update a ListingModerationLog.
+     */
+    data: XOR<ListingModerationLogUpdateInput, ListingModerationLogUncheckedUpdateInput>
+    /**
+     * Choose, which ListingModerationLog to update.
+     */
+    where: ListingModerationLogWhereUniqueInput
+  }
+
+  /**
+   * ListingModerationLog updateMany
+   */
+  export type ListingModerationLogUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ListingModerationLogs.
+     */
+    data: XOR<ListingModerationLogUpdateManyMutationInput, ListingModerationLogUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingModerationLogs to update
+     */
+    where?: ListingModerationLogWhereInput
+    /**
+     * Limit how many ListingModerationLogs to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingModerationLog updateManyAndReturn
+   */
+  export type ListingModerationLogUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * The data used to update ListingModerationLogs.
+     */
+    data: XOR<ListingModerationLogUpdateManyMutationInput, ListingModerationLogUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingModerationLogs to update
+     */
+    where?: ListingModerationLogWhereInput
+    /**
+     * Limit how many ListingModerationLogs to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingModerationLog upsert
+   */
+  export type ListingModerationLogUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    /**
+     * The filter to search for the ListingModerationLog to update in case it exists.
+     */
+    where: ListingModerationLogWhereUniqueInput
+    /**
+     * In case the ListingModerationLog found by the `where` argument doesn't exist, create a new ListingModerationLog with this data.
+     */
+    create: XOR<ListingModerationLogCreateInput, ListingModerationLogUncheckedCreateInput>
+    /**
+     * In case the ListingModerationLog was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ListingModerationLogUpdateInput, ListingModerationLogUncheckedUpdateInput>
+  }
+
+  /**
+   * ListingModerationLog delete
+   */
+  export type ListingModerationLogDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+    /**
+     * Filter which ListingModerationLog to delete.
+     */
+    where: ListingModerationLogWhereUniqueInput
+  }
+
+  /**
+   * ListingModerationLog deleteMany
+   */
+  export type ListingModerationLogDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingModerationLogs to delete
+     */
+    where?: ListingModerationLogWhereInput
+    /**
+     * Limit how many ListingModerationLogs to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingModerationLog without action
+   */
+  export type ListingModerationLogDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingModerationLog
+     */
+    select?: ListingModerationLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingModerationLog
+     */
+    omit?: ListingModerationLogOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingModerationLogInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model ListingBedConfig
+   */
+
+  export type AggregateListingBedConfig = {
+    _count: ListingBedConfigCountAggregateOutputType | null
+    _avg: ListingBedConfigAvgAggregateOutputType | null
+    _sum: ListingBedConfigSumAggregateOutputType | null
+    _min: ListingBedConfigMinAggregateOutputType | null
+    _max: ListingBedConfigMaxAggregateOutputType | null
+  }
+
+  export type ListingBedConfigAvgAggregateOutputType = {
+    quantity: number | null
+  }
+
+  export type ListingBedConfigSumAggregateOutputType = {
+    quantity: number | null
+  }
+
+  export type ListingBedConfigMinAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    bedType: $Enums.BedType | null
+    quantity: number | null
+    roomLabel: string | null
+  }
+
+  export type ListingBedConfigMaxAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    bedType: $Enums.BedType | null
+    quantity: number | null
+    roomLabel: string | null
+  }
+
+  export type ListingBedConfigCountAggregateOutputType = {
+    id: number
+    listingId: number
+    bedType: number
+    quantity: number
+    roomLabel: number
+    _all: number
+  }
+
+
+  export type ListingBedConfigAvgAggregateInputType = {
+    quantity?: true
+  }
+
+  export type ListingBedConfigSumAggregateInputType = {
+    quantity?: true
+  }
+
+  export type ListingBedConfigMinAggregateInputType = {
+    id?: true
+    listingId?: true
+    bedType?: true
+    quantity?: true
+    roomLabel?: true
+  }
+
+  export type ListingBedConfigMaxAggregateInputType = {
+    id?: true
+    listingId?: true
+    bedType?: true
+    quantity?: true
+    roomLabel?: true
+  }
+
+  export type ListingBedConfigCountAggregateInputType = {
+    id?: true
+    listingId?: true
+    bedType?: true
+    quantity?: true
+    roomLabel?: true
+    _all?: true
+  }
+
+  export type ListingBedConfigAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingBedConfig to aggregate.
+     */
+    where?: ListingBedConfigWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingBedConfigs to fetch.
+     */
+    orderBy?: ListingBedConfigOrderByWithRelationInput | ListingBedConfigOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ListingBedConfigWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingBedConfigs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingBedConfigs.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ListingBedConfigs
+    **/
+    _count?: true | ListingBedConfigCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: ListingBedConfigAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: ListingBedConfigSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ListingBedConfigMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ListingBedConfigMaxAggregateInputType
+  }
+
+  export type GetListingBedConfigAggregateType<T extends ListingBedConfigAggregateArgs> = {
+        [P in keyof T & keyof AggregateListingBedConfig]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateListingBedConfig[P]>
+      : GetScalarType<T[P], AggregateListingBedConfig[P]>
+  }
+
+
+
+
+  export type ListingBedConfigGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingBedConfigWhereInput
+    orderBy?: ListingBedConfigOrderByWithAggregationInput | ListingBedConfigOrderByWithAggregationInput[]
+    by: ListingBedConfigScalarFieldEnum[] | ListingBedConfigScalarFieldEnum
+    having?: ListingBedConfigScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ListingBedConfigCountAggregateInputType | true
+    _avg?: ListingBedConfigAvgAggregateInputType
+    _sum?: ListingBedConfigSumAggregateInputType
+    _min?: ListingBedConfigMinAggregateInputType
+    _max?: ListingBedConfigMaxAggregateInputType
+  }
+
+  export type ListingBedConfigGroupByOutputType = {
+    id: string
+    listingId: string
+    bedType: $Enums.BedType
+    quantity: number
+    roomLabel: string | null
+    _count: ListingBedConfigCountAggregateOutputType | null
+    _avg: ListingBedConfigAvgAggregateOutputType | null
+    _sum: ListingBedConfigSumAggregateOutputType | null
+    _min: ListingBedConfigMinAggregateOutputType | null
+    _max: ListingBedConfigMaxAggregateOutputType | null
+  }
+
+  type GetListingBedConfigGroupByPayload<T extends ListingBedConfigGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ListingBedConfigGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ListingBedConfigGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ListingBedConfigGroupByOutputType[P]>
+            : GetScalarType<T[P], ListingBedConfigGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ListingBedConfigSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    bedType?: boolean
+    quantity?: boolean
+    roomLabel?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingBedConfig"]>
+
+  export type ListingBedConfigSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    bedType?: boolean
+    quantity?: boolean
+    roomLabel?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingBedConfig"]>
+
+  export type ListingBedConfigSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    bedType?: boolean
+    quantity?: boolean
+    roomLabel?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingBedConfig"]>
+
+  export type ListingBedConfigSelectScalar = {
+    id?: boolean
+    listingId?: boolean
+    bedType?: boolean
+    quantity?: boolean
+    roomLabel?: boolean
+  }
+
+  export type ListingBedConfigOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "bedType" | "quantity" | "roomLabel", ExtArgs["result"]["listingBedConfig"]>
+  export type ListingBedConfigInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingBedConfigIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingBedConfigIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+
+  export type $ListingBedConfigPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ListingBedConfig"
+    objects: {
+      listing: Prisma.$ListingPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      listingId: string
+      bedType: $Enums.BedType
+      quantity: number
+      roomLabel: string | null
+    }, ExtArgs["result"]["listingBedConfig"]>
+    composites: {}
+  }
+
+  type ListingBedConfigGetPayload<S extends boolean | null | undefined | ListingBedConfigDefaultArgs> = $Result.GetResult<Prisma.$ListingBedConfigPayload, S>
+
+  type ListingBedConfigCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ListingBedConfigFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ListingBedConfigCountAggregateInputType | true
+    }
+
+  export interface ListingBedConfigDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ListingBedConfig'], meta: { name: 'ListingBedConfig' } }
+    /**
+     * Find zero or one ListingBedConfig that matches the filter.
+     * @param {ListingBedConfigFindUniqueArgs} args - Arguments to find a ListingBedConfig
+     * @example
+     * // Get one ListingBedConfig
+     * const listingBedConfig = await prisma.listingBedConfig.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ListingBedConfigFindUniqueArgs>(args: SelectSubset<T, ListingBedConfigFindUniqueArgs<ExtArgs>>): Prisma__ListingBedConfigClient<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ListingBedConfig that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ListingBedConfigFindUniqueOrThrowArgs} args - Arguments to find a ListingBedConfig
+     * @example
+     * // Get one ListingBedConfig
+     * const listingBedConfig = await prisma.listingBedConfig.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ListingBedConfigFindUniqueOrThrowArgs>(args: SelectSubset<T, ListingBedConfigFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ListingBedConfigClient<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingBedConfig that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBedConfigFindFirstArgs} args - Arguments to find a ListingBedConfig
+     * @example
+     * // Get one ListingBedConfig
+     * const listingBedConfig = await prisma.listingBedConfig.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ListingBedConfigFindFirstArgs>(args?: SelectSubset<T, ListingBedConfigFindFirstArgs<ExtArgs>>): Prisma__ListingBedConfigClient<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingBedConfig that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBedConfigFindFirstOrThrowArgs} args - Arguments to find a ListingBedConfig
+     * @example
+     * // Get one ListingBedConfig
+     * const listingBedConfig = await prisma.listingBedConfig.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ListingBedConfigFindFirstOrThrowArgs>(args?: SelectSubset<T, ListingBedConfigFindFirstOrThrowArgs<ExtArgs>>): Prisma__ListingBedConfigClient<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ListingBedConfigs that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBedConfigFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ListingBedConfigs
+     * const listingBedConfigs = await prisma.listingBedConfig.findMany()
+     * 
+     * // Get first 10 ListingBedConfigs
+     * const listingBedConfigs = await prisma.listingBedConfig.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const listingBedConfigWithIdOnly = await prisma.listingBedConfig.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ListingBedConfigFindManyArgs>(args?: SelectSubset<T, ListingBedConfigFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ListingBedConfig.
+     * @param {ListingBedConfigCreateArgs} args - Arguments to create a ListingBedConfig.
+     * @example
+     * // Create one ListingBedConfig
+     * const ListingBedConfig = await prisma.listingBedConfig.create({
+     *   data: {
+     *     // ... data to create a ListingBedConfig
+     *   }
+     * })
+     * 
+     */
+    create<T extends ListingBedConfigCreateArgs>(args: SelectSubset<T, ListingBedConfigCreateArgs<ExtArgs>>): Prisma__ListingBedConfigClient<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ListingBedConfigs.
+     * @param {ListingBedConfigCreateManyArgs} args - Arguments to create many ListingBedConfigs.
+     * @example
+     * // Create many ListingBedConfigs
+     * const listingBedConfig = await prisma.listingBedConfig.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ListingBedConfigCreateManyArgs>(args?: SelectSubset<T, ListingBedConfigCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ListingBedConfigs and returns the data saved in the database.
+     * @param {ListingBedConfigCreateManyAndReturnArgs} args - Arguments to create many ListingBedConfigs.
+     * @example
+     * // Create many ListingBedConfigs
+     * const listingBedConfig = await prisma.listingBedConfig.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ListingBedConfigs and only return the `id`
+     * const listingBedConfigWithIdOnly = await prisma.listingBedConfig.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ListingBedConfigCreateManyAndReturnArgs>(args?: SelectSubset<T, ListingBedConfigCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ListingBedConfig.
+     * @param {ListingBedConfigDeleteArgs} args - Arguments to delete one ListingBedConfig.
+     * @example
+     * // Delete one ListingBedConfig
+     * const ListingBedConfig = await prisma.listingBedConfig.delete({
+     *   where: {
+     *     // ... filter to delete one ListingBedConfig
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ListingBedConfigDeleteArgs>(args: SelectSubset<T, ListingBedConfigDeleteArgs<ExtArgs>>): Prisma__ListingBedConfigClient<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ListingBedConfig.
+     * @param {ListingBedConfigUpdateArgs} args - Arguments to update one ListingBedConfig.
+     * @example
+     * // Update one ListingBedConfig
+     * const listingBedConfig = await prisma.listingBedConfig.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ListingBedConfigUpdateArgs>(args: SelectSubset<T, ListingBedConfigUpdateArgs<ExtArgs>>): Prisma__ListingBedConfigClient<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ListingBedConfigs.
+     * @param {ListingBedConfigDeleteManyArgs} args - Arguments to filter ListingBedConfigs to delete.
+     * @example
+     * // Delete a few ListingBedConfigs
+     * const { count } = await prisma.listingBedConfig.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ListingBedConfigDeleteManyArgs>(args?: SelectSubset<T, ListingBedConfigDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingBedConfigs.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBedConfigUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ListingBedConfigs
+     * const listingBedConfig = await prisma.listingBedConfig.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ListingBedConfigUpdateManyArgs>(args: SelectSubset<T, ListingBedConfigUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingBedConfigs and returns the data updated in the database.
+     * @param {ListingBedConfigUpdateManyAndReturnArgs} args - Arguments to update many ListingBedConfigs.
+     * @example
+     * // Update many ListingBedConfigs
+     * const listingBedConfig = await prisma.listingBedConfig.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ListingBedConfigs and only return the `id`
+     * const listingBedConfigWithIdOnly = await prisma.listingBedConfig.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ListingBedConfigUpdateManyAndReturnArgs>(args: SelectSubset<T, ListingBedConfigUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ListingBedConfig.
+     * @param {ListingBedConfigUpsertArgs} args - Arguments to update or create a ListingBedConfig.
+     * @example
+     * // Update or create a ListingBedConfig
+     * const listingBedConfig = await prisma.listingBedConfig.upsert({
+     *   create: {
+     *     // ... data to create a ListingBedConfig
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ListingBedConfig we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ListingBedConfigUpsertArgs>(args: SelectSubset<T, ListingBedConfigUpsertArgs<ExtArgs>>): Prisma__ListingBedConfigClient<$Result.GetResult<Prisma.$ListingBedConfigPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ListingBedConfigs.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBedConfigCountArgs} args - Arguments to filter ListingBedConfigs to count.
+     * @example
+     * // Count the number of ListingBedConfigs
+     * const count = await prisma.listingBedConfig.count({
+     *   where: {
+     *     // ... the filter for the ListingBedConfigs we want to count
+     *   }
+     * })
+    **/
+    count<T extends ListingBedConfigCountArgs>(
+      args?: Subset<T, ListingBedConfigCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ListingBedConfigCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ListingBedConfig.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBedConfigAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ListingBedConfigAggregateArgs>(args: Subset<T, ListingBedConfigAggregateArgs>): Prisma.PrismaPromise<GetListingBedConfigAggregateType<T>>
+
+    /**
+     * Group by ListingBedConfig.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBedConfigGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ListingBedConfigGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ListingBedConfigGroupByArgs['orderBy'] }
+        : { orderBy?: ListingBedConfigGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ListingBedConfigGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetListingBedConfigGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ListingBedConfig model
+   */
+  readonly fields: ListingBedConfigFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ListingBedConfig.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ListingBedConfigClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    listing<T extends ListingDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ListingDefaultArgs<ExtArgs>>): Prisma__ListingClient<$Result.GetResult<Prisma.$ListingPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ListingBedConfig model
+   */
+  interface ListingBedConfigFieldRefs {
+    readonly id: FieldRef<"ListingBedConfig", 'String'>
+    readonly listingId: FieldRef<"ListingBedConfig", 'String'>
+    readonly bedType: FieldRef<"ListingBedConfig", 'BedType'>
+    readonly quantity: FieldRef<"ListingBedConfig", 'Int'>
+    readonly roomLabel: FieldRef<"ListingBedConfig", 'String'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ListingBedConfig findUnique
+   */
+  export type ListingBedConfigFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBedConfig to fetch.
+     */
+    where: ListingBedConfigWhereUniqueInput
+  }
+
+  /**
+   * ListingBedConfig findUniqueOrThrow
+   */
+  export type ListingBedConfigFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBedConfig to fetch.
+     */
+    where: ListingBedConfigWhereUniqueInput
+  }
+
+  /**
+   * ListingBedConfig findFirst
+   */
+  export type ListingBedConfigFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBedConfig to fetch.
+     */
+    where?: ListingBedConfigWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingBedConfigs to fetch.
+     */
+    orderBy?: ListingBedConfigOrderByWithRelationInput | ListingBedConfigOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingBedConfigs.
+     */
+    cursor?: ListingBedConfigWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingBedConfigs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingBedConfigs.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingBedConfigs.
+     */
+    distinct?: ListingBedConfigScalarFieldEnum | ListingBedConfigScalarFieldEnum[]
+  }
+
+  /**
+   * ListingBedConfig findFirstOrThrow
+   */
+  export type ListingBedConfigFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBedConfig to fetch.
+     */
+    where?: ListingBedConfigWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingBedConfigs to fetch.
+     */
+    orderBy?: ListingBedConfigOrderByWithRelationInput | ListingBedConfigOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingBedConfigs.
+     */
+    cursor?: ListingBedConfigWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingBedConfigs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingBedConfigs.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingBedConfigs.
+     */
+    distinct?: ListingBedConfigScalarFieldEnum | ListingBedConfigScalarFieldEnum[]
+  }
+
+  /**
+   * ListingBedConfig findMany
+   */
+  export type ListingBedConfigFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBedConfigs to fetch.
+     */
+    where?: ListingBedConfigWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingBedConfigs to fetch.
+     */
+    orderBy?: ListingBedConfigOrderByWithRelationInput | ListingBedConfigOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ListingBedConfigs.
+     */
+    cursor?: ListingBedConfigWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingBedConfigs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingBedConfigs.
+     */
+    skip?: number
+    distinct?: ListingBedConfigScalarFieldEnum | ListingBedConfigScalarFieldEnum[]
+  }
+
+  /**
+   * ListingBedConfig create
+   */
+  export type ListingBedConfigCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    /**
+     * The data needed to create a ListingBedConfig.
+     */
+    data: XOR<ListingBedConfigCreateInput, ListingBedConfigUncheckedCreateInput>
+  }
+
+  /**
+   * ListingBedConfig createMany
+   */
+  export type ListingBedConfigCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ListingBedConfigs.
+     */
+    data: ListingBedConfigCreateManyInput | ListingBedConfigCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ListingBedConfig createManyAndReturn
+   */
+  export type ListingBedConfigCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * The data used to create many ListingBedConfigs.
+     */
+    data: ListingBedConfigCreateManyInput | ListingBedConfigCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingBedConfig update
+   */
+  export type ListingBedConfigUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    /**
+     * The data needed to update a ListingBedConfig.
+     */
+    data: XOR<ListingBedConfigUpdateInput, ListingBedConfigUncheckedUpdateInput>
+    /**
+     * Choose, which ListingBedConfig to update.
+     */
+    where: ListingBedConfigWhereUniqueInput
+  }
+
+  /**
+   * ListingBedConfig updateMany
+   */
+  export type ListingBedConfigUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ListingBedConfigs.
+     */
+    data: XOR<ListingBedConfigUpdateManyMutationInput, ListingBedConfigUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingBedConfigs to update
+     */
+    where?: ListingBedConfigWhereInput
+    /**
+     * Limit how many ListingBedConfigs to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingBedConfig updateManyAndReturn
+   */
+  export type ListingBedConfigUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * The data used to update ListingBedConfigs.
+     */
+    data: XOR<ListingBedConfigUpdateManyMutationInput, ListingBedConfigUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingBedConfigs to update
+     */
+    where?: ListingBedConfigWhereInput
+    /**
+     * Limit how many ListingBedConfigs to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingBedConfig upsert
+   */
+  export type ListingBedConfigUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    /**
+     * The filter to search for the ListingBedConfig to update in case it exists.
+     */
+    where: ListingBedConfigWhereUniqueInput
+    /**
+     * In case the ListingBedConfig found by the `where` argument doesn't exist, create a new ListingBedConfig with this data.
+     */
+    create: XOR<ListingBedConfigCreateInput, ListingBedConfigUncheckedCreateInput>
+    /**
+     * In case the ListingBedConfig was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ListingBedConfigUpdateInput, ListingBedConfigUncheckedUpdateInput>
+  }
+
+  /**
+   * ListingBedConfig delete
+   */
+  export type ListingBedConfigDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+    /**
+     * Filter which ListingBedConfig to delete.
+     */
+    where: ListingBedConfigWhereUniqueInput
+  }
+
+  /**
+   * ListingBedConfig deleteMany
+   */
+  export type ListingBedConfigDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingBedConfigs to delete
+     */
+    where?: ListingBedConfigWhereInput
+    /**
+     * Limit how many ListingBedConfigs to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingBedConfig without action
+   */
+  export type ListingBedConfigDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBedConfig
+     */
+    select?: ListingBedConfigSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBedConfig
+     */
+    omit?: ListingBedConfigOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBedConfigInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model ListingBlockedDate
+   */
+
+  export type AggregateListingBlockedDate = {
+    _count: ListingBlockedDateCountAggregateOutputType | null
+    _min: ListingBlockedDateMinAggregateOutputType | null
+    _max: ListingBlockedDateMaxAggregateOutputType | null
+  }
+
+  export type ListingBlockedDateMinAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    date: Date | null
+    source: $Enums.BlockedDateSource | null
+    note: string | null
+    createdAt: Date | null
+  }
+
+  export type ListingBlockedDateMaxAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    date: Date | null
+    source: $Enums.BlockedDateSource | null
+    note: string | null
+    createdAt: Date | null
+  }
+
+  export type ListingBlockedDateCountAggregateOutputType = {
+    id: number
+    listingId: number
+    date: number
+    source: number
+    note: number
+    createdAt: number
+    _all: number
+  }
+
+
+  export type ListingBlockedDateMinAggregateInputType = {
+    id?: true
+    listingId?: true
+    date?: true
+    source?: true
+    note?: true
+    createdAt?: true
+  }
+
+  export type ListingBlockedDateMaxAggregateInputType = {
+    id?: true
+    listingId?: true
+    date?: true
+    source?: true
+    note?: true
+    createdAt?: true
+  }
+
+  export type ListingBlockedDateCountAggregateInputType = {
+    id?: true
+    listingId?: true
+    date?: true
+    source?: true
+    note?: true
+    createdAt?: true
+    _all?: true
+  }
+
+  export type ListingBlockedDateAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingBlockedDate to aggregate.
+     */
+    where?: ListingBlockedDateWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingBlockedDates to fetch.
+     */
+    orderBy?: ListingBlockedDateOrderByWithRelationInput | ListingBlockedDateOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ListingBlockedDateWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingBlockedDates from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingBlockedDates.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ListingBlockedDates
+    **/
+    _count?: true | ListingBlockedDateCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ListingBlockedDateMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ListingBlockedDateMaxAggregateInputType
+  }
+
+  export type GetListingBlockedDateAggregateType<T extends ListingBlockedDateAggregateArgs> = {
+        [P in keyof T & keyof AggregateListingBlockedDate]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateListingBlockedDate[P]>
+      : GetScalarType<T[P], AggregateListingBlockedDate[P]>
+  }
+
+
+
+
+  export type ListingBlockedDateGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingBlockedDateWhereInput
+    orderBy?: ListingBlockedDateOrderByWithAggregationInput | ListingBlockedDateOrderByWithAggregationInput[]
+    by: ListingBlockedDateScalarFieldEnum[] | ListingBlockedDateScalarFieldEnum
+    having?: ListingBlockedDateScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ListingBlockedDateCountAggregateInputType | true
+    _min?: ListingBlockedDateMinAggregateInputType
+    _max?: ListingBlockedDateMaxAggregateInputType
+  }
+
+  export type ListingBlockedDateGroupByOutputType = {
+    id: string
+    listingId: string
+    date: Date
+    source: $Enums.BlockedDateSource
+    note: string | null
+    createdAt: Date
+    _count: ListingBlockedDateCountAggregateOutputType | null
+    _min: ListingBlockedDateMinAggregateOutputType | null
+    _max: ListingBlockedDateMaxAggregateOutputType | null
+  }
+
+  type GetListingBlockedDateGroupByPayload<T extends ListingBlockedDateGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ListingBlockedDateGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ListingBlockedDateGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ListingBlockedDateGroupByOutputType[P]>
+            : GetScalarType<T[P], ListingBlockedDateGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ListingBlockedDateSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    date?: boolean
+    source?: boolean
+    note?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingBlockedDate"]>
+
+  export type ListingBlockedDateSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    date?: boolean
+    source?: boolean
+    note?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingBlockedDate"]>
+
+  export type ListingBlockedDateSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    date?: boolean
+    source?: boolean
+    note?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingBlockedDate"]>
+
+  export type ListingBlockedDateSelectScalar = {
+    id?: boolean
+    listingId?: boolean
+    date?: boolean
+    source?: boolean
+    note?: boolean
+    createdAt?: boolean
+  }
+
+  export type ListingBlockedDateOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "date" | "source" | "note" | "createdAt", ExtArgs["result"]["listingBlockedDate"]>
+  export type ListingBlockedDateInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingBlockedDateIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingBlockedDateIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+
+  export type $ListingBlockedDatePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ListingBlockedDate"
+    objects: {
+      listing: Prisma.$ListingPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      listingId: string
+      date: Date
+      source: $Enums.BlockedDateSource
+      note: string | null
+      createdAt: Date
+    }, ExtArgs["result"]["listingBlockedDate"]>
+    composites: {}
+  }
+
+  type ListingBlockedDateGetPayload<S extends boolean | null | undefined | ListingBlockedDateDefaultArgs> = $Result.GetResult<Prisma.$ListingBlockedDatePayload, S>
+
+  type ListingBlockedDateCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ListingBlockedDateFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ListingBlockedDateCountAggregateInputType | true
+    }
+
+  export interface ListingBlockedDateDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ListingBlockedDate'], meta: { name: 'ListingBlockedDate' } }
+    /**
+     * Find zero or one ListingBlockedDate that matches the filter.
+     * @param {ListingBlockedDateFindUniqueArgs} args - Arguments to find a ListingBlockedDate
+     * @example
+     * // Get one ListingBlockedDate
+     * const listingBlockedDate = await prisma.listingBlockedDate.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ListingBlockedDateFindUniqueArgs>(args: SelectSubset<T, ListingBlockedDateFindUniqueArgs<ExtArgs>>): Prisma__ListingBlockedDateClient<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ListingBlockedDate that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ListingBlockedDateFindUniqueOrThrowArgs} args - Arguments to find a ListingBlockedDate
+     * @example
+     * // Get one ListingBlockedDate
+     * const listingBlockedDate = await prisma.listingBlockedDate.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ListingBlockedDateFindUniqueOrThrowArgs>(args: SelectSubset<T, ListingBlockedDateFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ListingBlockedDateClient<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingBlockedDate that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBlockedDateFindFirstArgs} args - Arguments to find a ListingBlockedDate
+     * @example
+     * // Get one ListingBlockedDate
+     * const listingBlockedDate = await prisma.listingBlockedDate.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ListingBlockedDateFindFirstArgs>(args?: SelectSubset<T, ListingBlockedDateFindFirstArgs<ExtArgs>>): Prisma__ListingBlockedDateClient<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingBlockedDate that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBlockedDateFindFirstOrThrowArgs} args - Arguments to find a ListingBlockedDate
+     * @example
+     * // Get one ListingBlockedDate
+     * const listingBlockedDate = await prisma.listingBlockedDate.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ListingBlockedDateFindFirstOrThrowArgs>(args?: SelectSubset<T, ListingBlockedDateFindFirstOrThrowArgs<ExtArgs>>): Prisma__ListingBlockedDateClient<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ListingBlockedDates that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBlockedDateFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ListingBlockedDates
+     * const listingBlockedDates = await prisma.listingBlockedDate.findMany()
+     * 
+     * // Get first 10 ListingBlockedDates
+     * const listingBlockedDates = await prisma.listingBlockedDate.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const listingBlockedDateWithIdOnly = await prisma.listingBlockedDate.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ListingBlockedDateFindManyArgs>(args?: SelectSubset<T, ListingBlockedDateFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ListingBlockedDate.
+     * @param {ListingBlockedDateCreateArgs} args - Arguments to create a ListingBlockedDate.
+     * @example
+     * // Create one ListingBlockedDate
+     * const ListingBlockedDate = await prisma.listingBlockedDate.create({
+     *   data: {
+     *     // ... data to create a ListingBlockedDate
+     *   }
+     * })
+     * 
+     */
+    create<T extends ListingBlockedDateCreateArgs>(args: SelectSubset<T, ListingBlockedDateCreateArgs<ExtArgs>>): Prisma__ListingBlockedDateClient<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ListingBlockedDates.
+     * @param {ListingBlockedDateCreateManyArgs} args - Arguments to create many ListingBlockedDates.
+     * @example
+     * // Create many ListingBlockedDates
+     * const listingBlockedDate = await prisma.listingBlockedDate.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ListingBlockedDateCreateManyArgs>(args?: SelectSubset<T, ListingBlockedDateCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ListingBlockedDates and returns the data saved in the database.
+     * @param {ListingBlockedDateCreateManyAndReturnArgs} args - Arguments to create many ListingBlockedDates.
+     * @example
+     * // Create many ListingBlockedDates
+     * const listingBlockedDate = await prisma.listingBlockedDate.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ListingBlockedDates and only return the `id`
+     * const listingBlockedDateWithIdOnly = await prisma.listingBlockedDate.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ListingBlockedDateCreateManyAndReturnArgs>(args?: SelectSubset<T, ListingBlockedDateCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ListingBlockedDate.
+     * @param {ListingBlockedDateDeleteArgs} args - Arguments to delete one ListingBlockedDate.
+     * @example
+     * // Delete one ListingBlockedDate
+     * const ListingBlockedDate = await prisma.listingBlockedDate.delete({
+     *   where: {
+     *     // ... filter to delete one ListingBlockedDate
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ListingBlockedDateDeleteArgs>(args: SelectSubset<T, ListingBlockedDateDeleteArgs<ExtArgs>>): Prisma__ListingBlockedDateClient<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ListingBlockedDate.
+     * @param {ListingBlockedDateUpdateArgs} args - Arguments to update one ListingBlockedDate.
+     * @example
+     * // Update one ListingBlockedDate
+     * const listingBlockedDate = await prisma.listingBlockedDate.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ListingBlockedDateUpdateArgs>(args: SelectSubset<T, ListingBlockedDateUpdateArgs<ExtArgs>>): Prisma__ListingBlockedDateClient<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ListingBlockedDates.
+     * @param {ListingBlockedDateDeleteManyArgs} args - Arguments to filter ListingBlockedDates to delete.
+     * @example
+     * // Delete a few ListingBlockedDates
+     * const { count } = await prisma.listingBlockedDate.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ListingBlockedDateDeleteManyArgs>(args?: SelectSubset<T, ListingBlockedDateDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingBlockedDates.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBlockedDateUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ListingBlockedDates
+     * const listingBlockedDate = await prisma.listingBlockedDate.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ListingBlockedDateUpdateManyArgs>(args: SelectSubset<T, ListingBlockedDateUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingBlockedDates and returns the data updated in the database.
+     * @param {ListingBlockedDateUpdateManyAndReturnArgs} args - Arguments to update many ListingBlockedDates.
+     * @example
+     * // Update many ListingBlockedDates
+     * const listingBlockedDate = await prisma.listingBlockedDate.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ListingBlockedDates and only return the `id`
+     * const listingBlockedDateWithIdOnly = await prisma.listingBlockedDate.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ListingBlockedDateUpdateManyAndReturnArgs>(args: SelectSubset<T, ListingBlockedDateUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ListingBlockedDate.
+     * @param {ListingBlockedDateUpsertArgs} args - Arguments to update or create a ListingBlockedDate.
+     * @example
+     * // Update or create a ListingBlockedDate
+     * const listingBlockedDate = await prisma.listingBlockedDate.upsert({
+     *   create: {
+     *     // ... data to create a ListingBlockedDate
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ListingBlockedDate we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ListingBlockedDateUpsertArgs>(args: SelectSubset<T, ListingBlockedDateUpsertArgs<ExtArgs>>): Prisma__ListingBlockedDateClient<$Result.GetResult<Prisma.$ListingBlockedDatePayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ListingBlockedDates.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBlockedDateCountArgs} args - Arguments to filter ListingBlockedDates to count.
+     * @example
+     * // Count the number of ListingBlockedDates
+     * const count = await prisma.listingBlockedDate.count({
+     *   where: {
+     *     // ... the filter for the ListingBlockedDates we want to count
+     *   }
+     * })
+    **/
+    count<T extends ListingBlockedDateCountArgs>(
+      args?: Subset<T, ListingBlockedDateCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ListingBlockedDateCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ListingBlockedDate.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBlockedDateAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ListingBlockedDateAggregateArgs>(args: Subset<T, ListingBlockedDateAggregateArgs>): Prisma.PrismaPromise<GetListingBlockedDateAggregateType<T>>
+
+    /**
+     * Group by ListingBlockedDate.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingBlockedDateGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ListingBlockedDateGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ListingBlockedDateGroupByArgs['orderBy'] }
+        : { orderBy?: ListingBlockedDateGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ListingBlockedDateGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetListingBlockedDateGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ListingBlockedDate model
+   */
+  readonly fields: ListingBlockedDateFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ListingBlockedDate.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ListingBlockedDateClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    listing<T extends ListingDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ListingDefaultArgs<ExtArgs>>): Prisma__ListingClient<$Result.GetResult<Prisma.$ListingPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ListingBlockedDate model
+   */
+  interface ListingBlockedDateFieldRefs {
+    readonly id: FieldRef<"ListingBlockedDate", 'String'>
+    readonly listingId: FieldRef<"ListingBlockedDate", 'String'>
+    readonly date: FieldRef<"ListingBlockedDate", 'DateTime'>
+    readonly source: FieldRef<"ListingBlockedDate", 'BlockedDateSource'>
+    readonly note: FieldRef<"ListingBlockedDate", 'String'>
+    readonly createdAt: FieldRef<"ListingBlockedDate", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ListingBlockedDate findUnique
+   */
+  export type ListingBlockedDateFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBlockedDate to fetch.
+     */
+    where: ListingBlockedDateWhereUniqueInput
+  }
+
+  /**
+   * ListingBlockedDate findUniqueOrThrow
+   */
+  export type ListingBlockedDateFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBlockedDate to fetch.
+     */
+    where: ListingBlockedDateWhereUniqueInput
+  }
+
+  /**
+   * ListingBlockedDate findFirst
+   */
+  export type ListingBlockedDateFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBlockedDate to fetch.
+     */
+    where?: ListingBlockedDateWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingBlockedDates to fetch.
+     */
+    orderBy?: ListingBlockedDateOrderByWithRelationInput | ListingBlockedDateOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingBlockedDates.
+     */
+    cursor?: ListingBlockedDateWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingBlockedDates from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingBlockedDates.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingBlockedDates.
+     */
+    distinct?: ListingBlockedDateScalarFieldEnum | ListingBlockedDateScalarFieldEnum[]
+  }
+
+  /**
+   * ListingBlockedDate findFirstOrThrow
+   */
+  export type ListingBlockedDateFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBlockedDate to fetch.
+     */
+    where?: ListingBlockedDateWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingBlockedDates to fetch.
+     */
+    orderBy?: ListingBlockedDateOrderByWithRelationInput | ListingBlockedDateOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingBlockedDates.
+     */
+    cursor?: ListingBlockedDateWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingBlockedDates from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingBlockedDates.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingBlockedDates.
+     */
+    distinct?: ListingBlockedDateScalarFieldEnum | ListingBlockedDateScalarFieldEnum[]
+  }
+
+  /**
+   * ListingBlockedDate findMany
+   */
+  export type ListingBlockedDateFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingBlockedDates to fetch.
+     */
+    where?: ListingBlockedDateWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingBlockedDates to fetch.
+     */
+    orderBy?: ListingBlockedDateOrderByWithRelationInput | ListingBlockedDateOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ListingBlockedDates.
+     */
+    cursor?: ListingBlockedDateWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingBlockedDates from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingBlockedDates.
+     */
+    skip?: number
+    distinct?: ListingBlockedDateScalarFieldEnum | ListingBlockedDateScalarFieldEnum[]
+  }
+
+  /**
+   * ListingBlockedDate create
+   */
+  export type ListingBlockedDateCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    /**
+     * The data needed to create a ListingBlockedDate.
+     */
+    data: XOR<ListingBlockedDateCreateInput, ListingBlockedDateUncheckedCreateInput>
+  }
+
+  /**
+   * ListingBlockedDate createMany
+   */
+  export type ListingBlockedDateCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ListingBlockedDates.
+     */
+    data: ListingBlockedDateCreateManyInput | ListingBlockedDateCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ListingBlockedDate createManyAndReturn
+   */
+  export type ListingBlockedDateCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * The data used to create many ListingBlockedDates.
+     */
+    data: ListingBlockedDateCreateManyInput | ListingBlockedDateCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingBlockedDate update
+   */
+  export type ListingBlockedDateUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    /**
+     * The data needed to update a ListingBlockedDate.
+     */
+    data: XOR<ListingBlockedDateUpdateInput, ListingBlockedDateUncheckedUpdateInput>
+    /**
+     * Choose, which ListingBlockedDate to update.
+     */
+    where: ListingBlockedDateWhereUniqueInput
+  }
+
+  /**
+   * ListingBlockedDate updateMany
+   */
+  export type ListingBlockedDateUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ListingBlockedDates.
+     */
+    data: XOR<ListingBlockedDateUpdateManyMutationInput, ListingBlockedDateUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingBlockedDates to update
+     */
+    where?: ListingBlockedDateWhereInput
+    /**
+     * Limit how many ListingBlockedDates to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingBlockedDate updateManyAndReturn
+   */
+  export type ListingBlockedDateUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * The data used to update ListingBlockedDates.
+     */
+    data: XOR<ListingBlockedDateUpdateManyMutationInput, ListingBlockedDateUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingBlockedDates to update
+     */
+    where?: ListingBlockedDateWhereInput
+    /**
+     * Limit how many ListingBlockedDates to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingBlockedDate upsert
+   */
+  export type ListingBlockedDateUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    /**
+     * The filter to search for the ListingBlockedDate to update in case it exists.
+     */
+    where: ListingBlockedDateWhereUniqueInput
+    /**
+     * In case the ListingBlockedDate found by the `where` argument doesn't exist, create a new ListingBlockedDate with this data.
+     */
+    create: XOR<ListingBlockedDateCreateInput, ListingBlockedDateUncheckedCreateInput>
+    /**
+     * In case the ListingBlockedDate was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ListingBlockedDateUpdateInput, ListingBlockedDateUncheckedUpdateInput>
+  }
+
+  /**
+   * ListingBlockedDate delete
+   */
+  export type ListingBlockedDateDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+    /**
+     * Filter which ListingBlockedDate to delete.
+     */
+    where: ListingBlockedDateWhereUniqueInput
+  }
+
+  /**
+   * ListingBlockedDate deleteMany
+   */
+  export type ListingBlockedDateDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingBlockedDates to delete
+     */
+    where?: ListingBlockedDateWhereInput
+    /**
+     * Limit how many ListingBlockedDates to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingBlockedDate without action
+   */
+  export type ListingBlockedDateDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingBlockedDate
+     */
+    select?: ListingBlockedDateSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingBlockedDate
+     */
+    omit?: ListingBlockedDateOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingBlockedDateInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model ListingSeasonalPrice
+   */
+
+  export type AggregateListingSeasonalPrice = {
+    _count: ListingSeasonalPriceCountAggregateOutputType | null
+    _avg: ListingSeasonalPriceAvgAggregateOutputType | null
+    _sum: ListingSeasonalPriceSumAggregateOutputType | null
+    _min: ListingSeasonalPriceMinAggregateOutputType | null
+    _max: ListingSeasonalPriceMaxAggregateOutputType | null
+  }
+
+  export type ListingSeasonalPriceAvgAggregateOutputType = {
+    pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
+  }
+
+  export type ListingSeasonalPriceSumAggregateOutputType = {
+    pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
+  }
+
+  export type ListingSeasonalPriceMinAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    startDate: Date | null
+    endDate: Date | null
+    pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
+    label: string | null
+    createdAt: Date | null
+  }
+
+  export type ListingSeasonalPriceMaxAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    startDate: Date | null
+    endDate: Date | null
+    pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
+    label: string | null
+    createdAt: Date | null
+  }
+
+  export type ListingSeasonalPriceCountAggregateOutputType = {
+    id: number
+    listingId: number
+    startDate: number
+    endDate: number
+    pricePerNight: number
+    pricePerDay: number
+    label: number
+    createdAt: number
+    _all: number
+  }
+
+
+  export type ListingSeasonalPriceAvgAggregateInputType = {
+    pricePerNight?: true
+    pricePerDay?: true
+  }
+
+  export type ListingSeasonalPriceSumAggregateInputType = {
+    pricePerNight?: true
+    pricePerDay?: true
+  }
+
+  export type ListingSeasonalPriceMinAggregateInputType = {
+    id?: true
+    listingId?: true
+    startDate?: true
+    endDate?: true
+    pricePerNight?: true
+    pricePerDay?: true
+    label?: true
+    createdAt?: true
+  }
+
+  export type ListingSeasonalPriceMaxAggregateInputType = {
+    id?: true
+    listingId?: true
+    startDate?: true
+    endDate?: true
+    pricePerNight?: true
+    pricePerDay?: true
+    label?: true
+    createdAt?: true
+  }
+
+  export type ListingSeasonalPriceCountAggregateInputType = {
+    id?: true
+    listingId?: true
+    startDate?: true
+    endDate?: true
+    pricePerNight?: true
+    pricePerDay?: true
+    label?: true
+    createdAt?: true
+    _all?: true
+  }
+
+  export type ListingSeasonalPriceAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingSeasonalPrice to aggregate.
+     */
+    where?: ListingSeasonalPriceWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingSeasonalPrices to fetch.
+     */
+    orderBy?: ListingSeasonalPriceOrderByWithRelationInput | ListingSeasonalPriceOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ListingSeasonalPriceWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingSeasonalPrices from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingSeasonalPrices.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ListingSeasonalPrices
+    **/
+    _count?: true | ListingSeasonalPriceCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: ListingSeasonalPriceAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: ListingSeasonalPriceSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ListingSeasonalPriceMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ListingSeasonalPriceMaxAggregateInputType
+  }
+
+  export type GetListingSeasonalPriceAggregateType<T extends ListingSeasonalPriceAggregateArgs> = {
+        [P in keyof T & keyof AggregateListingSeasonalPrice]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateListingSeasonalPrice[P]>
+      : GetScalarType<T[P], AggregateListingSeasonalPrice[P]>
+  }
+
+
+
+
+  export type ListingSeasonalPriceGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingSeasonalPriceWhereInput
+    orderBy?: ListingSeasonalPriceOrderByWithAggregationInput | ListingSeasonalPriceOrderByWithAggregationInput[]
+    by: ListingSeasonalPriceScalarFieldEnum[] | ListingSeasonalPriceScalarFieldEnum
+    having?: ListingSeasonalPriceScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ListingSeasonalPriceCountAggregateInputType | true
+    _avg?: ListingSeasonalPriceAvgAggregateInputType
+    _sum?: ListingSeasonalPriceSumAggregateInputType
+    _min?: ListingSeasonalPriceMinAggregateInputType
+    _max?: ListingSeasonalPriceMaxAggregateInputType
+  }
+
+  export type ListingSeasonalPriceGroupByOutputType = {
+    id: string
+    listingId: string
+    startDate: Date
+    endDate: Date
+    pricePerNight: Decimal | null
+    pricePerDay: Decimal | null
+    label: string | null
+    createdAt: Date
+    _count: ListingSeasonalPriceCountAggregateOutputType | null
+    _avg: ListingSeasonalPriceAvgAggregateOutputType | null
+    _sum: ListingSeasonalPriceSumAggregateOutputType | null
+    _min: ListingSeasonalPriceMinAggregateOutputType | null
+    _max: ListingSeasonalPriceMaxAggregateOutputType | null
+  }
+
+  type GetListingSeasonalPriceGroupByPayload<T extends ListingSeasonalPriceGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ListingSeasonalPriceGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ListingSeasonalPriceGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ListingSeasonalPriceGroupByOutputType[P]>
+            : GetScalarType<T[P], ListingSeasonalPriceGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ListingSeasonalPriceSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    startDate?: boolean
+    endDate?: boolean
+    pricePerNight?: boolean
+    pricePerDay?: boolean
+    label?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingSeasonalPrice"]>
+
+  export type ListingSeasonalPriceSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    startDate?: boolean
+    endDate?: boolean
+    pricePerNight?: boolean
+    pricePerDay?: boolean
+    label?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingSeasonalPrice"]>
+
+  export type ListingSeasonalPriceSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    startDate?: boolean
+    endDate?: boolean
+    pricePerNight?: boolean
+    pricePerDay?: boolean
+    label?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingSeasonalPrice"]>
+
+  export type ListingSeasonalPriceSelectScalar = {
+    id?: boolean
+    listingId?: boolean
+    startDate?: boolean
+    endDate?: boolean
+    pricePerNight?: boolean
+    pricePerDay?: boolean
+    label?: boolean
+    createdAt?: boolean
+  }
+
+  export type ListingSeasonalPriceOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "startDate" | "endDate" | "pricePerNight" | "pricePerDay" | "label" | "createdAt", ExtArgs["result"]["listingSeasonalPrice"]>
+  export type ListingSeasonalPriceInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingSeasonalPriceIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingSeasonalPriceIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+
+  export type $ListingSeasonalPricePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ListingSeasonalPrice"
+    objects: {
+      listing: Prisma.$ListingPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      listingId: string
+      startDate: Date
+      endDate: Date
+      pricePerNight: Prisma.Decimal | null
+      pricePerDay: Prisma.Decimal | null
+      label: string | null
+      createdAt: Date
+    }, ExtArgs["result"]["listingSeasonalPrice"]>
+    composites: {}
+  }
+
+  type ListingSeasonalPriceGetPayload<S extends boolean | null | undefined | ListingSeasonalPriceDefaultArgs> = $Result.GetResult<Prisma.$ListingSeasonalPricePayload, S>
+
+  type ListingSeasonalPriceCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ListingSeasonalPriceFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ListingSeasonalPriceCountAggregateInputType | true
+    }
+
+  export interface ListingSeasonalPriceDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ListingSeasonalPrice'], meta: { name: 'ListingSeasonalPrice' } }
+    /**
+     * Find zero or one ListingSeasonalPrice that matches the filter.
+     * @param {ListingSeasonalPriceFindUniqueArgs} args - Arguments to find a ListingSeasonalPrice
+     * @example
+     * // Get one ListingSeasonalPrice
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ListingSeasonalPriceFindUniqueArgs>(args: SelectSubset<T, ListingSeasonalPriceFindUniqueArgs<ExtArgs>>): Prisma__ListingSeasonalPriceClient<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ListingSeasonalPrice that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ListingSeasonalPriceFindUniqueOrThrowArgs} args - Arguments to find a ListingSeasonalPrice
+     * @example
+     * // Get one ListingSeasonalPrice
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ListingSeasonalPriceFindUniqueOrThrowArgs>(args: SelectSubset<T, ListingSeasonalPriceFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ListingSeasonalPriceClient<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingSeasonalPrice that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingSeasonalPriceFindFirstArgs} args - Arguments to find a ListingSeasonalPrice
+     * @example
+     * // Get one ListingSeasonalPrice
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ListingSeasonalPriceFindFirstArgs>(args?: SelectSubset<T, ListingSeasonalPriceFindFirstArgs<ExtArgs>>): Prisma__ListingSeasonalPriceClient<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingSeasonalPrice that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingSeasonalPriceFindFirstOrThrowArgs} args - Arguments to find a ListingSeasonalPrice
+     * @example
+     * // Get one ListingSeasonalPrice
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ListingSeasonalPriceFindFirstOrThrowArgs>(args?: SelectSubset<T, ListingSeasonalPriceFindFirstOrThrowArgs<ExtArgs>>): Prisma__ListingSeasonalPriceClient<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ListingSeasonalPrices that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingSeasonalPriceFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ListingSeasonalPrices
+     * const listingSeasonalPrices = await prisma.listingSeasonalPrice.findMany()
+     * 
+     * // Get first 10 ListingSeasonalPrices
+     * const listingSeasonalPrices = await prisma.listingSeasonalPrice.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const listingSeasonalPriceWithIdOnly = await prisma.listingSeasonalPrice.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ListingSeasonalPriceFindManyArgs>(args?: SelectSubset<T, ListingSeasonalPriceFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ListingSeasonalPrice.
+     * @param {ListingSeasonalPriceCreateArgs} args - Arguments to create a ListingSeasonalPrice.
+     * @example
+     * // Create one ListingSeasonalPrice
+     * const ListingSeasonalPrice = await prisma.listingSeasonalPrice.create({
+     *   data: {
+     *     // ... data to create a ListingSeasonalPrice
+     *   }
+     * })
+     * 
+     */
+    create<T extends ListingSeasonalPriceCreateArgs>(args: SelectSubset<T, ListingSeasonalPriceCreateArgs<ExtArgs>>): Prisma__ListingSeasonalPriceClient<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ListingSeasonalPrices.
+     * @param {ListingSeasonalPriceCreateManyArgs} args - Arguments to create many ListingSeasonalPrices.
+     * @example
+     * // Create many ListingSeasonalPrices
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ListingSeasonalPriceCreateManyArgs>(args?: SelectSubset<T, ListingSeasonalPriceCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ListingSeasonalPrices and returns the data saved in the database.
+     * @param {ListingSeasonalPriceCreateManyAndReturnArgs} args - Arguments to create many ListingSeasonalPrices.
+     * @example
+     * // Create many ListingSeasonalPrices
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ListingSeasonalPrices and only return the `id`
+     * const listingSeasonalPriceWithIdOnly = await prisma.listingSeasonalPrice.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ListingSeasonalPriceCreateManyAndReturnArgs>(args?: SelectSubset<T, ListingSeasonalPriceCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ListingSeasonalPrice.
+     * @param {ListingSeasonalPriceDeleteArgs} args - Arguments to delete one ListingSeasonalPrice.
+     * @example
+     * // Delete one ListingSeasonalPrice
+     * const ListingSeasonalPrice = await prisma.listingSeasonalPrice.delete({
+     *   where: {
+     *     // ... filter to delete one ListingSeasonalPrice
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ListingSeasonalPriceDeleteArgs>(args: SelectSubset<T, ListingSeasonalPriceDeleteArgs<ExtArgs>>): Prisma__ListingSeasonalPriceClient<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ListingSeasonalPrice.
+     * @param {ListingSeasonalPriceUpdateArgs} args - Arguments to update one ListingSeasonalPrice.
+     * @example
+     * // Update one ListingSeasonalPrice
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ListingSeasonalPriceUpdateArgs>(args: SelectSubset<T, ListingSeasonalPriceUpdateArgs<ExtArgs>>): Prisma__ListingSeasonalPriceClient<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ListingSeasonalPrices.
+     * @param {ListingSeasonalPriceDeleteManyArgs} args - Arguments to filter ListingSeasonalPrices to delete.
+     * @example
+     * // Delete a few ListingSeasonalPrices
+     * const { count } = await prisma.listingSeasonalPrice.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ListingSeasonalPriceDeleteManyArgs>(args?: SelectSubset<T, ListingSeasonalPriceDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingSeasonalPrices.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingSeasonalPriceUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ListingSeasonalPrices
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ListingSeasonalPriceUpdateManyArgs>(args: SelectSubset<T, ListingSeasonalPriceUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingSeasonalPrices and returns the data updated in the database.
+     * @param {ListingSeasonalPriceUpdateManyAndReturnArgs} args - Arguments to update many ListingSeasonalPrices.
+     * @example
+     * // Update many ListingSeasonalPrices
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ListingSeasonalPrices and only return the `id`
+     * const listingSeasonalPriceWithIdOnly = await prisma.listingSeasonalPrice.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ListingSeasonalPriceUpdateManyAndReturnArgs>(args: SelectSubset<T, ListingSeasonalPriceUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ListingSeasonalPrice.
+     * @param {ListingSeasonalPriceUpsertArgs} args - Arguments to update or create a ListingSeasonalPrice.
+     * @example
+     * // Update or create a ListingSeasonalPrice
+     * const listingSeasonalPrice = await prisma.listingSeasonalPrice.upsert({
+     *   create: {
+     *     // ... data to create a ListingSeasonalPrice
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ListingSeasonalPrice we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ListingSeasonalPriceUpsertArgs>(args: SelectSubset<T, ListingSeasonalPriceUpsertArgs<ExtArgs>>): Prisma__ListingSeasonalPriceClient<$Result.GetResult<Prisma.$ListingSeasonalPricePayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ListingSeasonalPrices.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingSeasonalPriceCountArgs} args - Arguments to filter ListingSeasonalPrices to count.
+     * @example
+     * // Count the number of ListingSeasonalPrices
+     * const count = await prisma.listingSeasonalPrice.count({
+     *   where: {
+     *     // ... the filter for the ListingSeasonalPrices we want to count
+     *   }
+     * })
+    **/
+    count<T extends ListingSeasonalPriceCountArgs>(
+      args?: Subset<T, ListingSeasonalPriceCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ListingSeasonalPriceCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ListingSeasonalPrice.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingSeasonalPriceAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ListingSeasonalPriceAggregateArgs>(args: Subset<T, ListingSeasonalPriceAggregateArgs>): Prisma.PrismaPromise<GetListingSeasonalPriceAggregateType<T>>
+
+    /**
+     * Group by ListingSeasonalPrice.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingSeasonalPriceGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ListingSeasonalPriceGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ListingSeasonalPriceGroupByArgs['orderBy'] }
+        : { orderBy?: ListingSeasonalPriceGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ListingSeasonalPriceGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetListingSeasonalPriceGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ListingSeasonalPrice model
+   */
+  readonly fields: ListingSeasonalPriceFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ListingSeasonalPrice.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ListingSeasonalPriceClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    listing<T extends ListingDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ListingDefaultArgs<ExtArgs>>): Prisma__ListingClient<$Result.GetResult<Prisma.$ListingPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ListingSeasonalPrice model
+   */
+  interface ListingSeasonalPriceFieldRefs {
+    readonly id: FieldRef<"ListingSeasonalPrice", 'String'>
+    readonly listingId: FieldRef<"ListingSeasonalPrice", 'String'>
+    readonly startDate: FieldRef<"ListingSeasonalPrice", 'DateTime'>
+    readonly endDate: FieldRef<"ListingSeasonalPrice", 'DateTime'>
+    readonly pricePerNight: FieldRef<"ListingSeasonalPrice", 'Decimal'>
+    readonly pricePerDay: FieldRef<"ListingSeasonalPrice", 'Decimal'>
+    readonly label: FieldRef<"ListingSeasonalPrice", 'String'>
+    readonly createdAt: FieldRef<"ListingSeasonalPrice", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ListingSeasonalPrice findUnique
+   */
+  export type ListingSeasonalPriceFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingSeasonalPrice to fetch.
+     */
+    where: ListingSeasonalPriceWhereUniqueInput
+  }
+
+  /**
+   * ListingSeasonalPrice findUniqueOrThrow
+   */
+  export type ListingSeasonalPriceFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingSeasonalPrice to fetch.
+     */
+    where: ListingSeasonalPriceWhereUniqueInput
+  }
+
+  /**
+   * ListingSeasonalPrice findFirst
+   */
+  export type ListingSeasonalPriceFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingSeasonalPrice to fetch.
+     */
+    where?: ListingSeasonalPriceWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingSeasonalPrices to fetch.
+     */
+    orderBy?: ListingSeasonalPriceOrderByWithRelationInput | ListingSeasonalPriceOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingSeasonalPrices.
+     */
+    cursor?: ListingSeasonalPriceWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingSeasonalPrices from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingSeasonalPrices.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingSeasonalPrices.
+     */
+    distinct?: ListingSeasonalPriceScalarFieldEnum | ListingSeasonalPriceScalarFieldEnum[]
+  }
+
+  /**
+   * ListingSeasonalPrice findFirstOrThrow
+   */
+  export type ListingSeasonalPriceFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingSeasonalPrice to fetch.
+     */
+    where?: ListingSeasonalPriceWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingSeasonalPrices to fetch.
+     */
+    orderBy?: ListingSeasonalPriceOrderByWithRelationInput | ListingSeasonalPriceOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingSeasonalPrices.
+     */
+    cursor?: ListingSeasonalPriceWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingSeasonalPrices from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingSeasonalPrices.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingSeasonalPrices.
+     */
+    distinct?: ListingSeasonalPriceScalarFieldEnum | ListingSeasonalPriceScalarFieldEnum[]
+  }
+
+  /**
+   * ListingSeasonalPrice findMany
+   */
+  export type ListingSeasonalPriceFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingSeasonalPrices to fetch.
+     */
+    where?: ListingSeasonalPriceWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingSeasonalPrices to fetch.
+     */
+    orderBy?: ListingSeasonalPriceOrderByWithRelationInput | ListingSeasonalPriceOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ListingSeasonalPrices.
+     */
+    cursor?: ListingSeasonalPriceWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingSeasonalPrices from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingSeasonalPrices.
+     */
+    skip?: number
+    distinct?: ListingSeasonalPriceScalarFieldEnum | ListingSeasonalPriceScalarFieldEnum[]
+  }
+
+  /**
+   * ListingSeasonalPrice create
+   */
+  export type ListingSeasonalPriceCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    /**
+     * The data needed to create a ListingSeasonalPrice.
+     */
+    data: XOR<ListingSeasonalPriceCreateInput, ListingSeasonalPriceUncheckedCreateInput>
+  }
+
+  /**
+   * ListingSeasonalPrice createMany
+   */
+  export type ListingSeasonalPriceCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ListingSeasonalPrices.
+     */
+    data: ListingSeasonalPriceCreateManyInput | ListingSeasonalPriceCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ListingSeasonalPrice createManyAndReturn
+   */
+  export type ListingSeasonalPriceCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * The data used to create many ListingSeasonalPrices.
+     */
+    data: ListingSeasonalPriceCreateManyInput | ListingSeasonalPriceCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingSeasonalPrice update
+   */
+  export type ListingSeasonalPriceUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    /**
+     * The data needed to update a ListingSeasonalPrice.
+     */
+    data: XOR<ListingSeasonalPriceUpdateInput, ListingSeasonalPriceUncheckedUpdateInput>
+    /**
+     * Choose, which ListingSeasonalPrice to update.
+     */
+    where: ListingSeasonalPriceWhereUniqueInput
+  }
+
+  /**
+   * ListingSeasonalPrice updateMany
+   */
+  export type ListingSeasonalPriceUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ListingSeasonalPrices.
+     */
+    data: XOR<ListingSeasonalPriceUpdateManyMutationInput, ListingSeasonalPriceUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingSeasonalPrices to update
+     */
+    where?: ListingSeasonalPriceWhereInput
+    /**
+     * Limit how many ListingSeasonalPrices to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingSeasonalPrice updateManyAndReturn
+   */
+  export type ListingSeasonalPriceUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * The data used to update ListingSeasonalPrices.
+     */
+    data: XOR<ListingSeasonalPriceUpdateManyMutationInput, ListingSeasonalPriceUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingSeasonalPrices to update
+     */
+    where?: ListingSeasonalPriceWhereInput
+    /**
+     * Limit how many ListingSeasonalPrices to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingSeasonalPrice upsert
+   */
+  export type ListingSeasonalPriceUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    /**
+     * The filter to search for the ListingSeasonalPrice to update in case it exists.
+     */
+    where: ListingSeasonalPriceWhereUniqueInput
+    /**
+     * In case the ListingSeasonalPrice found by the `where` argument doesn't exist, create a new ListingSeasonalPrice with this data.
+     */
+    create: XOR<ListingSeasonalPriceCreateInput, ListingSeasonalPriceUncheckedCreateInput>
+    /**
+     * In case the ListingSeasonalPrice was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ListingSeasonalPriceUpdateInput, ListingSeasonalPriceUncheckedUpdateInput>
+  }
+
+  /**
+   * ListingSeasonalPrice delete
+   */
+  export type ListingSeasonalPriceDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+    /**
+     * Filter which ListingSeasonalPrice to delete.
+     */
+    where: ListingSeasonalPriceWhereUniqueInput
+  }
+
+  /**
+   * ListingSeasonalPrice deleteMany
+   */
+  export type ListingSeasonalPriceDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingSeasonalPrices to delete
+     */
+    where?: ListingSeasonalPriceWhereInput
+    /**
+     * Limit how many ListingSeasonalPrices to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingSeasonalPrice without action
+   */
+  export type ListingSeasonalPriceDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingSeasonalPrice
+     */
+    select?: ListingSeasonalPriceSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingSeasonalPrice
+     */
+    omit?: ListingSeasonalPriceOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingSeasonalPriceInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model ListingNearbyLandmark
+   */
+
+  export type AggregateListingNearbyLandmark = {
+    _count: ListingNearbyLandmarkCountAggregateOutputType | null
+    _avg: ListingNearbyLandmarkAvgAggregateOutputType | null
+    _sum: ListingNearbyLandmarkSumAggregateOutputType | null
+    _min: ListingNearbyLandmarkMinAggregateOutputType | null
+    _max: ListingNearbyLandmarkMaxAggregateOutputType | null
+  }
+
+  export type ListingNearbyLandmarkAvgAggregateOutputType = {
+    distanceKm: Decimal | null
+  }
+
+  export type ListingNearbyLandmarkSumAggregateOutputType = {
+    distanceKm: Decimal | null
+  }
+
+  export type ListingNearbyLandmarkMinAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    name: string | null
+    category: string | null
+    distanceKm: Decimal | null
+    createdAt: Date | null
+  }
+
+  export type ListingNearbyLandmarkMaxAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    name: string | null
+    category: string | null
+    distanceKm: Decimal | null
+    createdAt: Date | null
+  }
+
+  export type ListingNearbyLandmarkCountAggregateOutputType = {
+    id: number
+    listingId: number
+    name: number
+    category: number
+    distanceKm: number
+    createdAt: number
+    _all: number
+  }
+
+
+  export type ListingNearbyLandmarkAvgAggregateInputType = {
+    distanceKm?: true
+  }
+
+  export type ListingNearbyLandmarkSumAggregateInputType = {
+    distanceKm?: true
+  }
+
+  export type ListingNearbyLandmarkMinAggregateInputType = {
+    id?: true
+    listingId?: true
+    name?: true
+    category?: true
+    distanceKm?: true
+    createdAt?: true
+  }
+
+  export type ListingNearbyLandmarkMaxAggregateInputType = {
+    id?: true
+    listingId?: true
+    name?: true
+    category?: true
+    distanceKm?: true
+    createdAt?: true
+  }
+
+  export type ListingNearbyLandmarkCountAggregateInputType = {
+    id?: true
+    listingId?: true
+    name?: true
+    category?: true
+    distanceKm?: true
+    createdAt?: true
+    _all?: true
+  }
+
+  export type ListingNearbyLandmarkAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingNearbyLandmark to aggregate.
+     */
+    where?: ListingNearbyLandmarkWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingNearbyLandmarks to fetch.
+     */
+    orderBy?: ListingNearbyLandmarkOrderByWithRelationInput | ListingNearbyLandmarkOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ListingNearbyLandmarkWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingNearbyLandmarks from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingNearbyLandmarks.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ListingNearbyLandmarks
+    **/
+    _count?: true | ListingNearbyLandmarkCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to average
+    **/
+    _avg?: ListingNearbyLandmarkAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: ListingNearbyLandmarkSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ListingNearbyLandmarkMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ListingNearbyLandmarkMaxAggregateInputType
+  }
+
+  export type GetListingNearbyLandmarkAggregateType<T extends ListingNearbyLandmarkAggregateArgs> = {
+        [P in keyof T & keyof AggregateListingNearbyLandmark]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateListingNearbyLandmark[P]>
+      : GetScalarType<T[P], AggregateListingNearbyLandmark[P]>
+  }
+
+
+
+
+  export type ListingNearbyLandmarkGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingNearbyLandmarkWhereInput
+    orderBy?: ListingNearbyLandmarkOrderByWithAggregationInput | ListingNearbyLandmarkOrderByWithAggregationInput[]
+    by: ListingNearbyLandmarkScalarFieldEnum[] | ListingNearbyLandmarkScalarFieldEnum
+    having?: ListingNearbyLandmarkScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ListingNearbyLandmarkCountAggregateInputType | true
+    _avg?: ListingNearbyLandmarkAvgAggregateInputType
+    _sum?: ListingNearbyLandmarkSumAggregateInputType
+    _min?: ListingNearbyLandmarkMinAggregateInputType
+    _max?: ListingNearbyLandmarkMaxAggregateInputType
+  }
+
+  export type ListingNearbyLandmarkGroupByOutputType = {
+    id: string
+    listingId: string
+    name: string
+    category: string | null
+    distanceKm: Decimal | null
+    createdAt: Date
+    _count: ListingNearbyLandmarkCountAggregateOutputType | null
+    _avg: ListingNearbyLandmarkAvgAggregateOutputType | null
+    _sum: ListingNearbyLandmarkSumAggregateOutputType | null
+    _min: ListingNearbyLandmarkMinAggregateOutputType | null
+    _max: ListingNearbyLandmarkMaxAggregateOutputType | null
+  }
+
+  type GetListingNearbyLandmarkGroupByPayload<T extends ListingNearbyLandmarkGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ListingNearbyLandmarkGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ListingNearbyLandmarkGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ListingNearbyLandmarkGroupByOutputType[P]>
+            : GetScalarType<T[P], ListingNearbyLandmarkGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ListingNearbyLandmarkSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    name?: boolean
+    category?: boolean
+    distanceKm?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingNearbyLandmark"]>
+
+  export type ListingNearbyLandmarkSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    name?: boolean
+    category?: boolean
+    distanceKm?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingNearbyLandmark"]>
+
+  export type ListingNearbyLandmarkSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    name?: boolean
+    category?: boolean
+    distanceKm?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingNearbyLandmark"]>
+
+  export type ListingNearbyLandmarkSelectScalar = {
+    id?: boolean
+    listingId?: boolean
+    name?: boolean
+    category?: boolean
+    distanceKm?: boolean
+    createdAt?: boolean
+  }
+
+  export type ListingNearbyLandmarkOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "name" | "category" | "distanceKm" | "createdAt", ExtArgs["result"]["listingNearbyLandmark"]>
+  export type ListingNearbyLandmarkInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingNearbyLandmarkIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingNearbyLandmarkIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+
+  export type $ListingNearbyLandmarkPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ListingNearbyLandmark"
+    objects: {
+      listing: Prisma.$ListingPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      listingId: string
+      name: string
+      category: string | null
+      distanceKm: Prisma.Decimal | null
+      createdAt: Date
+    }, ExtArgs["result"]["listingNearbyLandmark"]>
+    composites: {}
+  }
+
+  type ListingNearbyLandmarkGetPayload<S extends boolean | null | undefined | ListingNearbyLandmarkDefaultArgs> = $Result.GetResult<Prisma.$ListingNearbyLandmarkPayload, S>
+
+  type ListingNearbyLandmarkCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ListingNearbyLandmarkFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ListingNearbyLandmarkCountAggregateInputType | true
+    }
+
+  export interface ListingNearbyLandmarkDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ListingNearbyLandmark'], meta: { name: 'ListingNearbyLandmark' } }
+    /**
+     * Find zero or one ListingNearbyLandmark that matches the filter.
+     * @param {ListingNearbyLandmarkFindUniqueArgs} args - Arguments to find a ListingNearbyLandmark
+     * @example
+     * // Get one ListingNearbyLandmark
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ListingNearbyLandmarkFindUniqueArgs>(args: SelectSubset<T, ListingNearbyLandmarkFindUniqueArgs<ExtArgs>>): Prisma__ListingNearbyLandmarkClient<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ListingNearbyLandmark that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ListingNearbyLandmarkFindUniqueOrThrowArgs} args - Arguments to find a ListingNearbyLandmark
+     * @example
+     * // Get one ListingNearbyLandmark
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ListingNearbyLandmarkFindUniqueOrThrowArgs>(args: SelectSubset<T, ListingNearbyLandmarkFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ListingNearbyLandmarkClient<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingNearbyLandmark that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingNearbyLandmarkFindFirstArgs} args - Arguments to find a ListingNearbyLandmark
+     * @example
+     * // Get one ListingNearbyLandmark
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ListingNearbyLandmarkFindFirstArgs>(args?: SelectSubset<T, ListingNearbyLandmarkFindFirstArgs<ExtArgs>>): Prisma__ListingNearbyLandmarkClient<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingNearbyLandmark that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingNearbyLandmarkFindFirstOrThrowArgs} args - Arguments to find a ListingNearbyLandmark
+     * @example
+     * // Get one ListingNearbyLandmark
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ListingNearbyLandmarkFindFirstOrThrowArgs>(args?: SelectSubset<T, ListingNearbyLandmarkFindFirstOrThrowArgs<ExtArgs>>): Prisma__ListingNearbyLandmarkClient<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ListingNearbyLandmarks that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingNearbyLandmarkFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ListingNearbyLandmarks
+     * const listingNearbyLandmarks = await prisma.listingNearbyLandmark.findMany()
+     * 
+     * // Get first 10 ListingNearbyLandmarks
+     * const listingNearbyLandmarks = await prisma.listingNearbyLandmark.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const listingNearbyLandmarkWithIdOnly = await prisma.listingNearbyLandmark.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ListingNearbyLandmarkFindManyArgs>(args?: SelectSubset<T, ListingNearbyLandmarkFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ListingNearbyLandmark.
+     * @param {ListingNearbyLandmarkCreateArgs} args - Arguments to create a ListingNearbyLandmark.
+     * @example
+     * // Create one ListingNearbyLandmark
+     * const ListingNearbyLandmark = await prisma.listingNearbyLandmark.create({
+     *   data: {
+     *     // ... data to create a ListingNearbyLandmark
+     *   }
+     * })
+     * 
+     */
+    create<T extends ListingNearbyLandmarkCreateArgs>(args: SelectSubset<T, ListingNearbyLandmarkCreateArgs<ExtArgs>>): Prisma__ListingNearbyLandmarkClient<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ListingNearbyLandmarks.
+     * @param {ListingNearbyLandmarkCreateManyArgs} args - Arguments to create many ListingNearbyLandmarks.
+     * @example
+     * // Create many ListingNearbyLandmarks
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ListingNearbyLandmarkCreateManyArgs>(args?: SelectSubset<T, ListingNearbyLandmarkCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ListingNearbyLandmarks and returns the data saved in the database.
+     * @param {ListingNearbyLandmarkCreateManyAndReturnArgs} args - Arguments to create many ListingNearbyLandmarks.
+     * @example
+     * // Create many ListingNearbyLandmarks
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ListingNearbyLandmarks and only return the `id`
+     * const listingNearbyLandmarkWithIdOnly = await prisma.listingNearbyLandmark.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ListingNearbyLandmarkCreateManyAndReturnArgs>(args?: SelectSubset<T, ListingNearbyLandmarkCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ListingNearbyLandmark.
+     * @param {ListingNearbyLandmarkDeleteArgs} args - Arguments to delete one ListingNearbyLandmark.
+     * @example
+     * // Delete one ListingNearbyLandmark
+     * const ListingNearbyLandmark = await prisma.listingNearbyLandmark.delete({
+     *   where: {
+     *     // ... filter to delete one ListingNearbyLandmark
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ListingNearbyLandmarkDeleteArgs>(args: SelectSubset<T, ListingNearbyLandmarkDeleteArgs<ExtArgs>>): Prisma__ListingNearbyLandmarkClient<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ListingNearbyLandmark.
+     * @param {ListingNearbyLandmarkUpdateArgs} args - Arguments to update one ListingNearbyLandmark.
+     * @example
+     * // Update one ListingNearbyLandmark
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ListingNearbyLandmarkUpdateArgs>(args: SelectSubset<T, ListingNearbyLandmarkUpdateArgs<ExtArgs>>): Prisma__ListingNearbyLandmarkClient<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ListingNearbyLandmarks.
+     * @param {ListingNearbyLandmarkDeleteManyArgs} args - Arguments to filter ListingNearbyLandmarks to delete.
+     * @example
+     * // Delete a few ListingNearbyLandmarks
+     * const { count } = await prisma.listingNearbyLandmark.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ListingNearbyLandmarkDeleteManyArgs>(args?: SelectSubset<T, ListingNearbyLandmarkDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingNearbyLandmarks.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingNearbyLandmarkUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ListingNearbyLandmarks
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ListingNearbyLandmarkUpdateManyArgs>(args: SelectSubset<T, ListingNearbyLandmarkUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingNearbyLandmarks and returns the data updated in the database.
+     * @param {ListingNearbyLandmarkUpdateManyAndReturnArgs} args - Arguments to update many ListingNearbyLandmarks.
+     * @example
+     * // Update many ListingNearbyLandmarks
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ListingNearbyLandmarks and only return the `id`
+     * const listingNearbyLandmarkWithIdOnly = await prisma.listingNearbyLandmark.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ListingNearbyLandmarkUpdateManyAndReturnArgs>(args: SelectSubset<T, ListingNearbyLandmarkUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ListingNearbyLandmark.
+     * @param {ListingNearbyLandmarkUpsertArgs} args - Arguments to update or create a ListingNearbyLandmark.
+     * @example
+     * // Update or create a ListingNearbyLandmark
+     * const listingNearbyLandmark = await prisma.listingNearbyLandmark.upsert({
+     *   create: {
+     *     // ... data to create a ListingNearbyLandmark
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ListingNearbyLandmark we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ListingNearbyLandmarkUpsertArgs>(args: SelectSubset<T, ListingNearbyLandmarkUpsertArgs<ExtArgs>>): Prisma__ListingNearbyLandmarkClient<$Result.GetResult<Prisma.$ListingNearbyLandmarkPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ListingNearbyLandmarks.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingNearbyLandmarkCountArgs} args - Arguments to filter ListingNearbyLandmarks to count.
+     * @example
+     * // Count the number of ListingNearbyLandmarks
+     * const count = await prisma.listingNearbyLandmark.count({
+     *   where: {
+     *     // ... the filter for the ListingNearbyLandmarks we want to count
+     *   }
+     * })
+    **/
+    count<T extends ListingNearbyLandmarkCountArgs>(
+      args?: Subset<T, ListingNearbyLandmarkCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ListingNearbyLandmarkCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ListingNearbyLandmark.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingNearbyLandmarkAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ListingNearbyLandmarkAggregateArgs>(args: Subset<T, ListingNearbyLandmarkAggregateArgs>): Prisma.PrismaPromise<GetListingNearbyLandmarkAggregateType<T>>
+
+    /**
+     * Group by ListingNearbyLandmark.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingNearbyLandmarkGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ListingNearbyLandmarkGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ListingNearbyLandmarkGroupByArgs['orderBy'] }
+        : { orderBy?: ListingNearbyLandmarkGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ListingNearbyLandmarkGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetListingNearbyLandmarkGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ListingNearbyLandmark model
+   */
+  readonly fields: ListingNearbyLandmarkFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ListingNearbyLandmark.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ListingNearbyLandmarkClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    listing<T extends ListingDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ListingDefaultArgs<ExtArgs>>): Prisma__ListingClient<$Result.GetResult<Prisma.$ListingPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ListingNearbyLandmark model
+   */
+  interface ListingNearbyLandmarkFieldRefs {
+    readonly id: FieldRef<"ListingNearbyLandmark", 'String'>
+    readonly listingId: FieldRef<"ListingNearbyLandmark", 'String'>
+    readonly name: FieldRef<"ListingNearbyLandmark", 'String'>
+    readonly category: FieldRef<"ListingNearbyLandmark", 'String'>
+    readonly distanceKm: FieldRef<"ListingNearbyLandmark", 'Decimal'>
+    readonly createdAt: FieldRef<"ListingNearbyLandmark", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ListingNearbyLandmark findUnique
+   */
+  export type ListingNearbyLandmarkFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingNearbyLandmark to fetch.
+     */
+    where: ListingNearbyLandmarkWhereUniqueInput
+  }
+
+  /**
+   * ListingNearbyLandmark findUniqueOrThrow
+   */
+  export type ListingNearbyLandmarkFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingNearbyLandmark to fetch.
+     */
+    where: ListingNearbyLandmarkWhereUniqueInput
+  }
+
+  /**
+   * ListingNearbyLandmark findFirst
+   */
+  export type ListingNearbyLandmarkFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingNearbyLandmark to fetch.
+     */
+    where?: ListingNearbyLandmarkWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingNearbyLandmarks to fetch.
+     */
+    orderBy?: ListingNearbyLandmarkOrderByWithRelationInput | ListingNearbyLandmarkOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingNearbyLandmarks.
+     */
+    cursor?: ListingNearbyLandmarkWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingNearbyLandmarks from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingNearbyLandmarks.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingNearbyLandmarks.
+     */
+    distinct?: ListingNearbyLandmarkScalarFieldEnum | ListingNearbyLandmarkScalarFieldEnum[]
+  }
+
+  /**
+   * ListingNearbyLandmark findFirstOrThrow
+   */
+  export type ListingNearbyLandmarkFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingNearbyLandmark to fetch.
+     */
+    where?: ListingNearbyLandmarkWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingNearbyLandmarks to fetch.
+     */
+    orderBy?: ListingNearbyLandmarkOrderByWithRelationInput | ListingNearbyLandmarkOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingNearbyLandmarks.
+     */
+    cursor?: ListingNearbyLandmarkWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingNearbyLandmarks from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingNearbyLandmarks.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingNearbyLandmarks.
+     */
+    distinct?: ListingNearbyLandmarkScalarFieldEnum | ListingNearbyLandmarkScalarFieldEnum[]
+  }
+
+  /**
+   * ListingNearbyLandmark findMany
+   */
+  export type ListingNearbyLandmarkFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingNearbyLandmarks to fetch.
+     */
+    where?: ListingNearbyLandmarkWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingNearbyLandmarks to fetch.
+     */
+    orderBy?: ListingNearbyLandmarkOrderByWithRelationInput | ListingNearbyLandmarkOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ListingNearbyLandmarks.
+     */
+    cursor?: ListingNearbyLandmarkWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingNearbyLandmarks from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingNearbyLandmarks.
+     */
+    skip?: number
+    distinct?: ListingNearbyLandmarkScalarFieldEnum | ListingNearbyLandmarkScalarFieldEnum[]
+  }
+
+  /**
+   * ListingNearbyLandmark create
+   */
+  export type ListingNearbyLandmarkCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    /**
+     * The data needed to create a ListingNearbyLandmark.
+     */
+    data: XOR<ListingNearbyLandmarkCreateInput, ListingNearbyLandmarkUncheckedCreateInput>
+  }
+
+  /**
+   * ListingNearbyLandmark createMany
+   */
+  export type ListingNearbyLandmarkCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ListingNearbyLandmarks.
+     */
+    data: ListingNearbyLandmarkCreateManyInput | ListingNearbyLandmarkCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ListingNearbyLandmark createManyAndReturn
+   */
+  export type ListingNearbyLandmarkCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * The data used to create many ListingNearbyLandmarks.
+     */
+    data: ListingNearbyLandmarkCreateManyInput | ListingNearbyLandmarkCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingNearbyLandmark update
+   */
+  export type ListingNearbyLandmarkUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    /**
+     * The data needed to update a ListingNearbyLandmark.
+     */
+    data: XOR<ListingNearbyLandmarkUpdateInput, ListingNearbyLandmarkUncheckedUpdateInput>
+    /**
+     * Choose, which ListingNearbyLandmark to update.
+     */
+    where: ListingNearbyLandmarkWhereUniqueInput
+  }
+
+  /**
+   * ListingNearbyLandmark updateMany
+   */
+  export type ListingNearbyLandmarkUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ListingNearbyLandmarks.
+     */
+    data: XOR<ListingNearbyLandmarkUpdateManyMutationInput, ListingNearbyLandmarkUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingNearbyLandmarks to update
+     */
+    where?: ListingNearbyLandmarkWhereInput
+    /**
+     * Limit how many ListingNearbyLandmarks to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingNearbyLandmark updateManyAndReturn
+   */
+  export type ListingNearbyLandmarkUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * The data used to update ListingNearbyLandmarks.
+     */
+    data: XOR<ListingNearbyLandmarkUpdateManyMutationInput, ListingNearbyLandmarkUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingNearbyLandmarks to update
+     */
+    where?: ListingNearbyLandmarkWhereInput
+    /**
+     * Limit how many ListingNearbyLandmarks to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingNearbyLandmark upsert
+   */
+  export type ListingNearbyLandmarkUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    /**
+     * The filter to search for the ListingNearbyLandmark to update in case it exists.
+     */
+    where: ListingNearbyLandmarkWhereUniqueInput
+    /**
+     * In case the ListingNearbyLandmark found by the `where` argument doesn't exist, create a new ListingNearbyLandmark with this data.
+     */
+    create: XOR<ListingNearbyLandmarkCreateInput, ListingNearbyLandmarkUncheckedCreateInput>
+    /**
+     * In case the ListingNearbyLandmark was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ListingNearbyLandmarkUpdateInput, ListingNearbyLandmarkUncheckedUpdateInput>
+  }
+
+  /**
+   * ListingNearbyLandmark delete
+   */
+  export type ListingNearbyLandmarkDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+    /**
+     * Filter which ListingNearbyLandmark to delete.
+     */
+    where: ListingNearbyLandmarkWhereUniqueInput
+  }
+
+  /**
+   * ListingNearbyLandmark deleteMany
+   */
+  export type ListingNearbyLandmarkDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingNearbyLandmarks to delete
+     */
+    where?: ListingNearbyLandmarkWhereInput
+    /**
+     * Limit how many ListingNearbyLandmarks to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingNearbyLandmark without action
+   */
+  export type ListingNearbyLandmarkDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingNearbyLandmark
+     */
+    select?: ListingNearbyLandmarkSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingNearbyLandmark
+     */
+    omit?: ListingNearbyLandmarkOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingNearbyLandmarkInclude<ExtArgs> | null
+  }
+
+
+  /**
+   * Model ListingHouseRule
+   */
+
+  export type AggregateListingHouseRule = {
+    _count: ListingHouseRuleCountAggregateOutputType | null
+    _min: ListingHouseRuleMinAggregateOutputType | null
+    _max: ListingHouseRuleMaxAggregateOutputType | null
+  }
+
+  export type ListingHouseRuleMinAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    rule: string | null
+    createdAt: Date | null
+  }
+
+  export type ListingHouseRuleMaxAggregateOutputType = {
+    id: string | null
+    listingId: string | null
+    rule: string | null
+    createdAt: Date | null
+  }
+
+  export type ListingHouseRuleCountAggregateOutputType = {
+    id: number
+    listingId: number
+    rule: number
+    createdAt: number
+    _all: number
+  }
+
+
+  export type ListingHouseRuleMinAggregateInputType = {
+    id?: true
+    listingId?: true
+    rule?: true
+    createdAt?: true
+  }
+
+  export type ListingHouseRuleMaxAggregateInputType = {
+    id?: true
+    listingId?: true
+    rule?: true
+    createdAt?: true
+  }
+
+  export type ListingHouseRuleCountAggregateInputType = {
+    id?: true
+    listingId?: true
+    rule?: true
+    createdAt?: true
+    _all?: true
+  }
+
+  export type ListingHouseRuleAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingHouseRule to aggregate.
+     */
+    where?: ListingHouseRuleWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingHouseRules to fetch.
+     */
+    orderBy?: ListingHouseRuleOrderByWithRelationInput | ListingHouseRuleOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: ListingHouseRuleWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingHouseRules from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingHouseRules.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned ListingHouseRules
+    **/
+    _count?: true | ListingHouseRuleCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: ListingHouseRuleMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: ListingHouseRuleMaxAggregateInputType
+  }
+
+  export type GetListingHouseRuleAggregateType<T extends ListingHouseRuleAggregateArgs> = {
+        [P in keyof T & keyof AggregateListingHouseRule]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateListingHouseRule[P]>
+      : GetScalarType<T[P], AggregateListingHouseRule[P]>
+  }
+
+
+
+
+  export type ListingHouseRuleGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ListingHouseRuleWhereInput
+    orderBy?: ListingHouseRuleOrderByWithAggregationInput | ListingHouseRuleOrderByWithAggregationInput[]
+    by: ListingHouseRuleScalarFieldEnum[] | ListingHouseRuleScalarFieldEnum
+    having?: ListingHouseRuleScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: ListingHouseRuleCountAggregateInputType | true
+    _min?: ListingHouseRuleMinAggregateInputType
+    _max?: ListingHouseRuleMaxAggregateInputType
+  }
+
+  export type ListingHouseRuleGroupByOutputType = {
+    id: string
+    listingId: string
+    rule: string
+    createdAt: Date
+    _count: ListingHouseRuleCountAggregateOutputType | null
+    _min: ListingHouseRuleMinAggregateOutputType | null
+    _max: ListingHouseRuleMaxAggregateOutputType | null
+  }
+
+  type GetListingHouseRuleGroupByPayload<T extends ListingHouseRuleGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ListingHouseRuleGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof ListingHouseRuleGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], ListingHouseRuleGroupByOutputType[P]>
+            : GetScalarType<T[P], ListingHouseRuleGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type ListingHouseRuleSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    rule?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingHouseRule"]>
+
+  export type ListingHouseRuleSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    rule?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingHouseRule"]>
+
+  export type ListingHouseRuleSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    listingId?: boolean
+    rule?: boolean
+    createdAt?: boolean
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }, ExtArgs["result"]["listingHouseRule"]>
+
+  export type ListingHouseRuleSelectScalar = {
+    id?: boolean
+    listingId?: boolean
+    rule?: boolean
+    createdAt?: boolean
+  }
+
+  export type ListingHouseRuleOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "rule" | "createdAt", ExtArgs["result"]["listingHouseRule"]>
+  export type ListingHouseRuleInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingHouseRuleIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+  export type ListingHouseRuleIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    listing?: boolean | ListingDefaultArgs<ExtArgs>
+  }
+
+  export type $ListingHouseRulePayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "ListingHouseRule"
+    objects: {
+      listing: Prisma.$ListingPayload<ExtArgs>
+    }
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      listingId: string
+      rule: string
+      createdAt: Date
+    }, ExtArgs["result"]["listingHouseRule"]>
+    composites: {}
+  }
+
+  type ListingHouseRuleGetPayload<S extends boolean | null | undefined | ListingHouseRuleDefaultArgs> = $Result.GetResult<Prisma.$ListingHouseRulePayload, S>
+
+  type ListingHouseRuleCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<ListingHouseRuleFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: ListingHouseRuleCountAggregateInputType | true
+    }
+
+  export interface ListingHouseRuleDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ListingHouseRule'], meta: { name: 'ListingHouseRule' } }
+    /**
+     * Find zero or one ListingHouseRule that matches the filter.
+     * @param {ListingHouseRuleFindUniqueArgs} args - Arguments to find a ListingHouseRule
+     * @example
+     * // Get one ListingHouseRule
+     * const listingHouseRule = await prisma.listingHouseRule.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ListingHouseRuleFindUniqueArgs>(args: SelectSubset<T, ListingHouseRuleFindUniqueArgs<ExtArgs>>): Prisma__ListingHouseRuleClient<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one ListingHouseRule that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ListingHouseRuleFindUniqueOrThrowArgs} args - Arguments to find a ListingHouseRule
+     * @example
+     * // Get one ListingHouseRule
+     * const listingHouseRule = await prisma.listingHouseRule.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ListingHouseRuleFindUniqueOrThrowArgs>(args: SelectSubset<T, ListingHouseRuleFindUniqueOrThrowArgs<ExtArgs>>): Prisma__ListingHouseRuleClient<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingHouseRule that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingHouseRuleFindFirstArgs} args - Arguments to find a ListingHouseRule
+     * @example
+     * // Get one ListingHouseRule
+     * const listingHouseRule = await prisma.listingHouseRule.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ListingHouseRuleFindFirstArgs>(args?: SelectSubset<T, ListingHouseRuleFindFirstArgs<ExtArgs>>): Prisma__ListingHouseRuleClient<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first ListingHouseRule that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingHouseRuleFindFirstOrThrowArgs} args - Arguments to find a ListingHouseRule
+     * @example
+     * // Get one ListingHouseRule
+     * const listingHouseRule = await prisma.listingHouseRule.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ListingHouseRuleFindFirstOrThrowArgs>(args?: SelectSubset<T, ListingHouseRuleFindFirstOrThrowArgs<ExtArgs>>): Prisma__ListingHouseRuleClient<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more ListingHouseRules that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingHouseRuleFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ListingHouseRules
+     * const listingHouseRules = await prisma.listingHouseRule.findMany()
+     * 
+     * // Get first 10 ListingHouseRules
+     * const listingHouseRules = await prisma.listingHouseRule.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const listingHouseRuleWithIdOnly = await prisma.listingHouseRule.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends ListingHouseRuleFindManyArgs>(args?: SelectSubset<T, ListingHouseRuleFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a ListingHouseRule.
+     * @param {ListingHouseRuleCreateArgs} args - Arguments to create a ListingHouseRule.
+     * @example
+     * // Create one ListingHouseRule
+     * const ListingHouseRule = await prisma.listingHouseRule.create({
+     *   data: {
+     *     // ... data to create a ListingHouseRule
+     *   }
+     * })
+     * 
+     */
+    create<T extends ListingHouseRuleCreateArgs>(args: SelectSubset<T, ListingHouseRuleCreateArgs<ExtArgs>>): Prisma__ListingHouseRuleClient<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many ListingHouseRules.
+     * @param {ListingHouseRuleCreateManyArgs} args - Arguments to create many ListingHouseRules.
+     * @example
+     * // Create many ListingHouseRules
+     * const listingHouseRule = await prisma.listingHouseRule.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends ListingHouseRuleCreateManyArgs>(args?: SelectSubset<T, ListingHouseRuleCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many ListingHouseRules and returns the data saved in the database.
+     * @param {ListingHouseRuleCreateManyAndReturnArgs} args - Arguments to create many ListingHouseRules.
+     * @example
+     * // Create many ListingHouseRules
+     * const listingHouseRule = await prisma.listingHouseRule.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many ListingHouseRules and only return the `id`
+     * const listingHouseRuleWithIdOnly = await prisma.listingHouseRule.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends ListingHouseRuleCreateManyAndReturnArgs>(args?: SelectSubset<T, ListingHouseRuleCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a ListingHouseRule.
+     * @param {ListingHouseRuleDeleteArgs} args - Arguments to delete one ListingHouseRule.
+     * @example
+     * // Delete one ListingHouseRule
+     * const ListingHouseRule = await prisma.listingHouseRule.delete({
+     *   where: {
+     *     // ... filter to delete one ListingHouseRule
+     *   }
+     * })
+     * 
+     */
+    delete<T extends ListingHouseRuleDeleteArgs>(args: SelectSubset<T, ListingHouseRuleDeleteArgs<ExtArgs>>): Prisma__ListingHouseRuleClient<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one ListingHouseRule.
+     * @param {ListingHouseRuleUpdateArgs} args - Arguments to update one ListingHouseRule.
+     * @example
+     * // Update one ListingHouseRule
+     * const listingHouseRule = await prisma.listingHouseRule.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends ListingHouseRuleUpdateArgs>(args: SelectSubset<T, ListingHouseRuleUpdateArgs<ExtArgs>>): Prisma__ListingHouseRuleClient<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more ListingHouseRules.
+     * @param {ListingHouseRuleDeleteManyArgs} args - Arguments to filter ListingHouseRules to delete.
+     * @example
+     * // Delete a few ListingHouseRules
+     * const { count } = await prisma.listingHouseRule.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends ListingHouseRuleDeleteManyArgs>(args?: SelectSubset<T, ListingHouseRuleDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingHouseRules.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingHouseRuleUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ListingHouseRules
+     * const listingHouseRule = await prisma.listingHouseRule.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends ListingHouseRuleUpdateManyArgs>(args: SelectSubset<T, ListingHouseRuleUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more ListingHouseRules and returns the data updated in the database.
+     * @param {ListingHouseRuleUpdateManyAndReturnArgs} args - Arguments to update many ListingHouseRules.
+     * @example
+     * // Update many ListingHouseRules
+     * const listingHouseRule = await prisma.listingHouseRule.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more ListingHouseRules and only return the `id`
+     * const listingHouseRuleWithIdOnly = await prisma.listingHouseRule.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends ListingHouseRuleUpdateManyAndReturnArgs>(args: SelectSubset<T, ListingHouseRuleUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one ListingHouseRule.
+     * @param {ListingHouseRuleUpsertArgs} args - Arguments to update or create a ListingHouseRule.
+     * @example
+     * // Update or create a ListingHouseRule
+     * const listingHouseRule = await prisma.listingHouseRule.upsert({
+     *   create: {
+     *     // ... data to create a ListingHouseRule
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ListingHouseRule we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ListingHouseRuleUpsertArgs>(args: SelectSubset<T, ListingHouseRuleUpsertArgs<ExtArgs>>): Prisma__ListingHouseRuleClient<$Result.GetResult<Prisma.$ListingHouseRulePayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of ListingHouseRules.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingHouseRuleCountArgs} args - Arguments to filter ListingHouseRules to count.
+     * @example
+     * // Count the number of ListingHouseRules
+     * const count = await prisma.listingHouseRule.count({
+     *   where: {
+     *     // ... the filter for the ListingHouseRules we want to count
+     *   }
+     * })
+    **/
+    count<T extends ListingHouseRuleCountArgs>(
+      args?: Subset<T, ListingHouseRuleCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ListingHouseRuleCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a ListingHouseRule.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingHouseRuleAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends ListingHouseRuleAggregateArgs>(args: Subset<T, ListingHouseRuleAggregateArgs>): Prisma.PrismaPromise<GetListingHouseRuleAggregateType<T>>
+
+    /**
+     * Group by ListingHouseRule.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ListingHouseRuleGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends ListingHouseRuleGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ListingHouseRuleGroupByArgs['orderBy'] }
+        : { orderBy?: ListingHouseRuleGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, ListingHouseRuleGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetListingHouseRuleGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the ListingHouseRule model
+   */
+  readonly fields: ListingHouseRuleFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ListingHouseRule.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ListingHouseRuleClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    listing<T extends ListingDefaultArgs<ExtArgs> = {}>(args?: Subset<T, ListingDefaultArgs<ExtArgs>>): Prisma__ListingClient<$Result.GetResult<Prisma.$ListingPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions> | Null, Null, ExtArgs, GlobalOmitOptions>
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the ListingHouseRule model
+   */
+  interface ListingHouseRuleFieldRefs {
+    readonly id: FieldRef<"ListingHouseRule", 'String'>
+    readonly listingId: FieldRef<"ListingHouseRule", 'String'>
+    readonly rule: FieldRef<"ListingHouseRule", 'String'>
+    readonly createdAt: FieldRef<"ListingHouseRule", 'DateTime'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * ListingHouseRule findUnique
+   */
+  export type ListingHouseRuleFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingHouseRule to fetch.
+     */
+    where: ListingHouseRuleWhereUniqueInput
+  }
+
+  /**
+   * ListingHouseRule findUniqueOrThrow
+   */
+  export type ListingHouseRuleFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingHouseRule to fetch.
+     */
+    where: ListingHouseRuleWhereUniqueInput
+  }
+
+  /**
+   * ListingHouseRule findFirst
+   */
+  export type ListingHouseRuleFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingHouseRule to fetch.
+     */
+    where?: ListingHouseRuleWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingHouseRules to fetch.
+     */
+    orderBy?: ListingHouseRuleOrderByWithRelationInput | ListingHouseRuleOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingHouseRules.
+     */
+    cursor?: ListingHouseRuleWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingHouseRules from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingHouseRules.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingHouseRules.
+     */
+    distinct?: ListingHouseRuleScalarFieldEnum | ListingHouseRuleScalarFieldEnum[]
+  }
+
+  /**
+   * ListingHouseRule findFirstOrThrow
+   */
+  export type ListingHouseRuleFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingHouseRule to fetch.
+     */
+    where?: ListingHouseRuleWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingHouseRules to fetch.
+     */
+    orderBy?: ListingHouseRuleOrderByWithRelationInput | ListingHouseRuleOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for ListingHouseRules.
+     */
+    cursor?: ListingHouseRuleWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingHouseRules from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingHouseRules.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of ListingHouseRules.
+     */
+    distinct?: ListingHouseRuleScalarFieldEnum | ListingHouseRuleScalarFieldEnum[]
+  }
+
+  /**
+   * ListingHouseRule findMany
+   */
+  export type ListingHouseRuleFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    /**
+     * Filter, which ListingHouseRules to fetch.
+     */
+    where?: ListingHouseRuleWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of ListingHouseRules to fetch.
+     */
+    orderBy?: ListingHouseRuleOrderByWithRelationInput | ListingHouseRuleOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing ListingHouseRules.
+     */
+    cursor?: ListingHouseRuleWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` ListingHouseRules from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` ListingHouseRules.
+     */
+    skip?: number
+    distinct?: ListingHouseRuleScalarFieldEnum | ListingHouseRuleScalarFieldEnum[]
+  }
+
+  /**
+   * ListingHouseRule create
+   */
+  export type ListingHouseRuleCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    /**
+     * The data needed to create a ListingHouseRule.
+     */
+    data: XOR<ListingHouseRuleCreateInput, ListingHouseRuleUncheckedCreateInput>
+  }
+
+  /**
+   * ListingHouseRule createMany
+   */
+  export type ListingHouseRuleCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ListingHouseRules.
+     */
+    data: ListingHouseRuleCreateManyInput | ListingHouseRuleCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * ListingHouseRule createManyAndReturn
+   */
+  export type ListingHouseRuleCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * The data used to create many ListingHouseRules.
+     */
+    data: ListingHouseRuleCreateManyInput | ListingHouseRuleCreateManyInput[]
+    skipDuplicates?: boolean
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleIncludeCreateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingHouseRule update
+   */
+  export type ListingHouseRuleUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    /**
+     * The data needed to update a ListingHouseRule.
+     */
+    data: XOR<ListingHouseRuleUpdateInput, ListingHouseRuleUncheckedUpdateInput>
+    /**
+     * Choose, which ListingHouseRule to update.
+     */
+    where: ListingHouseRuleWhereUniqueInput
+  }
+
+  /**
+   * ListingHouseRule updateMany
+   */
+  export type ListingHouseRuleUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ListingHouseRules.
+     */
+    data: XOR<ListingHouseRuleUpdateManyMutationInput, ListingHouseRuleUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingHouseRules to update
+     */
+    where?: ListingHouseRuleWhereInput
+    /**
+     * Limit how many ListingHouseRules to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingHouseRule updateManyAndReturn
+   */
+  export type ListingHouseRuleUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * The data used to update ListingHouseRules.
+     */
+    data: XOR<ListingHouseRuleUpdateManyMutationInput, ListingHouseRuleUncheckedUpdateManyInput>
+    /**
+     * Filter which ListingHouseRules to update
+     */
+    where?: ListingHouseRuleWhereInput
+    /**
+     * Limit how many ListingHouseRules to update.
+     */
+    limit?: number
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleIncludeUpdateManyAndReturn<ExtArgs> | null
+  }
+
+  /**
+   * ListingHouseRule upsert
+   */
+  export type ListingHouseRuleUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    /**
+     * The filter to search for the ListingHouseRule to update in case it exists.
+     */
+    where: ListingHouseRuleWhereUniqueInput
+    /**
+     * In case the ListingHouseRule found by the `where` argument doesn't exist, create a new ListingHouseRule with this data.
+     */
+    create: XOR<ListingHouseRuleCreateInput, ListingHouseRuleUncheckedCreateInput>
+    /**
+     * In case the ListingHouseRule was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ListingHouseRuleUpdateInput, ListingHouseRuleUncheckedUpdateInput>
+  }
+
+  /**
+   * ListingHouseRule delete
+   */
+  export type ListingHouseRuleDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
+    /**
+     * Filter which ListingHouseRule to delete.
+     */
+    where: ListingHouseRuleWhereUniqueInput
+  }
+
+  /**
+   * ListingHouseRule deleteMany
+   */
+  export type ListingHouseRuleDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ListingHouseRules to delete
+     */
+    where?: ListingHouseRuleWhereInput
+    /**
+     * Limit how many ListingHouseRules to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * ListingHouseRule without action
+   */
+  export type ListingHouseRuleDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ListingHouseRule
+     */
+    select?: ListingHouseRuleSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the ListingHouseRule
+     */
+    omit?: ListingHouseRuleOmit<ExtArgs> | null
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ListingHouseRuleInclude<ExtArgs> | null
   }
 
 
@@ -21115,8 +29212,18 @@ export namespace Prisma {
 
   export type AggregateIcalFeed = {
     _count: IcalFeedCountAggregateOutputType | null
+    _avg: IcalFeedAvgAggregateOutputType | null
+    _sum: IcalFeedSumAggregateOutputType | null
     _min: IcalFeedMinAggregateOutputType | null
     _max: IcalFeedMaxAggregateOutputType | null
+  }
+
+  export type IcalFeedAvgAggregateOutputType = {
+    consecutiveFailures: number | null
+  }
+
+  export type IcalFeedSumAggregateOutputType = {
+    consecutiveFailures: number | null
   }
 
   export type IcalFeedMinAggregateOutputType = {
@@ -21126,6 +29233,8 @@ export namespace Prisma {
     feedUrl: string | null
     lastSyncedAt: Date | null
     lastError: string | null
+    consecutiveFailures: number | null
+    nextRetryAt: Date | null
     isActive: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -21138,6 +29247,8 @@ export namespace Prisma {
     feedUrl: string | null
     lastSyncedAt: Date | null
     lastError: string | null
+    consecutiveFailures: number | null
+    nextRetryAt: Date | null
     isActive: boolean | null
     createdAt: Date | null
     updatedAt: Date | null
@@ -21150,12 +29261,22 @@ export namespace Prisma {
     feedUrl: number
     lastSyncedAt: number
     lastError: number
+    consecutiveFailures: number
+    nextRetryAt: number
     isActive: number
     createdAt: number
     updatedAt: number
     _all: number
   }
 
+
+  export type IcalFeedAvgAggregateInputType = {
+    consecutiveFailures?: true
+  }
+
+  export type IcalFeedSumAggregateInputType = {
+    consecutiveFailures?: true
+  }
 
   export type IcalFeedMinAggregateInputType = {
     id?: true
@@ -21164,6 +29285,8 @@ export namespace Prisma {
     feedUrl?: true
     lastSyncedAt?: true
     lastError?: true
+    consecutiveFailures?: true
+    nextRetryAt?: true
     isActive?: true
     createdAt?: true
     updatedAt?: true
@@ -21176,6 +29299,8 @@ export namespace Prisma {
     feedUrl?: true
     lastSyncedAt?: true
     lastError?: true
+    consecutiveFailures?: true
+    nextRetryAt?: true
     isActive?: true
     createdAt?: true
     updatedAt?: true
@@ -21188,6 +29313,8 @@ export namespace Prisma {
     feedUrl?: true
     lastSyncedAt?: true
     lastError?: true
+    consecutiveFailures?: true
+    nextRetryAt?: true
     isActive?: true
     createdAt?: true
     updatedAt?: true
@@ -21232,6 +29359,18 @@ export namespace Prisma {
     /**
      * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
      * 
+     * Select which fields to average
+    **/
+    _avg?: IcalFeedAvgAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to sum
+    **/
+    _sum?: IcalFeedSumAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
      * Select which fields to find the minimum value
     **/
     _min?: IcalFeedMinAggregateInputType
@@ -21262,6 +29401,8 @@ export namespace Prisma {
     take?: number
     skip?: number
     _count?: IcalFeedCountAggregateInputType | true
+    _avg?: IcalFeedAvgAggregateInputType
+    _sum?: IcalFeedSumAggregateInputType
     _min?: IcalFeedMinAggregateInputType
     _max?: IcalFeedMaxAggregateInputType
   }
@@ -21273,10 +29414,14 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt: Date | null
     lastError: string | null
+    consecutiveFailures: number
+    nextRetryAt: Date | null
     isActive: boolean
     createdAt: Date
     updatedAt: Date
     _count: IcalFeedCountAggregateOutputType | null
+    _avg: IcalFeedAvgAggregateOutputType | null
+    _sum: IcalFeedSumAggregateOutputType | null
     _min: IcalFeedMinAggregateOutputType | null
     _max: IcalFeedMaxAggregateOutputType | null
   }
@@ -21302,6 +29447,8 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -21317,6 +29464,8 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -21330,6 +29479,8 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
@@ -21343,12 +29494,14 @@ export namespace Prisma {
     feedUrl?: boolean
     lastSyncedAt?: boolean
     lastError?: boolean
+    consecutiveFailures?: boolean
+    nextRetryAt?: boolean
     isActive?: boolean
     createdAt?: boolean
     updatedAt?: boolean
   }
 
-  export type IcalFeedOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "platform" | "feedUrl" | "lastSyncedAt" | "lastError" | "isActive" | "createdAt" | "updatedAt", ExtArgs["result"]["icalFeed"]>
+  export type IcalFeedOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "listingId" | "platform" | "feedUrl" | "lastSyncedAt" | "lastError" | "consecutiveFailures" | "nextRetryAt" | "isActive" | "createdAt" | "updatedAt", ExtArgs["result"]["icalFeed"]>
   export type IcalFeedInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     listing?: boolean | ListingDefaultArgs<ExtArgs>
     blockedDates?: boolean | IcalFeed$blockedDatesArgs<ExtArgs>
@@ -21374,6 +29527,8 @@ export namespace Prisma {
       feedUrl: string
       lastSyncedAt: Date | null
       lastError: string | null
+      consecutiveFailures: number
+      nextRetryAt: Date | null
       isActive: boolean
       createdAt: Date
       updatedAt: Date
@@ -21808,6 +29963,8 @@ export namespace Prisma {
     readonly feedUrl: FieldRef<"IcalFeed", 'String'>
     readonly lastSyncedAt: FieldRef<"IcalFeed", 'DateTime'>
     readonly lastError: FieldRef<"IcalFeed", 'String'>
+    readonly consecutiveFailures: FieldRef<"IcalFeed", 'Int'>
+    readonly nextRetryAt: FieldRef<"IcalFeed", 'DateTime'>
     readonly isActive: FieldRef<"IcalFeed", 'Boolean'>
     readonly createdAt: FieldRef<"IcalFeed", 'DateTime'>
     readonly updatedAt: FieldRef<"IcalFeed", 'DateTime'>
@@ -25575,6 +33732,7 @@ export namespace Prisma {
     unitCount: 'unitCount',
     description: 'description',
     pricePerNight: 'pricePerNight',
+    pricePerDay: 'pricePerDay',
     currency: 'currency',
     minStayNights: 'minStayNights',
     checkinTime: 'checkinTime',
@@ -25619,9 +33777,54 @@ export namespace Prisma {
     doors: 'doors',
     mileagePolicy: 'mileagePolicy',
     mileageLimitKm: 'mileageLimitKm',
+    carCategory: 'carCategory',
+    driveType: 'driveType',
+    airConditioning: 'airConditioning',
+    odometerReading: 'odometerReading',
+    licencePlate: 'licencePlate',
+    engineSize: 'engineSize',
+    colour: 'colour',
+    securityDeposit: 'securityDeposit',
+    minimumDriverAge: 'minimumDriverAge',
+    minimumRentalDays: 'minimumRentalDays',
+    fuelPolicy: 'fuelPolicy',
+    extraKmRate: 'extraKmRate',
+    roadsideAssistance: 'roadsideAssistance',
+    crossBorderAllowed: 'crossBorderAllowed',
+    airportPickup: 'airportPickup',
+    deliveryEnabled: 'deliveryEnabled',
+    deliveryRadiusKm: 'deliveryRadiusKm',
+    deliveryFee: 'deliveryFee',
+    pickupHoursFrom: 'pickupHoursFrom',
+    pickupHoursTo: 'pickupHoursTo',
+    returnSameLocation: 'returnSameLocation',
+    insuranceType: 'insuranceType',
     updatedAt: 'updatedAt',
     createdAt: 'createdAt',
-    deletedAt: 'deletedAt'
+    deletedAt: 'deletedAt',
+    featuredPhotoId: 'featuredPhotoId',
+    maxAdults: 'maxAdults',
+    maxChildren: 'maxChildren',
+    childrenAllowed: 'childrenAllowed',
+    childPriceType: 'childPriceType',
+    childPriceValue: 'childPriceValue',
+    childFreeUnderAge: 'childFreeUnderAge',
+    checkinRules: 'checkinRules',
+    checkoutRules: 'checkoutRules',
+    earlyCheckinFee: 'earlyCheckinFee',
+    lateCheckoutFee: 'lateCheckoutFee',
+    cleaningFee: 'cleaningFee',
+    extraGuestFee: 'extraGuestFee',
+    extraGuestAfter: 'extraGuestAfter',
+    weeklyDiscount: 'weeklyDiscount',
+    monthlyDiscount: 'monthlyDiscount',
+    instantBooking: 'instantBooking',
+    selfCheckin: 'selfCheckin',
+    selfCheckinDetails: 'selfCheckinDetails',
+    apartmentType: 'apartmentType',
+    floorNumber: 'floorNumber',
+    propertySizeM2: 'propertySizeM2',
+    securityDepositDue: 'securityDepositDue'
   };
 
   export type ListingScalarFieldEnum = (typeof ListingScalarFieldEnum)[keyof typeof ListingScalarFieldEnum]
@@ -25641,6 +33844,78 @@ export namespace Prisma {
   };
 
   export type ListingReviewTaskScalarFieldEnum = (typeof ListingReviewTaskScalarFieldEnum)[keyof typeof ListingReviewTaskScalarFieldEnum]
+
+
+  export const ListingModerationLogScalarFieldEnum: {
+    id: 'id',
+    listingId: 'listingId',
+    action: 'action',
+    actorId: 'actorId',
+    actorRole: 'actorRole',
+    metadata: 'metadata',
+    createdAt: 'createdAt'
+  };
+
+  export type ListingModerationLogScalarFieldEnum = (typeof ListingModerationLogScalarFieldEnum)[keyof typeof ListingModerationLogScalarFieldEnum]
+
+
+  export const ListingBedConfigScalarFieldEnum: {
+    id: 'id',
+    listingId: 'listingId',
+    bedType: 'bedType',
+    quantity: 'quantity',
+    roomLabel: 'roomLabel'
+  };
+
+  export type ListingBedConfigScalarFieldEnum = (typeof ListingBedConfigScalarFieldEnum)[keyof typeof ListingBedConfigScalarFieldEnum]
+
+
+  export const ListingBlockedDateScalarFieldEnum: {
+    id: 'id',
+    listingId: 'listingId',
+    date: 'date',
+    source: 'source',
+    note: 'note',
+    createdAt: 'createdAt'
+  };
+
+  export type ListingBlockedDateScalarFieldEnum = (typeof ListingBlockedDateScalarFieldEnum)[keyof typeof ListingBlockedDateScalarFieldEnum]
+
+
+  export const ListingSeasonalPriceScalarFieldEnum: {
+    id: 'id',
+    listingId: 'listingId',
+    startDate: 'startDate',
+    endDate: 'endDate',
+    pricePerNight: 'pricePerNight',
+    pricePerDay: 'pricePerDay',
+    label: 'label',
+    createdAt: 'createdAt'
+  };
+
+  export type ListingSeasonalPriceScalarFieldEnum = (typeof ListingSeasonalPriceScalarFieldEnum)[keyof typeof ListingSeasonalPriceScalarFieldEnum]
+
+
+  export const ListingNearbyLandmarkScalarFieldEnum: {
+    id: 'id',
+    listingId: 'listingId',
+    name: 'name',
+    category: 'category',
+    distanceKm: 'distanceKm',
+    createdAt: 'createdAt'
+  };
+
+  export type ListingNearbyLandmarkScalarFieldEnum = (typeof ListingNearbyLandmarkScalarFieldEnum)[keyof typeof ListingNearbyLandmarkScalarFieldEnum]
+
+
+  export const ListingHouseRuleScalarFieldEnum: {
+    id: 'id',
+    listingId: 'listingId',
+    rule: 'rule',
+    createdAt: 'createdAt'
+  };
+
+  export type ListingHouseRuleScalarFieldEnum = (typeof ListingHouseRuleScalarFieldEnum)[keyof typeof ListingHouseRuleScalarFieldEnum]
 
 
   export const ListingPhotoScalarFieldEnum: {
@@ -25865,6 +34140,8 @@ export namespace Prisma {
     feedUrl: 'feedUrl',
     lastSyncedAt: 'lastSyncedAt',
     lastError: 'lastError',
+    consecutiveFailures: 'consecutiveFailures',
+    nextRetryAt: 'nextRetryAt',
     isActive: 'isActive',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
@@ -26136,6 +34413,76 @@ export namespace Prisma {
 
 
   /**
+   * Reference to a field of type 'CarCategory'
+   */
+  export type EnumCarCategoryFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CarCategory'>
+    
+
+
+  /**
+   * Reference to a field of type 'CarCategory[]'
+   */
+  export type ListEnumCarCategoryFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'CarCategory[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'DriveType'
+   */
+  export type EnumDriveTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DriveType'>
+    
+
+
+  /**
+   * Reference to a field of type 'DriveType[]'
+   */
+  export type ListEnumDriveTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DriveType[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'FuelPolicy'
+   */
+  export type EnumFuelPolicyFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'FuelPolicy'>
+    
+
+
+  /**
+   * Reference to a field of type 'FuelPolicy[]'
+   */
+  export type ListEnumFuelPolicyFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'FuelPolicy[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'InsuranceType'
+   */
+  export type EnumInsuranceTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'InsuranceType'>
+    
+
+
+  /**
+   * Reference to a field of type 'InsuranceType[]'
+   */
+  export type ListEnumInsuranceTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'InsuranceType[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'ApartmentType'
+   */
+  export type EnumApartmentTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ApartmentType'>
+    
+
+
+  /**
+   * Reference to a field of type 'ApartmentType[]'
+   */
+  export type ListEnumApartmentTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ApartmentType[]'>
+    
+
+
+  /**
    * Reference to a field of type 'ReviewTaskStatus'
    */
   export type EnumReviewTaskStatusFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'ReviewTaskStatus'>
@@ -26150,20 +34497,6 @@ export namespace Prisma {
 
 
   /**
-   * Reference to a field of type 'DocumentType'
-   */
-  export type EnumDocumentTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DocumentType'>
-    
-
-
-  /**
-   * Reference to a field of type 'DocumentType[]'
-   */
-  export type ListEnumDocumentTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DocumentType[]'>
-    
-
-
-  /**
    * Reference to a field of type 'Json'
    */
   export type JsonFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Json'>
@@ -26174,6 +34507,48 @@ export namespace Prisma {
    * Reference to a field of type 'QueryMode'
    */
   export type EnumQueryModeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'QueryMode'>
+    
+
+
+  /**
+   * Reference to a field of type 'BedType'
+   */
+  export type EnumBedTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BedType'>
+    
+
+
+  /**
+   * Reference to a field of type 'BedType[]'
+   */
+  export type ListEnumBedTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BedType[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'BlockedDateSource'
+   */
+  export type EnumBlockedDateSourceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BlockedDateSource'>
+    
+
+
+  /**
+   * Reference to a field of type 'BlockedDateSource[]'
+   */
+  export type ListEnumBlockedDateSourceFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'BlockedDateSource[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'DocumentType'
+   */
+  export type EnumDocumentTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DocumentType'>
+    
+
+
+  /**
+   * Reference to a field of type 'DocumentType[]'
+   */
+  export type ListEnumDocumentTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'DocumentType[]'>
     
 
 
@@ -26248,6 +34623,7 @@ export namespace Prisma {
     unitCount?: IntNullableFilter<"Listing"> | number | null
     description?: StringNullableFilter<"Listing"> | string | null
     pricePerNight?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
     currency?: StringNullableFilter<"Listing"> | string | null
     minStayNights?: IntFilter<"Listing"> | number
     checkinTime?: StringNullableFilter<"Listing"> | string | null
@@ -26292,19 +34668,70 @@ export namespace Prisma {
     doors?: IntNullableFilter<"Listing"> | number | null
     mileagePolicy?: EnumMileagePolicyNullableFilter<"Listing"> | $Enums.MileagePolicy | null
     mileageLimitKm?: IntNullableFilter<"Listing"> | number | null
+    carCategory?: EnumCarCategoryNullableFilter<"Listing"> | $Enums.CarCategory | null
+    driveType?: EnumDriveTypeNullableFilter<"Listing"> | $Enums.DriveType | null
+    airConditioning?: BoolNullableFilter<"Listing"> | boolean | null
+    odometerReading?: IntNullableFilter<"Listing"> | number | null
+    licencePlate?: StringNullableFilter<"Listing"> | string | null
+    engineSize?: StringNullableFilter<"Listing"> | string | null
+    colour?: StringNullableFilter<"Listing"> | string | null
+    securityDeposit?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: IntNullableFilter<"Listing"> | number | null
+    minimumRentalDays?: IntNullableFilter<"Listing"> | number | null
+    fuelPolicy?: EnumFuelPolicyNullableFilter<"Listing"> | $Enums.FuelPolicy | null
+    extraKmRate?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFilter<"Listing"> | boolean
+    crossBorderAllowed?: BoolFilter<"Listing"> | boolean
+    airportPickup?: BoolFilter<"Listing"> | boolean
+    deliveryEnabled?: BoolFilter<"Listing"> | boolean
+    deliveryRadiusKm?: IntNullableFilter<"Listing"> | number | null
+    deliveryFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: StringNullableFilter<"Listing"> | string | null
+    pickupHoursTo?: StringNullableFilter<"Listing"> | string | null
+    returnSameLocation?: BoolFilter<"Listing"> | boolean
+    insuranceType?: EnumInsuranceTypeNullableFilter<"Listing"> | $Enums.InsuranceType | null
     updatedAt?: DateTimeFilter<"Listing"> | Date | string
     createdAt?: DateTimeFilter<"Listing"> | Date | string
     deletedAt?: DateTimeNullableFilter<"Listing"> | Date | string | null
+    featuredPhotoId?: StringNullableFilter<"Listing"> | string | null
+    maxAdults?: IntNullableFilter<"Listing"> | number | null
+    maxChildren?: IntNullableFilter<"Listing"> | number | null
+    childrenAllowed?: BoolFilter<"Listing"> | boolean
+    childPriceType?: StringNullableFilter<"Listing"> | string | null
+    childPriceValue?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: IntNullableFilter<"Listing"> | number | null
+    checkinRules?: StringNullableFilter<"Listing"> | string | null
+    checkoutRules?: StringNullableFilter<"Listing"> | string | null
+    earlyCheckinFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: IntNullableFilter<"Listing"> | number | null
+    weeklyDiscount?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFilter<"Listing"> | boolean
+    selfCheckin?: BoolFilter<"Listing"> | boolean
+    selfCheckinDetails?: StringNullableFilter<"Listing"> | string | null
+    apartmentType?: EnumApartmentTypeNullableFilter<"Listing"> | $Enums.ApartmentType | null
+    floorNumber?: IntNullableFilter<"Listing"> | number | null
+    propertySizeM2?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: StringNullableFilter<"Listing"> | string | null
     photos?: ListingPhotoListRelationFilter
     documents?: ListingDocumentListRelationFilter
     amenities?: ListingAmenityListRelationFilter
     customAmenities?: ListingCustomAmenityListRelationFilter
     reviewTasks?: ListingReviewTaskListRelationFilter
+    moderationLog?: ListingModerationLogListRelationFilter
     favourites?: UserFavouriteListRelationFilter
     recentViews?: UserRecentlyViewedListRelationFilter
     bookings?: BookingListRelationFilter
     reviews?: ListingReviewListRelationFilter
     icalFeeds?: IcalFeedListRelationFilter
+    bedConfigs?: ListingBedConfigListRelationFilter
+    blockedDates?: ListingBlockedDateListRelationFilter
+    seasonalPrices?: ListingSeasonalPriceListRelationFilter
+    landmarks?: ListingNearbyLandmarkListRelationFilter
+    houseRules?: ListingHouseRuleListRelationFilter
   }
 
   export type ListingOrderByWithRelationInput = {
@@ -26316,6 +34743,7 @@ export namespace Prisma {
     unitCount?: SortOrderInput | SortOrder
     description?: SortOrderInput | SortOrder
     pricePerNight?: SortOrderInput | SortOrder
+    pricePerDay?: SortOrderInput | SortOrder
     currency?: SortOrderInput | SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrderInput | SortOrder
@@ -26360,19 +34788,70 @@ export namespace Prisma {
     doors?: SortOrderInput | SortOrder
     mileagePolicy?: SortOrderInput | SortOrder
     mileageLimitKm?: SortOrderInput | SortOrder
+    carCategory?: SortOrderInput | SortOrder
+    driveType?: SortOrderInput | SortOrder
+    airConditioning?: SortOrderInput | SortOrder
+    odometerReading?: SortOrderInput | SortOrder
+    licencePlate?: SortOrderInput | SortOrder
+    engineSize?: SortOrderInput | SortOrder
+    colour?: SortOrderInput | SortOrder
+    securityDeposit?: SortOrderInput | SortOrder
+    minimumDriverAge?: SortOrderInput | SortOrder
+    minimumRentalDays?: SortOrderInput | SortOrder
+    fuelPolicy?: SortOrderInput | SortOrder
+    extraKmRate?: SortOrderInput | SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrderInput | SortOrder
+    deliveryFee?: SortOrderInput | SortOrder
+    pickupHoursFrom?: SortOrderInput | SortOrder
+    pickupHoursTo?: SortOrderInput | SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrderInput | SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrderInput | SortOrder
+    featuredPhotoId?: SortOrderInput | SortOrder
+    maxAdults?: SortOrderInput | SortOrder
+    maxChildren?: SortOrderInput | SortOrder
+    childrenAllowed?: SortOrder
+    childPriceType?: SortOrderInput | SortOrder
+    childPriceValue?: SortOrderInput | SortOrder
+    childFreeUnderAge?: SortOrderInput | SortOrder
+    checkinRules?: SortOrderInput | SortOrder
+    checkoutRules?: SortOrderInput | SortOrder
+    earlyCheckinFee?: SortOrderInput | SortOrder
+    lateCheckoutFee?: SortOrderInput | SortOrder
+    cleaningFee?: SortOrderInput | SortOrder
+    extraGuestFee?: SortOrderInput | SortOrder
+    extraGuestAfter?: SortOrderInput | SortOrder
+    weeklyDiscount?: SortOrderInput | SortOrder
+    monthlyDiscount?: SortOrderInput | SortOrder
+    instantBooking?: SortOrder
+    selfCheckin?: SortOrder
+    selfCheckinDetails?: SortOrderInput | SortOrder
+    apartmentType?: SortOrderInput | SortOrder
+    floorNumber?: SortOrderInput | SortOrder
+    propertySizeM2?: SortOrderInput | SortOrder
+    securityDepositDue?: SortOrderInput | SortOrder
     photos?: ListingPhotoOrderByRelationAggregateInput
     documents?: ListingDocumentOrderByRelationAggregateInput
     amenities?: ListingAmenityOrderByRelationAggregateInput
     customAmenities?: ListingCustomAmenityOrderByRelationAggregateInput
     reviewTasks?: ListingReviewTaskOrderByRelationAggregateInput
+    moderationLog?: ListingModerationLogOrderByRelationAggregateInput
     favourites?: UserFavouriteOrderByRelationAggregateInput
     recentViews?: UserRecentlyViewedOrderByRelationAggregateInput
     bookings?: BookingOrderByRelationAggregateInput
     reviews?: ListingReviewOrderByRelationAggregateInput
     icalFeeds?: IcalFeedOrderByRelationAggregateInput
+    bedConfigs?: ListingBedConfigOrderByRelationAggregateInput
+    blockedDates?: ListingBlockedDateOrderByRelationAggregateInput
+    seasonalPrices?: ListingSeasonalPriceOrderByRelationAggregateInput
+    landmarks?: ListingNearbyLandmarkOrderByRelationAggregateInput
+    houseRules?: ListingHouseRuleOrderByRelationAggregateInput
   }
 
   export type ListingWhereUniqueInput = Prisma.AtLeast<{
@@ -26387,6 +34866,7 @@ export namespace Prisma {
     unitCount?: IntNullableFilter<"Listing"> | number | null
     description?: StringNullableFilter<"Listing"> | string | null
     pricePerNight?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
     currency?: StringNullableFilter<"Listing"> | string | null
     minStayNights?: IntFilter<"Listing"> | number
     checkinTime?: StringNullableFilter<"Listing"> | string | null
@@ -26431,19 +34911,70 @@ export namespace Prisma {
     doors?: IntNullableFilter<"Listing"> | number | null
     mileagePolicy?: EnumMileagePolicyNullableFilter<"Listing"> | $Enums.MileagePolicy | null
     mileageLimitKm?: IntNullableFilter<"Listing"> | number | null
+    carCategory?: EnumCarCategoryNullableFilter<"Listing"> | $Enums.CarCategory | null
+    driveType?: EnumDriveTypeNullableFilter<"Listing"> | $Enums.DriveType | null
+    airConditioning?: BoolNullableFilter<"Listing"> | boolean | null
+    odometerReading?: IntNullableFilter<"Listing"> | number | null
+    licencePlate?: StringNullableFilter<"Listing"> | string | null
+    engineSize?: StringNullableFilter<"Listing"> | string | null
+    colour?: StringNullableFilter<"Listing"> | string | null
+    securityDeposit?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: IntNullableFilter<"Listing"> | number | null
+    minimumRentalDays?: IntNullableFilter<"Listing"> | number | null
+    fuelPolicy?: EnumFuelPolicyNullableFilter<"Listing"> | $Enums.FuelPolicy | null
+    extraKmRate?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFilter<"Listing"> | boolean
+    crossBorderAllowed?: BoolFilter<"Listing"> | boolean
+    airportPickup?: BoolFilter<"Listing"> | boolean
+    deliveryEnabled?: BoolFilter<"Listing"> | boolean
+    deliveryRadiusKm?: IntNullableFilter<"Listing"> | number | null
+    deliveryFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: StringNullableFilter<"Listing"> | string | null
+    pickupHoursTo?: StringNullableFilter<"Listing"> | string | null
+    returnSameLocation?: BoolFilter<"Listing"> | boolean
+    insuranceType?: EnumInsuranceTypeNullableFilter<"Listing"> | $Enums.InsuranceType | null
     updatedAt?: DateTimeFilter<"Listing"> | Date | string
     createdAt?: DateTimeFilter<"Listing"> | Date | string
     deletedAt?: DateTimeNullableFilter<"Listing"> | Date | string | null
+    featuredPhotoId?: StringNullableFilter<"Listing"> | string | null
+    maxAdults?: IntNullableFilter<"Listing"> | number | null
+    maxChildren?: IntNullableFilter<"Listing"> | number | null
+    childrenAllowed?: BoolFilter<"Listing"> | boolean
+    childPriceType?: StringNullableFilter<"Listing"> | string | null
+    childPriceValue?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: IntNullableFilter<"Listing"> | number | null
+    checkinRules?: StringNullableFilter<"Listing"> | string | null
+    checkoutRules?: StringNullableFilter<"Listing"> | string | null
+    earlyCheckinFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: IntNullableFilter<"Listing"> | number | null
+    weeklyDiscount?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFilter<"Listing"> | boolean
+    selfCheckin?: BoolFilter<"Listing"> | boolean
+    selfCheckinDetails?: StringNullableFilter<"Listing"> | string | null
+    apartmentType?: EnumApartmentTypeNullableFilter<"Listing"> | $Enums.ApartmentType | null
+    floorNumber?: IntNullableFilter<"Listing"> | number | null
+    propertySizeM2?: DecimalNullableFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: StringNullableFilter<"Listing"> | string | null
     photos?: ListingPhotoListRelationFilter
     documents?: ListingDocumentListRelationFilter
     amenities?: ListingAmenityListRelationFilter
     customAmenities?: ListingCustomAmenityListRelationFilter
     reviewTasks?: ListingReviewTaskListRelationFilter
+    moderationLog?: ListingModerationLogListRelationFilter
     favourites?: UserFavouriteListRelationFilter
     recentViews?: UserRecentlyViewedListRelationFilter
     bookings?: BookingListRelationFilter
     reviews?: ListingReviewListRelationFilter
     icalFeeds?: IcalFeedListRelationFilter
+    bedConfigs?: ListingBedConfigListRelationFilter
+    blockedDates?: ListingBlockedDateListRelationFilter
+    seasonalPrices?: ListingSeasonalPriceListRelationFilter
+    landmarks?: ListingNearbyLandmarkListRelationFilter
+    houseRules?: ListingHouseRuleListRelationFilter
   }, "id">
 
   export type ListingOrderByWithAggregationInput = {
@@ -26455,6 +34986,7 @@ export namespace Prisma {
     unitCount?: SortOrderInput | SortOrder
     description?: SortOrderInput | SortOrder
     pricePerNight?: SortOrderInput | SortOrder
+    pricePerDay?: SortOrderInput | SortOrder
     currency?: SortOrderInput | SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrderInput | SortOrder
@@ -26499,9 +35031,54 @@ export namespace Prisma {
     doors?: SortOrderInput | SortOrder
     mileagePolicy?: SortOrderInput | SortOrder
     mileageLimitKm?: SortOrderInput | SortOrder
+    carCategory?: SortOrderInput | SortOrder
+    driveType?: SortOrderInput | SortOrder
+    airConditioning?: SortOrderInput | SortOrder
+    odometerReading?: SortOrderInput | SortOrder
+    licencePlate?: SortOrderInput | SortOrder
+    engineSize?: SortOrderInput | SortOrder
+    colour?: SortOrderInput | SortOrder
+    securityDeposit?: SortOrderInput | SortOrder
+    minimumDriverAge?: SortOrderInput | SortOrder
+    minimumRentalDays?: SortOrderInput | SortOrder
+    fuelPolicy?: SortOrderInput | SortOrder
+    extraKmRate?: SortOrderInput | SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrderInput | SortOrder
+    deliveryFee?: SortOrderInput | SortOrder
+    pickupHoursFrom?: SortOrderInput | SortOrder
+    pickupHoursTo?: SortOrderInput | SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrderInput | SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrderInput | SortOrder
+    featuredPhotoId?: SortOrderInput | SortOrder
+    maxAdults?: SortOrderInput | SortOrder
+    maxChildren?: SortOrderInput | SortOrder
+    childrenAllowed?: SortOrder
+    childPriceType?: SortOrderInput | SortOrder
+    childPriceValue?: SortOrderInput | SortOrder
+    childFreeUnderAge?: SortOrderInput | SortOrder
+    checkinRules?: SortOrderInput | SortOrder
+    checkoutRules?: SortOrderInput | SortOrder
+    earlyCheckinFee?: SortOrderInput | SortOrder
+    lateCheckoutFee?: SortOrderInput | SortOrder
+    cleaningFee?: SortOrderInput | SortOrder
+    extraGuestFee?: SortOrderInput | SortOrder
+    extraGuestAfter?: SortOrderInput | SortOrder
+    weeklyDiscount?: SortOrderInput | SortOrder
+    monthlyDiscount?: SortOrderInput | SortOrder
+    instantBooking?: SortOrder
+    selfCheckin?: SortOrder
+    selfCheckinDetails?: SortOrderInput | SortOrder
+    apartmentType?: SortOrderInput | SortOrder
+    floorNumber?: SortOrderInput | SortOrder
+    propertySizeM2?: SortOrderInput | SortOrder
+    securityDepositDue?: SortOrderInput | SortOrder
     _count?: ListingCountOrderByAggregateInput
     _avg?: ListingAvgOrderByAggregateInput
     _max?: ListingMaxOrderByAggregateInput
@@ -26521,6 +35098,7 @@ export namespace Prisma {
     unitCount?: IntNullableWithAggregatesFilter<"Listing"> | number | null
     description?: StringNullableWithAggregatesFilter<"Listing"> | string | null
     pricePerNight?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
     currency?: StringNullableWithAggregatesFilter<"Listing"> | string | null
     minStayNights?: IntWithAggregatesFilter<"Listing"> | number
     checkinTime?: StringNullableWithAggregatesFilter<"Listing"> | string | null
@@ -26565,9 +35143,54 @@ export namespace Prisma {
     doors?: IntNullableWithAggregatesFilter<"Listing"> | number | null
     mileagePolicy?: EnumMileagePolicyNullableWithAggregatesFilter<"Listing"> | $Enums.MileagePolicy | null
     mileageLimitKm?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    carCategory?: EnumCarCategoryNullableWithAggregatesFilter<"Listing"> | $Enums.CarCategory | null
+    driveType?: EnumDriveTypeNullableWithAggregatesFilter<"Listing"> | $Enums.DriveType | null
+    airConditioning?: BoolNullableWithAggregatesFilter<"Listing"> | boolean | null
+    odometerReading?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    licencePlate?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    engineSize?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    colour?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    securityDeposit?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    minimumRentalDays?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    fuelPolicy?: EnumFuelPolicyNullableWithAggregatesFilter<"Listing"> | $Enums.FuelPolicy | null
+    extraKmRate?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolWithAggregatesFilter<"Listing"> | boolean
+    crossBorderAllowed?: BoolWithAggregatesFilter<"Listing"> | boolean
+    airportPickup?: BoolWithAggregatesFilter<"Listing"> | boolean
+    deliveryEnabled?: BoolWithAggregatesFilter<"Listing"> | boolean
+    deliveryRadiusKm?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    deliveryFee?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    pickupHoursTo?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    returnSameLocation?: BoolWithAggregatesFilter<"Listing"> | boolean
+    insuranceType?: EnumInsuranceTypeNullableWithAggregatesFilter<"Listing"> | $Enums.InsuranceType | null
     updatedAt?: DateTimeWithAggregatesFilter<"Listing"> | Date | string
     createdAt?: DateTimeWithAggregatesFilter<"Listing"> | Date | string
     deletedAt?: DateTimeNullableWithAggregatesFilter<"Listing"> | Date | string | null
+    featuredPhotoId?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    maxAdults?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    maxChildren?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    childrenAllowed?: BoolWithAggregatesFilter<"Listing"> | boolean
+    childPriceType?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    childPriceValue?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    checkinRules?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    checkoutRules?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    earlyCheckinFee?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    weeklyDiscount?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolWithAggregatesFilter<"Listing"> | boolean
+    selfCheckin?: BoolWithAggregatesFilter<"Listing"> | boolean
+    selfCheckinDetails?: StringNullableWithAggregatesFilter<"Listing"> | string | null
+    apartmentType?: EnumApartmentTypeNullableWithAggregatesFilter<"Listing"> | $Enums.ApartmentType | null
+    floorNumber?: IntNullableWithAggregatesFilter<"Listing"> | number | null
+    propertySizeM2?: DecimalNullableWithAggregatesFilter<"Listing"> | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: StringNullableWithAggregatesFilter<"Listing"> | string | null
   }
 
   export type ListingReviewTaskWhereInput = {
@@ -26650,6 +35273,373 @@ export namespace Prisma {
     slaDeadline?: DateTimeWithAggregatesFilter<"ListingReviewTask"> | Date | string
     createdAt?: DateTimeWithAggregatesFilter<"ListingReviewTask"> | Date | string
     resolvedAt?: DateTimeNullableWithAggregatesFilter<"ListingReviewTask"> | Date | string | null
+  }
+
+  export type ListingModerationLogWhereInput = {
+    AND?: ListingModerationLogWhereInput | ListingModerationLogWhereInput[]
+    OR?: ListingModerationLogWhereInput[]
+    NOT?: ListingModerationLogWhereInput | ListingModerationLogWhereInput[]
+    id?: StringFilter<"ListingModerationLog"> | string
+    listingId?: StringFilter<"ListingModerationLog"> | string
+    action?: StringFilter<"ListingModerationLog"> | string
+    actorId?: StringFilter<"ListingModerationLog"> | string
+    actorRole?: StringFilter<"ListingModerationLog"> | string
+    metadata?: JsonFilter<"ListingModerationLog">
+    createdAt?: DateTimeFilter<"ListingModerationLog"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }
+
+  export type ListingModerationLogOrderByWithRelationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    action?: SortOrder
+    actorId?: SortOrder
+    actorRole?: SortOrder
+    metadata?: SortOrder
+    createdAt?: SortOrder
+    listing?: ListingOrderByWithRelationInput
+  }
+
+  export type ListingModerationLogWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: ListingModerationLogWhereInput | ListingModerationLogWhereInput[]
+    OR?: ListingModerationLogWhereInput[]
+    NOT?: ListingModerationLogWhereInput | ListingModerationLogWhereInput[]
+    listingId?: StringFilter<"ListingModerationLog"> | string
+    action?: StringFilter<"ListingModerationLog"> | string
+    actorId?: StringFilter<"ListingModerationLog"> | string
+    actorRole?: StringFilter<"ListingModerationLog"> | string
+    metadata?: JsonFilter<"ListingModerationLog">
+    createdAt?: DateTimeFilter<"ListingModerationLog"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }, "id">
+
+  export type ListingModerationLogOrderByWithAggregationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    action?: SortOrder
+    actorId?: SortOrder
+    actorRole?: SortOrder
+    metadata?: SortOrder
+    createdAt?: SortOrder
+    _count?: ListingModerationLogCountOrderByAggregateInput
+    _max?: ListingModerationLogMaxOrderByAggregateInput
+    _min?: ListingModerationLogMinOrderByAggregateInput
+  }
+
+  export type ListingModerationLogScalarWhereWithAggregatesInput = {
+    AND?: ListingModerationLogScalarWhereWithAggregatesInput | ListingModerationLogScalarWhereWithAggregatesInput[]
+    OR?: ListingModerationLogScalarWhereWithAggregatesInput[]
+    NOT?: ListingModerationLogScalarWhereWithAggregatesInput | ListingModerationLogScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"ListingModerationLog"> | string
+    listingId?: StringWithAggregatesFilter<"ListingModerationLog"> | string
+    action?: StringWithAggregatesFilter<"ListingModerationLog"> | string
+    actorId?: StringWithAggregatesFilter<"ListingModerationLog"> | string
+    actorRole?: StringWithAggregatesFilter<"ListingModerationLog"> | string
+    metadata?: JsonWithAggregatesFilter<"ListingModerationLog">
+    createdAt?: DateTimeWithAggregatesFilter<"ListingModerationLog"> | Date | string
+  }
+
+  export type ListingBedConfigWhereInput = {
+    AND?: ListingBedConfigWhereInput | ListingBedConfigWhereInput[]
+    OR?: ListingBedConfigWhereInput[]
+    NOT?: ListingBedConfigWhereInput | ListingBedConfigWhereInput[]
+    id?: StringFilter<"ListingBedConfig"> | string
+    listingId?: StringFilter<"ListingBedConfig"> | string
+    bedType?: EnumBedTypeFilter<"ListingBedConfig"> | $Enums.BedType
+    quantity?: IntFilter<"ListingBedConfig"> | number
+    roomLabel?: StringNullableFilter<"ListingBedConfig"> | string | null
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }
+
+  export type ListingBedConfigOrderByWithRelationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    bedType?: SortOrder
+    quantity?: SortOrder
+    roomLabel?: SortOrderInput | SortOrder
+    listing?: ListingOrderByWithRelationInput
+  }
+
+  export type ListingBedConfigWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: ListingBedConfigWhereInput | ListingBedConfigWhereInput[]
+    OR?: ListingBedConfigWhereInput[]
+    NOT?: ListingBedConfigWhereInput | ListingBedConfigWhereInput[]
+    listingId?: StringFilter<"ListingBedConfig"> | string
+    bedType?: EnumBedTypeFilter<"ListingBedConfig"> | $Enums.BedType
+    quantity?: IntFilter<"ListingBedConfig"> | number
+    roomLabel?: StringNullableFilter<"ListingBedConfig"> | string | null
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }, "id">
+
+  export type ListingBedConfigOrderByWithAggregationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    bedType?: SortOrder
+    quantity?: SortOrder
+    roomLabel?: SortOrderInput | SortOrder
+    _count?: ListingBedConfigCountOrderByAggregateInput
+    _avg?: ListingBedConfigAvgOrderByAggregateInput
+    _max?: ListingBedConfigMaxOrderByAggregateInput
+    _min?: ListingBedConfigMinOrderByAggregateInput
+    _sum?: ListingBedConfigSumOrderByAggregateInput
+  }
+
+  export type ListingBedConfigScalarWhereWithAggregatesInput = {
+    AND?: ListingBedConfigScalarWhereWithAggregatesInput | ListingBedConfigScalarWhereWithAggregatesInput[]
+    OR?: ListingBedConfigScalarWhereWithAggregatesInput[]
+    NOT?: ListingBedConfigScalarWhereWithAggregatesInput | ListingBedConfigScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"ListingBedConfig"> | string
+    listingId?: StringWithAggregatesFilter<"ListingBedConfig"> | string
+    bedType?: EnumBedTypeWithAggregatesFilter<"ListingBedConfig"> | $Enums.BedType
+    quantity?: IntWithAggregatesFilter<"ListingBedConfig"> | number
+    roomLabel?: StringNullableWithAggregatesFilter<"ListingBedConfig"> | string | null
+  }
+
+  export type ListingBlockedDateWhereInput = {
+    AND?: ListingBlockedDateWhereInput | ListingBlockedDateWhereInput[]
+    OR?: ListingBlockedDateWhereInput[]
+    NOT?: ListingBlockedDateWhereInput | ListingBlockedDateWhereInput[]
+    id?: StringFilter<"ListingBlockedDate"> | string
+    listingId?: StringFilter<"ListingBlockedDate"> | string
+    date?: DateTimeFilter<"ListingBlockedDate"> | Date | string
+    source?: EnumBlockedDateSourceFilter<"ListingBlockedDate"> | $Enums.BlockedDateSource
+    note?: StringNullableFilter<"ListingBlockedDate"> | string | null
+    createdAt?: DateTimeFilter<"ListingBlockedDate"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }
+
+  export type ListingBlockedDateOrderByWithRelationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    date?: SortOrder
+    source?: SortOrder
+    note?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    listing?: ListingOrderByWithRelationInput
+  }
+
+  export type ListingBlockedDateWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    listingId_date?: ListingBlockedDateListingIdDateCompoundUniqueInput
+    AND?: ListingBlockedDateWhereInput | ListingBlockedDateWhereInput[]
+    OR?: ListingBlockedDateWhereInput[]
+    NOT?: ListingBlockedDateWhereInput | ListingBlockedDateWhereInput[]
+    listingId?: StringFilter<"ListingBlockedDate"> | string
+    date?: DateTimeFilter<"ListingBlockedDate"> | Date | string
+    source?: EnumBlockedDateSourceFilter<"ListingBlockedDate"> | $Enums.BlockedDateSource
+    note?: StringNullableFilter<"ListingBlockedDate"> | string | null
+    createdAt?: DateTimeFilter<"ListingBlockedDate"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }, "id" | "listingId_date">
+
+  export type ListingBlockedDateOrderByWithAggregationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    date?: SortOrder
+    source?: SortOrder
+    note?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    _count?: ListingBlockedDateCountOrderByAggregateInput
+    _max?: ListingBlockedDateMaxOrderByAggregateInput
+    _min?: ListingBlockedDateMinOrderByAggregateInput
+  }
+
+  export type ListingBlockedDateScalarWhereWithAggregatesInput = {
+    AND?: ListingBlockedDateScalarWhereWithAggregatesInput | ListingBlockedDateScalarWhereWithAggregatesInput[]
+    OR?: ListingBlockedDateScalarWhereWithAggregatesInput[]
+    NOT?: ListingBlockedDateScalarWhereWithAggregatesInput | ListingBlockedDateScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"ListingBlockedDate"> | string
+    listingId?: StringWithAggregatesFilter<"ListingBlockedDate"> | string
+    date?: DateTimeWithAggregatesFilter<"ListingBlockedDate"> | Date | string
+    source?: EnumBlockedDateSourceWithAggregatesFilter<"ListingBlockedDate"> | $Enums.BlockedDateSource
+    note?: StringNullableWithAggregatesFilter<"ListingBlockedDate"> | string | null
+    createdAt?: DateTimeWithAggregatesFilter<"ListingBlockedDate"> | Date | string
+  }
+
+  export type ListingSeasonalPriceWhereInput = {
+    AND?: ListingSeasonalPriceWhereInput | ListingSeasonalPriceWhereInput[]
+    OR?: ListingSeasonalPriceWhereInput[]
+    NOT?: ListingSeasonalPriceWhereInput | ListingSeasonalPriceWhereInput[]
+    id?: StringFilter<"ListingSeasonalPrice"> | string
+    listingId?: StringFilter<"ListingSeasonalPrice"> | string
+    startDate?: DateTimeFilter<"ListingSeasonalPrice"> | Date | string
+    endDate?: DateTimeFilter<"ListingSeasonalPrice"> | Date | string
+    pricePerNight?: DecimalNullableFilter<"ListingSeasonalPrice"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableFilter<"ListingSeasonalPrice"> | Decimal | DecimalJsLike | number | string | null
+    label?: StringNullableFilter<"ListingSeasonalPrice"> | string | null
+    createdAt?: DateTimeFilter<"ListingSeasonalPrice"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }
+
+  export type ListingSeasonalPriceOrderByWithRelationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    startDate?: SortOrder
+    endDate?: SortOrder
+    pricePerNight?: SortOrderInput | SortOrder
+    pricePerDay?: SortOrderInput | SortOrder
+    label?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    listing?: ListingOrderByWithRelationInput
+  }
+
+  export type ListingSeasonalPriceWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: ListingSeasonalPriceWhereInput | ListingSeasonalPriceWhereInput[]
+    OR?: ListingSeasonalPriceWhereInput[]
+    NOT?: ListingSeasonalPriceWhereInput | ListingSeasonalPriceWhereInput[]
+    listingId?: StringFilter<"ListingSeasonalPrice"> | string
+    startDate?: DateTimeFilter<"ListingSeasonalPrice"> | Date | string
+    endDate?: DateTimeFilter<"ListingSeasonalPrice"> | Date | string
+    pricePerNight?: DecimalNullableFilter<"ListingSeasonalPrice"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableFilter<"ListingSeasonalPrice"> | Decimal | DecimalJsLike | number | string | null
+    label?: StringNullableFilter<"ListingSeasonalPrice"> | string | null
+    createdAt?: DateTimeFilter<"ListingSeasonalPrice"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }, "id">
+
+  export type ListingSeasonalPriceOrderByWithAggregationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    startDate?: SortOrder
+    endDate?: SortOrder
+    pricePerNight?: SortOrderInput | SortOrder
+    pricePerDay?: SortOrderInput | SortOrder
+    label?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    _count?: ListingSeasonalPriceCountOrderByAggregateInput
+    _avg?: ListingSeasonalPriceAvgOrderByAggregateInput
+    _max?: ListingSeasonalPriceMaxOrderByAggregateInput
+    _min?: ListingSeasonalPriceMinOrderByAggregateInput
+    _sum?: ListingSeasonalPriceSumOrderByAggregateInput
+  }
+
+  export type ListingSeasonalPriceScalarWhereWithAggregatesInput = {
+    AND?: ListingSeasonalPriceScalarWhereWithAggregatesInput | ListingSeasonalPriceScalarWhereWithAggregatesInput[]
+    OR?: ListingSeasonalPriceScalarWhereWithAggregatesInput[]
+    NOT?: ListingSeasonalPriceScalarWhereWithAggregatesInput | ListingSeasonalPriceScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"ListingSeasonalPrice"> | string
+    listingId?: StringWithAggregatesFilter<"ListingSeasonalPrice"> | string
+    startDate?: DateTimeWithAggregatesFilter<"ListingSeasonalPrice"> | Date | string
+    endDate?: DateTimeWithAggregatesFilter<"ListingSeasonalPrice"> | Date | string
+    pricePerNight?: DecimalNullableWithAggregatesFilter<"ListingSeasonalPrice"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableWithAggregatesFilter<"ListingSeasonalPrice"> | Decimal | DecimalJsLike | number | string | null
+    label?: StringNullableWithAggregatesFilter<"ListingSeasonalPrice"> | string | null
+    createdAt?: DateTimeWithAggregatesFilter<"ListingSeasonalPrice"> | Date | string
+  }
+
+  export type ListingNearbyLandmarkWhereInput = {
+    AND?: ListingNearbyLandmarkWhereInput | ListingNearbyLandmarkWhereInput[]
+    OR?: ListingNearbyLandmarkWhereInput[]
+    NOT?: ListingNearbyLandmarkWhereInput | ListingNearbyLandmarkWhereInput[]
+    id?: StringFilter<"ListingNearbyLandmark"> | string
+    listingId?: StringFilter<"ListingNearbyLandmark"> | string
+    name?: StringFilter<"ListingNearbyLandmark"> | string
+    category?: StringNullableFilter<"ListingNearbyLandmark"> | string | null
+    distanceKm?: DecimalNullableFilter<"ListingNearbyLandmark"> | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFilter<"ListingNearbyLandmark"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }
+
+  export type ListingNearbyLandmarkOrderByWithRelationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    name?: SortOrder
+    category?: SortOrderInput | SortOrder
+    distanceKm?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    listing?: ListingOrderByWithRelationInput
+  }
+
+  export type ListingNearbyLandmarkWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: ListingNearbyLandmarkWhereInput | ListingNearbyLandmarkWhereInput[]
+    OR?: ListingNearbyLandmarkWhereInput[]
+    NOT?: ListingNearbyLandmarkWhereInput | ListingNearbyLandmarkWhereInput[]
+    listingId?: StringFilter<"ListingNearbyLandmark"> | string
+    name?: StringFilter<"ListingNearbyLandmark"> | string
+    category?: StringNullableFilter<"ListingNearbyLandmark"> | string | null
+    distanceKm?: DecimalNullableFilter<"ListingNearbyLandmark"> | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFilter<"ListingNearbyLandmark"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }, "id">
+
+  export type ListingNearbyLandmarkOrderByWithAggregationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    name?: SortOrder
+    category?: SortOrderInput | SortOrder
+    distanceKm?: SortOrderInput | SortOrder
+    createdAt?: SortOrder
+    _count?: ListingNearbyLandmarkCountOrderByAggregateInput
+    _avg?: ListingNearbyLandmarkAvgOrderByAggregateInput
+    _max?: ListingNearbyLandmarkMaxOrderByAggregateInput
+    _min?: ListingNearbyLandmarkMinOrderByAggregateInput
+    _sum?: ListingNearbyLandmarkSumOrderByAggregateInput
+  }
+
+  export type ListingNearbyLandmarkScalarWhereWithAggregatesInput = {
+    AND?: ListingNearbyLandmarkScalarWhereWithAggregatesInput | ListingNearbyLandmarkScalarWhereWithAggregatesInput[]
+    OR?: ListingNearbyLandmarkScalarWhereWithAggregatesInput[]
+    NOT?: ListingNearbyLandmarkScalarWhereWithAggregatesInput | ListingNearbyLandmarkScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"ListingNearbyLandmark"> | string
+    listingId?: StringWithAggregatesFilter<"ListingNearbyLandmark"> | string
+    name?: StringWithAggregatesFilter<"ListingNearbyLandmark"> | string
+    category?: StringNullableWithAggregatesFilter<"ListingNearbyLandmark"> | string | null
+    distanceKm?: DecimalNullableWithAggregatesFilter<"ListingNearbyLandmark"> | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeWithAggregatesFilter<"ListingNearbyLandmark"> | Date | string
+  }
+
+  export type ListingHouseRuleWhereInput = {
+    AND?: ListingHouseRuleWhereInput | ListingHouseRuleWhereInput[]
+    OR?: ListingHouseRuleWhereInput[]
+    NOT?: ListingHouseRuleWhereInput | ListingHouseRuleWhereInput[]
+    id?: StringFilter<"ListingHouseRule"> | string
+    listingId?: StringFilter<"ListingHouseRule"> | string
+    rule?: StringFilter<"ListingHouseRule"> | string
+    createdAt?: DateTimeFilter<"ListingHouseRule"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }
+
+  export type ListingHouseRuleOrderByWithRelationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    rule?: SortOrder
+    createdAt?: SortOrder
+    listing?: ListingOrderByWithRelationInput
+  }
+
+  export type ListingHouseRuleWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: ListingHouseRuleWhereInput | ListingHouseRuleWhereInput[]
+    OR?: ListingHouseRuleWhereInput[]
+    NOT?: ListingHouseRuleWhereInput | ListingHouseRuleWhereInput[]
+    listingId?: StringFilter<"ListingHouseRule"> | string
+    rule?: StringFilter<"ListingHouseRule"> | string
+    createdAt?: DateTimeFilter<"ListingHouseRule"> | Date | string
+    listing?: XOR<ListingScalarRelationFilter, ListingWhereInput>
+  }, "id">
+
+  export type ListingHouseRuleOrderByWithAggregationInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    rule?: SortOrder
+    createdAt?: SortOrder
+    _count?: ListingHouseRuleCountOrderByAggregateInput
+    _max?: ListingHouseRuleMaxOrderByAggregateInput
+    _min?: ListingHouseRuleMinOrderByAggregateInput
+  }
+
+  export type ListingHouseRuleScalarWhereWithAggregatesInput = {
+    AND?: ListingHouseRuleScalarWhereWithAggregatesInput | ListingHouseRuleScalarWhereWithAggregatesInput[]
+    OR?: ListingHouseRuleScalarWhereWithAggregatesInput[]
+    NOT?: ListingHouseRuleScalarWhereWithAggregatesInput | ListingHouseRuleScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"ListingHouseRule"> | string
+    listingId?: StringWithAggregatesFilter<"ListingHouseRule"> | string
+    rule?: StringWithAggregatesFilter<"ListingHouseRule"> | string
+    createdAt?: DateTimeWithAggregatesFilter<"ListingHouseRule"> | Date | string
   }
 
   export type ListingPhotoWhereInput = {
@@ -27757,6 +36747,8 @@ export namespace Prisma {
     feedUrl?: StringFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeFilter<"IcalFeed"> | Date | string
@@ -27771,6 +36763,8 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrderInput | SortOrder
     lastError?: SortOrderInput | SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrderInput | SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -27788,6 +36782,8 @@ export namespace Prisma {
     feedUrl?: StringFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeFilter<"IcalFeed"> | Date | string
@@ -27802,12 +36798,16 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrderInput | SortOrder
     lastError?: SortOrderInput | SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrderInput | SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
     _count?: IcalFeedCountOrderByAggregateInput
+    _avg?: IcalFeedAvgOrderByAggregateInput
     _max?: IcalFeedMaxOrderByAggregateInput
     _min?: IcalFeedMinOrderByAggregateInput
+    _sum?: IcalFeedSumOrderByAggregateInput
   }
 
   export type IcalFeedScalarWhereWithAggregatesInput = {
@@ -27820,6 +36820,8 @@ export namespace Prisma {
     feedUrl?: StringWithAggregatesFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableWithAggregatesFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableWithAggregatesFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntWithAggregatesFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableWithAggregatesFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolWithAggregatesFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeWithAggregatesFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeWithAggregatesFilter<"IcalFeed"> | Date | string
@@ -28045,6 +37047,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -28089,19 +37092,70 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateInput = {
@@ -28113,6 +37167,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -28157,19 +37212,70 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingUpdateInput = {
@@ -28181,6 +37287,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -28225,19 +37332,70 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateInput = {
@@ -28249,6 +37407,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -28293,19 +37452,70 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type ListingCreateManyInput = {
@@ -28317,6 +37527,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -28361,9 +37572,54 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
   }
 
   export type ListingUpdateManyMutationInput = {
@@ -28375,6 +37631,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -28419,9 +37676,54 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ListingUncheckedUpdateManyInput = {
@@ -28433,6 +37735,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -28477,9 +37780,54 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
   }
 
   export type ListingReviewTaskCreateInput = {
@@ -28570,6 +37918,378 @@ export namespace Prisma {
     slaDeadline?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     resolvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type ListingModerationLogCreateInput = {
+    id?: string
+    action: string
+    actorId: string
+    actorRole: string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+    listing: ListingCreateNestedOneWithoutModerationLogInput
+  }
+
+  export type ListingModerationLogUncheckedCreateInput = {
+    id?: string
+    listingId: string
+    action: string
+    actorId: string
+    actorRole: string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+  }
+
+  export type ListingModerationLogUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    actorId?: StringFieldUpdateOperationsInput | string
+    actorRole?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    listing?: ListingUpdateOneRequiredWithoutModerationLogNestedInput
+  }
+
+  export type ListingModerationLogUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    actorId?: StringFieldUpdateOperationsInput | string
+    actorRole?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingModerationLogCreateManyInput = {
+    id?: string
+    listingId: string
+    action: string
+    actorId: string
+    actorRole: string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+  }
+
+  export type ListingModerationLogUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    actorId?: StringFieldUpdateOperationsInput | string
+    actorRole?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingModerationLogUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    actorId?: StringFieldUpdateOperationsInput | string
+    actorRole?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingBedConfigCreateInput = {
+    id?: string
+    bedType: $Enums.BedType
+    quantity: number
+    roomLabel?: string | null
+    listing: ListingCreateNestedOneWithoutBedConfigsInput
+  }
+
+  export type ListingBedConfigUncheckedCreateInput = {
+    id?: string
+    listingId: string
+    bedType: $Enums.BedType
+    quantity: number
+    roomLabel?: string | null
+  }
+
+  export type ListingBedConfigUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    bedType?: EnumBedTypeFieldUpdateOperationsInput | $Enums.BedType
+    quantity?: IntFieldUpdateOperationsInput | number
+    roomLabel?: NullableStringFieldUpdateOperationsInput | string | null
+    listing?: ListingUpdateOneRequiredWithoutBedConfigsNestedInput
+  }
+
+  export type ListingBedConfigUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    bedType?: EnumBedTypeFieldUpdateOperationsInput | $Enums.BedType
+    quantity?: IntFieldUpdateOperationsInput | number
+    roomLabel?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type ListingBedConfigCreateManyInput = {
+    id?: string
+    listingId: string
+    bedType: $Enums.BedType
+    quantity: number
+    roomLabel?: string | null
+  }
+
+  export type ListingBedConfigUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    bedType?: EnumBedTypeFieldUpdateOperationsInput | $Enums.BedType
+    quantity?: IntFieldUpdateOperationsInput | number
+    roomLabel?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type ListingBedConfigUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    bedType?: EnumBedTypeFieldUpdateOperationsInput | $Enums.BedType
+    quantity?: IntFieldUpdateOperationsInput | number
+    roomLabel?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type ListingBlockedDateCreateInput = {
+    id?: string
+    date: Date | string
+    source?: $Enums.BlockedDateSource
+    note?: string | null
+    createdAt?: Date | string
+    listing: ListingCreateNestedOneWithoutBlockedDatesInput
+  }
+
+  export type ListingBlockedDateUncheckedCreateInput = {
+    id?: string
+    listingId: string
+    date: Date | string
+    source?: $Enums.BlockedDateSource
+    note?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingBlockedDateUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
+    source?: EnumBlockedDateSourceFieldUpdateOperationsInput | $Enums.BlockedDateSource
+    note?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    listing?: ListingUpdateOneRequiredWithoutBlockedDatesNestedInput
+  }
+
+  export type ListingBlockedDateUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
+    source?: EnumBlockedDateSourceFieldUpdateOperationsInput | $Enums.BlockedDateSource
+    note?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingBlockedDateCreateManyInput = {
+    id?: string
+    listingId: string
+    date: Date | string
+    source?: $Enums.BlockedDateSource
+    note?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingBlockedDateUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
+    source?: EnumBlockedDateSourceFieldUpdateOperationsInput | $Enums.BlockedDateSource
+    note?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingBlockedDateUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
+    source?: EnumBlockedDateSourceFieldUpdateOperationsInput | $Enums.BlockedDateSource
+    note?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingSeasonalPriceCreateInput = {
+    id?: string
+    startDate: Date | string
+    endDate: Date | string
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    label?: string | null
+    createdAt?: Date | string
+    listing: ListingCreateNestedOneWithoutSeasonalPricesInput
+  }
+
+  export type ListingSeasonalPriceUncheckedCreateInput = {
+    id?: string
+    listingId: string
+    startDate: Date | string
+    endDate: Date | string
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    label?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingSeasonalPriceUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    label?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    listing?: ListingUpdateOneRequiredWithoutSeasonalPricesNestedInput
+  }
+
+  export type ListingSeasonalPriceUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    label?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingSeasonalPriceCreateManyInput = {
+    id?: string
+    listingId: string
+    startDate: Date | string
+    endDate: Date | string
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    label?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingSeasonalPriceUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    label?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingSeasonalPriceUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    label?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingNearbyLandmarkCreateInput = {
+    id?: string
+    name: string
+    category?: string | null
+    distanceKm?: Decimal | DecimalJsLike | number | string | null
+    createdAt?: Date | string
+    listing: ListingCreateNestedOneWithoutLandmarksInput
+  }
+
+  export type ListingNearbyLandmarkUncheckedCreateInput = {
+    id?: string
+    listingId: string
+    name: string
+    category?: string | null
+    distanceKm?: Decimal | DecimalJsLike | number | string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingNearbyLandmarkUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    category?: NullableStringFieldUpdateOperationsInput | string | null
+    distanceKm?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    listing?: ListingUpdateOneRequiredWithoutLandmarksNestedInput
+  }
+
+  export type ListingNearbyLandmarkUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    category?: NullableStringFieldUpdateOperationsInput | string | null
+    distanceKm?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingNearbyLandmarkCreateManyInput = {
+    id?: string
+    listingId: string
+    name: string
+    category?: string | null
+    distanceKm?: Decimal | DecimalJsLike | number | string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingNearbyLandmarkUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    category?: NullableStringFieldUpdateOperationsInput | string | null
+    distanceKm?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingNearbyLandmarkUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    category?: NullableStringFieldUpdateOperationsInput | string | null
+    distanceKm?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingHouseRuleCreateInput = {
+    id?: string
+    rule: string
+    createdAt?: Date | string
+    listing: ListingCreateNestedOneWithoutHouseRulesInput
+  }
+
+  export type ListingHouseRuleUncheckedCreateInput = {
+    id?: string
+    listingId: string
+    rule: string
+    createdAt?: Date | string
+  }
+
+  export type ListingHouseRuleUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    rule?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    listing?: ListingUpdateOneRequiredWithoutHouseRulesNestedInput
+  }
+
+  export type ListingHouseRuleUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    rule?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingHouseRuleCreateManyInput = {
+    id?: string
+    listingId: string
+    rule: string
+    createdAt?: Date | string
+  }
+
+  export type ListingHouseRuleUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    rule?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingHouseRuleUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    listingId?: StringFieldUpdateOperationsInput | string
+    rule?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type ListingPhotoCreateInput = {
@@ -29811,6 +39531,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -29825,6 +39547,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -29837,6 +39561,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -29851,6 +39577,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -29864,6 +39592,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -29875,6 +39605,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -29887,6 +39619,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -30268,6 +40002,39 @@ export namespace Prisma {
     not?: NestedEnumMileagePolicyNullableFilter<$PrismaModel> | $Enums.MileagePolicy | null
   }
 
+  export type EnumCarCategoryNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.CarCategory | EnumCarCategoryFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCarCategoryNullableFilter<$PrismaModel> | $Enums.CarCategory | null
+  }
+
+  export type EnumDriveTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.DriveType | EnumDriveTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumDriveTypeNullableFilter<$PrismaModel> | $Enums.DriveType | null
+  }
+
+  export type BoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
+  export type EnumFuelPolicyNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.FuelPolicy | EnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    in?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumFuelPolicyNullableFilter<$PrismaModel> | $Enums.FuelPolicy | null
+  }
+
+  export type EnumInsuranceTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.InsuranceType | EnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel> | $Enums.InsuranceType | null
+  }
+
   export type DateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -30277,6 +40044,13 @@ export namespace Prisma {
     gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     not?: NestedDateTimeFilter<$PrismaModel> | Date | string
+  }
+
+  export type EnumApartmentTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.ApartmentType | EnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.ApartmentType[] | ListEnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.ApartmentType[] | ListEnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumApartmentTypeNullableFilter<$PrismaModel> | $Enums.ApartmentType | null
   }
 
   export type ListingPhotoListRelationFilter = {
@@ -30309,6 +40083,12 @@ export namespace Prisma {
     none?: ListingReviewTaskWhereInput
   }
 
+  export type ListingModerationLogListRelationFilter = {
+    every?: ListingModerationLogWhereInput
+    some?: ListingModerationLogWhereInput
+    none?: ListingModerationLogWhereInput
+  }
+
   export type UserFavouriteListRelationFilter = {
     every?: UserFavouriteWhereInput
     some?: UserFavouriteWhereInput
@@ -30339,6 +40119,36 @@ export namespace Prisma {
     none?: IcalFeedWhereInput
   }
 
+  export type ListingBedConfigListRelationFilter = {
+    every?: ListingBedConfigWhereInput
+    some?: ListingBedConfigWhereInput
+    none?: ListingBedConfigWhereInput
+  }
+
+  export type ListingBlockedDateListRelationFilter = {
+    every?: ListingBlockedDateWhereInput
+    some?: ListingBlockedDateWhereInput
+    none?: ListingBlockedDateWhereInput
+  }
+
+  export type ListingSeasonalPriceListRelationFilter = {
+    every?: ListingSeasonalPriceWhereInput
+    some?: ListingSeasonalPriceWhereInput
+    none?: ListingSeasonalPriceWhereInput
+  }
+
+  export type ListingNearbyLandmarkListRelationFilter = {
+    every?: ListingNearbyLandmarkWhereInput
+    some?: ListingNearbyLandmarkWhereInput
+    none?: ListingNearbyLandmarkWhereInput
+  }
+
+  export type ListingHouseRuleListRelationFilter = {
+    every?: ListingHouseRuleWhereInput
+    some?: ListingHouseRuleWhereInput
+    none?: ListingHouseRuleWhereInput
+  }
+
   export type SortOrderInput = {
     sort: SortOrder
     nulls?: NullsOrder
@@ -30364,6 +40174,10 @@ export namespace Prisma {
     _count?: SortOrder
   }
 
+  export type ListingModerationLogOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
   export type UserFavouriteOrderByRelationAggregateInput = {
     _count?: SortOrder
   }
@@ -30384,6 +40198,26 @@ export namespace Prisma {
     _count?: SortOrder
   }
 
+  export type ListingBedConfigOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type ListingBlockedDateOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type ListingSeasonalPriceOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type ListingNearbyLandmarkOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
+  export type ListingHouseRuleOrderByRelationAggregateInput = {
+    _count?: SortOrder
+  }
+
   export type ListingCountOrderByAggregateInput = {
     id?: SortOrder
     providerId?: SortOrder
@@ -30393,6 +40227,7 @@ export namespace Prisma {
     unitCount?: SortOrder
     description?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     currency?: SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrder
@@ -30437,14 +40272,60 @@ export namespace Prisma {
     doors?: SortOrder
     mileagePolicy?: SortOrder
     mileageLimitKm?: SortOrder
+    carCategory?: SortOrder
+    driveType?: SortOrder
+    airConditioning?: SortOrder
+    odometerReading?: SortOrder
+    licencePlate?: SortOrder
+    engineSize?: SortOrder
+    colour?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    fuelPolicy?: SortOrder
+    extraKmRate?: SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
+    pickupHoursFrom?: SortOrder
+    pickupHoursTo?: SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrder
+    featuredPhotoId?: SortOrder
+    maxAdults?: SortOrder
+    maxChildren?: SortOrder
+    childrenAllowed?: SortOrder
+    childPriceType?: SortOrder
+    childPriceValue?: SortOrder
+    childFreeUnderAge?: SortOrder
+    checkinRules?: SortOrder
+    checkoutRules?: SortOrder
+    earlyCheckinFee?: SortOrder
+    lateCheckoutFee?: SortOrder
+    cleaningFee?: SortOrder
+    extraGuestFee?: SortOrder
+    extraGuestAfter?: SortOrder
+    weeklyDiscount?: SortOrder
+    monthlyDiscount?: SortOrder
+    instantBooking?: SortOrder
+    selfCheckin?: SortOrder
+    selfCheckinDetails?: SortOrder
+    apartmentType?: SortOrder
+    floorNumber?: SortOrder
+    propertySizeM2?: SortOrder
+    securityDepositDue?: SortOrder
   }
 
   export type ListingAvgOrderByAggregateInput = {
     unitCount?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     minStayNights?: SortOrder
     lat?: SortOrder
     lng?: SortOrder
@@ -30461,6 +40342,26 @@ export namespace Prisma {
     seats?: SortOrder
     doors?: SortOrder
     mileageLimitKm?: SortOrder
+    odometerReading?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    extraKmRate?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
+    maxAdults?: SortOrder
+    maxChildren?: SortOrder
+    childPriceValue?: SortOrder
+    childFreeUnderAge?: SortOrder
+    earlyCheckinFee?: SortOrder
+    lateCheckoutFee?: SortOrder
+    cleaningFee?: SortOrder
+    extraGuestFee?: SortOrder
+    extraGuestAfter?: SortOrder
+    weeklyDiscount?: SortOrder
+    monthlyDiscount?: SortOrder
+    floorNumber?: SortOrder
+    propertySizeM2?: SortOrder
   }
 
   export type ListingMaxOrderByAggregateInput = {
@@ -30472,6 +40373,7 @@ export namespace Prisma {
     unitCount?: SortOrder
     description?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     currency?: SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrder
@@ -30515,9 +40417,54 @@ export namespace Prisma {
     doors?: SortOrder
     mileagePolicy?: SortOrder
     mileageLimitKm?: SortOrder
+    carCategory?: SortOrder
+    driveType?: SortOrder
+    airConditioning?: SortOrder
+    odometerReading?: SortOrder
+    licencePlate?: SortOrder
+    engineSize?: SortOrder
+    colour?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    fuelPolicy?: SortOrder
+    extraKmRate?: SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
+    pickupHoursFrom?: SortOrder
+    pickupHoursTo?: SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrder
+    featuredPhotoId?: SortOrder
+    maxAdults?: SortOrder
+    maxChildren?: SortOrder
+    childrenAllowed?: SortOrder
+    childPriceType?: SortOrder
+    childPriceValue?: SortOrder
+    childFreeUnderAge?: SortOrder
+    checkinRules?: SortOrder
+    checkoutRules?: SortOrder
+    earlyCheckinFee?: SortOrder
+    lateCheckoutFee?: SortOrder
+    cleaningFee?: SortOrder
+    extraGuestFee?: SortOrder
+    extraGuestAfter?: SortOrder
+    weeklyDiscount?: SortOrder
+    monthlyDiscount?: SortOrder
+    instantBooking?: SortOrder
+    selfCheckin?: SortOrder
+    selfCheckinDetails?: SortOrder
+    apartmentType?: SortOrder
+    floorNumber?: SortOrder
+    propertySizeM2?: SortOrder
+    securityDepositDue?: SortOrder
   }
 
   export type ListingMinOrderByAggregateInput = {
@@ -30529,6 +40476,7 @@ export namespace Prisma {
     unitCount?: SortOrder
     description?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     currency?: SortOrder
     minStayNights?: SortOrder
     checkinTime?: SortOrder
@@ -30572,14 +40520,60 @@ export namespace Prisma {
     doors?: SortOrder
     mileagePolicy?: SortOrder
     mileageLimitKm?: SortOrder
+    carCategory?: SortOrder
+    driveType?: SortOrder
+    airConditioning?: SortOrder
+    odometerReading?: SortOrder
+    licencePlate?: SortOrder
+    engineSize?: SortOrder
+    colour?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    fuelPolicy?: SortOrder
+    extraKmRate?: SortOrder
+    roadsideAssistance?: SortOrder
+    crossBorderAllowed?: SortOrder
+    airportPickup?: SortOrder
+    deliveryEnabled?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
+    pickupHoursFrom?: SortOrder
+    pickupHoursTo?: SortOrder
+    returnSameLocation?: SortOrder
+    insuranceType?: SortOrder
     updatedAt?: SortOrder
     createdAt?: SortOrder
     deletedAt?: SortOrder
+    featuredPhotoId?: SortOrder
+    maxAdults?: SortOrder
+    maxChildren?: SortOrder
+    childrenAllowed?: SortOrder
+    childPriceType?: SortOrder
+    childPriceValue?: SortOrder
+    childFreeUnderAge?: SortOrder
+    checkinRules?: SortOrder
+    checkoutRules?: SortOrder
+    earlyCheckinFee?: SortOrder
+    lateCheckoutFee?: SortOrder
+    cleaningFee?: SortOrder
+    extraGuestFee?: SortOrder
+    extraGuestAfter?: SortOrder
+    weeklyDiscount?: SortOrder
+    monthlyDiscount?: SortOrder
+    instantBooking?: SortOrder
+    selfCheckin?: SortOrder
+    selfCheckinDetails?: SortOrder
+    apartmentType?: SortOrder
+    floorNumber?: SortOrder
+    propertySizeM2?: SortOrder
+    securityDepositDue?: SortOrder
   }
 
   export type ListingSumOrderByAggregateInput = {
     unitCount?: SortOrder
     pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
     minStayNights?: SortOrder
     lat?: SortOrder
     lng?: SortOrder
@@ -30596,6 +40590,26 @@ export namespace Prisma {
     seats?: SortOrder
     doors?: SortOrder
     mileageLimitKm?: SortOrder
+    odometerReading?: SortOrder
+    securityDeposit?: SortOrder
+    minimumDriverAge?: SortOrder
+    minimumRentalDays?: SortOrder
+    extraKmRate?: SortOrder
+    deliveryRadiusKm?: SortOrder
+    deliveryFee?: SortOrder
+    maxAdults?: SortOrder
+    maxChildren?: SortOrder
+    childPriceValue?: SortOrder
+    childFreeUnderAge?: SortOrder
+    earlyCheckinFee?: SortOrder
+    lateCheckoutFee?: SortOrder
+    cleaningFee?: SortOrder
+    extraGuestFee?: SortOrder
+    extraGuestAfter?: SortOrder
+    weeklyDiscount?: SortOrder
+    monthlyDiscount?: SortOrder
+    floorNumber?: SortOrder
+    propertySizeM2?: SortOrder
   }
 
   export type StringWithAggregatesFilter<$PrismaModel = never> = {
@@ -30784,6 +40798,54 @@ export namespace Prisma {
     _max?: NestedEnumMileagePolicyNullableFilter<$PrismaModel>
   }
 
+  export type EnumCarCategoryNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CarCategory | EnumCarCategoryFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCarCategoryNullableWithAggregatesFilter<$PrismaModel> | $Enums.CarCategory | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumCarCategoryNullableFilter<$PrismaModel>
+    _max?: NestedEnumCarCategoryNullableFilter<$PrismaModel>
+  }
+
+  export type EnumDriveTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.DriveType | EnumDriveTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumDriveTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.DriveType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumDriveTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumDriveTypeNullableFilter<$PrismaModel>
+  }
+
+  export type BoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
+  }
+
+  export type EnumFuelPolicyNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.FuelPolicy | EnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    in?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumFuelPolicyNullableWithAggregatesFilter<$PrismaModel> | $Enums.FuelPolicy | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumFuelPolicyNullableFilter<$PrismaModel>
+    _max?: NestedEnumFuelPolicyNullableFilter<$PrismaModel>
+  }
+
+  export type EnumInsuranceTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.InsuranceType | EnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumInsuranceTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.InsuranceType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel>
+  }
+
   export type DateTimeWithAggregatesFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -30796,6 +40858,16 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedDateTimeFilter<$PrismaModel>
     _max?: NestedDateTimeFilter<$PrismaModel>
+  }
+
+  export type EnumApartmentTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.ApartmentType | EnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.ApartmentType[] | ListEnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.ApartmentType[] | ListEnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumApartmentTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.ApartmentType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumApartmentTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumApartmentTypeNullableFilter<$PrismaModel>
   }
 
   export type EnumReviewTaskStatusFilter<$PrismaModel = never> = {
@@ -30865,6 +40937,280 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedEnumReviewTaskStatusFilter<$PrismaModel>
     _max?: NestedEnumReviewTaskStatusFilter<$PrismaModel>
+  }
+  export type JsonFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<JsonFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+  }
+
+  export type ListingModerationLogCountOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    action?: SortOrder
+    actorId?: SortOrder
+    actorRole?: SortOrder
+    metadata?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingModerationLogMaxOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    action?: SortOrder
+    actorId?: SortOrder
+    actorRole?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingModerationLogMinOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    action?: SortOrder
+    actorId?: SortOrder
+    actorRole?: SortOrder
+    createdAt?: SortOrder
+  }
+  export type JsonWithAggregatesFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<JsonWithAggregatesFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonWithAggregatesFilterBase<$PrismaModel>>, 'path'>>,
+        Required<JsonWithAggregatesFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<JsonWithAggregatesFilterBase<$PrismaModel>>, 'path'>>
+
+  export type JsonWithAggregatesFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedJsonFilter<$PrismaModel>
+    _max?: NestedJsonFilter<$PrismaModel>
+  }
+
+  export type EnumBedTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.BedType | EnumBedTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.BedType[] | ListEnumBedTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BedType[] | ListEnumBedTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumBedTypeFilter<$PrismaModel> | $Enums.BedType
+  }
+
+  export type ListingBedConfigCountOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    bedType?: SortOrder
+    quantity?: SortOrder
+    roomLabel?: SortOrder
+  }
+
+  export type ListingBedConfigAvgOrderByAggregateInput = {
+    quantity?: SortOrder
+  }
+
+  export type ListingBedConfigMaxOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    bedType?: SortOrder
+    quantity?: SortOrder
+    roomLabel?: SortOrder
+  }
+
+  export type ListingBedConfigMinOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    bedType?: SortOrder
+    quantity?: SortOrder
+    roomLabel?: SortOrder
+  }
+
+  export type ListingBedConfigSumOrderByAggregateInput = {
+    quantity?: SortOrder
+  }
+
+  export type EnumBedTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.BedType | EnumBedTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.BedType[] | ListEnumBedTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BedType[] | ListEnumBedTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumBedTypeWithAggregatesFilter<$PrismaModel> | $Enums.BedType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumBedTypeFilter<$PrismaModel>
+    _max?: NestedEnumBedTypeFilter<$PrismaModel>
+  }
+
+  export type EnumBlockedDateSourceFilter<$PrismaModel = never> = {
+    equals?: $Enums.BlockedDateSource | EnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    in?: $Enums.BlockedDateSource[] | ListEnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BlockedDateSource[] | ListEnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    not?: NestedEnumBlockedDateSourceFilter<$PrismaModel> | $Enums.BlockedDateSource
+  }
+
+  export type ListingBlockedDateListingIdDateCompoundUniqueInput = {
+    listingId: string
+    date: Date | string
+  }
+
+  export type ListingBlockedDateCountOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    date?: SortOrder
+    source?: SortOrder
+    note?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingBlockedDateMaxOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    date?: SortOrder
+    source?: SortOrder
+    note?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingBlockedDateMinOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    date?: SortOrder
+    source?: SortOrder
+    note?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type EnumBlockedDateSourceWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.BlockedDateSource | EnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    in?: $Enums.BlockedDateSource[] | ListEnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BlockedDateSource[] | ListEnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    not?: NestedEnumBlockedDateSourceWithAggregatesFilter<$PrismaModel> | $Enums.BlockedDateSource
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumBlockedDateSourceFilter<$PrismaModel>
+    _max?: NestedEnumBlockedDateSourceFilter<$PrismaModel>
+  }
+
+  export type ListingSeasonalPriceCountOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    startDate?: SortOrder
+    endDate?: SortOrder
+    pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
+    label?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingSeasonalPriceAvgOrderByAggregateInput = {
+    pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
+  }
+
+  export type ListingSeasonalPriceMaxOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    startDate?: SortOrder
+    endDate?: SortOrder
+    pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
+    label?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingSeasonalPriceMinOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    startDate?: SortOrder
+    endDate?: SortOrder
+    pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
+    label?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingSeasonalPriceSumOrderByAggregateInput = {
+    pricePerNight?: SortOrder
+    pricePerDay?: SortOrder
+  }
+
+  export type ListingNearbyLandmarkCountOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    name?: SortOrder
+    category?: SortOrder
+    distanceKm?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingNearbyLandmarkAvgOrderByAggregateInput = {
+    distanceKm?: SortOrder
+  }
+
+  export type ListingNearbyLandmarkMaxOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    name?: SortOrder
+    category?: SortOrder
+    distanceKm?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingNearbyLandmarkMinOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    name?: SortOrder
+    category?: SortOrder
+    distanceKm?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingNearbyLandmarkSumOrderByAggregateInput = {
+    distanceKm?: SortOrder
+  }
+
+  export type ListingHouseRuleCountOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    rule?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingHouseRuleMaxOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    rule?: SortOrder
+    createdAt?: SortOrder
+  }
+
+  export type ListingHouseRuleMinOrderByAggregateInput = {
+    id?: SortOrder
+    listingId?: SortOrder
+    rule?: SortOrder
+    createdAt?: SortOrder
   }
 
   export type ListingPhotoCountOrderByAggregateInput = {
@@ -31049,29 +41395,6 @@ export namespace Prisma {
     gte?: Decimal | DecimalJsLike | number | string | DecimalFieldRefInput<$PrismaModel>
     not?: NestedDecimalFilter<$PrismaModel> | Decimal | DecimalJsLike | number | string
   }
-  export type JsonFilter<$PrismaModel = never> =
-    | PatchUndefined<
-        Either<Required<JsonFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonFilterBase<$PrismaModel>>, 'path'>>,
-        Required<JsonFilterBase<$PrismaModel>>
-      >
-    | OptionalFlat<Omit<Required<JsonFilterBase<$PrismaModel>>, 'path'>>
-
-  export type JsonFilterBase<$PrismaModel = never> = {
-    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
-    path?: string[]
-    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
-    string_contains?: string | StringFieldRefInput<$PrismaModel>
-    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
-    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
-    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
-    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
-    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
-    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
-  }
 
   export type SearchLogCountOrderByAggregateInput = {
     id?: SortOrder
@@ -31158,32 +41481,6 @@ export namespace Prisma {
     _sum?: NestedDecimalFilter<$PrismaModel>
     _min?: NestedDecimalFilter<$PrismaModel>
     _max?: NestedDecimalFilter<$PrismaModel>
-  }
-  export type JsonWithAggregatesFilter<$PrismaModel = never> =
-    | PatchUndefined<
-        Either<Required<JsonWithAggregatesFilterBase<$PrismaModel>>, Exclude<keyof Required<JsonWithAggregatesFilterBase<$PrismaModel>>, 'path'>>,
-        Required<JsonWithAggregatesFilterBase<$PrismaModel>>
-      >
-    | OptionalFlat<Omit<Required<JsonWithAggregatesFilterBase<$PrismaModel>>, 'path'>>
-
-  export type JsonWithAggregatesFilterBase<$PrismaModel = never> = {
-    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
-    path?: string[]
-    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
-    string_contains?: string | StringFieldRefInput<$PrismaModel>
-    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
-    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
-    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
-    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
-    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
-    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
-    _count?: NestedIntFilter<$PrismaModel>
-    _min?: NestedJsonFilter<$PrismaModel>
-    _max?: NestedJsonFilter<$PrismaModel>
   }
 
   export type EnumBookingStatusFilter<$PrismaModel = never> = {
@@ -31689,9 +41986,15 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrder
     lastError?: SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type IcalFeedAvgOrderByAggregateInput = {
+    consecutiveFailures?: SortOrder
   }
 
   export type IcalFeedMaxOrderByAggregateInput = {
@@ -31701,6 +42004,8 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrder
     lastError?: SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
@@ -31713,9 +42018,15 @@ export namespace Prisma {
     feedUrl?: SortOrder
     lastSyncedAt?: SortOrder
     lastError?: SortOrder
+    consecutiveFailures?: SortOrder
+    nextRetryAt?: SortOrder
     isActive?: SortOrder
     createdAt?: SortOrder
     updatedAt?: SortOrder
+  }
+
+  export type IcalFeedSumOrderByAggregateInput = {
+    consecutiveFailures?: SortOrder
   }
 
   export type IcalFeedScalarRelationFilter = {
@@ -31898,6 +42209,13 @@ export namespace Prisma {
     connect?: ListingReviewTaskWhereUniqueInput | ListingReviewTaskWhereUniqueInput[]
   }
 
+  export type ListingModerationLogCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingModerationLogCreateWithoutListingInput, ListingModerationLogUncheckedCreateWithoutListingInput> | ListingModerationLogCreateWithoutListingInput[] | ListingModerationLogUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingModerationLogCreateOrConnectWithoutListingInput | ListingModerationLogCreateOrConnectWithoutListingInput[]
+    createMany?: ListingModerationLogCreateManyListingInputEnvelope
+    connect?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+  }
+
   export type UserFavouriteCreateNestedManyWithoutListingInput = {
     create?: XOR<UserFavouriteCreateWithoutListingInput, UserFavouriteUncheckedCreateWithoutListingInput> | UserFavouriteCreateWithoutListingInput[] | UserFavouriteUncheckedCreateWithoutListingInput[]
     connectOrCreate?: UserFavouriteCreateOrConnectWithoutListingInput | UserFavouriteCreateOrConnectWithoutListingInput[]
@@ -31931,6 +42249,41 @@ export namespace Prisma {
     connectOrCreate?: IcalFeedCreateOrConnectWithoutListingInput | IcalFeedCreateOrConnectWithoutListingInput[]
     createMany?: IcalFeedCreateManyListingInputEnvelope
     connect?: IcalFeedWhereUniqueInput | IcalFeedWhereUniqueInput[]
+  }
+
+  export type ListingBedConfigCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingBedConfigCreateWithoutListingInput, ListingBedConfigUncheckedCreateWithoutListingInput> | ListingBedConfigCreateWithoutListingInput[] | ListingBedConfigUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingBedConfigCreateOrConnectWithoutListingInput | ListingBedConfigCreateOrConnectWithoutListingInput[]
+    createMany?: ListingBedConfigCreateManyListingInputEnvelope
+    connect?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+  }
+
+  export type ListingBlockedDateCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingBlockedDateCreateWithoutListingInput, ListingBlockedDateUncheckedCreateWithoutListingInput> | ListingBlockedDateCreateWithoutListingInput[] | ListingBlockedDateUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingBlockedDateCreateOrConnectWithoutListingInput | ListingBlockedDateCreateOrConnectWithoutListingInput[]
+    createMany?: ListingBlockedDateCreateManyListingInputEnvelope
+    connect?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+  }
+
+  export type ListingSeasonalPriceCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingSeasonalPriceCreateWithoutListingInput, ListingSeasonalPriceUncheckedCreateWithoutListingInput> | ListingSeasonalPriceCreateWithoutListingInput[] | ListingSeasonalPriceUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingSeasonalPriceCreateOrConnectWithoutListingInput | ListingSeasonalPriceCreateOrConnectWithoutListingInput[]
+    createMany?: ListingSeasonalPriceCreateManyListingInputEnvelope
+    connect?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+  }
+
+  export type ListingNearbyLandmarkCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingNearbyLandmarkCreateWithoutListingInput, ListingNearbyLandmarkUncheckedCreateWithoutListingInput> | ListingNearbyLandmarkCreateWithoutListingInput[] | ListingNearbyLandmarkUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingNearbyLandmarkCreateOrConnectWithoutListingInput | ListingNearbyLandmarkCreateOrConnectWithoutListingInput[]
+    createMany?: ListingNearbyLandmarkCreateManyListingInputEnvelope
+    connect?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+  }
+
+  export type ListingHouseRuleCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingHouseRuleCreateWithoutListingInput, ListingHouseRuleUncheckedCreateWithoutListingInput> | ListingHouseRuleCreateWithoutListingInput[] | ListingHouseRuleUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingHouseRuleCreateOrConnectWithoutListingInput | ListingHouseRuleCreateOrConnectWithoutListingInput[]
+    createMany?: ListingHouseRuleCreateManyListingInputEnvelope
+    connect?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
   }
 
   export type ListingPhotoUncheckedCreateNestedManyWithoutListingInput = {
@@ -31968,6 +42321,13 @@ export namespace Prisma {
     connect?: ListingReviewTaskWhereUniqueInput | ListingReviewTaskWhereUniqueInput[]
   }
 
+  export type ListingModerationLogUncheckedCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingModerationLogCreateWithoutListingInput, ListingModerationLogUncheckedCreateWithoutListingInput> | ListingModerationLogCreateWithoutListingInput[] | ListingModerationLogUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingModerationLogCreateOrConnectWithoutListingInput | ListingModerationLogCreateOrConnectWithoutListingInput[]
+    createMany?: ListingModerationLogCreateManyListingInputEnvelope
+    connect?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+  }
+
   export type UserFavouriteUncheckedCreateNestedManyWithoutListingInput = {
     create?: XOR<UserFavouriteCreateWithoutListingInput, UserFavouriteUncheckedCreateWithoutListingInput> | UserFavouriteCreateWithoutListingInput[] | UserFavouriteUncheckedCreateWithoutListingInput[]
     connectOrCreate?: UserFavouriteCreateOrConnectWithoutListingInput | UserFavouriteCreateOrConnectWithoutListingInput[]
@@ -32001,6 +42361,41 @@ export namespace Prisma {
     connectOrCreate?: IcalFeedCreateOrConnectWithoutListingInput | IcalFeedCreateOrConnectWithoutListingInput[]
     createMany?: IcalFeedCreateManyListingInputEnvelope
     connect?: IcalFeedWhereUniqueInput | IcalFeedWhereUniqueInput[]
+  }
+
+  export type ListingBedConfigUncheckedCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingBedConfigCreateWithoutListingInput, ListingBedConfigUncheckedCreateWithoutListingInput> | ListingBedConfigCreateWithoutListingInput[] | ListingBedConfigUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingBedConfigCreateOrConnectWithoutListingInput | ListingBedConfigCreateOrConnectWithoutListingInput[]
+    createMany?: ListingBedConfigCreateManyListingInputEnvelope
+    connect?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+  }
+
+  export type ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingBlockedDateCreateWithoutListingInput, ListingBlockedDateUncheckedCreateWithoutListingInput> | ListingBlockedDateCreateWithoutListingInput[] | ListingBlockedDateUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingBlockedDateCreateOrConnectWithoutListingInput | ListingBlockedDateCreateOrConnectWithoutListingInput[]
+    createMany?: ListingBlockedDateCreateManyListingInputEnvelope
+    connect?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+  }
+
+  export type ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingSeasonalPriceCreateWithoutListingInput, ListingSeasonalPriceUncheckedCreateWithoutListingInput> | ListingSeasonalPriceCreateWithoutListingInput[] | ListingSeasonalPriceUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingSeasonalPriceCreateOrConnectWithoutListingInput | ListingSeasonalPriceCreateOrConnectWithoutListingInput[]
+    createMany?: ListingSeasonalPriceCreateManyListingInputEnvelope
+    connect?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+  }
+
+  export type ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingNearbyLandmarkCreateWithoutListingInput, ListingNearbyLandmarkUncheckedCreateWithoutListingInput> | ListingNearbyLandmarkCreateWithoutListingInput[] | ListingNearbyLandmarkUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingNearbyLandmarkCreateOrConnectWithoutListingInput | ListingNearbyLandmarkCreateOrConnectWithoutListingInput[]
+    createMany?: ListingNearbyLandmarkCreateManyListingInputEnvelope
+    connect?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+  }
+
+  export type ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput = {
+    create?: XOR<ListingHouseRuleCreateWithoutListingInput, ListingHouseRuleUncheckedCreateWithoutListingInput> | ListingHouseRuleCreateWithoutListingInput[] | ListingHouseRuleUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingHouseRuleCreateOrConnectWithoutListingInput | ListingHouseRuleCreateOrConnectWithoutListingInput[]
+    createMany?: ListingHouseRuleCreateManyListingInputEnvelope
+    connect?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
   }
 
   export type StringFieldUpdateOperationsInput = {
@@ -32080,8 +42475,32 @@ export namespace Prisma {
     set?: $Enums.MileagePolicy | null
   }
 
+  export type NullableEnumCarCategoryFieldUpdateOperationsInput = {
+    set?: $Enums.CarCategory | null
+  }
+
+  export type NullableEnumDriveTypeFieldUpdateOperationsInput = {
+    set?: $Enums.DriveType | null
+  }
+
+  export type NullableBoolFieldUpdateOperationsInput = {
+    set?: boolean | null
+  }
+
+  export type NullableEnumFuelPolicyFieldUpdateOperationsInput = {
+    set?: $Enums.FuelPolicy | null
+  }
+
+  export type NullableEnumInsuranceTypeFieldUpdateOperationsInput = {
+    set?: $Enums.InsuranceType | null
+  }
+
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string
+  }
+
+  export type NullableEnumApartmentTypeFieldUpdateOperationsInput = {
+    set?: $Enums.ApartmentType | null
   }
 
   export type ListingPhotoUpdateManyWithoutListingNestedInput = {
@@ -32154,6 +42573,20 @@ export namespace Prisma {
     deleteMany?: ListingReviewTaskScalarWhereInput | ListingReviewTaskScalarWhereInput[]
   }
 
+  export type ListingModerationLogUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingModerationLogCreateWithoutListingInput, ListingModerationLogUncheckedCreateWithoutListingInput> | ListingModerationLogCreateWithoutListingInput[] | ListingModerationLogUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingModerationLogCreateOrConnectWithoutListingInput | ListingModerationLogCreateOrConnectWithoutListingInput[]
+    upsert?: ListingModerationLogUpsertWithWhereUniqueWithoutListingInput | ListingModerationLogUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingModerationLogCreateManyListingInputEnvelope
+    set?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+    disconnect?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+    delete?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+    connect?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+    update?: ListingModerationLogUpdateWithWhereUniqueWithoutListingInput | ListingModerationLogUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingModerationLogUpdateManyWithWhereWithoutListingInput | ListingModerationLogUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingModerationLogScalarWhereInput | ListingModerationLogScalarWhereInput[]
+  }
+
   export type UserFavouriteUpdateManyWithoutListingNestedInput = {
     create?: XOR<UserFavouriteCreateWithoutListingInput, UserFavouriteUncheckedCreateWithoutListingInput> | UserFavouriteCreateWithoutListingInput[] | UserFavouriteUncheckedCreateWithoutListingInput[]
     connectOrCreate?: UserFavouriteCreateOrConnectWithoutListingInput | UserFavouriteCreateOrConnectWithoutListingInput[]
@@ -32222,6 +42655,76 @@ export namespace Prisma {
     update?: IcalFeedUpdateWithWhereUniqueWithoutListingInput | IcalFeedUpdateWithWhereUniqueWithoutListingInput[]
     updateMany?: IcalFeedUpdateManyWithWhereWithoutListingInput | IcalFeedUpdateManyWithWhereWithoutListingInput[]
     deleteMany?: IcalFeedScalarWhereInput | IcalFeedScalarWhereInput[]
+  }
+
+  export type ListingBedConfigUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingBedConfigCreateWithoutListingInput, ListingBedConfigUncheckedCreateWithoutListingInput> | ListingBedConfigCreateWithoutListingInput[] | ListingBedConfigUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingBedConfigCreateOrConnectWithoutListingInput | ListingBedConfigCreateOrConnectWithoutListingInput[]
+    upsert?: ListingBedConfigUpsertWithWhereUniqueWithoutListingInput | ListingBedConfigUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingBedConfigCreateManyListingInputEnvelope
+    set?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+    disconnect?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+    delete?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+    connect?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+    update?: ListingBedConfigUpdateWithWhereUniqueWithoutListingInput | ListingBedConfigUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingBedConfigUpdateManyWithWhereWithoutListingInput | ListingBedConfigUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingBedConfigScalarWhereInput | ListingBedConfigScalarWhereInput[]
+  }
+
+  export type ListingBlockedDateUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingBlockedDateCreateWithoutListingInput, ListingBlockedDateUncheckedCreateWithoutListingInput> | ListingBlockedDateCreateWithoutListingInput[] | ListingBlockedDateUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingBlockedDateCreateOrConnectWithoutListingInput | ListingBlockedDateCreateOrConnectWithoutListingInput[]
+    upsert?: ListingBlockedDateUpsertWithWhereUniqueWithoutListingInput | ListingBlockedDateUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingBlockedDateCreateManyListingInputEnvelope
+    set?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+    disconnect?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+    delete?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+    connect?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+    update?: ListingBlockedDateUpdateWithWhereUniqueWithoutListingInput | ListingBlockedDateUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingBlockedDateUpdateManyWithWhereWithoutListingInput | ListingBlockedDateUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingBlockedDateScalarWhereInput | ListingBlockedDateScalarWhereInput[]
+  }
+
+  export type ListingSeasonalPriceUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingSeasonalPriceCreateWithoutListingInput, ListingSeasonalPriceUncheckedCreateWithoutListingInput> | ListingSeasonalPriceCreateWithoutListingInput[] | ListingSeasonalPriceUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingSeasonalPriceCreateOrConnectWithoutListingInput | ListingSeasonalPriceCreateOrConnectWithoutListingInput[]
+    upsert?: ListingSeasonalPriceUpsertWithWhereUniqueWithoutListingInput | ListingSeasonalPriceUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingSeasonalPriceCreateManyListingInputEnvelope
+    set?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+    disconnect?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+    delete?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+    connect?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+    update?: ListingSeasonalPriceUpdateWithWhereUniqueWithoutListingInput | ListingSeasonalPriceUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingSeasonalPriceUpdateManyWithWhereWithoutListingInput | ListingSeasonalPriceUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingSeasonalPriceScalarWhereInput | ListingSeasonalPriceScalarWhereInput[]
+  }
+
+  export type ListingNearbyLandmarkUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingNearbyLandmarkCreateWithoutListingInput, ListingNearbyLandmarkUncheckedCreateWithoutListingInput> | ListingNearbyLandmarkCreateWithoutListingInput[] | ListingNearbyLandmarkUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingNearbyLandmarkCreateOrConnectWithoutListingInput | ListingNearbyLandmarkCreateOrConnectWithoutListingInput[]
+    upsert?: ListingNearbyLandmarkUpsertWithWhereUniqueWithoutListingInput | ListingNearbyLandmarkUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingNearbyLandmarkCreateManyListingInputEnvelope
+    set?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+    disconnect?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+    delete?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+    connect?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+    update?: ListingNearbyLandmarkUpdateWithWhereUniqueWithoutListingInput | ListingNearbyLandmarkUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingNearbyLandmarkUpdateManyWithWhereWithoutListingInput | ListingNearbyLandmarkUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingNearbyLandmarkScalarWhereInput | ListingNearbyLandmarkScalarWhereInput[]
+  }
+
+  export type ListingHouseRuleUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingHouseRuleCreateWithoutListingInput, ListingHouseRuleUncheckedCreateWithoutListingInput> | ListingHouseRuleCreateWithoutListingInput[] | ListingHouseRuleUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingHouseRuleCreateOrConnectWithoutListingInput | ListingHouseRuleCreateOrConnectWithoutListingInput[]
+    upsert?: ListingHouseRuleUpsertWithWhereUniqueWithoutListingInput | ListingHouseRuleUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingHouseRuleCreateManyListingInputEnvelope
+    set?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
+    disconnect?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
+    delete?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
+    connect?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
+    update?: ListingHouseRuleUpdateWithWhereUniqueWithoutListingInput | ListingHouseRuleUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingHouseRuleUpdateManyWithWhereWithoutListingInput | ListingHouseRuleUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingHouseRuleScalarWhereInput | ListingHouseRuleScalarWhereInput[]
   }
 
   export type ListingPhotoUncheckedUpdateManyWithoutListingNestedInput = {
@@ -32294,6 +42797,20 @@ export namespace Prisma {
     deleteMany?: ListingReviewTaskScalarWhereInput | ListingReviewTaskScalarWhereInput[]
   }
 
+  export type ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingModerationLogCreateWithoutListingInput, ListingModerationLogUncheckedCreateWithoutListingInput> | ListingModerationLogCreateWithoutListingInput[] | ListingModerationLogUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingModerationLogCreateOrConnectWithoutListingInput | ListingModerationLogCreateOrConnectWithoutListingInput[]
+    upsert?: ListingModerationLogUpsertWithWhereUniqueWithoutListingInput | ListingModerationLogUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingModerationLogCreateManyListingInputEnvelope
+    set?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+    disconnect?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+    delete?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+    connect?: ListingModerationLogWhereUniqueInput | ListingModerationLogWhereUniqueInput[]
+    update?: ListingModerationLogUpdateWithWhereUniqueWithoutListingInput | ListingModerationLogUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingModerationLogUpdateManyWithWhereWithoutListingInput | ListingModerationLogUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingModerationLogScalarWhereInput | ListingModerationLogScalarWhereInput[]
+  }
+
   export type UserFavouriteUncheckedUpdateManyWithoutListingNestedInput = {
     create?: XOR<UserFavouriteCreateWithoutListingInput, UserFavouriteUncheckedCreateWithoutListingInput> | UserFavouriteCreateWithoutListingInput[] | UserFavouriteUncheckedCreateWithoutListingInput[]
     connectOrCreate?: UserFavouriteCreateOrConnectWithoutListingInput | UserFavouriteCreateOrConnectWithoutListingInput[]
@@ -32364,6 +42881,76 @@ export namespace Prisma {
     deleteMany?: IcalFeedScalarWhereInput | IcalFeedScalarWhereInput[]
   }
 
+  export type ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingBedConfigCreateWithoutListingInput, ListingBedConfigUncheckedCreateWithoutListingInput> | ListingBedConfigCreateWithoutListingInput[] | ListingBedConfigUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingBedConfigCreateOrConnectWithoutListingInput | ListingBedConfigCreateOrConnectWithoutListingInput[]
+    upsert?: ListingBedConfigUpsertWithWhereUniqueWithoutListingInput | ListingBedConfigUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingBedConfigCreateManyListingInputEnvelope
+    set?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+    disconnect?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+    delete?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+    connect?: ListingBedConfigWhereUniqueInput | ListingBedConfigWhereUniqueInput[]
+    update?: ListingBedConfigUpdateWithWhereUniqueWithoutListingInput | ListingBedConfigUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingBedConfigUpdateManyWithWhereWithoutListingInput | ListingBedConfigUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingBedConfigScalarWhereInput | ListingBedConfigScalarWhereInput[]
+  }
+
+  export type ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingBlockedDateCreateWithoutListingInput, ListingBlockedDateUncheckedCreateWithoutListingInput> | ListingBlockedDateCreateWithoutListingInput[] | ListingBlockedDateUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingBlockedDateCreateOrConnectWithoutListingInput | ListingBlockedDateCreateOrConnectWithoutListingInput[]
+    upsert?: ListingBlockedDateUpsertWithWhereUniqueWithoutListingInput | ListingBlockedDateUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingBlockedDateCreateManyListingInputEnvelope
+    set?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+    disconnect?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+    delete?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+    connect?: ListingBlockedDateWhereUniqueInput | ListingBlockedDateWhereUniqueInput[]
+    update?: ListingBlockedDateUpdateWithWhereUniqueWithoutListingInput | ListingBlockedDateUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingBlockedDateUpdateManyWithWhereWithoutListingInput | ListingBlockedDateUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingBlockedDateScalarWhereInput | ListingBlockedDateScalarWhereInput[]
+  }
+
+  export type ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingSeasonalPriceCreateWithoutListingInput, ListingSeasonalPriceUncheckedCreateWithoutListingInput> | ListingSeasonalPriceCreateWithoutListingInput[] | ListingSeasonalPriceUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingSeasonalPriceCreateOrConnectWithoutListingInput | ListingSeasonalPriceCreateOrConnectWithoutListingInput[]
+    upsert?: ListingSeasonalPriceUpsertWithWhereUniqueWithoutListingInput | ListingSeasonalPriceUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingSeasonalPriceCreateManyListingInputEnvelope
+    set?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+    disconnect?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+    delete?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+    connect?: ListingSeasonalPriceWhereUniqueInput | ListingSeasonalPriceWhereUniqueInput[]
+    update?: ListingSeasonalPriceUpdateWithWhereUniqueWithoutListingInput | ListingSeasonalPriceUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingSeasonalPriceUpdateManyWithWhereWithoutListingInput | ListingSeasonalPriceUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingSeasonalPriceScalarWhereInput | ListingSeasonalPriceScalarWhereInput[]
+  }
+
+  export type ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingNearbyLandmarkCreateWithoutListingInput, ListingNearbyLandmarkUncheckedCreateWithoutListingInput> | ListingNearbyLandmarkCreateWithoutListingInput[] | ListingNearbyLandmarkUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingNearbyLandmarkCreateOrConnectWithoutListingInput | ListingNearbyLandmarkCreateOrConnectWithoutListingInput[]
+    upsert?: ListingNearbyLandmarkUpsertWithWhereUniqueWithoutListingInput | ListingNearbyLandmarkUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingNearbyLandmarkCreateManyListingInputEnvelope
+    set?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+    disconnect?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+    delete?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+    connect?: ListingNearbyLandmarkWhereUniqueInput | ListingNearbyLandmarkWhereUniqueInput[]
+    update?: ListingNearbyLandmarkUpdateWithWhereUniqueWithoutListingInput | ListingNearbyLandmarkUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingNearbyLandmarkUpdateManyWithWhereWithoutListingInput | ListingNearbyLandmarkUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingNearbyLandmarkScalarWhereInput | ListingNearbyLandmarkScalarWhereInput[]
+  }
+
+  export type ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput = {
+    create?: XOR<ListingHouseRuleCreateWithoutListingInput, ListingHouseRuleUncheckedCreateWithoutListingInput> | ListingHouseRuleCreateWithoutListingInput[] | ListingHouseRuleUncheckedCreateWithoutListingInput[]
+    connectOrCreate?: ListingHouseRuleCreateOrConnectWithoutListingInput | ListingHouseRuleCreateOrConnectWithoutListingInput[]
+    upsert?: ListingHouseRuleUpsertWithWhereUniqueWithoutListingInput | ListingHouseRuleUpsertWithWhereUniqueWithoutListingInput[]
+    createMany?: ListingHouseRuleCreateManyListingInputEnvelope
+    set?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
+    disconnect?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
+    delete?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
+    connect?: ListingHouseRuleWhereUniqueInput | ListingHouseRuleWhereUniqueInput[]
+    update?: ListingHouseRuleUpdateWithWhereUniqueWithoutListingInput | ListingHouseRuleUpdateWithWhereUniqueWithoutListingInput[]
+    updateMany?: ListingHouseRuleUpdateManyWithWhereWithoutListingInput | ListingHouseRuleUpdateManyWithWhereWithoutListingInput[]
+    deleteMany?: ListingHouseRuleScalarWhereInput | ListingHouseRuleScalarWhereInput[]
+  }
+
   export type ListingCreateNestedOneWithoutReviewTasksInput = {
     create?: XOR<ListingCreateWithoutReviewTasksInput, ListingUncheckedCreateWithoutReviewTasksInput>
     connectOrCreate?: ListingCreateOrConnectWithoutReviewTasksInput
@@ -32380,6 +42967,98 @@ export namespace Prisma {
     upsert?: ListingUpsertWithoutReviewTasksInput
     connect?: ListingWhereUniqueInput
     update?: XOR<XOR<ListingUpdateToOneWithWhereWithoutReviewTasksInput, ListingUpdateWithoutReviewTasksInput>, ListingUncheckedUpdateWithoutReviewTasksInput>
+  }
+
+  export type ListingCreateNestedOneWithoutModerationLogInput = {
+    create?: XOR<ListingCreateWithoutModerationLogInput, ListingUncheckedCreateWithoutModerationLogInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutModerationLogInput
+    connect?: ListingWhereUniqueInput
+  }
+
+  export type ListingUpdateOneRequiredWithoutModerationLogNestedInput = {
+    create?: XOR<ListingCreateWithoutModerationLogInput, ListingUncheckedCreateWithoutModerationLogInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutModerationLogInput
+    upsert?: ListingUpsertWithoutModerationLogInput
+    connect?: ListingWhereUniqueInput
+    update?: XOR<XOR<ListingUpdateToOneWithWhereWithoutModerationLogInput, ListingUpdateWithoutModerationLogInput>, ListingUncheckedUpdateWithoutModerationLogInput>
+  }
+
+  export type ListingCreateNestedOneWithoutBedConfigsInput = {
+    create?: XOR<ListingCreateWithoutBedConfigsInput, ListingUncheckedCreateWithoutBedConfigsInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutBedConfigsInput
+    connect?: ListingWhereUniqueInput
+  }
+
+  export type EnumBedTypeFieldUpdateOperationsInput = {
+    set?: $Enums.BedType
+  }
+
+  export type ListingUpdateOneRequiredWithoutBedConfigsNestedInput = {
+    create?: XOR<ListingCreateWithoutBedConfigsInput, ListingUncheckedCreateWithoutBedConfigsInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutBedConfigsInput
+    upsert?: ListingUpsertWithoutBedConfigsInput
+    connect?: ListingWhereUniqueInput
+    update?: XOR<XOR<ListingUpdateToOneWithWhereWithoutBedConfigsInput, ListingUpdateWithoutBedConfigsInput>, ListingUncheckedUpdateWithoutBedConfigsInput>
+  }
+
+  export type ListingCreateNestedOneWithoutBlockedDatesInput = {
+    create?: XOR<ListingCreateWithoutBlockedDatesInput, ListingUncheckedCreateWithoutBlockedDatesInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutBlockedDatesInput
+    connect?: ListingWhereUniqueInput
+  }
+
+  export type EnumBlockedDateSourceFieldUpdateOperationsInput = {
+    set?: $Enums.BlockedDateSource
+  }
+
+  export type ListingUpdateOneRequiredWithoutBlockedDatesNestedInput = {
+    create?: XOR<ListingCreateWithoutBlockedDatesInput, ListingUncheckedCreateWithoutBlockedDatesInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutBlockedDatesInput
+    upsert?: ListingUpsertWithoutBlockedDatesInput
+    connect?: ListingWhereUniqueInput
+    update?: XOR<XOR<ListingUpdateToOneWithWhereWithoutBlockedDatesInput, ListingUpdateWithoutBlockedDatesInput>, ListingUncheckedUpdateWithoutBlockedDatesInput>
+  }
+
+  export type ListingCreateNestedOneWithoutSeasonalPricesInput = {
+    create?: XOR<ListingCreateWithoutSeasonalPricesInput, ListingUncheckedCreateWithoutSeasonalPricesInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutSeasonalPricesInput
+    connect?: ListingWhereUniqueInput
+  }
+
+  export type ListingUpdateOneRequiredWithoutSeasonalPricesNestedInput = {
+    create?: XOR<ListingCreateWithoutSeasonalPricesInput, ListingUncheckedCreateWithoutSeasonalPricesInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutSeasonalPricesInput
+    upsert?: ListingUpsertWithoutSeasonalPricesInput
+    connect?: ListingWhereUniqueInput
+    update?: XOR<XOR<ListingUpdateToOneWithWhereWithoutSeasonalPricesInput, ListingUpdateWithoutSeasonalPricesInput>, ListingUncheckedUpdateWithoutSeasonalPricesInput>
+  }
+
+  export type ListingCreateNestedOneWithoutLandmarksInput = {
+    create?: XOR<ListingCreateWithoutLandmarksInput, ListingUncheckedCreateWithoutLandmarksInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutLandmarksInput
+    connect?: ListingWhereUniqueInput
+  }
+
+  export type ListingUpdateOneRequiredWithoutLandmarksNestedInput = {
+    create?: XOR<ListingCreateWithoutLandmarksInput, ListingUncheckedCreateWithoutLandmarksInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutLandmarksInput
+    upsert?: ListingUpsertWithoutLandmarksInput
+    connect?: ListingWhereUniqueInput
+    update?: XOR<XOR<ListingUpdateToOneWithWhereWithoutLandmarksInput, ListingUpdateWithoutLandmarksInput>, ListingUncheckedUpdateWithoutLandmarksInput>
+  }
+
+  export type ListingCreateNestedOneWithoutHouseRulesInput = {
+    create?: XOR<ListingCreateWithoutHouseRulesInput, ListingUncheckedCreateWithoutHouseRulesInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutHouseRulesInput
+    connect?: ListingWhereUniqueInput
+  }
+
+  export type ListingUpdateOneRequiredWithoutHouseRulesNestedInput = {
+    create?: XOR<ListingCreateWithoutHouseRulesInput, ListingUncheckedCreateWithoutHouseRulesInput>
+    connectOrCreate?: ListingCreateOrConnectWithoutHouseRulesInput
+    upsert?: ListingUpsertWithoutHouseRulesInput
+    connect?: ListingWhereUniqueInput
+    update?: XOR<XOR<ListingUpdateToOneWithWhereWithoutHouseRulesInput, ListingUpdateWithoutHouseRulesInput>, ListingUncheckedUpdateWithoutHouseRulesInput>
   }
 
   export type ListingCreateNestedOneWithoutPhotosInput = {
@@ -32935,6 +43614,39 @@ export namespace Prisma {
     not?: NestedEnumMileagePolicyNullableFilter<$PrismaModel> | $Enums.MileagePolicy | null
   }
 
+  export type NestedEnumCarCategoryNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.CarCategory | EnumCarCategoryFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCarCategoryNullableFilter<$PrismaModel> | $Enums.CarCategory | null
+  }
+
+  export type NestedEnumDriveTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.DriveType | EnumDriveTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumDriveTypeNullableFilter<$PrismaModel> | $Enums.DriveType | null
+  }
+
+  export type NestedBoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
+  export type NestedEnumFuelPolicyNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.FuelPolicy | EnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    in?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumFuelPolicyNullableFilter<$PrismaModel> | $Enums.FuelPolicy | null
+  }
+
+  export type NestedEnumInsuranceTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.InsuranceType | EnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel> | $Enums.InsuranceType | null
+  }
+
   export type NestedDateTimeFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -32944,6 +43656,13 @@ export namespace Prisma {
     gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     not?: NestedDateTimeFilter<$PrismaModel> | Date | string
+  }
+
+  export type NestedEnumApartmentTypeNullableFilter<$PrismaModel = never> = {
+    equals?: $Enums.ApartmentType | EnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.ApartmentType[] | ListEnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.ApartmentType[] | ListEnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumApartmentTypeNullableFilter<$PrismaModel> | $Enums.ApartmentType | null
   }
 
   export type NestedStringWithAggregatesFilter<$PrismaModel = never> = {
@@ -33152,6 +43871,54 @@ export namespace Prisma {
     _max?: NestedEnumMileagePolicyNullableFilter<$PrismaModel>
   }
 
+  export type NestedEnumCarCategoryNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.CarCategory | EnumCarCategoryFieldRefInput<$PrismaModel> | null
+    in?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.CarCategory[] | ListEnumCarCategoryFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumCarCategoryNullableWithAggregatesFilter<$PrismaModel> | $Enums.CarCategory | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumCarCategoryNullableFilter<$PrismaModel>
+    _max?: NestedEnumCarCategoryNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumDriveTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.DriveType | EnumDriveTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.DriveType[] | ListEnumDriveTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumDriveTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.DriveType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumDriveTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumDriveTypeNullableFilter<$PrismaModel>
+  }
+
+  export type NestedBoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumFuelPolicyNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.FuelPolicy | EnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    in?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.FuelPolicy[] | ListEnumFuelPolicyFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumFuelPolicyNullableWithAggregatesFilter<$PrismaModel> | $Enums.FuelPolicy | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumFuelPolicyNullableFilter<$PrismaModel>
+    _max?: NestedEnumFuelPolicyNullableFilter<$PrismaModel>
+  }
+
+  export type NestedEnumInsuranceTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.InsuranceType | EnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.InsuranceType[] | ListEnumInsuranceTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumInsuranceTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.InsuranceType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumInsuranceTypeNullableFilter<$PrismaModel>
+  }
+
   export type NestedDateTimeWithAggregatesFilter<$PrismaModel = never> = {
     equals?: Date | string | DateTimeFieldRefInput<$PrismaModel>
     in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel>
@@ -33164,6 +43931,16 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedDateTimeFilter<$PrismaModel>
     _max?: NestedDateTimeFilter<$PrismaModel>
+  }
+
+  export type NestedEnumApartmentTypeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.ApartmentType | EnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    in?: $Enums.ApartmentType[] | ListEnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    notIn?: $Enums.ApartmentType[] | ListEnumApartmentTypeFieldRefInput<$PrismaModel> | null
+    not?: NestedEnumApartmentTypeNullableWithAggregatesFilter<$PrismaModel> | $Enums.ApartmentType | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedEnumApartmentTypeNullableFilter<$PrismaModel>
+    _max?: NestedEnumApartmentTypeNullableFilter<$PrismaModel>
   }
 
   export type NestedEnumReviewTaskStatusFilter<$PrismaModel = never> = {
@@ -33181,6 +43958,63 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>
     _min?: NestedEnumReviewTaskStatusFilter<$PrismaModel>
     _max?: NestedEnumReviewTaskStatusFilter<$PrismaModel>
+  }
+  export type NestedJsonFilter<$PrismaModel = never> =
+    | PatchUndefined<
+        Either<Required<NestedJsonFilterBase<$PrismaModel>>, Exclude<keyof Required<NestedJsonFilterBase<$PrismaModel>>, 'path'>>,
+        Required<NestedJsonFilterBase<$PrismaModel>>
+      >
+    | OptionalFlat<Omit<Required<NestedJsonFilterBase<$PrismaModel>>, 'path'>>
+
+  export type NestedJsonFilterBase<$PrismaModel = never> = {
+    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+    path?: string[]
+    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
+    string_contains?: string | StringFieldRefInput<$PrismaModel>
+    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
+    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
+    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
+    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
+    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
+  }
+
+  export type NestedEnumBedTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.BedType | EnumBedTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.BedType[] | ListEnumBedTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BedType[] | ListEnumBedTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumBedTypeFilter<$PrismaModel> | $Enums.BedType
+  }
+
+  export type NestedEnumBedTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.BedType | EnumBedTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.BedType[] | ListEnumBedTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BedType[] | ListEnumBedTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumBedTypeWithAggregatesFilter<$PrismaModel> | $Enums.BedType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumBedTypeFilter<$PrismaModel>
+    _max?: NestedEnumBedTypeFilter<$PrismaModel>
+  }
+
+  export type NestedEnumBlockedDateSourceFilter<$PrismaModel = never> = {
+    equals?: $Enums.BlockedDateSource | EnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    in?: $Enums.BlockedDateSource[] | ListEnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BlockedDateSource[] | ListEnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    not?: NestedEnumBlockedDateSourceFilter<$PrismaModel> | $Enums.BlockedDateSource
+  }
+
+  export type NestedEnumBlockedDateSourceWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.BlockedDateSource | EnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    in?: $Enums.BlockedDateSource[] | ListEnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    notIn?: $Enums.BlockedDateSource[] | ListEnumBlockedDateSourceFieldRefInput<$PrismaModel>
+    not?: NestedEnumBlockedDateSourceWithAggregatesFilter<$PrismaModel> | $Enums.BlockedDateSource
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumBlockedDateSourceFilter<$PrismaModel>
+    _max?: NestedEnumBlockedDateSourceFilter<$PrismaModel>
   }
 
   export type NestedEnumDocumentTypeFilter<$PrismaModel = never> = {
@@ -33225,29 +44059,6 @@ export namespace Prisma {
     _sum?: NestedDecimalFilter<$PrismaModel>
     _min?: NestedDecimalFilter<$PrismaModel>
     _max?: NestedDecimalFilter<$PrismaModel>
-  }
-  export type NestedJsonFilter<$PrismaModel = never> =
-    | PatchUndefined<
-        Either<Required<NestedJsonFilterBase<$PrismaModel>>, Exclude<keyof Required<NestedJsonFilterBase<$PrismaModel>>, 'path'>>,
-        Required<NestedJsonFilterBase<$PrismaModel>>
-      >
-    | OptionalFlat<Omit<Required<NestedJsonFilterBase<$PrismaModel>>, 'path'>>
-
-  export type NestedJsonFilterBase<$PrismaModel = never> = {
-    equals?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
-    path?: string[]
-    mode?: QueryMode | EnumQueryModeFieldRefInput<$PrismaModel>
-    string_contains?: string | StringFieldRefInput<$PrismaModel>
-    string_starts_with?: string | StringFieldRefInput<$PrismaModel>
-    string_ends_with?: string | StringFieldRefInput<$PrismaModel>
-    array_starts_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
-    array_ends_with?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
-    array_contains?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | null
-    lt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    lte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    gt?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    gte?: InputJsonValue | JsonFieldRefInput<$PrismaModel>
-    not?: InputJsonValue | JsonFieldRefInput<$PrismaModel> | JsonNullValueFilter
   }
 
   export type NestedEnumBookingStatusFilter<$PrismaModel = never> = {
@@ -33428,6 +44239,34 @@ export namespace Prisma {
 
   export type ListingReviewTaskCreateManyListingInputEnvelope = {
     data: ListingReviewTaskCreateManyListingInput | ListingReviewTaskCreateManyListingInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type ListingModerationLogCreateWithoutListingInput = {
+    id?: string
+    action: string
+    actorId: string
+    actorRole: string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+  }
+
+  export type ListingModerationLogUncheckedCreateWithoutListingInput = {
+    id?: string
+    action: string
+    actorId: string
+    actorRole: string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+  }
+
+  export type ListingModerationLogCreateOrConnectWithoutListingInput = {
+    where: ListingModerationLogWhereUniqueInput
+    create: XOR<ListingModerationLogCreateWithoutListingInput, ListingModerationLogUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingModerationLogCreateManyListingInputEnvelope = {
+    data: ListingModerationLogCreateManyListingInput | ListingModerationLogCreateManyListingInput[]
     skipDuplicates?: boolean
   }
 
@@ -33633,6 +44472,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -33645,6 +44486,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -33658,6 +44501,134 @@ export namespace Prisma {
 
   export type IcalFeedCreateManyListingInputEnvelope = {
     data: IcalFeedCreateManyListingInput | IcalFeedCreateManyListingInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type ListingBedConfigCreateWithoutListingInput = {
+    id?: string
+    bedType: $Enums.BedType
+    quantity: number
+    roomLabel?: string | null
+  }
+
+  export type ListingBedConfigUncheckedCreateWithoutListingInput = {
+    id?: string
+    bedType: $Enums.BedType
+    quantity: number
+    roomLabel?: string | null
+  }
+
+  export type ListingBedConfigCreateOrConnectWithoutListingInput = {
+    where: ListingBedConfigWhereUniqueInput
+    create: XOR<ListingBedConfigCreateWithoutListingInput, ListingBedConfigUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingBedConfigCreateManyListingInputEnvelope = {
+    data: ListingBedConfigCreateManyListingInput | ListingBedConfigCreateManyListingInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type ListingBlockedDateCreateWithoutListingInput = {
+    id?: string
+    date: Date | string
+    source?: $Enums.BlockedDateSource
+    note?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingBlockedDateUncheckedCreateWithoutListingInput = {
+    id?: string
+    date: Date | string
+    source?: $Enums.BlockedDateSource
+    note?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingBlockedDateCreateOrConnectWithoutListingInput = {
+    where: ListingBlockedDateWhereUniqueInput
+    create: XOR<ListingBlockedDateCreateWithoutListingInput, ListingBlockedDateUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingBlockedDateCreateManyListingInputEnvelope = {
+    data: ListingBlockedDateCreateManyListingInput | ListingBlockedDateCreateManyListingInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type ListingSeasonalPriceCreateWithoutListingInput = {
+    id?: string
+    startDate: Date | string
+    endDate: Date | string
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    label?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingSeasonalPriceUncheckedCreateWithoutListingInput = {
+    id?: string
+    startDate: Date | string
+    endDate: Date | string
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    label?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingSeasonalPriceCreateOrConnectWithoutListingInput = {
+    where: ListingSeasonalPriceWhereUniqueInput
+    create: XOR<ListingSeasonalPriceCreateWithoutListingInput, ListingSeasonalPriceUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingSeasonalPriceCreateManyListingInputEnvelope = {
+    data: ListingSeasonalPriceCreateManyListingInput | ListingSeasonalPriceCreateManyListingInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type ListingNearbyLandmarkCreateWithoutListingInput = {
+    id?: string
+    name: string
+    category?: string | null
+    distanceKm?: Decimal | DecimalJsLike | number | string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingNearbyLandmarkUncheckedCreateWithoutListingInput = {
+    id?: string
+    name: string
+    category?: string | null
+    distanceKm?: Decimal | DecimalJsLike | number | string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingNearbyLandmarkCreateOrConnectWithoutListingInput = {
+    where: ListingNearbyLandmarkWhereUniqueInput
+    create: XOR<ListingNearbyLandmarkCreateWithoutListingInput, ListingNearbyLandmarkUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingNearbyLandmarkCreateManyListingInputEnvelope = {
+    data: ListingNearbyLandmarkCreateManyListingInput | ListingNearbyLandmarkCreateManyListingInput[]
+    skipDuplicates?: boolean
+  }
+
+  export type ListingHouseRuleCreateWithoutListingInput = {
+    id?: string
+    rule: string
+    createdAt?: Date | string
+  }
+
+  export type ListingHouseRuleUncheckedCreateWithoutListingInput = {
+    id?: string
+    rule: string
+    createdAt?: Date | string
+  }
+
+  export type ListingHouseRuleCreateOrConnectWithoutListingInput = {
+    where: ListingHouseRuleWhereUniqueInput
+    create: XOR<ListingHouseRuleCreateWithoutListingInput, ListingHouseRuleUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingHouseRuleCreateManyListingInputEnvelope = {
+    data: ListingHouseRuleCreateManyListingInput | ListingHouseRuleCreateManyListingInput[]
     skipDuplicates?: boolean
   }
 
@@ -33799,6 +44770,35 @@ export namespace Prisma {
     slaDeadline?: DateTimeFilter<"ListingReviewTask"> | Date | string
     createdAt?: DateTimeFilter<"ListingReviewTask"> | Date | string
     resolvedAt?: DateTimeNullableFilter<"ListingReviewTask"> | Date | string | null
+  }
+
+  export type ListingModerationLogUpsertWithWhereUniqueWithoutListingInput = {
+    where: ListingModerationLogWhereUniqueInput
+    update: XOR<ListingModerationLogUpdateWithoutListingInput, ListingModerationLogUncheckedUpdateWithoutListingInput>
+    create: XOR<ListingModerationLogCreateWithoutListingInput, ListingModerationLogUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingModerationLogUpdateWithWhereUniqueWithoutListingInput = {
+    where: ListingModerationLogWhereUniqueInput
+    data: XOR<ListingModerationLogUpdateWithoutListingInput, ListingModerationLogUncheckedUpdateWithoutListingInput>
+  }
+
+  export type ListingModerationLogUpdateManyWithWhereWithoutListingInput = {
+    where: ListingModerationLogScalarWhereInput
+    data: XOR<ListingModerationLogUpdateManyMutationInput, ListingModerationLogUncheckedUpdateManyWithoutListingInput>
+  }
+
+  export type ListingModerationLogScalarWhereInput = {
+    AND?: ListingModerationLogScalarWhereInput | ListingModerationLogScalarWhereInput[]
+    OR?: ListingModerationLogScalarWhereInput[]
+    NOT?: ListingModerationLogScalarWhereInput | ListingModerationLogScalarWhereInput[]
+    id?: StringFilter<"ListingModerationLog"> | string
+    listingId?: StringFilter<"ListingModerationLog"> | string
+    action?: StringFilter<"ListingModerationLog"> | string
+    actorId?: StringFilter<"ListingModerationLog"> | string
+    actorRole?: StringFilter<"ListingModerationLog"> | string
+    metadata?: JsonFilter<"ListingModerationLog">
+    createdAt?: DateTimeFilter<"ListingModerationLog"> | Date | string
   }
 
   export type UserFavouriteUpsertWithWhereUniqueWithoutListingInput = {
@@ -33983,9 +44983,150 @@ export namespace Prisma {
     feedUrl?: StringFilter<"IcalFeed"> | string
     lastSyncedAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     lastError?: StringNullableFilter<"IcalFeed"> | string | null
+    consecutiveFailures?: IntFilter<"IcalFeed"> | number
+    nextRetryAt?: DateTimeNullableFilter<"IcalFeed"> | Date | string | null
     isActive?: BoolFilter<"IcalFeed"> | boolean
     createdAt?: DateTimeFilter<"IcalFeed"> | Date | string
     updatedAt?: DateTimeFilter<"IcalFeed"> | Date | string
+  }
+
+  export type ListingBedConfigUpsertWithWhereUniqueWithoutListingInput = {
+    where: ListingBedConfigWhereUniqueInput
+    update: XOR<ListingBedConfigUpdateWithoutListingInput, ListingBedConfigUncheckedUpdateWithoutListingInput>
+    create: XOR<ListingBedConfigCreateWithoutListingInput, ListingBedConfigUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingBedConfigUpdateWithWhereUniqueWithoutListingInput = {
+    where: ListingBedConfigWhereUniqueInput
+    data: XOR<ListingBedConfigUpdateWithoutListingInput, ListingBedConfigUncheckedUpdateWithoutListingInput>
+  }
+
+  export type ListingBedConfigUpdateManyWithWhereWithoutListingInput = {
+    where: ListingBedConfigScalarWhereInput
+    data: XOR<ListingBedConfigUpdateManyMutationInput, ListingBedConfigUncheckedUpdateManyWithoutListingInput>
+  }
+
+  export type ListingBedConfigScalarWhereInput = {
+    AND?: ListingBedConfigScalarWhereInput | ListingBedConfigScalarWhereInput[]
+    OR?: ListingBedConfigScalarWhereInput[]
+    NOT?: ListingBedConfigScalarWhereInput | ListingBedConfigScalarWhereInput[]
+    id?: StringFilter<"ListingBedConfig"> | string
+    listingId?: StringFilter<"ListingBedConfig"> | string
+    bedType?: EnumBedTypeFilter<"ListingBedConfig"> | $Enums.BedType
+    quantity?: IntFilter<"ListingBedConfig"> | number
+    roomLabel?: StringNullableFilter<"ListingBedConfig"> | string | null
+  }
+
+  export type ListingBlockedDateUpsertWithWhereUniqueWithoutListingInput = {
+    where: ListingBlockedDateWhereUniqueInput
+    update: XOR<ListingBlockedDateUpdateWithoutListingInput, ListingBlockedDateUncheckedUpdateWithoutListingInput>
+    create: XOR<ListingBlockedDateCreateWithoutListingInput, ListingBlockedDateUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingBlockedDateUpdateWithWhereUniqueWithoutListingInput = {
+    where: ListingBlockedDateWhereUniqueInput
+    data: XOR<ListingBlockedDateUpdateWithoutListingInput, ListingBlockedDateUncheckedUpdateWithoutListingInput>
+  }
+
+  export type ListingBlockedDateUpdateManyWithWhereWithoutListingInput = {
+    where: ListingBlockedDateScalarWhereInput
+    data: XOR<ListingBlockedDateUpdateManyMutationInput, ListingBlockedDateUncheckedUpdateManyWithoutListingInput>
+  }
+
+  export type ListingBlockedDateScalarWhereInput = {
+    AND?: ListingBlockedDateScalarWhereInput | ListingBlockedDateScalarWhereInput[]
+    OR?: ListingBlockedDateScalarWhereInput[]
+    NOT?: ListingBlockedDateScalarWhereInput | ListingBlockedDateScalarWhereInput[]
+    id?: StringFilter<"ListingBlockedDate"> | string
+    listingId?: StringFilter<"ListingBlockedDate"> | string
+    date?: DateTimeFilter<"ListingBlockedDate"> | Date | string
+    source?: EnumBlockedDateSourceFilter<"ListingBlockedDate"> | $Enums.BlockedDateSource
+    note?: StringNullableFilter<"ListingBlockedDate"> | string | null
+    createdAt?: DateTimeFilter<"ListingBlockedDate"> | Date | string
+  }
+
+  export type ListingSeasonalPriceUpsertWithWhereUniqueWithoutListingInput = {
+    where: ListingSeasonalPriceWhereUniqueInput
+    update: XOR<ListingSeasonalPriceUpdateWithoutListingInput, ListingSeasonalPriceUncheckedUpdateWithoutListingInput>
+    create: XOR<ListingSeasonalPriceCreateWithoutListingInput, ListingSeasonalPriceUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingSeasonalPriceUpdateWithWhereUniqueWithoutListingInput = {
+    where: ListingSeasonalPriceWhereUniqueInput
+    data: XOR<ListingSeasonalPriceUpdateWithoutListingInput, ListingSeasonalPriceUncheckedUpdateWithoutListingInput>
+  }
+
+  export type ListingSeasonalPriceUpdateManyWithWhereWithoutListingInput = {
+    where: ListingSeasonalPriceScalarWhereInput
+    data: XOR<ListingSeasonalPriceUpdateManyMutationInput, ListingSeasonalPriceUncheckedUpdateManyWithoutListingInput>
+  }
+
+  export type ListingSeasonalPriceScalarWhereInput = {
+    AND?: ListingSeasonalPriceScalarWhereInput | ListingSeasonalPriceScalarWhereInput[]
+    OR?: ListingSeasonalPriceScalarWhereInput[]
+    NOT?: ListingSeasonalPriceScalarWhereInput | ListingSeasonalPriceScalarWhereInput[]
+    id?: StringFilter<"ListingSeasonalPrice"> | string
+    listingId?: StringFilter<"ListingSeasonalPrice"> | string
+    startDate?: DateTimeFilter<"ListingSeasonalPrice"> | Date | string
+    endDate?: DateTimeFilter<"ListingSeasonalPrice"> | Date | string
+    pricePerNight?: DecimalNullableFilter<"ListingSeasonalPrice"> | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: DecimalNullableFilter<"ListingSeasonalPrice"> | Decimal | DecimalJsLike | number | string | null
+    label?: StringNullableFilter<"ListingSeasonalPrice"> | string | null
+    createdAt?: DateTimeFilter<"ListingSeasonalPrice"> | Date | string
+  }
+
+  export type ListingNearbyLandmarkUpsertWithWhereUniqueWithoutListingInput = {
+    where: ListingNearbyLandmarkWhereUniqueInput
+    update: XOR<ListingNearbyLandmarkUpdateWithoutListingInput, ListingNearbyLandmarkUncheckedUpdateWithoutListingInput>
+    create: XOR<ListingNearbyLandmarkCreateWithoutListingInput, ListingNearbyLandmarkUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingNearbyLandmarkUpdateWithWhereUniqueWithoutListingInput = {
+    where: ListingNearbyLandmarkWhereUniqueInput
+    data: XOR<ListingNearbyLandmarkUpdateWithoutListingInput, ListingNearbyLandmarkUncheckedUpdateWithoutListingInput>
+  }
+
+  export type ListingNearbyLandmarkUpdateManyWithWhereWithoutListingInput = {
+    where: ListingNearbyLandmarkScalarWhereInput
+    data: XOR<ListingNearbyLandmarkUpdateManyMutationInput, ListingNearbyLandmarkUncheckedUpdateManyWithoutListingInput>
+  }
+
+  export type ListingNearbyLandmarkScalarWhereInput = {
+    AND?: ListingNearbyLandmarkScalarWhereInput | ListingNearbyLandmarkScalarWhereInput[]
+    OR?: ListingNearbyLandmarkScalarWhereInput[]
+    NOT?: ListingNearbyLandmarkScalarWhereInput | ListingNearbyLandmarkScalarWhereInput[]
+    id?: StringFilter<"ListingNearbyLandmark"> | string
+    listingId?: StringFilter<"ListingNearbyLandmark"> | string
+    name?: StringFilter<"ListingNearbyLandmark"> | string
+    category?: StringNullableFilter<"ListingNearbyLandmark"> | string | null
+    distanceKm?: DecimalNullableFilter<"ListingNearbyLandmark"> | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFilter<"ListingNearbyLandmark"> | Date | string
+  }
+
+  export type ListingHouseRuleUpsertWithWhereUniqueWithoutListingInput = {
+    where: ListingHouseRuleWhereUniqueInput
+    update: XOR<ListingHouseRuleUpdateWithoutListingInput, ListingHouseRuleUncheckedUpdateWithoutListingInput>
+    create: XOR<ListingHouseRuleCreateWithoutListingInput, ListingHouseRuleUncheckedCreateWithoutListingInput>
+  }
+
+  export type ListingHouseRuleUpdateWithWhereUniqueWithoutListingInput = {
+    where: ListingHouseRuleWhereUniqueInput
+    data: XOR<ListingHouseRuleUpdateWithoutListingInput, ListingHouseRuleUncheckedUpdateWithoutListingInput>
+  }
+
+  export type ListingHouseRuleUpdateManyWithWhereWithoutListingInput = {
+    where: ListingHouseRuleScalarWhereInput
+    data: XOR<ListingHouseRuleUpdateManyMutationInput, ListingHouseRuleUncheckedUpdateManyWithoutListingInput>
+  }
+
+  export type ListingHouseRuleScalarWhereInput = {
+    AND?: ListingHouseRuleScalarWhereInput | ListingHouseRuleScalarWhereInput[]
+    OR?: ListingHouseRuleScalarWhereInput[]
+    NOT?: ListingHouseRuleScalarWhereInput | ListingHouseRuleScalarWhereInput[]
+    id?: StringFilter<"ListingHouseRule"> | string
+    listingId?: StringFilter<"ListingHouseRule"> | string
+    rule?: StringFilter<"ListingHouseRule"> | string
+    createdAt?: DateTimeFilter<"ListingHouseRule"> | Date | string
   }
 
   export type ListingCreateWithoutReviewTasksInput = {
@@ -33997,6 +45138,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34041,18 +45183,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutReviewTasksInput = {
@@ -34064,6 +45257,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34108,18 +45302,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutReviewTasksInput = {
@@ -34147,6 +45392,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34191,18 +45437,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutReviewTasksInput = {
@@ -34214,6 +45511,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34258,18 +45556,3021 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingCreateWithoutModerationLogInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
+    bookings?: BookingCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingUncheckedCreateWithoutModerationLogInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
+    bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingCreateOrConnectWithoutModerationLogInput = {
+    where: ListingWhereUniqueInput
+    create: XOR<ListingCreateWithoutModerationLogInput, ListingUncheckedCreateWithoutModerationLogInput>
+  }
+
+  export type ListingUpsertWithoutModerationLogInput = {
+    update: XOR<ListingUpdateWithoutModerationLogInput, ListingUncheckedUpdateWithoutModerationLogInput>
+    create: XOR<ListingCreateWithoutModerationLogInput, ListingUncheckedCreateWithoutModerationLogInput>
+    where?: ListingWhereInput
+  }
+
+  export type ListingUpdateToOneWithWhereWithoutModerationLogInput = {
+    where?: ListingWhereInput
+    data: XOR<ListingUpdateWithoutModerationLogInput, ListingUncheckedUpdateWithoutModerationLogInput>
+  }
+
+  export type ListingUpdateWithoutModerationLogInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingUncheckedUpdateWithoutModerationLogInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingCreateWithoutBedConfigsInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
+    bookings?: BookingCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingUncheckedCreateWithoutBedConfigsInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
+    bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingCreateOrConnectWithoutBedConfigsInput = {
+    where: ListingWhereUniqueInput
+    create: XOR<ListingCreateWithoutBedConfigsInput, ListingUncheckedCreateWithoutBedConfigsInput>
+  }
+
+  export type ListingUpsertWithoutBedConfigsInput = {
+    update: XOR<ListingUpdateWithoutBedConfigsInput, ListingUncheckedUpdateWithoutBedConfigsInput>
+    create: XOR<ListingCreateWithoutBedConfigsInput, ListingUncheckedCreateWithoutBedConfigsInput>
+    where?: ListingWhereInput
+  }
+
+  export type ListingUpdateToOneWithWhereWithoutBedConfigsInput = {
+    where?: ListingWhereInput
+    data: XOR<ListingUpdateWithoutBedConfigsInput, ListingUncheckedUpdateWithoutBedConfigsInput>
+  }
+
+  export type ListingUpdateWithoutBedConfigsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingUncheckedUpdateWithoutBedConfigsInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingCreateWithoutBlockedDatesInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
+    bookings?: BookingCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingUncheckedCreateWithoutBlockedDatesInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
+    bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingCreateOrConnectWithoutBlockedDatesInput = {
+    where: ListingWhereUniqueInput
+    create: XOR<ListingCreateWithoutBlockedDatesInput, ListingUncheckedCreateWithoutBlockedDatesInput>
+  }
+
+  export type ListingUpsertWithoutBlockedDatesInput = {
+    update: XOR<ListingUpdateWithoutBlockedDatesInput, ListingUncheckedUpdateWithoutBlockedDatesInput>
+    create: XOR<ListingCreateWithoutBlockedDatesInput, ListingUncheckedCreateWithoutBlockedDatesInput>
+    where?: ListingWhereInput
+  }
+
+  export type ListingUpdateToOneWithWhereWithoutBlockedDatesInput = {
+    where?: ListingWhereInput
+    data: XOR<ListingUpdateWithoutBlockedDatesInput, ListingUncheckedUpdateWithoutBlockedDatesInput>
+  }
+
+  export type ListingUpdateWithoutBlockedDatesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingUncheckedUpdateWithoutBlockedDatesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingCreateWithoutSeasonalPricesInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
+    bookings?: BookingCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingUncheckedCreateWithoutSeasonalPricesInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
+    bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingCreateOrConnectWithoutSeasonalPricesInput = {
+    where: ListingWhereUniqueInput
+    create: XOR<ListingCreateWithoutSeasonalPricesInput, ListingUncheckedCreateWithoutSeasonalPricesInput>
+  }
+
+  export type ListingUpsertWithoutSeasonalPricesInput = {
+    update: XOR<ListingUpdateWithoutSeasonalPricesInput, ListingUncheckedUpdateWithoutSeasonalPricesInput>
+    create: XOR<ListingCreateWithoutSeasonalPricesInput, ListingUncheckedCreateWithoutSeasonalPricesInput>
+    where?: ListingWhereInput
+  }
+
+  export type ListingUpdateToOneWithWhereWithoutSeasonalPricesInput = {
+    where?: ListingWhereInput
+    data: XOR<ListingUpdateWithoutSeasonalPricesInput, ListingUncheckedUpdateWithoutSeasonalPricesInput>
+  }
+
+  export type ListingUpdateWithoutSeasonalPricesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingUncheckedUpdateWithoutSeasonalPricesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingCreateWithoutLandmarksInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
+    bookings?: BookingCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingUncheckedCreateWithoutLandmarksInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
+    bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingCreateOrConnectWithoutLandmarksInput = {
+    where: ListingWhereUniqueInput
+    create: XOR<ListingCreateWithoutLandmarksInput, ListingUncheckedCreateWithoutLandmarksInput>
+  }
+
+  export type ListingUpsertWithoutLandmarksInput = {
+    update: XOR<ListingUpdateWithoutLandmarksInput, ListingUncheckedUpdateWithoutLandmarksInput>
+    create: XOR<ListingCreateWithoutLandmarksInput, ListingUncheckedCreateWithoutLandmarksInput>
+    where?: ListingWhereInput
+  }
+
+  export type ListingUpdateToOneWithWhereWithoutLandmarksInput = {
+    where?: ListingWhereInput
+    data: XOR<ListingUpdateWithoutLandmarksInput, ListingUncheckedUpdateWithoutLandmarksInput>
+  }
+
+  export type ListingUpdateWithoutLandmarksInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingUncheckedUpdateWithoutLandmarksInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingCreateWithoutHouseRulesInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
+    bookings?: BookingCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingUncheckedCreateWithoutHouseRulesInput = {
+    id?: string
+    providerId: string
+    category: $Enums.ListingCategory
+    name?: string | null
+    roomType?: $Enums.RoomType | null
+    unitCount?: number | null
+    description?: string | null
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    currency?: string | null
+    minStayNights?: number
+    checkinTime?: string | null
+    checkoutTime?: string | null
+    cancellationPolicy?: $Enums.CancellationPolicy | null
+    smokingAllowed?: boolean
+    petsAllowed?: boolean
+    address?: string | null
+    lat?: Decimal | DecimalJsLike | number | string | null
+    lng?: Decimal | DecimalJsLike | number | string | null
+    town?: string | null
+    country?: string | null
+    claimedStarRating?: number | null
+    starRating?: number | null
+    status?: $Enums.ListingStatus
+    submissionCount?: number
+    submittedAt?: Date | string | null
+    approvedAt?: Date | string | null
+    approvedBy?: string | null
+    rejectedAt?: Date | string | null
+    rejectedBy?: string | null
+    rejectionReasons?: ListingCreaterejectionReasonsInput | string[]
+    rejectionNote?: string | null
+    suspendedAt?: Date | string | null
+    suspendedBy?: string | null
+    suspensionReason?: string | null
+    consecutiveNegative?: number
+    bedrooms?: number | null
+    bathrooms?: number | null
+    maxGuests?: number | null
+    longStayEnabled?: boolean
+    longStayMinNights?: number | null
+    longStayDiscountType?: $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: Decimal | DecimalJsLike | number | string | null
+    activatedAt?: Date | string | null
+    carMake?: string | null
+    carModel?: string | null
+    carYear?: number | null
+    transmission?: $Enums.Transmission | null
+    fuelType?: $Enums.FuelType | null
+    seats?: number | null
+    doors?: number | null
+    mileagePolicy?: $Enums.MileagePolicy | null
+    mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
+    updatedAt?: Date | string
+    createdAt?: Date | string
+    deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
+    photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
+    documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
+    amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
+    customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
+    reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
+    favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
+    recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
+    bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
+    reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
+    icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+  }
+
+  export type ListingCreateOrConnectWithoutHouseRulesInput = {
+    where: ListingWhereUniqueInput
+    create: XOR<ListingCreateWithoutHouseRulesInput, ListingUncheckedCreateWithoutHouseRulesInput>
+  }
+
+  export type ListingUpsertWithoutHouseRulesInput = {
+    update: XOR<ListingUpdateWithoutHouseRulesInput, ListingUncheckedUpdateWithoutHouseRulesInput>
+    create: XOR<ListingCreateWithoutHouseRulesInput, ListingUncheckedCreateWithoutHouseRulesInput>
+    where?: ListingWhereInput
+  }
+
+  export type ListingUpdateToOneWithWhereWithoutHouseRulesInput = {
+    where?: ListingWhereInput
+    data: XOR<ListingUpdateWithoutHouseRulesInput, ListingUncheckedUpdateWithoutHouseRulesInput>
+  }
+
+  export type ListingUpdateWithoutHouseRulesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+  }
+
+  export type ListingUncheckedUpdateWithoutHouseRulesInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    providerId?: StringFieldUpdateOperationsInput | string
+    category?: EnumListingCategoryFieldUpdateOperationsInput | $Enums.ListingCategory
+    name?: NullableStringFieldUpdateOperationsInput | string | null
+    roomType?: NullableEnumRoomTypeFieldUpdateOperationsInput | $Enums.RoomType | null
+    unitCount?: NullableIntFieldUpdateOperationsInput | number | null
+    description?: NullableStringFieldUpdateOperationsInput | string | null
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    currency?: NullableStringFieldUpdateOperationsInput | string | null
+    minStayNights?: IntFieldUpdateOperationsInput | number
+    checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutTime?: NullableStringFieldUpdateOperationsInput | string | null
+    cancellationPolicy?: NullableEnumCancellationPolicyFieldUpdateOperationsInput | $Enums.CancellationPolicy | null
+    smokingAllowed?: BoolFieldUpdateOperationsInput | boolean
+    petsAllowed?: BoolFieldUpdateOperationsInput | boolean
+    address?: NullableStringFieldUpdateOperationsInput | string | null
+    lat?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lng?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    town?: NullableStringFieldUpdateOperationsInput | string | null
+    country?: NullableStringFieldUpdateOperationsInput | string | null
+    claimedStarRating?: NullableIntFieldUpdateOperationsInput | number | null
+    starRating?: NullableIntFieldUpdateOperationsInput | number | null
+    status?: EnumListingStatusFieldUpdateOperationsInput | $Enums.ListingStatus
+    submissionCount?: IntFieldUpdateOperationsInput | number
+    submittedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    approvedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    rejectedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    rejectionReasons?: ListingUpdaterejectionReasonsInput | string[]
+    rejectionNote?: NullableStringFieldUpdateOperationsInput | string | null
+    suspendedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    suspendedBy?: NullableStringFieldUpdateOperationsInput | string | null
+    suspensionReason?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveNegative?: IntFieldUpdateOperationsInput | number
+    bedrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    bathrooms?: NullableIntFieldUpdateOperationsInput | number | null
+    maxGuests?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayEnabled?: BoolFieldUpdateOperationsInput | boolean
+    longStayMinNights?: NullableIntFieldUpdateOperationsInput | number | null
+    longStayDiscountType?: NullableEnumLongStayDiscountTypeFieldUpdateOperationsInput | $Enums.LongStayDiscountType | null
+    longStayDiscountValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    activatedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    carMake?: NullableStringFieldUpdateOperationsInput | string | null
+    carModel?: NullableStringFieldUpdateOperationsInput | string | null
+    carYear?: NullableIntFieldUpdateOperationsInput | number | null
+    transmission?: NullableEnumTransmissionFieldUpdateOperationsInput | $Enums.Transmission | null
+    fuelType?: NullableEnumFuelTypeFieldUpdateOperationsInput | $Enums.FuelType | null
+    seats?: NullableIntFieldUpdateOperationsInput | number | null
+    doors?: NullableIntFieldUpdateOperationsInput | number | null
+    mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
+    mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+    deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
+    photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
+    documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
+    amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
+    customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
+    reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
+    favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
+    recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
+    bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
+    reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
+    icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type ListingCreateWithoutPhotosInput = {
@@ -34281,6 +48582,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34325,18 +48627,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutPhotosInput = {
@@ -34348,6 +48701,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34392,18 +48746,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutPhotosInput = {
@@ -34431,6 +48836,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34475,18 +48881,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutPhotosInput = {
@@ -34498,6 +48955,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34542,18 +49000,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type ListingCreateWithoutDocumentsInput = {
@@ -34565,6 +49074,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34609,18 +49119,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutDocumentsInput = {
@@ -34632,6 +49193,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34676,18 +49238,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutDocumentsInput = {
@@ -34715,6 +49328,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34759,18 +49373,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutDocumentsInput = {
@@ -34782,6 +49447,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -34826,18 +49492,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type ListingCreateWithoutAmenitiesInput = {
@@ -34849,6 +49566,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34893,18 +49611,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutAmenitiesInput = {
@@ -34916,6 +49685,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -34960,18 +49730,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutAmenitiesInput = {
@@ -34999,6 +49820,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35043,18 +49865,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutAmenitiesInput = {
@@ -35066,6 +49939,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35110,18 +49984,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type ListingCreateWithoutCustomAmenitiesInput = {
@@ -35133,6 +50058,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35177,18 +50103,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutCustomAmenitiesInput = {
@@ -35200,6 +50177,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35244,18 +50222,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutCustomAmenitiesInput = {
@@ -35283,6 +50312,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35327,18 +50357,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutCustomAmenitiesInput = {
@@ -35350,6 +50431,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35394,18 +50476,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type ListingCreateWithoutFavouritesInput = {
@@ -35417,6 +50550,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35461,18 +50595,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutFavouritesInput = {
@@ -35484,6 +50669,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35528,18 +50714,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutFavouritesInput = {
@@ -35567,6 +50804,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35611,18 +50849,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutFavouritesInput = {
@@ -35634,6 +50923,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35678,18 +50968,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type ListingCreateWithoutRecentViewsInput = {
@@ -35701,6 +51042,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35745,18 +51087,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutRecentViewsInput = {
@@ -35768,6 +51161,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -35812,18 +51206,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutRecentViewsInput = {
@@ -35851,6 +51296,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35895,18 +51341,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutRecentViewsInput = {
@@ -35918,6 +51415,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -35962,18 +51460,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type ListingCreateWithoutBookingsInput = {
@@ -35985,6 +51534,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -36029,18 +51579,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutBookingsInput = {
@@ -36052,6 +51653,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -36096,18 +51698,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutBookingsInput = {
@@ -36204,6 +51857,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -36248,18 +51902,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutBookingsInput = {
@@ -36271,6 +51976,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -36315,18 +52021,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type BookingStatusLogUpsertWithWhereUniqueWithoutBookingInput = {
@@ -36633,6 +52390,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -36677,18 +52435,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutReviewsInput = {
@@ -36700,6 +52509,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -36744,18 +52554,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     icalFeeds?: IcalFeedUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutReviewsInput = {
@@ -36890,6 +52751,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -36934,18 +52796,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutReviewsInput = {
@@ -36957,6 +52870,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -37001,18 +52915,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     icalFeeds?: IcalFeedUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type BookingUpsertWithoutReviewInput = {
@@ -37271,6 +53236,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -37315,18 +53281,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoCreateNestedManyWithoutListingInput
     documents?: ListingDocumentCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedCreateNestedManyWithoutListingInput
     bookings?: BookingCreateNestedManyWithoutListingInput
     reviews?: ListingReviewCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleCreateNestedManyWithoutListingInput
   }
 
   export type ListingUncheckedCreateWithoutIcalFeedsInput = {
@@ -37338,6 +53355,7 @@ export namespace Prisma {
     unitCount?: number | null
     description?: string | null
     pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
     currency?: string | null
     minStayNights?: number
     checkinTime?: string | null
@@ -37382,18 +53400,69 @@ export namespace Prisma {
     doors?: number | null
     mileagePolicy?: $Enums.MileagePolicy | null
     mileageLimitKm?: number | null
+    carCategory?: $Enums.CarCategory | null
+    driveType?: $Enums.DriveType | null
+    airConditioning?: boolean | null
+    odometerReading?: number | null
+    licencePlate?: string | null
+    engineSize?: string | null
+    colour?: string | null
+    securityDeposit?: Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: number | null
+    minimumRentalDays?: number | null
+    fuelPolicy?: $Enums.FuelPolicy | null
+    extraKmRate?: Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: boolean
+    crossBorderAllowed?: boolean
+    airportPickup?: boolean
+    deliveryEnabled?: boolean
+    deliveryRadiusKm?: number | null
+    deliveryFee?: Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: string | null
+    pickupHoursTo?: string | null
+    returnSameLocation?: boolean
+    insuranceType?: $Enums.InsuranceType | null
     updatedAt?: Date | string
     createdAt?: Date | string
     deletedAt?: Date | string | null
+    featuredPhotoId?: string | null
+    maxAdults?: number | null
+    maxChildren?: number | null
+    childrenAllowed?: boolean
+    childPriceType?: string | null
+    childPriceValue?: Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: number | null
+    checkinRules?: string | null
+    checkoutRules?: string | null
+    earlyCheckinFee?: Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: number | null
+    weeklyDiscount?: Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: Decimal | DecimalJsLike | number | string | null
+    instantBooking?: boolean
+    selfCheckin?: boolean
+    selfCheckinDetails?: string | null
+    apartmentType?: $Enums.ApartmentType | null
+    floorNumber?: number | null
+    propertySizeM2?: Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: string | null
     photos?: ListingPhotoUncheckedCreateNestedManyWithoutListingInput
     documents?: ListingDocumentUncheckedCreateNestedManyWithoutListingInput
     amenities?: ListingAmenityUncheckedCreateNestedManyWithoutListingInput
     customAmenities?: ListingCustomAmenityUncheckedCreateNestedManyWithoutListingInput
     reviewTasks?: ListingReviewTaskUncheckedCreateNestedManyWithoutListingInput
+    moderationLog?: ListingModerationLogUncheckedCreateNestedManyWithoutListingInput
     favourites?: UserFavouriteUncheckedCreateNestedManyWithoutListingInput
     recentViews?: UserRecentlyViewedUncheckedCreateNestedManyWithoutListingInput
     bookings?: BookingUncheckedCreateNestedManyWithoutListingInput
     reviews?: ListingReviewUncheckedCreateNestedManyWithoutListingInput
+    bedConfigs?: ListingBedConfigUncheckedCreateNestedManyWithoutListingInput
+    blockedDates?: ListingBlockedDateUncheckedCreateNestedManyWithoutListingInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedCreateNestedManyWithoutListingInput
+    landmarks?: ListingNearbyLandmarkUncheckedCreateNestedManyWithoutListingInput
+    houseRules?: ListingHouseRuleUncheckedCreateNestedManyWithoutListingInput
   }
 
   export type ListingCreateOrConnectWithoutIcalFeedsInput = {
@@ -37451,6 +53520,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -37495,18 +53565,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUpdateManyWithoutListingNestedInput
     bookings?: BookingUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUpdateManyWithoutListingNestedInput
   }
 
   export type ListingUncheckedUpdateWithoutIcalFeedsInput = {
@@ -37518,6 +53639,7 @@ export namespace Prisma {
     unitCount?: NullableIntFieldUpdateOperationsInput | number | null
     description?: NullableStringFieldUpdateOperationsInput | string | null
     pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
     currency?: NullableStringFieldUpdateOperationsInput | string | null
     minStayNights?: IntFieldUpdateOperationsInput | number
     checkinTime?: NullableStringFieldUpdateOperationsInput | string | null
@@ -37562,18 +53684,69 @@ export namespace Prisma {
     doors?: NullableIntFieldUpdateOperationsInput | number | null
     mileagePolicy?: NullableEnumMileagePolicyFieldUpdateOperationsInput | $Enums.MileagePolicy | null
     mileageLimitKm?: NullableIntFieldUpdateOperationsInput | number | null
+    carCategory?: NullableEnumCarCategoryFieldUpdateOperationsInput | $Enums.CarCategory | null
+    driveType?: NullableEnumDriveTypeFieldUpdateOperationsInput | $Enums.DriveType | null
+    airConditioning?: NullableBoolFieldUpdateOperationsInput | boolean | null
+    odometerReading?: NullableIntFieldUpdateOperationsInput | number | null
+    licencePlate?: NullableStringFieldUpdateOperationsInput | string | null
+    engineSize?: NullableStringFieldUpdateOperationsInput | string | null
+    colour?: NullableStringFieldUpdateOperationsInput | string | null
+    securityDeposit?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    minimumDriverAge?: NullableIntFieldUpdateOperationsInput | number | null
+    minimumRentalDays?: NullableIntFieldUpdateOperationsInput | number | null
+    fuelPolicy?: NullableEnumFuelPolicyFieldUpdateOperationsInput | $Enums.FuelPolicy | null
+    extraKmRate?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    roadsideAssistance?: BoolFieldUpdateOperationsInput | boolean
+    crossBorderAllowed?: BoolFieldUpdateOperationsInput | boolean
+    airportPickup?: BoolFieldUpdateOperationsInput | boolean
+    deliveryEnabled?: BoolFieldUpdateOperationsInput | boolean
+    deliveryRadiusKm?: NullableIntFieldUpdateOperationsInput | number | null
+    deliveryFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pickupHoursFrom?: NullableStringFieldUpdateOperationsInput | string | null
+    pickupHoursTo?: NullableStringFieldUpdateOperationsInput | string | null
+    returnSameLocation?: BoolFieldUpdateOperationsInput | boolean
+    insuranceType?: NullableEnumInsuranceTypeFieldUpdateOperationsInput | $Enums.InsuranceType | null
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     deletedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+    featuredPhotoId?: NullableStringFieldUpdateOperationsInput | string | null
+    maxAdults?: NullableIntFieldUpdateOperationsInput | number | null
+    maxChildren?: NullableIntFieldUpdateOperationsInput | number | null
+    childrenAllowed?: BoolFieldUpdateOperationsInput | boolean
+    childPriceType?: NullableStringFieldUpdateOperationsInput | string | null
+    childPriceValue?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    childFreeUnderAge?: NullableIntFieldUpdateOperationsInput | number | null
+    checkinRules?: NullableStringFieldUpdateOperationsInput | string | null
+    checkoutRules?: NullableStringFieldUpdateOperationsInput | string | null
+    earlyCheckinFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    lateCheckoutFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    cleaningFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestFee?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    extraGuestAfter?: NullableIntFieldUpdateOperationsInput | number | null
+    weeklyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    monthlyDiscount?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    instantBooking?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckin?: BoolFieldUpdateOperationsInput | boolean
+    selfCheckinDetails?: NullableStringFieldUpdateOperationsInput | string | null
+    apartmentType?: NullableEnumApartmentTypeFieldUpdateOperationsInput | $Enums.ApartmentType | null
+    floorNumber?: NullableIntFieldUpdateOperationsInput | number | null
+    propertySizeM2?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    securityDepositDue?: NullableStringFieldUpdateOperationsInput | string | null
     photos?: ListingPhotoUncheckedUpdateManyWithoutListingNestedInput
     documents?: ListingDocumentUncheckedUpdateManyWithoutListingNestedInput
     amenities?: ListingAmenityUncheckedUpdateManyWithoutListingNestedInput
     customAmenities?: ListingCustomAmenityUncheckedUpdateManyWithoutListingNestedInput
     reviewTasks?: ListingReviewTaskUncheckedUpdateManyWithoutListingNestedInput
+    moderationLog?: ListingModerationLogUncheckedUpdateManyWithoutListingNestedInput
     favourites?: UserFavouriteUncheckedUpdateManyWithoutListingNestedInput
     recentViews?: UserRecentlyViewedUncheckedUpdateManyWithoutListingNestedInput
     bookings?: BookingUncheckedUpdateManyWithoutListingNestedInput
     reviews?: ListingReviewUncheckedUpdateManyWithoutListingNestedInput
+    bedConfigs?: ListingBedConfigUncheckedUpdateManyWithoutListingNestedInput
+    blockedDates?: ListingBlockedDateUncheckedUpdateManyWithoutListingNestedInput
+    seasonalPrices?: ListingSeasonalPriceUncheckedUpdateManyWithoutListingNestedInput
+    landmarks?: ListingNearbyLandmarkUncheckedUpdateManyWithoutListingNestedInput
+    houseRules?: ListingHouseRuleUncheckedUpdateManyWithoutListingNestedInput
   }
 
   export type IcalBlockedDateUpsertWithWhereUniqueWithoutFeedInput = {
@@ -37612,6 +53785,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -37625,6 +53800,8 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
@@ -37652,6 +53829,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -37665,6 +53844,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -37830,6 +54011,15 @@ export namespace Prisma {
     resolvedAt?: Date | string | null
   }
 
+  export type ListingModerationLogCreateManyListingInput = {
+    id?: string
+    action: string
+    actorId: string
+    actorRole: string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: Date | string
+  }
+
   export type UserFavouriteCreateManyListingInput = {
     userId: string
     createdAt?: Date | string
@@ -37912,9 +54102,50 @@ export namespace Prisma {
     feedUrl: string
     lastSyncedAt?: Date | string | null
     lastError?: string | null
+    consecutiveFailures?: number
+    nextRetryAt?: Date | string | null
     isActive?: boolean
     createdAt?: Date | string
     updatedAt?: Date | string
+  }
+
+  export type ListingBedConfigCreateManyListingInput = {
+    id?: string
+    bedType: $Enums.BedType
+    quantity: number
+    roomLabel?: string | null
+  }
+
+  export type ListingBlockedDateCreateManyListingInput = {
+    id?: string
+    date: Date | string
+    source?: $Enums.BlockedDateSource
+    note?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingSeasonalPriceCreateManyListingInput = {
+    id?: string
+    startDate: Date | string
+    endDate: Date | string
+    pricePerNight?: Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: Decimal | DecimalJsLike | number | string | null
+    label?: string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingNearbyLandmarkCreateManyListingInput = {
+    id?: string
+    name: string
+    category?: string | null
+    distanceKm?: Decimal | DecimalJsLike | number | string | null
+    createdAt?: Date | string
+  }
+
+  export type ListingHouseRuleCreateManyListingInput = {
+    id?: string
+    rule: string
+    createdAt?: Date | string
   }
 
   export type ListingPhotoUpdateWithoutListingInput = {
@@ -38035,6 +54266,33 @@ export namespace Prisma {
     slaDeadline?: DateTimeFieldUpdateOperationsInput | Date | string
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     resolvedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
+  }
+
+  export type ListingModerationLogUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    actorId?: StringFieldUpdateOperationsInput | string
+    actorRole?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingModerationLogUncheckedUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    actorId?: StringFieldUpdateOperationsInput | string
+    actorRole?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingModerationLogUncheckedUpdateManyWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    action?: StringFieldUpdateOperationsInput | string
+    actorId?: StringFieldUpdateOperationsInput | string
+    actorRole?: StringFieldUpdateOperationsInput | string
+    metadata?: JsonNullValueInput | InputJsonValue
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type UserFavouriteUpdateWithoutListingInput = {
@@ -38275,6 +54533,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -38287,6 +54547,8 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
@@ -38299,9 +54561,128 @@ export namespace Prisma {
     feedUrl?: StringFieldUpdateOperationsInput | string
     lastSyncedAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     lastError?: NullableStringFieldUpdateOperationsInput | string | null
+    consecutiveFailures?: IntFieldUpdateOperationsInput | number
+    nextRetryAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null
     isActive?: BoolFieldUpdateOperationsInput | boolean
     createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingBedConfigUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    bedType?: EnumBedTypeFieldUpdateOperationsInput | $Enums.BedType
+    quantity?: IntFieldUpdateOperationsInput | number
+    roomLabel?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type ListingBedConfigUncheckedUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    bedType?: EnumBedTypeFieldUpdateOperationsInput | $Enums.BedType
+    quantity?: IntFieldUpdateOperationsInput | number
+    roomLabel?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type ListingBedConfigUncheckedUpdateManyWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    bedType?: EnumBedTypeFieldUpdateOperationsInput | $Enums.BedType
+    quantity?: IntFieldUpdateOperationsInput | number
+    roomLabel?: NullableStringFieldUpdateOperationsInput | string | null
+  }
+
+  export type ListingBlockedDateUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
+    source?: EnumBlockedDateSourceFieldUpdateOperationsInput | $Enums.BlockedDateSource
+    note?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingBlockedDateUncheckedUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
+    source?: EnumBlockedDateSourceFieldUpdateOperationsInput | $Enums.BlockedDateSource
+    note?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingBlockedDateUncheckedUpdateManyWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    date?: DateTimeFieldUpdateOperationsInput | Date | string
+    source?: EnumBlockedDateSourceFieldUpdateOperationsInput | $Enums.BlockedDateSource
+    note?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingSeasonalPriceUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    label?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingSeasonalPriceUncheckedUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    label?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingSeasonalPriceUncheckedUpdateManyWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    startDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    endDate?: DateTimeFieldUpdateOperationsInput | Date | string
+    pricePerNight?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    pricePerDay?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    label?: NullableStringFieldUpdateOperationsInput | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingNearbyLandmarkUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    category?: NullableStringFieldUpdateOperationsInput | string | null
+    distanceKm?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingNearbyLandmarkUncheckedUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    category?: NullableStringFieldUpdateOperationsInput | string | null
+    distanceKm?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingNearbyLandmarkUncheckedUpdateManyWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    name?: StringFieldUpdateOperationsInput | string
+    category?: NullableStringFieldUpdateOperationsInput | string | null
+    distanceKm?: NullableDecimalFieldUpdateOperationsInput | Decimal | DecimalJsLike | number | string | null
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingHouseRuleUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    rule?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingHouseRuleUncheckedUpdateWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    rule?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
+  }
+
+  export type ListingHouseRuleUncheckedUpdateManyWithoutListingInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    rule?: StringFieldUpdateOperationsInput | string
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string
   }
 
   export type BookingStatusLogCreateManyBookingInput = {

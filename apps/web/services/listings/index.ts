@@ -77,6 +77,9 @@ export const listingsService = {
   deactivate: (id: string) =>
     listingApi.post(`/listings/${id}/deactivate`).then((r) => r.data.data ?? r.data),
 
+  reactivate: (id: string) =>
+    listingApi.post(`/listings/${id}/reactivate`).then((r) => r.data.data ?? r.data),
+
   remove: (id: string) =>
     listingApi.delete(`/listings/${id}`).then((r) => r.data),
 

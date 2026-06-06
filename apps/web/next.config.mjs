@@ -14,7 +14,13 @@ const nextConfig = {
     ];
   },
   images: {
-    domains: ["zika-storage.s3.af-south-1.amazonaws.com", "localhost"],
+    // domains: ["zika-storage.s3.af-south-1.amazonaws.com", "localhost"],
+    domains: [
+      process.env.S3_CDN_BASE_URL 
+        ? new URL(process.env.S3_CDN_BASE_URL).hostname 
+        : "zika-storage.s3.af-south-1.amazonaws.com",
+      "localhost"
+    ],
   },
 };
 

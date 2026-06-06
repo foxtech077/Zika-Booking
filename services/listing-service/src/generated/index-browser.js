@@ -130,6 +130,7 @@ exports.Prisma.ListingScalarFieldEnum = {
   unitCount: 'unitCount',
   description: 'description',
   pricePerNight: 'pricePerNight',
+  pricePerDay: 'pricePerDay',
   currency: 'currency',
   minStayNights: 'minStayNights',
   checkinTime: 'checkinTime',
@@ -174,9 +175,54 @@ exports.Prisma.ListingScalarFieldEnum = {
   doors: 'doors',
   mileagePolicy: 'mileagePolicy',
   mileageLimitKm: 'mileageLimitKm',
+  carCategory: 'carCategory',
+  driveType: 'driveType',
+  airConditioning: 'airConditioning',
+  odometerReading: 'odometerReading',
+  licencePlate: 'licencePlate',
+  engineSize: 'engineSize',
+  colour: 'colour',
+  securityDeposit: 'securityDeposit',
+  minimumDriverAge: 'minimumDriverAge',
+  minimumRentalDays: 'minimumRentalDays',
+  fuelPolicy: 'fuelPolicy',
+  extraKmRate: 'extraKmRate',
+  roadsideAssistance: 'roadsideAssistance',
+  crossBorderAllowed: 'crossBorderAllowed',
+  airportPickup: 'airportPickup',
+  deliveryEnabled: 'deliveryEnabled',
+  deliveryRadiusKm: 'deliveryRadiusKm',
+  deliveryFee: 'deliveryFee',
+  pickupHoursFrom: 'pickupHoursFrom',
+  pickupHoursTo: 'pickupHoursTo',
+  returnSameLocation: 'returnSameLocation',
+  insuranceType: 'insuranceType',
   updatedAt: 'updatedAt',
   createdAt: 'createdAt',
-  deletedAt: 'deletedAt'
+  deletedAt: 'deletedAt',
+  featuredPhotoId: 'featuredPhotoId',
+  maxAdults: 'maxAdults',
+  maxChildren: 'maxChildren',
+  childrenAllowed: 'childrenAllowed',
+  childPriceType: 'childPriceType',
+  childPriceValue: 'childPriceValue',
+  childFreeUnderAge: 'childFreeUnderAge',
+  checkinRules: 'checkinRules',
+  checkoutRules: 'checkoutRules',
+  earlyCheckinFee: 'earlyCheckinFee',
+  lateCheckoutFee: 'lateCheckoutFee',
+  cleaningFee: 'cleaningFee',
+  extraGuestFee: 'extraGuestFee',
+  extraGuestAfter: 'extraGuestAfter',
+  weeklyDiscount: 'weeklyDiscount',
+  monthlyDiscount: 'monthlyDiscount',
+  instantBooking: 'instantBooking',
+  selfCheckin: 'selfCheckin',
+  selfCheckinDetails: 'selfCheckinDetails',
+  apartmentType: 'apartmentType',
+  floorNumber: 'floorNumber',
+  propertySizeM2: 'propertySizeM2',
+  securityDepositDue: 'securityDepositDue'
 };
 
 exports.Prisma.ListingReviewTaskScalarFieldEnum = {
@@ -190,6 +236,60 @@ exports.Prisma.ListingReviewTaskScalarFieldEnum = {
   slaDeadline: 'slaDeadline',
   createdAt: 'createdAt',
   resolvedAt: 'resolvedAt'
+};
+
+exports.Prisma.ListingModerationLogScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  action: 'action',
+  actorId: 'actorId',
+  actorRole: 'actorRole',
+  metadata: 'metadata',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ListingBedConfigScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  bedType: 'bedType',
+  quantity: 'quantity',
+  roomLabel: 'roomLabel'
+};
+
+exports.Prisma.ListingBlockedDateScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  date: 'date',
+  source: 'source',
+  note: 'note',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ListingSeasonalPriceScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  startDate: 'startDate',
+  endDate: 'endDate',
+  pricePerNight: 'pricePerNight',
+  pricePerDay: 'pricePerDay',
+  label: 'label',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ListingNearbyLandmarkScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  name: 'name',
+  category: 'category',
+  distanceKm: 'distanceKm',
+  createdAt: 'createdAt'
+};
+
+exports.Prisma.ListingHouseRuleScalarFieldEnum = {
+  id: 'id',
+  listingId: 'listingId',
+  rule: 'rule',
+  createdAt: 'createdAt'
 };
 
 exports.Prisma.ListingPhotoScalarFieldEnum = {
@@ -375,6 +475,8 @@ exports.Prisma.IcalFeedScalarFieldEnum = {
   feedUrl: 'feedUrl',
   lastSyncedAt: 'lastSyncedAt',
   lastError: 'lastError',
+  consecutiveFailures: 'consecutiveFailures',
+  nextRetryAt: 'nextRetryAt',
   isActive: 'isActive',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
@@ -479,19 +581,65 @@ exports.LongStayDiscountType = exports.$Enums.LongStayDiscountType = {
 
 exports.Transmission = exports.$Enums.Transmission = {
   manual: 'manual',
-  automatic: 'automatic'
+  automatic: 'automatic',
+  semi_auto: 'semi_auto'
 };
 
 exports.FuelType = exports.$Enums.FuelType = {
   petrol: 'petrol',
   diesel: 'diesel',
   electric: 'electric',
-  hybrid: 'hybrid'
+  hybrid: 'hybrid',
+  lpg: 'lpg'
 };
 
 exports.MileagePolicy = exports.$Enums.MileagePolicy = {
   unlimited: 'unlimited',
   limited: 'limited'
+};
+
+exports.CarCategory = exports.$Enums.CarCategory = {
+  Economy: 'Economy',
+  Compact: 'Compact',
+  SUV: 'SUV',
+  Minivan: 'Minivan',
+  Pickup: 'Pickup',
+  Luxury: 'Luxury',
+  Electric: 'Electric',
+  Convertible: 'Convertible'
+};
+
+exports.DriveType = exports.$Enums.DriveType = {
+  TWO_WD: 'TWO_WD',
+  FOUR_WD: 'FOUR_WD',
+  AWD: 'AWD'
+};
+
+exports.FuelPolicy = exports.$Enums.FuelPolicy = {
+  full_to_full: 'full_to_full',
+  same_to_same: 'same_to_same',
+  free_tank: 'free_tank',
+  full_to_empty: 'full_to_empty',
+  pre_purchase: 'pre_purchase'
+};
+
+exports.InsuranceType = exports.$Enums.InsuranceType = {
+  basic: 'basic',
+  standard: 'standard',
+  premium: 'premium',
+  comprehensive: 'comprehensive',
+  basic_third_party: 'basic_third_party',
+  premium_zero_excess: 'premium_zero_excess'
+};
+
+exports.ApartmentType = exports.$Enums.ApartmentType = {
+  entire_place: 'entire_place',
+  private_room: 'private_room',
+  shared_room: 'shared_room',
+  studio: 'studio',
+  loft: 'loft',
+  villa: 'villa',
+  townhouse: 'townhouse'
 };
 
 exports.ReviewTaskStatus = exports.$Enums.ReviewTaskStatus = {
@@ -501,10 +649,28 @@ exports.ReviewTaskStatus = exports.$Enums.ReviewTaskStatus = {
   escalated: 'escalated'
 };
 
+exports.BedType = exports.$Enums.BedType = {
+  single: 'single',
+  double: 'double',
+  queen: 'queen',
+  king: 'king',
+  twin: 'twin'
+};
+
+exports.BlockedDateSource = exports.$Enums.BlockedDateSource = {
+  manual: 'manual',
+  ical: 'ical'
+};
+
 exports.DocumentType = exports.$Enums.DocumentType = {
   business_licence: 'business_licence',
   operating_permit: 'operating_permit',
-  tourism_certificate: 'tourism_certificate'
+  tourism_certificate: 'tourism_certificate',
+  insurance_certificate: 'insurance_certificate',
+  roadworthiness_certificate: 'roadworthiness_certificate',
+  hotel_operating_permit: 'hotel_operating_permit',
+  tourism_authority_certificate: 'tourism_authority_certificate',
+  vehicle_registration: 'vehicle_registration'
 };
 
 exports.BookingStatus = exports.$Enums.BookingStatus = {
@@ -529,6 +695,12 @@ exports.ConversationStatus = exports.$Enums.ConversationStatus = {
 exports.Prisma.ModelName = {
   Listing: 'Listing',
   ListingReviewTask: 'ListingReviewTask',
+  ListingModerationLog: 'ListingModerationLog',
+  ListingBedConfig: 'ListingBedConfig',
+  ListingBlockedDate: 'ListingBlockedDate',
+  ListingSeasonalPrice: 'ListingSeasonalPrice',
+  ListingNearbyLandmark: 'ListingNearbyLandmark',
+  ListingHouseRule: 'ListingHouseRule',
   ListingPhoto: 'ListingPhoto',
   ListingDocument: 'ListingDocument',
   ListingAmenity: 'ListingAmenity',

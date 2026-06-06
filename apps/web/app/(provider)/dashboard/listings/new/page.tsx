@@ -4,11 +4,72 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { Building2, Car, Home, ArrowRight, Zap } from "lucide-react";
-import { listingApi } from "@/lib/listing-api";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { listingsService } from "@/services/listings";
 import { cn } from "@/lib/utils";
 import type { ListingCategory } from "@/types/provider";
+import { useAuthStore } from "@/stores/auth";
+
+const TOKEN_KEY = "zika:access_token";
+
+const unwrapListingId = (payload: any): string | null =>
+  payload?.data?.id ??
+  payload?.id ??
+  payload?.data?.listing?.id ??
+  payload?.listing?.id ??
+  payload?.listingId ??
+  null;
+
+const getAuthConfig = (storeToken: string | null) => {
+  const token =
+    storeToken ??
+    (typeof window !== "undefined" ? sessionStorage.getItem(TOKEN_KEY) : null);
+  if (!token) throw new Error("AUTH_REQUIRED");
+  if (typeof window !== "undefined") sessionStorage.setItem(TOKEN_KEY, token);
+  return { headers: { Authorization: `Bearer ${token}` } };
+};
+
+let refreshPromise: Promise<string> | null = null;
+
+const refreshAccessToken = async () => {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const res = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error?.message ?? "Session expired. Please sign in again.");
+      const accessToken =
+        body?.data?.tokens?.accessToken ??
+        body?.tokens?.accessToken ??
+        body?.data?.accessToken ??
+        body?.accessToken;
+      if (!accessToken) throw new Error("Refresh succeeded, but no access token was returned.");
+      if (typeof window !== "undefined") sessionStorage.setItem(TOKEN_KEY, accessToken);
+      const { user, setSession } = useAuthStore.getState();
+      if (user) setSession(accessToken, user);
+      return accessToken as string;
+    })().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+};
+
+const withTokenRefresh = async <T,>(
+  request: (tokenOverride: string | null) => Promise<T>,
+  currentToken: string | null,
+) => {
+  try {
+    return await request(currentToken);
+  } catch (err: any) {
+    if (err?.response?.status !== 401) throw err;
+    const freshToken = await refreshAccessToken();
+    return request(freshToken);
+  }
+};
 
 const CATEGORIES: Array<{
   value: ListingCategory;
@@ -24,7 +85,7 @@ const CATEGORIES: Array<{
     description: "Register a hotel, resort, lodge or B&B with room inventory management.",
     icon: <Building2 className="w-8 h-8" />,
     color: "from-blue-500 to-indigo-600",
-    features: ["Room management", "Star rating", "Admin review required", "Document uploads"],
+    features: ["Room management", "Review-based ratings", "Admin review required", "Document uploads"],
   },
   {
     value: "apartment",
@@ -46,18 +107,37 @@ const CATEGORIES: Array<{
 
 export default function NewListingPage() {
   const router = useRouter();
+  const token = useAuthStore((state) => state.token);
   const [selected, setSelected] = useState<ListingCategory | null>(null);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const createMutation = useMutation({
     mutationFn: (category: ListingCategory) =>
-      listingApi.post("/listings", { category }).then((r) => r.data.data ?? r.data),
+      withTokenRefresh(
+        () => listingsService.create(category),
+        token,
+      ),
     onSuccess: (data) => {
-      router.push(`/dashboard/listings/${data.id}/edit`);
+      const id = unwrapListingId(data);
+      if (!id) {
+        setErrorMsg("Listing was created, but the server did not return a listing id. Please refresh the listings page.");
+        return;
+      }
+      router.push(`/dashboard/listings/${id}/edit`);
+    },
+    onError: (err: any) => {
+      if (err.message === "AUTH_REQUIRED") {
+        setErrorMsg("Authentication required. Please sign in again as a provider.");
+        router.replace("/auth/login");
+        return;
+      }
+      setErrorMsg(err.response?.data?.error?.message ?? "Failed to create listing. Please try again.");
     },
   });
 
   const handleCreate = () => {
-    if (!selected) return;
+    if (!selected || createMutation.isPending) return;
+    setErrorMsg("");
     createMutation.mutate(selected);
   };
 
@@ -76,9 +156,11 @@ export default function NewListingPage() {
         {CATEGORIES.map((cat) => (
           <button
             key={cat.value}
+            type="button"
+            disabled={createMutation.isPending}
             onClick={() => setSelected(cat.value)}
             className={cn(
-              "text-left p-5 rounded-2xl border-2 transition-all duration-200",
+              "text-left p-5 rounded-2xl border-2 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed",
               selected === cat.value
                 ? "border-primary bg-primary-50 shadow-glow-primary"
                 : "border-border bg-white hover:border-primary-300 hover:shadow-card-md"
@@ -130,7 +212,7 @@ export default function NewListingPage() {
 
       {createMutation.isError && (
         <p className="mt-4 text-sm text-danger">
-          Failed to create listing. Please try again.
+          {errorMsg}
         </p>
       )}
     </div>

@@ -37,6 +37,7 @@ export default function RegisterPage() {
   });
   const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
 
   const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -54,10 +55,15 @@ export default function RegisterPage() {
         setError(data.error?.message ?? "Registration failed.");
         return;
       }
-      // After registration, auto-login
-      storeToken(data.data.tokens.accessToken);
-      setSession(data.data.tokens.accessToken, data.data.user);
-      router.replace("/dashboard");
+      // Dev mode (SKIP_EMAIL_VERIFICATION=true): backend returns tokens immediately.
+      if (data.data?.tokens?.accessToken && data.data?.user) {
+        storeToken(data.data.tokens.accessToken);
+        setSession(data.data.tokens.accessToken, data.data.user);
+        router.replace("/dashboard");
+        return;
+      }
+      // Production: email verification is required — show confirmation screen.
+      setSubmitted(true);
     },
     onError: (err: any) => {
       const fields = err?.response?.data?.error?.fields;
@@ -83,6 +89,27 @@ export default function RegisterPage() {
     }
     registerMutation.mutate();
   };
+
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-primary-900 to-slate-900 flex items-center justify-center p-4">
+        <div className="glass rounded-3xl border border-white/10 shadow-2xl p-10 max-w-md w-full text-center">
+          <div className="text-5xl mb-4">✉️</div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Check your email</h1>
+          <p className="text-slate-500 mb-2">
+            We&apos;ve sent a verification link to
+          </p>
+          <p className="font-semibold text-slate-800 mb-6">{form.email}</p>
+          <p className="text-sm text-slate-400 mb-6">
+            Click the link in the email to activate your account. It expires in 24 hours.
+          </p>
+          <Link href="/auth/login" className="text-primary font-semibold hover:underline">
+            Back to Sign In
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-primary-900 to-slate-900 flex items-center justify-center p-4">
