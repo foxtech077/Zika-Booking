@@ -8,10 +8,16 @@ interface ListingImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
 }
 
 export default function ListingImage({ listingId, fallbackNode, className, alt, ...props }: ListingImageProps) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(props.src || null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (props.src) {
+      setImageUrl(props.src);
+      setFailed(false);
+      return;
+    }
+    
     if (!listingId) {
       setFailed(true);
       return;

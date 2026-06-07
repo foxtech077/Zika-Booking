@@ -5,15 +5,17 @@ import ListingImage from "./ListingImage";
 interface PhotoGalleryProps {
   listingId?: string;
   name?: string;
+  imageUrl?: string | null;
 }
 
-const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "" }) => {
+const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", imageUrl }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-[400px] md:h-[480px] rounded-2xl overflow-hidden relative group">
       {/* Primary photo */}
       <div className="md:col-span-2 h-full overflow-hidden bg-slate-100">
         <ListingImage
           listingId={listingId}
+          src={imageUrl || undefined}
           alt={name}
           className="w-full h-full object-cover cursor-pointer hover:scale-105 transition duration-500"
           fallbackNode={
