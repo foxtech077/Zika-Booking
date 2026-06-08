@@ -324,7 +324,7 @@ export default function HomeScreen() {
   const currentTier = user?.currentTier ?? "bronze";
 
   const [category, setCategory] = useState<Category>("hotels");
-  const [location, setLocation] = useState("Nairobi");
+  const [location, setLocation] = useState("");
   const [checkIn, setCheckIn] = useState<Date | null>(null);
   const [checkOut, setCheckOut] = useState<Date | null>(null);
   const [guests, setGuests] = useState(1);
@@ -606,11 +606,33 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* ── Browse by Category ── */}
+        <View style={s.section}>
+          <SectionHeader title="Browse by Category" />
+          <View style={s.catRow}>
+            {[
+              { label: "Hotels", icon: "🏨", route: "/browse/hotels", color: "#EFF6FF", border: "#BFDBFE" },
+              { label: "Apartments", icon: "🏠", route: "/browse/apartments", color: "#F0FDF4", border: "#BBF7D0" },
+              { label: "Cars", icon: "🚗", route: "/browse/cars", color: "#FFF7ED", border: "#FED7AA" },
+            ].map((cat) => (
+              <TouchableOpacity
+                key={cat.label}
+                style={[s.catCard, { backgroundColor: cat.color, borderColor: cat.border }]}
+                onPress={() => router.push(cat.route as any)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.catIcon}>{cat.icon}</Text>
+                <Text style={s.catLabel}>{cat.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* ── Best Offers ── */}
         <View style={s.section}>
           <SectionHeader
             title="Best Offers & Deals"
-            onMore={() => router.push({ pathname: "/search", params: { category: "hotel", placeName: location } })}
+            onMore={() => router.push("/browse/hotels" as any)}
           />
           {allLoading ? (
             <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
@@ -636,7 +658,7 @@ export default function HomeScreen() {
           <SectionHeader
             title="Recommended Stays"
             subtitle="Top-rated gems selected just for you"
-            onMore={() => router.push({ pathname: "/search", params: { category: "hotel", placeName: location } })}
+            onMore={() => router.push("/browse/hotels" as any)}
           />
           {hotelsLoading ? (
             <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
@@ -691,7 +713,7 @@ export default function HomeScreen() {
           <SectionHeader
             title="Stays Nearby"
             subtitle="Based on your location"
-            onMore={() => router.push({ pathname: "/search", params: { category: "hotel", placeName: location } })}
+            onMore={() => router.push("/browse/hotels" as any)}
           />
           {hotelsLoading || aptsLoading ? (
             <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
@@ -710,7 +732,7 @@ export default function HomeScreen() {
             <SectionHeader
               title="Premium Rental Cars"
               subtitle="Arrive in style with our luxury fleet"
-              onMore={() => router.push({ pathname: "/search", params: { category: "car", placeName: location } })}
+              onMore={() => router.push("/browse/cars" as any)}
             />
             {carsLoading ? (
               <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
@@ -882,6 +904,13 @@ const s = StyleSheet.create({
   },
 
   section: { marginTop: 24 },
+  catRow: { flexDirection: "row", paddingHorizontal: 16, gap: 10 },
+  catCard: {
+    flex: 1, alignItems: "center", justifyContent: "center",
+    borderRadius: 14, borderWidth: 1.5, paddingVertical: 18,
+  },
+  catIcon: { fontSize: 28, marginBottom: 6 },
+  catLabel: { fontSize: 12, fontWeight: "700", color: TEXT },
   carousel: { paddingHorizontal: 16, paddingBottom: 4 },
 
   featuredCard: {

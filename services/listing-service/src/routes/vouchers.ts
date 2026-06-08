@@ -2,137 +2,497 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, requireAdmin, type ProviderRequest } from "../middleware/auth.js";
+import { getRedis } from "../lib/redis.js";
+
+const errSchema = {
+  type: "object",
+  properties: {
+    success: { type: "boolean" },
+    error: {
+      type: "object",
+      properties: { code: { type: "string" }, message: { type: "string" } },
+      required: ["code", "message"],
+    },
+  },
+  required: ["success", "error"],
+};
+
+const voucherItemSchema = {
+  type: "object",
+  properties: {
+    id:            { type: "string" },
+    code:          { type: "string" },
+    discountType:  { type: "string", enum: ["percentage", "fixed"] },
+    discountValue: { type: "number" },
+    minOrderValue: { type: "number", nullable: true },
+    maxDiscount:   { type: "number", nullable: true },
+    usageLimit:    { type: "integer", nullable: true },
+    usageCount:    { type: "integer" },
+    validFrom:     { type: "string" },
+    validUntil:    { type: "string" },
+    isActive:      { type: "boolean" },
+    createdAt:     { type: "string" },
+  },
+  required: ["id", "code", "discountType", "discountValue", "usageCount", "validFrom", "validUntil", "isActive", "createdAt"],
+};
 
 export async function voucherRoutes(app: FastifyInstance) {
-  // ── POST /vouchers/validate — validate a voucher code ────────────────
-  app.post("/vouchers/validate", { schema: { tags: ["Vouchers"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as { code: string; totalAmount: number; currency?: string };
+  const redis = getRedis();
 
-    if (!body.code || body.totalAmount === undefined) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "code and totalAmount are required.");
-    }
+  // ── POST /vouchers/validate — validate a voucher code ────────────────────
+  app.post(
+    "/vouchers/validate",
+    {
+      schema: {
+        tags: ["Vouchers"],
+        summary: "Validate a voucher code and compute the discount for a given total",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["code", "totalAmount"],
+          properties: {
+            code:        { type: "string" },
+            totalAmount: { type: "number", minimum: 0 },
+            currency:    { type: "string", minLength: 3, maxLength: 3 },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  valid:          { type: "boolean" },
+                  discountAmount: { type: "number" },
+                  voucherDiscount: { type: "number" },
+                  message:        { type: "string" },
+                  voucher: {
+                    type: "object",
+                    nullable: true,
+                    properties: {
+                      code:          { type: "string" },
+                      discountType:  { type: "string", enum: ["percentage", "fixed"] },
+                      discountValue: { type: "number" },
+                      maxDiscount:   { type: "number", nullable: true },
+                      validUntil:    { type: "string" },
+                    },
+                    required: ["code", "discountType", "discountValue", "maxDiscount", "validUntil"],
+                  },
+                },
+                required: ["valid", "discountAmount", "voucherDiscount", "message"],
+              },
+            },
+            required: ["success", "data"],
+          },
+          400: errSchema,
+        },
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = req.body as { code: string; totalAmount: number; currency?: string };
 
-    const now = new Date();
-    const voucher = await prisma.voucher.findUnique({ where: { code: body.code } });
+      const now = new Date();
+      const voucher = await prisma.voucher.findUnique({ where: { code: body.code } });
 
-    if (!voucher) {
-      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher code not found." });
-    }
-    if (!voucher.isActive) {
-      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not active." });
-    }
-    if (now < voucher.validFrom || now > voucher.validUntil) {
-      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher has expired or is not yet valid." });
-    }
-    if (voucher.usageLimit !== null && voucher.usageCount >= voucher.usageLimit) {
-      return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher usage limit has been reached." });
-    }
-    if (voucher.minOrderValue !== null && body.totalAmount < Number(voucher.minOrderValue)) {
+      if (!voucher)
+        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher code not found.", voucher: null });
+      if (!voucher.isActive)
+        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not active.", voucher: null });
+      if (now < voucher.validFrom || now > voucher.validUntil)
+        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher has expired or is not yet valid.", voucher: null });
+      if (voucher.usageLimit !== null && voucher.usageCount >= voucher.usageLimit)
+        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher usage limit has been reached.", voucher: null });
+      if (voucher.minOrderValue !== null && body.totalAmount < Number(voucher.minOrderValue))
+        return sendSuccess(reply, 200, {
+          valid: false,
+          discountAmount: 0,
+          voucherDiscount: 0,
+          message: `Minimum order value of ${Number(voucher.minOrderValue)} required to use this voucher.`,
+          voucher: null,
+        });
+
+      let discountAmount: number;
+      if (voucher.discountType === "percentage") {
+        discountAmount = body.totalAmount * (Number(voucher.discountValue) / 100);
+      } else {
+        discountAmount = Number(voucher.discountValue);
+      }
+      if (voucher.maxDiscount !== null && discountAmount > Number(voucher.maxDiscount)) {
+        discountAmount = Number(voucher.maxDiscount);
+      }
+      discountAmount = Math.min(discountAmount, body.totalAmount);
+
       return sendSuccess(reply, 200, {
-        valid: false,
-        discountAmount: 0,
-        voucherDiscount: 0,
-        message: `Minimum order value of ${Number(voucher.minOrderValue)} required to use this voucher.`,
+        valid: true,
+        discountAmount,
+        voucherDiscount: discountAmount,
+        message: "Voucher is valid.",
+        voucher: {
+          code:          voucher.code,
+          discountType:  voucher.discountType,
+          discountValue: Number(voucher.discountValue),
+          maxDiscount:   voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
+          validUntil:    voucher.validUntil.toISOString(),
+        },
       });
-    }
+    },
+  );
 
-    let discountAmount: number;
-    if (voucher.discountType === "percentage") {
-      discountAmount = body.totalAmount * (Number(voucher.discountValue) / 100);
-    } else {
-      discountAmount = Number(voucher.discountValue);
-    }
+  // ── GET /vouchers/applicable — Best Offer Wallet ──────────────────────────
+  // Returns all active, date-valid vouchers alongside their computed discounts
+  // for the guest's current booking context so the UI can surface the best offer.
+  app.get(
+    "/vouchers/applicable",
+    {
+      schema: {
+        tags: ["Vouchers"],
+        summary: "List applicable vouchers for the current booking context (Best Offer Wallet)",
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          required: ["totalAmount"],
+          properties: {
+            totalAmount: { type: "number", minimum: 0 },
+            currency:    { type: "string" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  vouchers: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        code:            { type: "string" },
+                        discountType:    { type: "string", enum: ["percentage", "fixed"] },
+                        discountValue:   { type: "number" },
+                        maxDiscount:     { type: "number", nullable: true },
+                        minOrderValue:   { type: "number", nullable: true },
+                        computedDiscount: { type: "number" },
+                        validUntil:      { type: "string" },
+                        applicable:      { type: "boolean" },
+                        reason:          { type: "string", nullable: true },
+                      },
+                      required: [
+                        "code", "discountType", "discountValue",
+                        "computedDiscount", "validUntil", "applicable",
+                      ],
+                    },
+                  },
+                },
+                required: ["vouchers"],
+              },
+            },
+          },
+        },
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const q = req.query as { totalAmount?: string; currency?: string };
+      const totalAmount = parseFloat(q.totalAmount ?? "0");
+      const now = new Date();
 
-    if (voucher.maxDiscount !== null && discountAmount > Number(voucher.maxDiscount)) {
-      discountAmount = Number(voucher.maxDiscount);
-    }
+      const vouchers = await prisma.voucher.findMany({
+        where: {
+          isActive: true,
+          validFrom:  { lte: now },
+          validUntil: { gte: now },
+        },
+        orderBy: { discountValue: "desc" },
+        take: 20,
+      });
 
-    discountAmount = Math.min(discountAmount, body.totalAmount);
+      const result = vouchers.map((v) => {
+        // Usage-exhausted
+        if (v.usageLimit !== null && v.usageCount >= v.usageLimit) {
+          return {
+            code: v.code, discountType: v.discountType,
+            discountValue: Number(v.discountValue),
+            maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
+            minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
+            computedDiscount: 0,
+            validUntil: v.validUntil.toISOString(),
+            applicable: false,
+            reason: "Usage limit reached.",
+          };
+        }
 
-    return sendSuccess(reply, 200, {
-      valid: true,
-      discountAmount,
-      voucherDiscount: discountAmount,
-      message: "Voucher is valid.",
-      voucher: {
-        code: voucher.code,
-        discountType: voucher.discountType,
+        // Below minimum order value (show as not applicable but still surfaced)
+        if (v.minOrderValue !== null && totalAmount < Number(v.minOrderValue)) {
+          return {
+            code: v.code, discountType: v.discountType,
+            discountValue: Number(v.discountValue),
+            maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
+            minOrderValue: Number(v.minOrderValue),
+            computedDiscount: 0,
+            validUntil: v.validUntil.toISOString(),
+            applicable: false,
+            reason: `Minimum order value of ${Number(v.minOrderValue)} required.`,
+          };
+        }
+
+        let computedDiscount: number;
+        if (v.discountType === "percentage") {
+          computedDiscount = totalAmount * (Number(v.discountValue) / 100);
+        } else {
+          computedDiscount = Number(v.discountValue);
+        }
+        if (v.maxDiscount !== null && computedDiscount > Number(v.maxDiscount)) {
+          computedDiscount = Number(v.maxDiscount);
+        }
+        computedDiscount = Math.min(computedDiscount, totalAmount);
+
+        return {
+          code: v.code, discountType: v.discountType,
+          discountValue: Number(v.discountValue),
+          maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
+          minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
+          computedDiscount,
+          validUntil: v.validUntil.toISOString(),
+          applicable: true,
+          reason: null,
+        };
+      });
+
+      return sendSuccess(reply, 200, { vouchers: result });
+    },
+  );
+
+  // ── POST /admin/vouchers — create a voucher ───────────────────────────────
+  app.post(
+    "/admin/vouchers",
+    {
+      schema: {
+        tags: ["Admin Vouchers"],
+        summary: "Create a new voucher (admin)",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["code", "discountType", "discountValue", "validFrom", "validUntil"],
+          properties: {
+            code:          { type: "string", maxLength: 30 },
+            discountType:  { type: "string", enum: ["percentage", "fixed"] },
+            discountValue: { type: "number", minimum: 0.01 },
+            minOrderValue: { type: "number", minimum: 0, nullable: true },
+            maxDiscount:   { type: "number", minimum: 0, nullable: true },
+            usageLimit:    { type: "integer", minimum: 1, nullable: true },
+            validFrom:     { type: "string" },
+            validUntil:    { type: "string" },
+          },
+        },
+        response: {
+          201: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: voucherItemSchema,
+            },
+            required: ["success", "data"],
+          },
+          400: errSchema,
+          409: errSchema,
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = req.body as {
+        code: string;
+        discountType: "percentage" | "fixed";
+        discountValue: number;
+        minOrderValue?: number;
+        maxDiscount?: number;
+        usageLimit?: number;
+        validFrom: string;
+        validUntil: string;
+      };
+
+      if (!["percentage", "fixed"].includes(body.discountType))
+        return sendError(reply, 400, "VALIDATION_ERROR", "discountType must be 'percentage' or 'fixed'.");
+      if (body.discountValue <= 0)
+        return sendError(reply, 400, "VALIDATION_ERROR", "discountValue must be greater than 0.");
+      if (body.discountType === "percentage" && body.discountValue > 100)
+        return sendError(reply, 400, "VALIDATION_ERROR", "Percentage discount cannot exceed 100.");
+
+      const validFrom  = new Date(body.validFrom);
+      const validUntil = new Date(body.validUntil);
+      if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime()))
+        return sendError(reply, 400, "VALIDATION_ERROR", "validFrom and validUntil must be valid ISO dates.");
+      if (validUntil <= validFrom)
+        return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be after validFrom.");
+
+      const existing = await prisma.voucher.findUnique({ where: { code: body.code.toUpperCase() } });
+      if (existing)
+        return sendError(reply, 409, "DUPLICATE_CODE", "A voucher with this code already exists.");
+
+      const voucher = await prisma.voucher.create({
+        data: {
+          code:          body.code.toUpperCase(),
+          discountType:  body.discountType,
+          discountValue: body.discountValue,
+          minOrderValue: body.minOrderValue ?? null,
+          maxDiscount:   body.maxDiscount ?? null,
+          usageLimit:    body.usageLimit ?? null,
+          validFrom,
+          validUntil,
+          createdBy: "admin",
+        },
+      });
+
+      return sendSuccess(reply, 201, {
+        id:            voucher.id,
+        code:          voucher.code,
+        discountType:  voucher.discountType,
         discountValue: Number(voucher.discountValue),
-        maxDiscount: voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
-        validUntil: voucher.validUntil.toISOString(),
+        minOrderValue: voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
+        maxDiscount:   voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
+        usageLimit:    voucher.usageLimit,
+        usageCount:    voucher.usageCount,
+        validFrom:     voucher.validFrom.toISOString(),
+        validUntil:    voucher.validUntil.toISOString(),
+        isActive:      voucher.isActive,
+        createdAt:     voucher.createdAt.toISOString(),
+      });
+    },
+  );
+
+
+  // ── GET /admin/promotions — list all promotion campaigns ─────────────────
+  app.get(
+    "/admin/promotions",
+    {
+      schema: {
+        tags: ["Admin Promotions"],
+        summary: "List all promotion campaigns (admin)",
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          properties: {
+            isActive: { type: "string", enum: ["true", "false"] },
+            category: { type: "string" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  promotions: {
+                    type: "array",
+                    items: { type: "object", additionalProperties: true },
+                  },
+                },
+                required: ["promotions"],
+              },
+            },
+          },
+        },
       },
-    });
-  });
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const q = req.query as { isActive?: string; category?: string };
 
-  // ── POST /admin/vouchers — create a voucher ───────────────────────────
-  app.post("/admin/vouchers", { schema: { tags: ["Admin Vouchers"], body: { type: "object", required: ["code", "discountType", "discountValue", "validFrom", "validUntil"], properties: { code: { type: "string" }, discountType: { type: "string", enum: ["percentage", "fixed"] }, discountValue: { type: "number" }, minOrderValue: { type: "number" }, maxDiscount: { type: "number" }, usageLimit: { type: "integer" }, validFrom: { type: "string", format: "date-time" }, validUntil: { type: "string", format: "date-time" } } } }, preHandler: [requireAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const body = req.body as {
-      code: string;
-      discountType: "percentage" | "fixed";
-      discountValue: number;
-      minOrderValue?: number;
-      maxDiscount?: number;
-      usageLimit?: number;
-      validFrom: string;
-      validUntil: string;
-    };
+      const ids = await redis.smembers("promos:all");
+      if (!ids.length) return sendSuccess(reply, 200, { promotions: [] });
 
-    if (!body.code || !body.discountType || body.discountValue === undefined || !body.validFrom || !body.validUntil) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "code, discountType, discountValue, validFrom, and validUntil are required.");
-    }
-    if (!["percentage", "fixed"].includes(body.discountType)) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "discountType must be 'percentage' or 'fixed'.");
-    }
-    if (body.discountValue <= 0) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "discountValue must be greater than 0.");
-    }
-    if (body.discountType === "percentage" && body.discountValue > 100) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Percentage discount cannot exceed 100.");
-    }
+      const pipeline = redis.pipeline();
+      for (const id of ids) pipeline.get(`promo:${id}`);
+      const results = await pipeline.exec();
 
-    const validFrom = new Date(body.validFrom);
-    const validUntil = new Date(body.validUntil);
-    if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime())) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "validFrom and validUntil must be valid dates.");
-    }
-    if (validUntil <= validFrom) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be after validFrom.");
-    }
+      let promotions: any[] = (results ?? [])
+        .map((r) => {
+          if (!r || r[0] != null || !r[1]) return null;
+          try { return JSON.parse(r[1] as string); } catch { return null; }
+        })
+        .filter(Boolean);
 
-    const existing = await prisma.voucher.findUnique({ where: { code: body.code } });
-    if (existing) {
-      return sendError(reply, 409, "DUPLICATE_CODE", "A voucher with this code already exists.");
-    }
+      if (q.isActive === "true")  promotions = promotions.filter((p) => p.isActive);
+      else if (q.isActive === "false") promotions = promotions.filter((p) => !p.isActive);
+      if (q.category) promotions = promotions.filter(
+        (p) => p.category === q.category || p.category === "all",
+      );
 
-    const voucher = await prisma.voucher.create({
-      data: {
-        code: body.code,
-        discountType: body.discountType,
-        discountValue: body.discountValue,
-        minOrderValue: body.minOrderValue ?? null,
-        maxDiscount: body.maxDiscount ?? null,
-        usageLimit: body.usageLimit ?? null,
-        validFrom,
-        validUntil,
-        createdBy: "admin",
+      promotions.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+
+      return sendSuccess(reply, 200, { promotions });
+    },
+  );
+
+  // ── GET /promotions/active — public: active promotions by category ────────
+  app.get(
+    "/promotions/active",
+    {
+      schema: {
+        tags: ["Promotions"],
+        summary: "Get currently active (date-valid) promotions, optionally filtered by category",
+        querystring: {
+          type: "object",
+          properties: {
+            category: { type: "string", enum: ["hotel", "apartment", "car"] },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  promotions: {
+                    type: "array",
+                    items: { type: "object", additionalProperties: true },
+                  },
+                },
+                required: ["promotions"],
+              },
+            },
+          },
+        },
       },
-    });
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const q = req.query as { category?: string };
+      const now = new Date();
 
-    return sendSuccess(reply, 201, {
-      id: voucher.id,
-      code: voucher.code,
-      discountType: voucher.discountType,
-      discountValue: Number(voucher.discountValue),
-      minOrderValue: voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
-      maxDiscount: voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
-      usageLimit: voucher.usageLimit,
-      usageCount: voucher.usageCount,
-      validFrom: voucher.validFrom.toISOString(),
-      validUntil: voucher.validUntil.toISOString(),
-      isActive: voucher.isActive,
-      createdAt: voucher.createdAt.toISOString(),
-    });
-  });
+      const ids = await redis.smembers("promos:all");
+      if (!ids.length) return sendSuccess(reply, 200, { promotions: [] });
+
+      const pipeline = redis.pipeline();
+      for (const id of ids) pipeline.get(`promo:${id}`);
+      const results = await pipeline.exec();
+
+      let promotions: any[] = (results ?? [])
+        .map((r) => {
+          if (!r || r[0] != null || !r[1]) return null;
+          try { return JSON.parse(r[1] as string); } catch { return null; }
+        })
+        .filter(Boolean)
+        .filter((p: any) => p.isActive && new Date(p.validFrom) <= now && new Date(p.validUntil) >= now);
+
+      if (q.category) {
+        promotions = promotions.filter((p: any) => p.category === q.category || p.category === "all");
+      }
+
+      return sendSuccess(reply, 200, { promotions });
+    },
+  );
 
   // ── GET /admin/vouchers — list all vouchers ───────────────────────────
   app.get("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] }, preHandler: [requireAdmin] }, async (_req: FastifyRequest, reply: FastifyReply) => {
