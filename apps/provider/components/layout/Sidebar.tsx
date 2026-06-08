@@ -57,7 +57,7 @@ export function Sidebar() {
               <Zap className="w-4.5 h-4.5 text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-slate-900 leading-none">ZikaBooking</p>
+              <p className="text-sm font-bold text-slate-900 leading-none">Kainook</p>
               <p className="text-xs text-slate-500 mt-0.5">Partner Portal</p>
             </div>
           </Link>

@@ -11,10 +11,20 @@ const nextConfig = {
         source: "/listing-api/:path*",
         destination: `${process.env.NEXT_PUBLIC_LISTING_API_URL ?? "http://localhost:3003"}/:path*`,
       },
+      {
+        source: "/payment-api/:path*",
+        destination: `${process.env.NEXT_PUBLIC_PAYMENT_API_URL ?? "http://localhost:3004"}/:path*`,
+      },
     ];
   },
   images: {
-    domains: ["zika-listings.s3.us-east-1.amazonaws.com", "localhost"],
+    // domains: ["zika-storage.s3.af-south-1.amazonaws.com", "localhost"],
+    domains: [
+      process.env.S3_CDN_BASE_URL 
+        ? new URL(process.env.S3_CDN_BASE_URL).hostname 
+        : "zika-storage.s3.af-south-1.amazonaws.com",
+      "localhost"
+    ],
   },
 };
 
