@@ -287,13 +287,13 @@ export function HotelForm({ listingId, listing }: Props) {
 
   const submitMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/submit`),
-    onSuccess:  () => { refetch(); flash("Submitted for admin review!", "ok"); },
+    onSuccess:  () => { refetch(); flash("Submitted for admin review!", "ok"); router.push("/dashboard/listings"); },
     onError:    (e: any) => flash(apiErr(e), "err"),
   });
 
   const reactivateMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/reactivate`),
-    onSuccess:  () => { refetch(); flash("Listing reactivated.", "ok"); },
+    onSuccess:  () => { refetch(); flash("Listing reactivated.", "ok"); router.push("/dashboard/listings"); },
     onError:    (e: any) => flash(apiErr(e), "err"),
   });
 

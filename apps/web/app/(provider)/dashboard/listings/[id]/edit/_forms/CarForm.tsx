@@ -424,7 +424,7 @@ export function CarForm({ listingId, listing }: Props) {
 
   const activateMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/activate`),
-    onSuccess: (r: any) => { refetch(); flash(r.data?.data?.message ?? "Car rental is now live!", "ok"); },
+    onSuccess: (r: any) => { refetch(); flash(r.data?.data?.message ?? "Car rental is now live!", "ok"); router.push("/dashboard/listings"); },
     onError: (e: any) => flash(apiErr(e), "err"),
   });
 
