@@ -36,36 +36,17 @@ export function formatRelativeTime(value: string | Date | null | undefined): str
   }
 }
 
-export const COUNTRY_CURRENCY_MAP: Record<string, { code: string; symbol: string }> = {
-  IN: { code: "INR", symbol: "₹" },
-  US: { code: "USD", symbol: "$" },
-  GB: { code: "GBP", symbol: "£" },
-  AE: { code: "AED", symbol: "د.إ" },
-  EU: { code: "EUR", symbol: "€" },
-};
-
-export function getCurrencyForCountry(countryCode?: string | null): { code: string; symbol: string } {
-  if (!countryCode) return { code: "USD", symbol: "$" };
-  const upper = countryCode.toUpperCase();
-  return COUNTRY_CURRENCY_MAP[upper] ?? { code: "USD", symbol: "$" };
-}
-
 export function formatCurrency(
   amount: number | null | undefined,
   currency = "USD",
 ): string {
   if (amount == null) return "—";
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency.toUpperCase(),
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  } catch {
-    const symbol = COUNTRY_CURRENCY_MAP[currency.toUpperCase()]?.symbol ?? currency;
-    return `${symbol}${Number(amount).toLocaleString()}`;
-  }
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
 }
 
 export function slugToLabel(slug: string): string {

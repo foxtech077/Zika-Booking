@@ -2,7 +2,6 @@ import axios from "axios";
 
 const TOKEN_KEY = "zika:access_token";
 
-// In Next.js we proxy /api/* → auth service via next.config rewrites
 export const api = axios.create({
   baseURL: "/api",
   withCredentials: true,
