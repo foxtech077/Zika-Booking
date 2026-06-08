@@ -61,7 +61,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_channel", "manage_channel",
     "view_audit",
     "view_reports",
-    "view_settings",
+    // "view_settings" removed — global platform settings is super_admin only
     "view_roles",
   ],
   country_manager: [

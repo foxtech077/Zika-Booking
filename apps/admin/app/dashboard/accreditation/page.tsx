@@ -107,7 +107,7 @@ export default function AccreditationPage() {
     if (activeDocId === docId && docUrl) return;
     const listingId = getListingId(selectedTask);
     if (!listingId) return;
-    
+
     setDocLoading(true);
     setDocError(null);
     try {
@@ -326,11 +326,10 @@ export default function AccreditationPage() {
                   <button
                     key={doc.id}
                     onClick={() => viewDocument(doc.id)}
-                    className={`w-full flex items-center justify-between p-2.5 rounded-lg border transition ${
-                      activeDocId === doc.id
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "bg-surface-subtle border-border hover:border-gray-300 text-slate-700"
-                    }`}
+                    className={`w-full flex items-center justify-between p-2.5 rounded-lg border transition ${activeDocId === doc.id
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "bg-surface-subtle border-border hover:border-gray-300 text-slate-700"
+                      }`}
                   >
                     <span className="text-xs font-medium capitalize">{doc.documentType.replace(/_/g, " ")}</span>
                     <span className="text-xs uppercase opacity-70">{doc.fileType}</span>
@@ -339,9 +338,9 @@ export default function AccreditationPage() {
               </div>
 
               {docError && <p className="text-sm text-red-600 mt-2">{docError}</p>}
-              
+
               {docLoading && <div className="flex justify-center py-4"><div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" /></div>}
-              
+
               {docUrl && !docLoading && (
                 <div className="mt-4 rounded-xl border border-gray-200 overflow-hidden bg-gray-50">
                   {docUrl.fileType === "pdf" ? (

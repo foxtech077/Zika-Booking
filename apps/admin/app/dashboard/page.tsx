@@ -12,6 +12,7 @@ import { Card, CardHeader, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
@@ -24,8 +25,8 @@ const fetchBookings = () =>
 const fetchListings = () =>
   listingApi.get("/admin/listings?limit=1").then((r) => r.data.data ?? r.data);
 
-const fetchReviewQueue = () =>
-  listingApi.get("/admin/listings/review-queue?limit=1").then((r) => r.data.data ?? r.data);
+const fetchReviewQueue = (params: Record<string, string>) =>
+  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 const fetchAuditLogs = () =>
   api.get("/admin/audit-logs?limit=8").then((r) => r.data.data ?? r.data);
@@ -82,10 +83,20 @@ function buildStatusDonut(bookings: any[]) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { user } = useAuthStore();
+  const isCountryManager = user?.role === "country_manager";
+  const userCountryScope = user?.countryScope ?? [];
+  const defaultCountry = isCountryManager && userCountryScope.length > 0 ? userCountryScope[0] : "";
+
+  const queueParams = { limit: "100", ...(defaultCountry ? { country: defaultCountry } : {}) };
+
   const { data: usersData, isLoading: loadingUsers } = useQuery({ queryKey: ["admin-users-count"], queryFn: fetchUsers });
   const { data: bookingsData, isLoading: loadingBookings } = useQuery({ queryKey: ["admin-bookings-dash"], queryFn: fetchBookings });
   const { data: listingsData, isLoading: loadingListings } = useQuery({ queryKey: ["admin-listings-dash"], queryFn: fetchListings });
-  const { data: queueData, isLoading: loadingQueue } = useQuery({ queryKey: ["admin-queue-dash"], queryFn: fetchReviewQueue });
+  const { data: queueData, isLoading: loadingQueue } = useQuery({
+    queryKey: ["admin-queue-dash", queueParams],
+    queryFn: () => fetchReviewQueue(queueParams),
+  });
   const { data: auditData, isLoading: loadingAudit } = useQuery({ queryKey: ["admin-audit-dash"], queryFn: fetchAuditLogs });
 
   const bookings: any[] = bookingsData?.bookings ?? [];
@@ -95,6 +106,10 @@ export default function DashboardPage() {
   const revenueChart = buildRevenueChart(bookings);
   const statusDonut = buildStatusDonut(bookings);
   const auditLogs: any[] = auditData?.logs ?? [];
+
+  const displayQueueCount = queueData
+    ? (queueData.tasks?.length === 0 ? 0 : (queueData.tasks?.length < 100 ? queueData.tasks.length : queueData.total))
+    : 0;
 
   return (
     <div className="space-y-6 max-w-screen-2xl">
@@ -149,7 +164,7 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Pending Accreditation"
-          value={queueData?.total ?? 0}
+          value={displayQueueCount}
           icon={<BadgeCheck className="h-4 w-4 text-warning" />}
           iconBg="bg-warning/10"
           loading={loadingQueue}

@@ -8,6 +8,7 @@ import { paymentApi } from "@/lib/payment-api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
 import { formatRelativeTime } from "@/lib/utils";
 
 const checkHealth = (client: any, label: string) =>
@@ -15,6 +16,8 @@ const checkHealth = (client: any, label: string) =>
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
+  // Global platform sections are super_admin only
+  const isGlobalAdmin = canAccess(user?.role, "manage_settings");
 
   const { data: authHealth } = useQuery({
     queryKey: ["health-auth"],
@@ -66,38 +69,40 @@ export default function SettingsPage() {
         description="Platform configuration and system status"
       />
 
-      {/* Service health */}
-      <Card padding="none">
-        <div className="p-5 border-b border-border">
-          <CardHeader title="Service Health" description="Live status of backend microservices" />
-        </div>
-        <div className="divide-y divide-border">
-          {services.map((svc) => (
-            <div key={svc.service} className="flex items-center gap-4 px-5 py-4">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                svc.status === "healthy" ? "bg-success/10" :
-                svc.status === "degraded" ? "bg-danger/10" : "bg-slate-100"
-              }`}>
-                {svc.status === "healthy" ? (
-                  <CheckCircle className="h-4 w-4 text-success" />
-                ) : svc.status === "degraded" ? (
-                  <AlertCircle className="h-4 w-4 text-danger" />
-                ) : (
-                  <Server className="h-4 w-4 text-slate-400" />
-                )}
+      {/* Service health — super_admin only */}
+      {isGlobalAdmin && (
+        <Card padding="none">
+          <div className="p-5 border-b border-border">
+            <CardHeader title="Service Health" description="Live status of backend microservices" />
+          </div>
+          <div className="divide-y divide-border">
+            {services.map((svc) => (
+              <div key={svc.service} className="flex items-center gap-4 px-5 py-4">
+                <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
+                  svc.status === "healthy" ? "bg-success/10" :
+                  svc.status === "degraded" ? "bg-danger/10" : "bg-slate-100"
+                }`}>
+                  {svc.status === "healthy" ? (
+                    <CheckCircle className="h-4 w-4 text-success" />
+                  ) : svc.status === "degraded" ? (
+                    <AlertCircle className="h-4 w-4 text-danger" />
+                  ) : (
+                    <Server className="h-4 w-4 text-slate-400" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-900">{svc.service}</p>
+                  <p className="text-xs text-slate-500">{svc.endpoint} - {svc.description}</p>
+                </div>
+                <Badge
+                  label={svc.status === "checking" ? "Checking…" : svc.status === "healthy" ? "Healthy" : "Degraded"}
+                  status={svc.status === "healthy" ? "active" : svc.status === "degraded" ? "rejected" : "pending_review"}
+                />
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-900">{svc.service}</p>
-                <p className="text-xs text-slate-500">{svc.endpoint} - {svc.description}</p>
-              </div>
-              <Badge
-                label={svc.status === "checking" ? "Checking…" : svc.status === "healthy" ? "Healthy" : "Degraded"}
-                status={svc.status === "healthy" ? "active" : svc.status === "degraded" ? "rejected" : "pending_review"}
-              />
-            </div>
-          ))}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Current session */}
       <Card padding="none">
@@ -119,50 +124,54 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* Platform features */}
-      <Card padding="none">
-        <div className="p-5 border-b border-border">
-          <CardHeader title="Platform Features" description="Core features and their current status" />
-        </div>
-        <div className="divide-y divide-border">
-          {PLATFORM_FEATURES.map(({ feature, description, status }) => (
-            <div key={feature} className="flex items-start justify-between gap-4 px-5 py-4">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{feature}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{description}</p>
+      {/* Platform features — super_admin only */}
+      {isGlobalAdmin && (
+        <Card padding="none">
+          <div className="p-5 border-b border-border">
+            <CardHeader title="Platform Features" description="Core features and their current status" />
+          </div>
+          <div className="divide-y divide-border">
+            {PLATFORM_FEATURES.map(({ feature, description, status }) => (
+              <div key={feature} className="flex items-start justify-between gap-4 px-5 py-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">{feature}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{description}</p>
+                </div>
+                <div className="flex-shrink-0">
+                  <Badge label="Enabled" status="active" />
+                </div>
               </div>
-              <div className="flex-shrink-0">
-                <Badge label="Enabled" status="active" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
+      )}
 
-      {/* Environment info */}
-      <Card>
-        <CardHeader title="Environment" description="Runtime configuration" />
-        <div className="mt-4 space-y-2 text-sm">
-          {[
-            ["Node Environment", "development"],
-            ["Admin Port", "3002"],
-            ["Main Website", "https://kainook.com"],
-            ["Admin Portal", "https://admin.kainook.com"],
-            ["Provider Portal", "https://provider.kainook.com"],
-            ["API Gateway", "https://api.kainook.com"],
-            ["Auth Service", "https://api.kainook.com/auth"],
-            ["Listing Service", "https://api.kainook.com/listings"],
-            ["Payment Service", "https://api.kainook.com/payments"],
-            ["Next.js Version", "14.2.21"],
-            ["React Version", "18.3.1"],
-          ].map(([k, v]) => (
-            <div key={String(k)} className="flex justify-between py-1.5 border-b border-border last:border-0">
-              <span className="text-slate-500">{k}</span>
-              <span className="font-mono text-slate-800 text-xs bg-slate-100 px-2 py-0.5 rounded">{v}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
+      {/* Environment info — super_admin only */}
+      {isGlobalAdmin && (
+        <Card>
+          <CardHeader title="Environment" description="Runtime configuration" />
+          <div className="mt-4 space-y-2 text-sm">
+            {[
+              ["Node Environment", "development"],
+              ["Admin Port", "3002"],
+              ["Main Website", "https://kainook.com"],
+              ["Admin Portal", "https://admin.kainook.com"],
+              ["Provider Portal", "https://provider.kainook.com"],
+              ["API Gateway", "https://api.kainook.com"],
+              ["Auth Service", "https://api.kainook.com/auth"],
+              ["Listing Service", "https://api.kainook.com/listings"],
+              ["Payment Service", "https://api.kainook.com/payments"],
+              ["Next.js Version", "14.2.21"],
+              ["React Version", "18.3.1"],
+            ].map(([k, v]) => (
+              <div key={String(k)} className="flex justify-between py-1.5 border-b border-border last:border-0">
+                <span className="text-slate-500">{k}</span>
+                <span className="font-mono text-slate-800 text-xs bg-slate-100 px-2 py-0.5 rounded">{v}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
