@@ -515,7 +515,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             driverFirstName:   { type: "string", maxLength: 100 },
             driverLastName:    { type: "string", maxLength: 100 },
             driverAge:         { type: "integer", minimum: 18 },
-            voucherCode:       { type: "string", maxLength: 30 },
+            // voucherCode:       { type: "string", maxLength: 30 },
           },
         },
         response: {

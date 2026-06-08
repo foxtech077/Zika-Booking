@@ -39,7 +39,13 @@ async function failBooking(bookingId: string) {
 export async function webhookRoutes(app: FastifyInstance) {
 
   // ── POST /payments/stripe/webhook ─────────────────────────────────────────
-  app.post("/payments/stripe/webhook", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/payments/stripe/webhook",{schema: {
+    tags: ["Webhooks"],
+    summary: "Stripe webhook endpoint",
+    description:
+      "Receives Stripe events such as payment_intent.succeeded and payment_intent.payment_failed.",
+
+  },}, async (req: FastifyRequest, reply: FastifyReply) => {
     const sig = req.headers["stripe-signature"];
     if (!sig || typeof sig !== "string") {
       return sendError(reply, 400, "MISSING_SIGNATURE", "Missing Stripe-Signature header.");
@@ -148,7 +154,12 @@ export async function webhookRoutes(app: FastifyInstance) {
   });
 
   // ── POST /payments/tara/webhook ───────────────────────────────────────────
-  app.post("/payments/tara/webhook", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/payments/tara/webhook",{schema: {
+    tags: ["Webhooks"],
+    summary: "Tara webhook endpoint",
+    description:
+      "Receives Tara payment status updates.",
+  },}, async (req: FastifyRequest, reply: FastifyReply) => {
     const signature = req.headers["x-tara-signature"];
     if (!signature || typeof signature !== "string") {
       return sendError(reply, 400, "MISSING_SIGNATURE", "Missing X-Tara-Signature header.");
