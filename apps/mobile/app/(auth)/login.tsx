@@ -208,14 +208,13 @@ export default function LoginScreen() {
 let _GoogleSignin: typeof import("@react-native-google-signin/google-signin")["GoogleSignin"] | null = null;
 try {
   _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin;
-  // Configure Google Sign-In with the appropriate client ID for each platform
+} catch { /* not available in Expo Go */ }
+
+function configureGoogleSignIn() {
+  if (!_GoogleSignin) return;
   _GoogleSignin.configure({
-    webClientId: Platform.select({
-      ios: process.env["GOOGLE_CLIENT_ID_IOS"],
-      android: process.env["GOOGLE_CLIENT_ID_ANDROID"],
-      // For web / Expo Go fallback, use the web client ID
-      default: process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"],
-    }) ?? "",
+    webClientId: process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"] ?? "",
+    iosClientId: process.env["EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID"],
     offlineAccess: true,
   });
 }

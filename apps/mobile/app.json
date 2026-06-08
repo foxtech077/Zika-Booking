@@ -45,6 +45,11 @@
               "scheme": "https",
               "host": "zikabooking.com",
               "pathPrefix": "/reset-password"
+            },
+            {
+              "scheme": "https",
+              "host": "kainook.com",
+              "pathPrefix": "/auth/verify"
             }
           ],
           "category": [

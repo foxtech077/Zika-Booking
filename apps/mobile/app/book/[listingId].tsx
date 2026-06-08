@@ -10,11 +10,14 @@ import {
   ActivityIndicator,
   Modal,
   StyleSheet,
+  Animated,
+  AppState,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
+import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 
@@ -115,9 +118,17 @@ function useCountdown(expiresAt: string | null) {
       setMsLeft(Math.max(0, remaining));
     };
     tick();
+
+    const appStateSub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        tick();
+      }
+    });
+
     intervalRef.current = setInterval(tick, 500);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      appStateSub.remove();
     };
   }, [expiresAt]);
 
@@ -162,6 +173,11 @@ export default function BookingFlowScreen() {
   const [lockLoading, setLockLoading] = useState(true);
   const [expiredModal, setExpiredModal] = useState(false);
   const [lockRetryKey, setLockRetryKey] = useState(0);
+  const [reBookingLoading, setReBookingLoading] = useState(false);
+  // Records the timestamp when the current lock was first established (for progress bar)
+  const lockStartMsRef = useRef<number | null>(null);
+  // Animated value for red-state pulse
+  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // ── Pending-payment bookings (shown when 429 occurs) ──────────────────────
   const [pendingBookings, setPendingBookings] = useState<PendingBooking[]>([]);
@@ -198,15 +214,120 @@ export default function BookingFlowScreen() {
 
   // ── Countdown ─────────────────────────────────────────────────────────────
   const msLeft = useCountdown(lockState?.expiresAt ?? null);
-  const showExpiringWarning = msLeft > 0 && msLeft <= 120_000; // 2-minute grace period
   // msLeft === -1 means "not yet calculated" — only treat as expired when it genuinely hits 0
   const isExpired = lockState !== null && msLeft === 0;
+
+  // Derive timer state label
+  const timerState: "green" | "amber" | "red" | null =
+    msLeft < 0 || !lockState ? null
+    : msLeft > 120_000 ? "green"
+    : msLeft > 30_000 ? "amber"
+    : msLeft > 0 ? "red"
+    : null;
+
+  // Record the lock start time once the lock is first set
+  useEffect(() => {
+    if (lockState && lockStartMsRef.current === null) {
+      lockStartMsRef.current = Date.now();
+    }
+  }, [lockState]);
+
+  // Pulse animation — only active during red state
+  useEffect(() => {
+    if (timerState === "red") {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 0.55, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [timerState, pulseAnim]);
 
   useEffect(() => {
     if (isExpired && step < 2) {
       setExpiredModal(true);
     }
   }, [isExpired, step]);
+
+  // Progress bar: fraction of time remaining vs. total lock duration (5 min)
+  const LOCK_TOTAL_MS = 300_000;
+  const progressFraction =
+    msLeft < 0 ? 1
+    : Math.max(0, Math.min(1, msLeft / LOCK_TOTAL_MS));
+
+  // ── Try to Rebook handler ─────────────────────────────────────────────────
+  async function handleTryRebook() {
+    setReBookingLoading(true);
+    try {
+      const body: Record<string, unknown> = { listingId, deliveryRequested: false };
+      if (checkIn) body.checkIn = checkIn;
+      if (checkOut) body.checkOut = checkOut;
+      if (pickupDatetime) body.pickupDatetime = pickupDatetime;
+      if (returnDatetime) body.returnDatetime = returnDatetime;
+      if (guests) body.guests = parseInt(guests, 10);
+
+      const res = await listingApi.post<{ data: { lockToken: string; expiresAt: string; pricingPreview: any } }>(
+        "/bookings/initiate", body,
+      );
+      const raw = res.data.data.pricingPreview;
+      const isCarRebook = !!raw.days;
+      const mapped: PricingPreview = {
+        ratePerUnit: isCarRebook ? raw.dailyRate : raw.nightlyRate,
+        units: isCarRebook ? raw.days : raw.nights,
+        unitLabel: isCarRebook ? "days" : "nights",
+        subtotal: raw.subtotal,
+        discountAmount: raw.discountAmount ?? undefined,
+        serviceFee: raw.serviceFee ?? undefined,
+        taxAmount: raw.taxAmount ?? undefined,
+        deliveryFee: raw.deliveryFee ?? undefined,
+        total: raw.totalAmount,
+        currency: raw.currency,
+      };
+
+      const lockStateObj = {
+        lockToken: res.data.data.lockToken,
+        expiresAt: res.data.data.expiresAt,
+        pricingPreview: mapped,
+      };
+      const startMs = Date.now();
+      lockStartMsRef.current = startMs;
+      setLockState(lockStateObj);
+
+      // Persist new lock
+      const cacheData = {
+        listingId,
+        checkIn,
+        checkOut,
+        pickupDatetime,
+        returnDatetime,
+        guests,
+        expiresAt: res.data.data.expiresAt,
+        lockStartMs: startMs,
+        lockState: lockStateObj,
+      };
+      await SecureStore.setItemAsync("ZIKA_ACTIVE_LOCK", JSON.stringify(cacheData));
+
+      setStep(0);
+      setExpiredModal(false);
+    } catch (err: any) {
+      const code = err?.response?.data?.error?.code ?? err?.response?.data?.code ?? err?.response?.data?.errors?.[0]?.code;
+      const isUnavailable =
+        code === "LISTING_UNAVAILABLE" || code === "LISTING_NOT_AVAILABLE" ||
+        err?.response?.status === 404;
+      if (isUnavailable) {
+        Alert.alert("Unavailable", "Listing is no longer available for the selected dates.");
+      } else {
+        Alert.alert("Could not rebook", err?.response?.data?.message ?? "Please try again.");
+      }
+    } finally {
+      setReBookingLoading(false);
+    }
+  }
 
   // ── Fetch pending-payment bookings from backend ───────────────────────────
   const fetchPendingBookings = useCallback(async () => {
@@ -258,6 +379,32 @@ export default function BookingFlowScreen() {
       setLockLoading(true);
       setLockError(null);
       setLockErrorMessage(null);
+
+      // Try active lock recovery first
+      try {
+        const cachedLockRaw = await SecureStore.getItemAsync("ZIKA_ACTIVE_LOCK");
+        if (cachedLockRaw) {
+          const cached = JSON.parse(cachedLockRaw);
+          const isMatch =
+            cached.listingId === listingId &&
+            cached.checkIn === checkIn &&
+            cached.checkOut === checkOut &&
+            cached.pickupDatetime === pickupDatetime &&
+            cached.returnDatetime === returnDatetime &&
+            (guests ? cached.guests === guests : !cached.guests);
+          
+          const expiresAtMs = new Date(cached.expiresAt).getTime();
+          if (isMatch && expiresAtMs > Date.now()) {
+            lockStartMsRef.current = cached.lockStartMs ?? Date.now();
+            setLockState(cached.lockState);
+            setLockLoading(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to retrieve active lock from SecureStore:", e);
+      }
+
       try {
         const body: Record<string, unknown> = {
           listingId,
@@ -289,11 +436,28 @@ export default function BookingFlowScreen() {
           currency: raw.currency,
         };
 
-        setLockState({
+        const lockStateObj = {
           lockToken: res.data.data.lockToken,
           expiresAt: res.data.data.expiresAt,
           pricingPreview: mapped,
-        });
+        };
+        const startMs = Date.now();
+        lockStartMsRef.current = startMs;
+        setLockState(lockStateObj);
+
+        // Persist lock
+        const cacheData = {
+          listingId,
+          checkIn,
+          checkOut,
+          pickupDatetime,
+          returnDatetime,
+          guests,
+          expiresAt: res.data.data.expiresAt,
+          lockStartMs: startMs,
+          lockState: lockStateObj,
+        };
+        await SecureStore.setItemAsync("ZIKA_ACTIVE_LOCK", JSON.stringify(cacheData));
       } catch (err: any) {
         console.warn("LOCK INITIATION ERROR:", JSON.stringify(err?.response?.data), "status:", err?.response?.status, "msg:", err?.message);
         const status = err?.response?.status;
@@ -336,7 +500,22 @@ export default function BookingFlowScreen() {
       return res.data.data.expiresAt;
     },
     onSuccess: (newExpiresAt) => {
-      setLockState((prev) => prev ? { ...prev, expiresAt: newExpiresAt } : prev);
+      setLockState((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, expiresAt: newExpiresAt };
+        
+        // Update persisted lock
+        SecureStore.getItemAsync("ZIKA_ACTIVE_LOCK").then((cachedLockRaw) => {
+          if (cachedLockRaw) {
+            const cached = JSON.parse(cachedLockRaw);
+            cached.expiresAt = newExpiresAt;
+            cached.lockState.expiresAt = newExpiresAt;
+            SecureStore.setItemAsync("ZIKA_ACTIVE_LOCK", JSON.stringify(cached));
+          }
+        }).catch(() => {});
+
+        return updated;
+      });
     },
     onError: () => {
       Alert.alert("Renewal failed", "Could not extend your reservation. Please try again.");
@@ -385,6 +564,7 @@ export default function BookingFlowScreen() {
       return res.data.data;
     },
     onSuccess: (data) => {
+      SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => {});
       router.push({ pathname: "/pay/[bookingId]", params: { bookingId: data.bookingId } });
     },
     onError: (err: any) => {
@@ -663,35 +843,57 @@ export default function BookingFlowScreen() {
       {/* Step indicator */}
       <StepIndicator current={step} />
 
-      {/* Timer bar (steps 0 and 1) */}
-      {step < 2 && lockState && msLeft >= 0 && (
-        <View style={styles.timerBar}>
-          <Ionicons name="time-outline" size={14} color={showExpiringWarning ? "#92400e" : "#374151"} />
-          <Text style={[styles.timerText, showExpiringWarning && styles.timerTextWarning]}>
-            {"Reservation held for "}
-            <Text style={styles.timerCountdown}>{msToCountdown(msLeft)}</Text>
-          </Text>
-          {showExpiringWarning && (
-            <TouchableOpacity
-              style={styles.renewBtn}
-              onPress={() => renewMutation.mutate()}
-              disabled={renewMutation.isPending}
-            >
-              {renewMutation.isPending ? (
-                <ActivityIndicator size="small" color="#92400e" />
-              ) : (
-                <Text style={styles.renewBtnText}>Renew (30s)</Text>
-              )}
-            </TouchableOpacity>
+      {/* ── Timer section (steps 0 and 1) ────────────────────────────── */}
+      {step < 2 && lockState && msLeft >= 0 && timerState !== null && (
+        <View>
+          {/* Colour-coded banner */}
+          {timerState === "green" && (
+            <View style={styles.timerBannerGreen}>
+              <Ionicons name="checkmark-circle-outline" size={15} color="#15803d" />
+              <Text style={styles.timerTextGreen}>Booking held — complete payment</Text>
+            </View>
           )}
-        </View>
-      )}
+          {timerState === "amber" && (
+            <View style={styles.timerBannerAmber}>
+              <Ionicons name="warning-outline" size={15} color="#92400e" />
+              <Text style={styles.timerTextAmber}>
+                Hurry — only{" "}
+                <Text style={{ fontWeight: "800" }}>{msToCountdown(msLeft)}</Text>
+                {" "}remaining!
+              </Text>
+              <TouchableOpacity
+                style={styles.renewBtn}
+                onPress={() => renewMutation.mutate()}
+                disabled={renewMutation.isPending}
+              >
+                {renewMutation.isPending
+                  ? <ActivityIndicator size="small" color="#92400e" />
+                  : <Text style={styles.renewBtnText}>Extend</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
+          {timerState === "red" && (
+            <Animated.View style={[styles.timerBannerRed, { opacity: pulseAnim }]}>
+              <Ionicons name="alert-circle" size={15} color="#fff" />
+              <Text style={styles.timerTextRed}>Less than 30 seconds — pay now!</Text>
+            </Animated.View>
+          )}
 
-      {/* Expiring soon banner */}
-      {step < 2 && showExpiringWarning && !expiredModal && (
-        <View style={styles.expiringBanner}>
-          <Ionicons name="warning-outline" size={16} color="#92400e" />
-          <Text style={styles.expiringBannerText}>Expiring soon!</Text>
+          {/* Progress bar */}
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${Math.round(progressFraction * 100)}%` as any,
+                  backgroundColor:
+                    timerState === "green" ? "#16a34a"
+                    : timerState === "amber" ? "#d97706"
+                    : "#dc2626",
+                },
+              ]}
+            />
+          </View>
         </View>
       )}
 
@@ -702,16 +904,25 @@ export default function BookingFlowScreen() {
             <Ionicons name="time" size={48} color="#dc2626" />
             <Text style={styles.modalTitle}>Reservation Expired</Text>
             <Text style={styles.modalBody}>
-              The listing has been released. Please search again to find available options.
+              Your reservation lock has expired and the selected dates are no longer guaranteed.
             </Text>
+            {/* Primary: Try to Rebook */}
             <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={() => {
-                setExpiredModal(false);
-                router.replace("/(tabs)");
-              }}
+              style={[styles.primaryBtn, reBookingLoading && styles.primaryBtnDisabled]}
+              onPress={() => void handleTryRebook()}
+              disabled={reBookingLoading}
             >
-              <Text style={styles.primaryBtnText}>Search Again</Text>
+              {reBookingLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.primaryBtnText}>Try to Rebook</Text>}
+            </TouchableOpacity>
+            {/* Secondary: Search Again */}
+            <TouchableOpacity
+              style={styles.modalSecondaryBtn}
+              onPress={() => { setExpiredModal(false); router.replace("/(tabs)"); }}
+              disabled={reBookingLoading}
+            >
+              <Text style={styles.modalSecondaryBtnText}>Search Again</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1152,20 +1363,43 @@ const styles = StyleSheet.create({
   stepLabelActive: { color: "#1a73e8", fontWeight: "600" },
   stepLabelDone: { color: "#16a34a" },
 
-  // Timer bar
-  timerBar: {
+  // ── Timer banners ───────────────────────────────────────────────────────────
+  timerBannerGreen: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#f0fdf4",
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
+    gap: 7,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    gap: 6,
+    borderBottomColor: "#bbf7d0",
   },
-  timerText: { fontSize: 13, color: "#374151", flex: 1 },
-  timerTextWarning: { color: "#92400e" },
-  timerCountdown: { fontWeight: "700" },
+  timerTextGreen: { fontSize: 13, color: "#15803d", fontWeight: "600", flex: 1 },
+
+  timerBannerAmber: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fffbeb",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    gap: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: "#fde68a",
+  },
+  timerTextAmber: { fontSize: 13, color: "#92400e", fontWeight: "600", flex: 1 },
+
+  timerBannerRed: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    gap: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: "#b91c1c",
+  },
+  timerTextRed: { fontSize: 13, color: "#fff", fontWeight: "700", flex: 1 },
+
   renewBtn: {
     backgroundColor: "#fef3c7",
     borderRadius: 8,
@@ -1176,18 +1410,16 @@ const styles = StyleSheet.create({
   },
   renewBtnText: { fontSize: 12, color: "#92400e", fontWeight: "600" },
 
-  // Expiring banner
-  expiringBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fef3c7",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    gap: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: "#fde68a",
+  // Progress bar
+  progressTrack: {
+    height: 3,
+    backgroundColor: "#e5e7eb",
+    width: "100%",
   },
-  expiringBannerText: { fontSize: 13, color: "#92400e", fontWeight: "600" },
+  progressFill: {
+    height: 3,
+    borderRadius: 2,
+  },
 
   // Modal
   modalOverlay: {
@@ -1208,6 +1440,15 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: "700", color: "#111827", textAlign: "center" },
   modalBody: { fontSize: 14, color: "#6b7280", textAlign: "center", lineHeight: 20 },
+  modalSecondaryBtn: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: "center",
+    width: "100%",
+  },
+  modalSecondaryBtnText: { color: "#374151", fontWeight: "600", fontSize: 15 },
 
   // Loading / error
   loadingText: { fontSize: 15, color: "#6b7280", marginTop: 16, textAlign: "center" },

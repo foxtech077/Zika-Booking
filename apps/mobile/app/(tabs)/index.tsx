@@ -500,21 +500,10 @@ export default function HomeScreen() {
     ...(apartmentsData ?? []).filter((a) => a.listingType !== "car" && a.isAccredited),
   ].slice(0, 8);
 
-  const featured = (hotelsData ?? [])
-    .filter((h) => h.listingType !== "car" && (h.isAccredited || (h.starRating ?? 0) >= 5))
-    .slice(0, 3);
-
-  const nearbyAll = [
-    ...(hotelsData ?? []).filter((h) => h.listingType !== "car"),
-    ...(apartmentsData ?? []).filter((a) => a.listingType !== "car"),
-  ].sort((a, b) => a.distanceKm - b.distanceKm).slice(0, 5);
-
-  const premiumCars = (carsData ?? []).filter((c) => c.listingType === "car").slice(0, 6);
-
-  const trending = [
-    ...(hotelsData ?? []).filter((h) => h.listingType !== "car").slice(0, 2),
-    ...(apartmentsData ?? []).filter((a) => a.listingType !== "car").slice(0, 2),
-  ].slice(0, 4);
+  const featured: SearchResult[] = [];
+  const nearbyAll: SearchResult[] = [];
+  const premiumCars: SearchResult[] = [];
+  const trending: SearchResult[] = [];
 
   // ── Batch-fetch fresh photo URLs ─────────────────────────────────────────
   // POST /listings/batch-summary is the public "Search" API designed for card
@@ -877,83 +866,7 @@ export default function HomeScreen() {
           ) : null}
         </View>
 
-        {/* ── Featured Stays ── */}
-        {featured.length > 0 ? (
-          <View style={s.section}>
-            <SectionHeader title="Featured Stays" />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
-              {featured.map((item) => (
-                <FeaturedCard
-                  key={item.id}
-                  item={item}
-                  photoUrl={photoMap[item.id]}
-                  onPress={() => navToListing(item.id, false)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        ) : null}
 
-        {/* ── Stays Nearby ── */}
-        <View style={s.section}>
-          <SectionHeader
-            title="Stays Nearby"
-            subtitle="Based on your location"
-            onMore={() => router.push("/browse/hotels" as any)}
-          />
-          {hotelsLoading || aptsLoading ? (
-            <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
-          ) : nearbyAll.length > 0 ? (
-            <View style={{ paddingHorizontal: 16 }}>
-              {nearbyAll.map((item) => (
-                <NearbyCard key={item.id} item={item} photoUrl={photoMap[item.id]} onPress={() => navToListing(item.id, item.listingType === "car")} />
-              ))}
-            </View>
-          ) : null}
-        </View>
-
-        {/* ── Premium Cars ── */}
-        {premiumCars.length > 0 ? (
-          <View style={s.section}>
-            <SectionHeader
-              title="Premium Rental Cars"
-              subtitle="Arrive in style with our luxury fleet"
-              onMore={() => router.push("/browse/cars" as any)}
-            />
-            {carsLoading ? (
-              <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
-                {premiumCars.map((item, idx) => (
-                  <PremiumCarCard
-                    key={item.id}
-                    item={item}
-                    photoUrl={photoMap[item.id]}
-                    onPress={() => navToListing(item.id, true)}
-                    isLast={idx === premiumCars.length - 1}
-                  />
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        ) : null}
-
-        {/* ── Trending Now ── */}
-        {trending.length > 0 ? (
-          <View style={s.section}>
-            <SectionHeader title="Trending Now" />
-            <View style={s.trendGrid}>
-              {trending.map((item) => (
-                <TrendingCard
-                  key={item.id}
-                  item={item}
-                  photoUrl={photoMap[item.id]}
-                  onPress={() => navToListing(item.id, false)}
-                />
-              ))}
-            </View>
-          </View>
-        ) : null}
 
         {/* ── CTA Banner ── */}
         <View style={s.ctaBanner}>

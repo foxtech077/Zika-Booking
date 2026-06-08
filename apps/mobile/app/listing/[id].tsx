@@ -110,7 +110,7 @@ function cancelText(p: string | null) {
 function Stars({ n, size = 13 }: { n: number; size?: number }) {
   return (
     <View style={{ flexDirection: "row", gap: 1 }}>
-      {[1,2,3,4,5].map(i => (
+      {[1, 2, 3, 4, 5].map(i => (
         <Text key={i} style={{ fontSize: size, color: i <= n ? "#F59E0B" : "#E5E7EB" }}>★</Text>
       ))}
     </View>

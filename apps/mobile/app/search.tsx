@@ -1,23 +1,68 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
+  Image,
   ActivityIndicator,
   ScrollView,
   TextInput,
   Modal,
+  Platform,
+  Linking,
+  Alert,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 
+// Safely load MapView and Marker to prevent crashes in environments without the native module
+let MapView: any = null;
+let Marker: any = null;
+try {
+  const Maps = require("react-native-maps");
+  MapView = Maps.default || Maps;
+  Marker = Maps.Marker;
+} catch (e) {
+  // console.warn("react-native-maps native module not available:", e);
+}
+
 import { listingApi } from "../lib/listing-api";
 import { useAuthStore } from "../store/auth";
 import { ListingImage } from "../components/ListingImage";
+
+
+// Deterministic coordinates calculator from search center + distance
+function getListingCoordinates(item: SearchResult, centerLat: number, centerLng: number) {
+  if ((item as any).lat != null && (item as any).lng != null) {
+    return {
+      latitude: Number((item as any).lat),
+      longitude: Number((item as any).lng),
+    };
+  }
+
+  const distance = item.distanceKm ?? 0.1;
+  let hash = 0;
+  const idStr = item.id || "";
+  for (let i = 0; i < idStr.length; i++) {
+    hash = idStr.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const angle = Math.abs(hash % 360) * (Math.PI / 180);
+
+  // 1 degree latitude = 111.32 km
+  const latOffset = (distance / 111.32) * Math.cos(angle);
+  const radLat = (centerLat * Math.PI) / 180;
+  const lngOffset = (distance / (111.32 * Math.cos(radLat) || 1)) * Math.sin(angle);
+
+  return {
+    latitude: centerLat + latOffset,
+    longitude: centerLng + lngOffset,
+  };
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -102,6 +147,26 @@ const SORT_OPTIONS: { key: SortOption; label: string }[] = [
 
 // ─── Helper: star rendering ───────────────────────────────────────────────────
 
+function StarRating({ rating }: { rating: number }) {
+  const stars = Math.min(5, Math.max(0, Math.round(rating)));
+  return (
+    <View style={starStyles.row}>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Ionicons
+          key={i}
+          name={i < stars ? "star" : "star-outline"}
+          size={12}
+          color={i < stars ? "#f59e0b" : BORDER}
+          style={{ marginRight: 1 }}
+        />
+      ))}
+    </View>
+  );
+}
+
+const starStyles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", marginRight: 6 },
+});
 
 // ─── Helper: cancellation badge ───────────────────────────────────────────────
 
@@ -154,7 +219,6 @@ interface ResultCardProps {
   returnDatetime?: string;
   onFavouriteToggle: (id: string, current: boolean) => void;
   favouriteLoading: string | null;
-  photoUrl?: string | null;
 }
 
 function ResultCard({
@@ -167,7 +231,6 @@ function ResultCard({
   returnDatetime,
   onFavouriteToggle,
   favouriteLoading,
-  photoUrl,
 }: ResultCardProps) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -192,14 +255,12 @@ function ResultCard({
   // Prefer backend-provided voucher details if exposed, otherwise fall back to category default
   const voucherCode = (item as any).voucherCode || (item as any).activeVoucher?.code || (isCar ? "SAFARI20" : "WELCOME10");
 
-  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
-
   return (
     <TouchableOpacity style={cardStyles.card} onPress={handlePress} activeOpacity={0.88}>
       {/* Photo */}
       <View style={cardStyles.photoWrapper}>
-        {!imgError && displayPhoto ? (
-          <ListingImage uri={displayPhoto} style={cardStyles.photo} onError={() => setImgError(true)} />
+        {!imgError && item.primaryPhotoUrl ? (
+          <ListingImage uri={item.primaryPhotoUrl} style={cardStyles.photo} onError={() => setImgError(true)} />
         ) : (
           <View style={[cardStyles.photo, cardStyles.photoPlaceholder, { alignItems: "center", justifyContent: "center" }]}>
             <Text style={{ fontSize: 36 }}>{isCar ? "🚗" : "🏨"}</Text>
@@ -407,20 +468,15 @@ export default function SearchScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     category: string;
-    placeName?: string;
+    placeName: string;
     checkIn?: string;
     checkOut?: string;
     guests?: string;
     pickupDatetime?: string;
     returnDatetime?: string;
-    geoLat?: string;
-    geoLng?: string;
   }>();
 
-  const { category = "hotel", placeName = "", checkIn, checkOut, guests, pickupDatetime, returnDatetime, geoLat, geoLng } = params;
-
-  // When raw GPS coords are provided (from home page "Near me"), treat as global geo
-  const hasRawCoords = !!geoLat && !!geoLng;
+  const { category = "hotel", placeName = "", checkIn, checkOut, guests, pickupDatetime, returnDatetime } = params;
 
   // Search destination refiner state
   const [searchInput, setSearchInput] = useState(placeName);
@@ -428,12 +484,19 @@ export default function SearchScreen() {
   // Filter Sheet visible state
   const [filterVisible, setFilterVisible] = useState(false);
 
+  // Map View toggle
+  const [showMapView, setShowMapView] = useState(false);
+  const [selectedListing, setSelectedListing] = useState<SearchResult | null>(null);
+  const [mapRegion, setMapRegion] = useState<any>(null);
+
   // Dynamic filter state variables
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [ratingMin, setRatingMin] = useState<number | null>(null);
   const [radiusKm, setRadiusKm] = useState(500);
   const [onlyPromotions, setOnlyPromotions] = useState(false);
+
+  const [lastPlaceName, setLastPlaceName] = useState("");
 
   // Hotel specifics
   const [starRating, setStarRating] = useState<string[]>([]);
@@ -515,21 +578,50 @@ export default function SearchScreen() {
     staleTime: 5 * 60_000,
   });
 
-  // Effective geo: raw coords → named city geocode → global (lat=0, lng=0)
-  const geo: GeoResult | null | undefined = hasRawCoords
-    ? { lat: Number(geoLat), lng: Number(geoLng), town: "Nearby", country: "" }
-    : placeName.trim()
-    ? geoFromApi
-    : { lat: 0, lng: 0, town: "Anywhere", country: "" };
-
-  // Effective search radius: global when no location specified
-  const effectiveRadius = (hasRawCoords || placeName.trim()) ? radiusKm : 20000;
+  // Sync map center region on searched place coords
+  useEffect(() => {
+    if (geo && placeName !== lastPlaceName) {
+      setLastPlaceName(placeName);
+      setMapRegion({
+        latitude: Number(geo.lat),
+        longitude: Number(geo.lng),
+        latitudeDelta: radiusKm ? radiusKm / 40 : 0.0922,
+        longitudeDelta: radiusKm ? radiusKm / 40 : 0.0421,
+      });
+      setSelectedListing(null);
+    }
+  }, [geo, placeName, radiusKm]);
 
   // Reset results and cursor when category changes (tab transition)
   useEffect(() => {
     setCursor(null);
     setAllResults([]);
   }, [category]);
+
+  // Center on user's current GPS location
+  const centerOnUserLocation = () => {
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const newRegion = {
+            latitude,
+            longitude,
+            latitudeDelta: 0.015,
+            longitudeDelta: 0.015,
+          };
+          setMapRegion(newRegion);
+          setSelectedListing(null);
+        },
+        () => {
+          Alert.alert("Location Error", "Could not get current location. Ensure location services are enabled.");
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      );
+    } else {
+      Alert.alert("Location Error", "Geolocation is not supported on this device.");
+    }
+  };
 
   // ── Step 2: Search ──
   // API returns price_asc as expensive-first and price_desc as cheap-first (inverted)
@@ -545,7 +637,6 @@ export default function SearchScreen() {
     category,
     geo?.lat,
     geo?.lng,
-    effectiveRadius,
     sort,
     checkIn,
     checkOut,
@@ -556,6 +647,7 @@ export default function SearchScreen() {
     priceMin,
     priceMax,
     ratingMin,
+    radiusKm,
     onlyPromotions,
     starRating,
     roomType,
@@ -656,45 +748,6 @@ export default function SearchScreen() {
     staleTime: 30_000,
   });
 
-  // ── Batch-fetch fresh photo URLs for search results ──────────────────────
-  // POST /listings/batch-summary is the public "Search" API — no provider auth
-  // required. Falls back to individual GET /listings/{id}/public per listing.
-  const displayedIds = useMemo(() => Array.from(new Set(allResults.map((r) => r.id))), [allResults]);
-
-  const { data: batchSummary } = useQuery({
-    queryKey: ["batch-photos", displayedIds],
-    queryFn: async (): Promise<Record<string, string>> => {
-      if (!displayedIds.length) return {};
-      const map: Record<string, string> = {};
-      try {
-        const res = await listingApi.post<{ data: { listings: any[] } }>("/listings/batch-summary", { ids: displayedIds });
-        const items = res.data?.data?.listings ?? [];
-        for (const item of items) {
-          const url = item.primaryPhotoUrl ?? item.photos?.[0]?.cdnUrl ?? item.coverPhotoUrl ?? null;
-          if (item.id && url) map[item.id] = url;
-        }
-        if (Object.keys(map).length > 0) return map;
-      } catch { /* fall through to per-listing fallback */ }
-      // Fallback: individual public endpoint per listing
-      await Promise.allSettled(
-        displayedIds.map(async (id) => {
-          try {
-            const res = await listingApi.get<{ data: { photos?: Array<{ cdnUrl: string }>; primaryPhotoUrl?: string } }>(`/listings/${id}/public`);
-            const url = res.data?.data?.photos?.[0]?.cdnUrl ?? res.data?.data?.primaryPhotoUrl ?? null;
-            if (url) map[id] = url;
-          } catch { /* ignore */ }
-        })
-      );
-      return map;
-    },
-    staleTime: 0,
-    gcTime: 5 * 60_000,
-    retry: 0,
-    enabled: displayedIds.length > 0,
-  });
-
-  const photoMap: Record<string, string> = batchSummary ?? {};
-
   // ── Favourite toggle ──
   const handleFavouriteToggle = useCallback(async (id: string, current: boolean) => {
     setFavouriteLoading(id);
@@ -761,13 +814,15 @@ export default function SearchScreen() {
           <Ionicons name="search" size={18} color={MUTED} style={{ marginRight: 6 }} />
           <TextInput
             style={styles.searchTextInput}
-            placeholder="Anywhere — city, country…"
+            placeholder="Where to? (e.g. Nairobi, Mombasa)"
             value={searchInput}
             onChangeText={setSearchInput}
             onSubmitEditing={() => {
-              router.setParams({ placeName: searchInput.trim(), geoLat: undefined, geoLng: undefined });
-              setCursor(null);
-              setAllResults([]);
+              if (searchInput.trim()) {
+                router.setParams({ placeName: searchInput.trim() });
+                setCursor(null);
+                setAllResults([]);
+              }
             }}
           />
         </View>
@@ -830,7 +885,7 @@ export default function SearchScreen() {
         </ScrollView>
       )}
 
-      {/* ── Results List ── */}
+      {/* ── Results List or Map View ── */}
       {!isFirstLoad && !searchError && (
         showMapView ? (
           <View style={styles.mapContainer}>
