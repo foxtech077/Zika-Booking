@@ -86,7 +86,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       });
     }
   
-    // ✅ CREATE PAYMENT FIRST
+    // CREATE PAYMENT FIRST
     const payment = await prisma.payment.create({
       data: {
         bookingId,

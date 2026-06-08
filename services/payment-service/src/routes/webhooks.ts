@@ -150,6 +150,63 @@ export async function webhookRoutes(app: FastifyInstance) {
       }
     }
 
+    //Setup intent code
+    else if (event.type === "setup_intent.succeeded") {
+      const setupIntent = event.data.object as any;
+
+      const paymentMethodId = setupIntent.payment_method;
+      const customerId = setupIntent.customer;
+
+      try {
+        // attach payment method
+        await stripe.paymentMethods
+          .attach(paymentMethodId, {
+            customer: customerId,
+          })
+          .catch(() => {}); // ignore already attached error
+
+        // set default payment method
+        await stripe.customers.update(customerId, {
+          invoice_settings: {
+            default_payment_method: paymentMethodId,
+          },
+        });
+
+        // find customer in DB
+        const customerAccount = await prisma.customerAccount.findFirst({
+          where: {
+            providerCustomerId: customerId,
+            paymentProvider: "stripe",
+          },
+        });
+
+        if (customerAccount) {
+          const exists = await prisma.paymentMethod.findFirst({
+            where: {
+              providerPmId: paymentMethodId,
+            },
+          });
+
+          if (!exists) {
+            await prisma.paymentMethod.create({
+              data: {
+                userId: customerAccount.userId,
+                providerPmId: paymentMethodId,
+                type: "card",
+                paymentProvider: "stripe",
+              },
+            });
+          }
+        }
+
+        app.log.info(
+          `[stripe-webhook] Card saved for customer ${customerId}`
+        );
+      } catch (err) {
+        app.log.error(`[stripe-webhook] SetupIntent error: ${err}`);
+      }
+    }
+
     return reply.status(200).send({ received: true });
   });
 

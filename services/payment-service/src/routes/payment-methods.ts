@@ -76,6 +76,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { paymentMethods: methods.map(formatMethod) });
   });
   
+  
     // ── POST /guests/me/payment-methods/stripe/setup ─────────────────────────
     app.post(
       "/guests/me/payment-methods/stripe/setup",{ preHandler: [requireUser],schema: {
@@ -90,56 +91,67 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
         let stripeCustomerId: string;
 
-  try{
-    const customerAccount =
-    await prisma.customerAccount.findUnique({
-      where: {
-        userId_paymentProvider: {
-          userId,
-          paymentProvider: "stripe",
-        },
-      },
-    });
-
-  if (customerAccount) {
-    stripeCustomerId =
-      customerAccount.providerCustomerId;
-  } else {
-    const customer =
-      await stripe.customers.create({
-        metadata: { userId },
-      });
-
-    await prisma.customerAccount.create({
-      data: {
-        userId,
-        paymentProvider: "stripe",
-        providerCustomerId: customer.id,
-      },
-    });
-
-    stripeCustomerId = customer.id;
-  }
-  }catch(err){
-    return sendError(
-      reply,
-      500,
-      "STRIPE_CUSTOMER_CREATE_FAILED",
-      (err as Error).message,
+        try {
+          // 1. Get or create Stripe customer
+          let customerAccount = await prisma.customerAccount.findUnique({
+            where: {
+              userId_paymentProvider: {
+                userId,
+                paymentProvider: "stripe",
+              },
+            },
+          });
+    
+          let stripeCustomerId: string;
+    
+          if (!customerAccount) {
+            const customer = await stripe.customers.create({
+              metadata: { userId },
+            });
+    
+            customerAccount = await prisma.customerAccount.create({
+              data: {
+                userId,
+                paymentProvider: "stripe",
+                providerCustomerId: customer.id,
+              },
+            });
+    
+            stripeCustomerId = customer.id;
+          } else {
+            stripeCustomerId = customerAccount.providerCustomerId;
+          }
+    
+          // 2. Create SetupIntent (PRODUCTION SAFE)
+          const setupIntent = await stripe.setupIntents.create({
+            customer: stripeCustomerId,
+            payment_method_types: ["card"],
+            automatic_payment_methods: { enabled: false },
+            usage: "off_session",
+          },
+          {
+            idempotencyKey: `setup_${userId}`
+          }
+          );
+    
+          // 3. Return response
+          return reply.code(200).send({
+            success: true,
+            data: {
+              setupIntentId: setupIntent.id,
+              clientSecret: setupIntent.client_secret,
+            },
+          });
+        } catch (err) {
+          return sendError(
+            reply,
+            500,
+            "SETUP_INTENT_FAILED",
+            (err as Error).message
+          );
+        }
+      }
     );
-  }
-      const setupIntent = await stripe.setupIntents.create({
-          customer: stripeCustomerId,
-          usage: "off_session",
-        });
-
-        return sendSuccess(reply, 201, {
-          setupIntentId: setupIntent.id,
-          clientSecret: setupIntent.client_secret,
-        });
-      },
-    );
-
     // ── POST /guests/me/payment-methods/stripe/confirm ───────────────────────
     app.post("/guests/me/payment-methods/stripe/confirm",{ preHandler: [requireUser],schema: {
       tags: ["Payment Methods"],
