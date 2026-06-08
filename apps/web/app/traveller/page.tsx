@@ -6,12 +6,12 @@ import { api } from "@/lib/api";           // auth-service: POST /auth/logout on
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
 import ListingImage from "./components/ListingImage";
-import type { ApiResponse } from "@zika/types";
 import { useAuthStore } from "@/stores/auth";
 import ListingCard from "./components/ListingCard";
 import PhotoGallery from "./components/PhotoGallery";
 import ReservationCard from "./components/ReservationCard";
 import MapView from "./components/MapView";
+import type { PublicListingDetail } from "@/types";
 
 interface User {
   id: string;
@@ -21,57 +21,6 @@ interface User {
   userType: string;
   currentTier: "bronze" | "silver" | "gold" | "diamond";
   loyaltyPoints: number;
-}
-
-interface ListingPhoto {
-  id: string;
-  cdnUrl: string;
-  position: number;
-}
-
-interface ListingAmenity {
-  id: string;
-  amenityKey: string;
-}
-
-interface CustomAmenity {
-  id: string;
-  name: string;
-}
-
-interface PublicListingDetail {
-  id: string;
-  providerId: string;
-  category: "hotel" | "apartment" | "car";
-  name: string;
-  roomType?: string;
-  bedrooms?: number;
-  bathrooms?: number;
-  maxGuests?: number;
-  description: string;
-  pricePerNight: number;
-  currency: string;
-  minStayNights: number;
-  checkinTime: string;
-  checkoutTime: string;
-  cancellationPolicy: "flexible" | "moderate" | "strict" | "non_refundable";
-  address: string;
-  lat: number;
-  lng: number;
-  town: string;
-  country: string;
-  starRating?: number;
-  carMake?: string;
-  carModel?: string;
-  carYear?: number;
-  transmission?: string;
-  fuelType?: string;
-  seats?: number;
-  mileagePolicy?: string;
-  primaryPhotoUrl?: string | null;
-  photos: ListingPhoto[];
-  amenities: ListingAmenity[];
-  customAmenities: CustomAmenity[];
 }
 
 interface Booking {
@@ -192,7 +141,7 @@ function StyledDateInput({
 
 export default function TravellerDashboard() {
   const router = useRouter();
-  const getTodayString = () => new Date().toISOString().split("T")[0];
+  const getTodayString = () => new Date().toISOString().slice(0, 10);
 
   // Auth — read directly from Zustand store (populated by login page, no API call needed)
   const { user, isAuthenticated, _hasHydrated, clearSession, updateUser } = useAuthStore();
@@ -656,7 +605,7 @@ export default function TravellerDashboard() {
       }
 
       // Step 3: Call listing search API
-      const res = await listingApi.get<ApiResponse<any>>("/search", { params });
+      const res = await listingApi.get<any>("/search", { params });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
       setSearchOffset(0);
@@ -709,7 +658,7 @@ export default function TravellerDashboard() {
         if (searchPickupDate) params.pickup_datetime = searchPickupDate;
         if (searchReturnDate) params.return_datetime = searchReturnDate;
       }
-      const res = await listingApi.get<ApiResponse<any>>("/search", { params });
+      const res = await listingApi.get<any>("/search", { params });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
       if (results.length > 0) {
@@ -733,7 +682,7 @@ export default function TravellerDashboard() {
     setVoucherCode("");
 
     try {
-      const res = await listingApi.get<ApiResponse<any>>(`/listings/${id}/public`);
+      const res = await listingApi.get<any>(`/listings/${id}/public`);
       if (res.data.success && res.data.data) {
         const item = res.data.data;
         const details: PublicListingDetail = {
@@ -796,7 +745,7 @@ export default function TravellerDashboard() {
 
     setAvailabilityStatus("checking");
     try {
-      const res = await listingApi.get<ApiResponse<any>>(`/listings/${listingId}/availability`, {
+      const res = await listingApi.get<any>(`/listings/${listingId}/availability`, {
         params: { start, end },
       });
       if (res.data.success) {
@@ -862,7 +811,7 @@ export default function TravellerDashboard() {
     }
 
     try {
-      const res = await listingApi.post<ApiResponse<{ lockToken: string; expiresAt: string }>>("/bookings/initiate", body);
+      const res = await listingApi.post<any>("/bookings/initiate", body);
       if (res.data.success && res.data.data?.lockToken) {
         setLockToken(res.data.data.lockToken);
         setSecondsLeft(300);
@@ -905,7 +854,7 @@ export default function TravellerDashboard() {
     setVoucherError("");
 
     try {
-      const res = await listingApi.post<ApiResponse<{ discountAmount: number }>>("/vouchers/validate", {
+      const res = await listingApi.post<any>("/vouchers/validate", {
         code: voucherCode,
         orderValue: detailListing?.pricePerNight || 0
       });
@@ -982,7 +931,7 @@ export default function TravellerDashboard() {
 
     try {
       // Step 1: Create booking
-      const bookingRes = await listingApi.post<ApiResponse<any>>("/bookings", body);
+      const bookingRes = await listingApi.post<any>("/bookings", body);
       if (!bookingRes.data.success || !bookingRes.data.data.bookingId) {
         setBookingError(bookingRes.data?.error?.message ?? "Booking failed. Please try again.");
         return;
@@ -1000,7 +949,7 @@ export default function TravellerDashboard() {
         if (!mobileNumber) { setBookingError("Please enter your mobile number for M-Pesa payment."); return; }
         paymentBody.mobileNumber = mobileNumber;
       }
-      const paymentRes = await paymentApi.post<ApiResponse<any>>("/payments/initiate", paymentBody);
+      const paymentRes = await paymentApi.post<any>("/payments/initiate", paymentBody);
       if (!paymentRes.data.success) {
         setBookingError(paymentRes.data?.error?.message ?? "Payment initiation failed.");
         return;
@@ -1063,7 +1012,7 @@ export default function TravellerDashboard() {
   async function fetchGuestBookings() {
     setLoadingBookings(true);
     try {
-      const res = await listingApi.get<ApiResponse<any>>("/guests/me/bookings");
+      const res = await listingApi.get<any>("/guests/me/bookings");
       console.log("[fetchGuestBookings] raw response:", res.data);
       const raw: any[] = res.data?.data?.bookings ?? res.data?.data ?? (Array.isArray(res.data) ? res.data : []);
       console.log("[fetchGuestBookings] raw bookings array:", raw);
@@ -1138,7 +1087,7 @@ export default function TravellerDashboard() {
   async function handleCancelBooking(id: string) {
     setCancellingId(id);
     try {
-      const res = await listingApi.post<ApiResponse<any>>(`/bookings/${id}/cancel`, {});
+      const res = await listingApi.post<any>(`/bookings/${id}/cancel`, {});
       if (res.data.success) {
         alert("Booking cancelled successfully! Refund has been processed.");
         fetchGuestBookings();
