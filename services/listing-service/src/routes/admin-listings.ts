@@ -1539,7 +1539,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       data: {
         status:             "cancelled_by_system",
         cancelledAt:        new Date(),
-        cancelledBy:        admin.adminId,
+        cancelledBy:        "admin",
         cancellationReason: reason,
         refundAmount:       booking.status === "confirmed" ? booking.totalAmount : 0,
       },
