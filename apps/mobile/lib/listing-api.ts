@@ -18,8 +18,21 @@ export const listingApi = axios.create({
 listingApi.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  const fullUrl = `${config.baseURL ?? LISTING_BASE_URL}${config.url ?? ""}`;
+  console.log(`[LISTING-API] ▶ ${(config.method ?? "GET").toUpperCase()} ${fullUrl}`);
+  if (config.data) console.log("[LISTING-API] Request body:", JSON.stringify(config.data, null, 2));
   return config;
 });
+
+const _listingErrorLogger = (error: any) => {
+  const config = error.config ?? {};
+  const fullUrl = `${config.baseURL ?? LISTING_BASE_URL}${config.url ?? ""}`;
+  console.log(`[LISTING-API] ❌ ERROR on ${(config.method ?? "GET").toUpperCase()} ${fullUrl}`);
+  console.log("[LISTING-API] HTTP status:", error?.response?.status);
+  console.log("[LISTING-API] Response body:", JSON.stringify(error?.response?.data, null, 2));
+  console.log("[LISTING-API] Error message:", error?.message);
+  return Promise.reject(error);
+};
 
 const getAuthBaseUrl = () => {
   const envUrl = process.env["EXPO_PUBLIC_API_URL"];
@@ -40,8 +53,14 @@ function isAccountRevoked(error: unknown): boolean {
 
 let refreshing: Promise<void> | null = null;
 listingApi.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const fullUrl = `${res.config.baseURL ?? LISTING_BASE_URL}${res.config.url ?? ""}`;
+    console.log(`[LISTING-API] ✅ ${res.status} ${fullUrl}`);
+    return res;
+  },
   async (error) => {
+    _listingErrorLogger(error);
+
     if (isAccountRevoked(error)) {
       await useAuthStore.getState().clearAuth();
       return Promise.reject(error);

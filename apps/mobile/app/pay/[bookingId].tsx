@@ -55,6 +55,7 @@ interface InitiateResponse {
     paymentId: string;
     clientSecret?: string;
     publishableKey?: string;
+    requiresAction?: boolean;
     taraReference?: string;
     message?: string;
   };
@@ -145,6 +146,15 @@ function getPaymentErrorMessage(err: unknown): string {
   if (message.includes("Invalid API Key")) {
     return "Card payment could not start. Check your connection and try again, or use Mobile Money.";
   }
+  if (
+    message.includes("findUnique") ||
+    message.includes("findFirst") ||
+    message.includes("Cannot read properties") ||
+    message.toLowerCase().includes("prisma") ||
+    message.toLowerCase().includes("database")
+  ) {
+    return "Payment could not be processed. Please try again or contact support if the issue persists.";
+  }
   return message || "An unexpected error occurred.";
 }
 
@@ -192,8 +202,19 @@ export default function PaymentScreen() {
   const { data: booking, isLoading: bookingLoading, error: bookingError } = useQuery<BookingDetail>({
     queryKey: ["booking-for-payment", bookingId],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: BookingDetail }>(`/guests/me/bookings/${bookingId}`);
-      return res.data.data;
+      console.log("[PAY] Fetching booking detail for bookingId:", bookingId);
+      try {
+        const res = await listingApi.get<{ data: BookingDetail }>(`/guests/me/bookings/${bookingId}`);
+        console.log("[PAY] Booking fetch SUCCESS — status:", res.status);
+        console.log("[PAY] Booking data:", JSON.stringify(res.data.data, null, 2));
+        return res.data.data;
+      } catch (err: any) {
+        console.log("[PAY] Booking fetch FAILED");
+        console.log("[PAY] HTTP status:", err?.response?.status);
+        console.log("[PAY] Response body:", JSON.stringify(err?.response?.data, null, 2));
+        console.log("[PAY] Raw error message:", err?.message);
+        throw err;
+      }
     },
     enabled: !!bookingId,
     retry: 1,
@@ -476,21 +497,68 @@ export default function PaymentScreen() {
         let session = stripeSessionRef.current;
 
         if (!session) {
-          const res = await paymentApi.post<InitiateResponse>("/payments/initiate", {
-            bookingId,
-            paymentProvider: "stripe",
-            ...(selectedSavedMethodId ? { savedPaymentMethodId: selectedSavedMethodId } : {}),
-          });
+          if (selectedSavedMethodId) {
+            // ── Saved card: POST /payments/initiate (off-session charge) ──────
+            const savedCardPayload = {
+              bookingId,
+              paymentProvider: "stripe",
+              paymentMethodId: selectedSavedMethodId,
+            };
+            console.log("[PAY] Saved-card Stripe — POST /payments/initiate:", JSON.stringify(savedCardPayload, null, 2));
+            try {
+              const res = await paymentApi.post<InitiateResponse>("/payments/initiate", savedCardPayload);
+              console.log("[PAY] /payments/initiate SUCCESS — status:", res.status);
+              console.log("[PAY] /payments/initiate response:", JSON.stringify(res.data, null, 2));
 
-          const { paymentId, clientSecret, publishableKey } = res.data.data;
-          if (!clientSecret) {
-            Alert.alert("Payment Error", "Could not initialise payment. Please try again.");
-            return;
+              const { paymentId, clientSecret, requiresAction } = res.data.data;
+              setAttemptCount((c) => c + 1);
+
+              if (requiresAction && clientSecret) {
+                // 3DS authentication needed — fall through to Payment Sheet
+                session = { paymentId, clientSecret };
+                stripeSessionRef.current = session;
+              } else {
+                // Off-session charge succeeded immediately — go straight to polling
+                stripeSessionRef.current = null;
+                setIsInitiating(false);
+                setView("stripe_polling");
+                startStripePolling(paymentId);
+                return;
+              }
+            } catch (savedErr: any) {
+              console.log("[PAY] /payments/initiate (saved card) FAILED");
+              console.log("[PAY] HTTP status:", savedErr?.response?.status);
+              console.log("[PAY] Response body:", JSON.stringify(savedErr?.response?.data, null, 2));
+              console.log("[PAY] Raw error message:", savedErr?.message);
+              throw savedErr;
+            }
+          } else {
+            // ── New card: POST /create-intent → clientSecret → Payment Sheet ──
+            const newCardPayload = { bookingId };
+            console.log("[PAY] New-card Stripe — POST /create-intent:", JSON.stringify(newCardPayload, null, 2));
+            try {
+              const res = await paymentApi.post<InitiateResponse>("/create-intent", newCardPayload);
+              console.log("[PAY] /create-intent SUCCESS — status:", res.status);
+              console.log("[PAY] /create-intent response:", JSON.stringify(res.data, null, 2));
+
+              const { paymentId, clientSecret, publishableKey } = res.data.data;
+              if (!clientSecret) {
+                console.log("[PAY] ERROR: clientSecret missing in /create-intent response");
+                Alert.alert("Payment Error", "Could not initialise payment. Please try again.");
+                return;
+              }
+
+              session = { paymentId, clientSecret, publishableKey };
+              stripeSessionRef.current = session;
+              setAttemptCount((c) => c + 1);
+            } catch (intentErr: any) {
+              console.log("[PAY] /create-intent FAILED");
+              console.log("[PAY] HTTP status:", intentErr?.response?.status);
+              console.log("[PAY] Response body:", JSON.stringify(intentErr?.response?.data, null, 2));
+              console.log("[PAY] Raw error message:", intentErr?.message);
+              throw intentErr;
+            }
           }
-
-          session = { paymentId, clientSecret, publishableKey };
-          stripeSessionRef.current = session;
-          setAttemptCount((c) => c + 1);
         }
 
         const { paymentId, clientSecret, publishableKey } = session;
@@ -537,6 +605,10 @@ export default function PaymentScreen() {
         setView("stripe_polling");
         startStripePolling(paymentId);
       } catch (err: any) {
+        console.log("[PAY] Stripe outer catch triggered");
+        console.log("[PAY] HTTP status:", err?.response?.status);
+        console.log("[PAY] Response body:", JSON.stringify(err?.response?.data, null, 2));
+        console.log("[PAY] Raw error message:", err?.message);
         const status = err?.response?.status;
         const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
         const rawMessage = err?.response?.data?.message ?? err?.message ?? "";
@@ -575,13 +647,17 @@ export default function PaymentScreen() {
 
     try {
       const fullMobileNumber = `${countryPrefix}${mobileNumber}`;
-
-      const res = await paymentApi.post<InitiateResponse>("/payments/initiate", {
+      const taraPayload = {
         bookingId,
         paymentProvider: "tara",
         mobileNumber: fullMobileNumber,
         ...(selectedSavedMethodId ? { savedPaymentMethodId: selectedSavedMethodId } : {}),
-      });
+      };
+      console.log("[PAY] Initiating Tara payment — request body:", JSON.stringify(taraPayload, null, 2));
+
+      const res = await paymentApi.post<InitiateResponse>("/payments/initiate", taraPayload);
+      console.log("[PAY] Tara initiate SUCCESS — status:", res.status);
+      console.log("[PAY] Tara initiate response:", JSON.stringify(res.data, null, 2));
 
       const { paymentId } = res.data.data;
       setAttemptCount((c) => c + 1);
@@ -590,6 +666,10 @@ export default function PaymentScreen() {
       startTaraCountdown();
       startTaraPolling(paymentId);
     } catch (err: any) {
+      console.log("[PAY] Tara initiate FAILED");
+      console.log("[PAY] HTTP status:", err?.response?.status);
+      console.log("[PAY] Response body:", JSON.stringify(err?.response?.data, null, 2));
+      console.log("[PAY] Raw error message:", err?.message);
       const status = err?.response?.status;
       const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
 
@@ -602,8 +682,7 @@ export default function PaymentScreen() {
         setAttemptCount(3);
         setView("failure");
       } else {
-        const message = err?.response?.data?.message ?? err?.message ?? "An unexpected error occurred.";
-        Alert.alert("Payment Error", message);
+        Alert.alert("Payment Error", getPaymentErrorMessage(err));
       }
     } finally {
       setIsInitiating(false);
