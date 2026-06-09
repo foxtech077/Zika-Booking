@@ -110,6 +110,9 @@ type CarState = {
   licencePlate: string;
   odometerReading: string;
   unitCount: string;
+  colour: string;
+  engineSize: string;
+  minimumRentalDays: string;
   address: string;
   lat: number | null;
   lng: number | null;
@@ -131,6 +134,8 @@ type CarState = {
   insuranceType: string;
   minimumDriverAge: string;
   securityDeposit: string;
+  pickupHoursFrom: string;
+  pickupHoursTo: string;
   deliveryEnabled: boolean;
   deliveryRadiusKm: string;
   deliveryFee: string;
@@ -202,6 +207,9 @@ function initState(l: Listing): CarState {
     licencePlate: a.licencePlate ?? "",
     odometerReading: a.odometerReading != null ? String(a.odometerReading) : "",
     unitCount: l.unitCount ? String(l.unitCount) : "1",
+    colour: a.colour ?? "",
+    engineSize: a.engineSize ?? "",
+    minimumRentalDays: a.minimumRentalDays != null ? String(a.minimumRentalDays) : "1",
     address: l.address ?? "",
     lat: toNullableNumber(a.lat),
     lng: toNullableNumber(a.lng),
@@ -215,6 +223,8 @@ function initState(l: Listing): CarState {
     airConditioning: a.airConditioning ?? true,
     pricePerDay: l.pricePerDay ? String(l.pricePerDay) : "",
     currency: l.currency ?? "USD",
+    pickupHoursFrom: a.pickupHoursFrom ?? "",
+    pickupHoursTo: a.pickupHoursTo ?? "",
     cancellationPolicy: normalizeSelectValue(l.cancellationPolicy, CANCELLATION_POLICY_VALUES, "flexible"),
     mileagePolicy: normalizeSelectValue(l.mileagePolicy, MILEAGE_POLICY_VALUES, "unlimited"),
     mileageLimitKm: l.mileageLimitKm != null ? String(l.mileageLimitKm) : "",
@@ -256,6 +266,11 @@ function buildPayload(s: CarState): Record<string, unknown> {
   p.lng = toNullableNumber(s.lng);
   p.town = trimOrNull(s.town);
   p.country = countryOrNull(s.country);
+
+  p.colour = trimOrNull(s.colour);
+  p.engineSize = trimOrNull(s.engineSize);
+  const minRentalDays = toNullableInt(s.minimumRentalDays);
+  p.minimumRentalDays = minRentalDays !== null && minRentalDays >= 1 ? minRentalDays : null;
 
   p.transmission = normalizeTransmission(s.transmission);
   p.fuelType = normalizeFuelType(s.fuelType);
@@ -309,6 +324,8 @@ function buildPayload(s: CarState): Record<string, unknown> {
   p.crossBorderAllowed = s.crossBorderAllowed;
   p.airportPickup = s.airportPickup;
   p.returnSameLocation = s.returnSameLocation;
+  p.pickupHoursFrom = s.pickupHoursFrom || null;
+  p.pickupHoursTo = s.pickupHoursTo || null;
 
   return p;
 }
@@ -331,8 +348,6 @@ function validateStep(step: Step, s: CarState): string[] {
         !s.licencePlate.trim() && "Licence plate is required.",
         s.odometerReading === "" && "Odometer reading is required.",
         !s.address.trim() && "Pickup address is required.",
-        !s.town.trim() && "Town is required — geocode the address.",
-        !s.country.trim() && "Country is required — geocode the address.",
       ].filter(Boolean) as string[];
     case "specs":
       return [
@@ -346,12 +361,14 @@ function validateStep(step: Step, s: CarState): string[] {
       return [
         !(Number(s.pricePerDay) > 0) && "Daily rate must be greater than 0.",
         !s.currency && "Currency is required.",
+        s.minimumRentalDays !== "" && Number(s.minimumRentalDays) < 1 && "Minimum rental days must be at least 1.",
         !s.cancellationPolicy && "Cancellation policy is required.",
         !s.mileagePolicy && "Mileage policy is required.",
         s.mileagePolicy === "limited" && !s.mileageLimitKm && "Mileage limit is required for limited mileage.",
         !s.fuelPolicy && "Fuel policy is required.",
         !s.insuranceType && "Insurance type is required.",
         s.deliveryEnabled && !s.deliveryRadiusKm && "Delivery radius is required when delivery is enabled.",
+        s.pickupHoursFrom && s.pickupHoursTo && s.pickupHoursFrom >= s.pickupHoursTo && "Pickup hours must be valid and end after start.",
       ].filter(Boolean) as string[];
     default:
       return [];
@@ -557,6 +574,22 @@ export function CarForm({ listingId, listing }: Props) {
                     value={s.unitCount}
                     onChange={(e) => set("unitCount", e.target.value)}
                   />
+                  <Input
+                    label="Colour"
+                    value={s.colour}
+                    onChange={(e) => set("colour", e.target.value)}
+                    placeholder="E.g., White, Black, Silver"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Engine Size (cc)"
+                    type="number"
+                    min="0"
+                    value={s.engineSize}
+                    onChange={(e) => set("engineSize", e.target.value)}
+                    placeholder="E.g., 1500"
+                  />
                 </div>
                 <Textarea
                   label="Description (optional)"
@@ -577,8 +610,6 @@ export function CarForm({ listingId, listing }: Props) {
                     onGeocoded={(r) => setS((p) => ({ ...p, lat: r.lat, lng: r.lng, town: r.town, country: r.country }))}
                     errors={tried ? {
                       address: !s.address.trim() ? "Pickup address is required." : undefined,
-                      town: !s.town.trim() ? "Town is required." : undefined,
-                      country: !s.country.trim() ? "Country is required." : undefined,
                     } : undefined}
                   />
                 </div>
@@ -681,13 +712,23 @@ export function CarForm({ listingId, listing }: Props) {
                   options={CANCELLATION_POLICIES}
                 />
                 <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Minimum Rental Days"
+                    type="number"
+                    min="1"
+                    value={s.minimumRentalDays}
+                    onChange={(e) => set("minimumRentalDays", e.target.value)}
+                    placeholder="1"
+                  />
                   <Select
                     label="Mileage Policy"
                     value={s.mileagePolicy}
                     onChange={(e) => set("mileagePolicy", e.target.value)}
                     options={MILEAGE_POLICY_OPTIONS}
                   />
-                  {s.mileagePolicy === "limited" && (
+                </div>
+                {s.mileagePolicy === "limited" && (
+                  <div className="grid grid-cols-2 gap-4">
                     <Input
                       label="Daily Km Limit"
                       type="number" min="1"
@@ -696,8 +737,8 @@ export function CarForm({ listingId, listing }: Props) {
                       required
                       error={tried && !s.mileageLimitKm ? "Required." : undefined}
                     />
-                  )}
-                </div>
+                  </div>
+                )}
                 {s.mileagePolicy === "limited" && (
                   <Input
                     label="Extra Km Rate"
@@ -710,6 +751,20 @@ export function CarForm({ listingId, listing }: Props) {
                 <div className="grid grid-cols-2 gap-4">
                   <Select label="Fuel Policy" value={s.fuelPolicy} onChange={(e) => set("fuelPolicy", e.target.value)} options={FUEL_POLICY_OPTIONS} />
                   <Select label="Insurance Type" value={s.insuranceType} onChange={(e) => set("insuranceType", e.target.value)} options={INSURANCE_TYPE_OPTIONS} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Pickup Hours From"
+                    type="time"
+                    value={s.pickupHoursFrom}
+                    onChange={(e) => set("pickupHoursFrom", e.target.value)}
+                  />
+                  <Input
+                    label="Pickup Hours To"
+                    type="time"
+                    value={s.pickupHoursTo}
+                    onChange={(e) => set("pickupHoursTo", e.target.value)}
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Input label="Min Driver Age" type="number" min="16" max="100" value={s.minimumDriverAge} onChange={(e) => set("minimumDriverAge", e.target.value)} />

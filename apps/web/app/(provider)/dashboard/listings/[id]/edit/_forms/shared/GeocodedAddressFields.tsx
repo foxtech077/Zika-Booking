@@ -61,7 +61,7 @@ export function GeocodedAddressFields({
         </Button>
       </div>
       <p className="text-xs text-slate-400">
-        Click Geocode to auto-fill lat/lng, town and country — required before saving.
+        Click Geocode to auto-fill lat/lng, town and country — optional, but helpful for map accuracy.
       </p>
       <div className="grid grid-cols-2 gap-3">
         <Input

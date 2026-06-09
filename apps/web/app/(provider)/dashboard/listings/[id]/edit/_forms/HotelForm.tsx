@@ -25,14 +25,6 @@ import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
-import {
-  DiscountSection,
-  initDiscountState,
-  appendDiscountPayload,
-  validateDiscount,
-  type DiscountState,
-  type DiscountField,
-} from "./shared/DiscountSection";
 
 // ── Enums (values match backend exactly) ────────────────────────────────────
 
@@ -84,7 +76,7 @@ type HotelState = {
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
-} & DiscountState;
+};
 
 function initState(l: Listing): HotelState {
   return {
@@ -110,7 +102,6 @@ function initState(l: Listing): HotelState {
     customAmenities:    ((l as any).customAmenities ?? []).map((a: any) =>
                           typeof a === "string" ? a : (a?.label ?? "")),
     customInput:        "",
-    ...initDiscountState(l as any),
   };
 }
 
@@ -172,14 +163,6 @@ function buildPayload(s: HotelState): Record<string, unknown> {
 
   p.amenities = groupAmenities(s.selectedAmenities);
   p.customAmenities = s.customAmenities.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean);
-
-  if (s.discountEnabled) {
-    const discountErrors = validateDiscount(s, s.pricePerNight).filter(Boolean);
-    if (discountErrors.length === 0 && s.discountValue !== "") {
-      appendDiscountPayload(p, s);
-    }
-  }
-
   return p;
 }
 
@@ -193,8 +176,6 @@ function validateStep(step: Step, s: HotelState): string[] {
       return [
         !s.name.trim()    && "Hotel name is required.",
         !s.address.trim() && "Address is required.",
-        !s.town.trim()    && "Town / City is required — geocode the address.",
-        !s.country.trim() && "Country code is required — geocode the address.",
       ].filter(Boolean) as string[];
     case "pricing":
       return [
@@ -205,7 +186,6 @@ function validateStep(step: Step, s: HotelState): string[] {
         !s.checkoutTime                && "Check-out time is required.",
         !s.cancellationPolicy          && "Cancellation policy is required.",
         // Discount validation — only blocks when discount is enabled
-        ...validateDiscount(s, s.pricePerNight),
       ].filter(Boolean) as string[];
     case "rooms":
       return [
@@ -505,18 +485,6 @@ export function HotelForm({ listingId, listing }: Props) {
                     <span className="text-sm text-slate-700">Pets Allowed</span>
                   </label>
                 </div>
-                <DiscountSection
-                  discountEnabled={s.discountEnabled}
-                  discountType={s.discountType}
-                  discountValue={s.discountValue}
-                  discountStartDate={s.discountStartDate}
-                  discountEndDate={s.discountEndDate}
-                  basePrice={s.pricePerNight}
-                  currency={s.currency}
-                  priceLabel="night"
-                  tried={tried}
-                  onChange={(field: DiscountField, value) => set(field, value)}
-                />
               </div>
             )}
 
