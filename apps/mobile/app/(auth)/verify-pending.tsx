@@ -9,6 +9,7 @@ import {
   Image,
   TextInput,
   ScrollView,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
@@ -20,21 +21,34 @@ import { K } from "../../constants/theme";
 function extractToken(input: string): string | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
-  try {
-    const url = new URL(trimmed);
-    const t = url.searchParams.get("token");
-    if (t) return t;
-  } catch {
-    // not a URL — treat as raw token if long enough
+
+  // 1. Try regex pattern match for a 64-character hex string (which is the token format)
+  const hexPattern = /[a-fA-F0-9]{64}/;
+  const match = trimmed.match(hexPattern);
+  if (match) {
+    return match[0];
   }
+
+  // 2. Query parameter fallback in case of custom formats
+  try {
+    const urlString = trimmed.includes("://") ? trimmed : `http://${trimmed}`;
+    const url = new URL(urlString);
+    const tokenParam = url.searchParams.get("token");
+    if (tokenParam) return tokenParam;
+  } catch {
+    // ignore URL parsing errors
+  }
+
+  // 3. Raw token fallback (if long enough)
   if (trimmed.length >= 32) return trimmed;
+
   return null;
 }
 
 export default function VerifyPendingScreen() {
   const { email } = useLocalSearchParams<{ email: string }>();
   const [cooldown, setCooldown] = useState(0);
-  const [showPaste, setShowPaste] = useState(false);
+  const [showPaste, setShowPaste] = useState(true);
   const [pastedLink, setPastedLink] = useState("");
   const [pasteError, setPasteError] = useState("");
 
@@ -82,13 +96,13 @@ export default function VerifyPendingScreen() {
     onError: (err: unknown) => {
       const code = (err as any)?.response?.data?.error?.code ?? "";
       if (code === "TOKEN_EXPIRED") {
-        setPasteError("This link has expired. Please request a new verification email.");
+        setPasteError("This link or token has expired. Please request a new verification email.");
       } else if (code === "TOKEN_USED" || code === "ALREADY_VERIFIED") {
         Alert.alert("Already verified!", "Your email is already verified. You can sign in.", [
           { text: "Sign In", onPress: () => router.replace("/(auth)/login") },
         ]);
       } else if (code === "INVALID_TOKEN") {
-        setPasteError("Invalid link. Make sure you copied the full URL from the email.");
+        setPasteError("Invalid link or token. Make sure you copied the entire URL or 64-char token.");
       } else {
         setPasteError("Something went wrong. Please try again.");
       }
@@ -99,11 +113,14 @@ export default function VerifyPendingScreen() {
     setPasteError("");
     const token = extractToken(pastedLink);
     if (!token) {
-      setPasteError("Please paste the full verification link from your email.");
+      setPasteError("Please paste either the full link from your email, or the 64-character token.");
       return;
     }
     verifyMutation.mutate(token);
   }
+
+  const isLocalhost = pastedLink.toLowerCase().includes("localhost");
+  const extractedTokenValue = extractToken(pastedLink);
 
   return (
     <ScrollView
@@ -124,10 +141,12 @@ export default function VerifyPendingScreen() {
       <Text style={styles.title}>Verify your email</Text>
       <Text style={styles.sub}>We sent a verification link to</Text>
       <Text style={styles.email}>{email}</Text>
-      <Text style={styles.hint}>
-        Open the email and tap the verification link.{"\n"}
-        Check your spam folder if you don't see it.
-      </Text>
+      
+      <View style={styles.instructionsContainer}>
+        <Text style={styles.instructionStep}>1. Open your verification email.</Text>
+        <Text style={styles.instructionStep}>2. Long-press the "Verify Email" button and copy the link.</Text>
+        <Text style={styles.instructionStep}>3. Paste the link or the raw token below to activate your account.</Text>
+      </View>
 
       <TouchableOpacity
         style={[
@@ -142,7 +161,7 @@ export default function VerifyPendingScreen() {
           <ActivityIndicator color="#fff" size="small" />
         ) : (
           <Text style={styles.resendBtnText}>
-            {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend verification email"}
+            {cooldown > 0 ? `Resend email in ${cooldown}s` : "Resend verification email"}
           </Text>
         )}
       </TouchableOpacity>
@@ -154,29 +173,50 @@ export default function VerifyPendingScreen() {
         activeOpacity={0.7}
       >
         <Text style={styles.pasteToggleText}>
-          {showPaste ? "▲ Hide" : "▼ Link not opening? Paste it here"}
+          {showPaste ? "▲ Hide Manual Paste" : "▼ Link not opening? Paste it here"}
         </Text>
       </TouchableOpacity>
 
       {showPaste && (
         <View style={styles.pasteCard}>
+          <View style={styles.warningBox}>
+            <Text style={styles.warningTitle}>⚠️ Note for Mobile Users</Text>
+            <Text style={styles.warningText}>
+              Verification links in the email contain "localhost", which cannot be opened directly on your phone.
+              Instead, copy the link from your email and paste it below. We will handle the rest!
+            </Text>
+          </View>
+
           <Text style={styles.pasteLabel}>
-            In your email, long-press the "Verify Email" button → Copy Link → paste it below:
+            Paste the verification link or token:
           </Text>
           <TextInput
             style={[styles.pasteInput, pasteError ? styles.pasteInputError : null]}
             value={pastedLink}
             onChangeText={(v) => { setPastedLink(v); setPasteError(""); }}
-            placeholder="http://localhost:3000/verify?token=..."
+            placeholder="Paste http://localhost:3000/verify?token=... or the 64-char token here"
             placeholderTextColor={K.colors.textLightDim}
             autoCapitalize="none"
             autoCorrect={false}
             multiline
             numberOfLines={3}
           />
+
+          {isLocalhost && extractedTokenValue && (
+            <View style={styles.infoBox}>
+              <Text style={styles.infoText}>
+                ✨ Localhost URL detected! Successfully extracted token:{"\n"}
+                <Text style={styles.tokenHighlight}>
+                  {extractedTokenValue.substring(0, 8)}...{extractedTokenValue.substring(extractedTokenValue.length - 8)}
+                </Text>
+              </Text>
+            </View>
+          )}
+
           {pasteError ? (
             <Text style={styles.pasteErrorText}>{pasteError}</Text>
           ) : null}
+
           <TouchableOpacity
             style={[
               styles.pasteBtn,
@@ -189,7 +229,7 @@ export default function VerifyPendingScreen() {
             {verifyMutation.isPending ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={styles.pasteBtnText}>Verify Now</Text>
+              <Text style={styles.pasteBtnText}>Verify and Activate Account</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -331,5 +371,57 @@ const styles = StyleSheet.create({
     fontSize: K.font.base,
     fontWeight: "600",
     textAlign: "center",
+  },
+  instructionsContainer: {
+    width: "100%",
+    backgroundColor: "rgba(255,255,255,0.04)",
+    borderRadius: K.radius.md,
+    padding: 14,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  instructionStep: {
+    color: K.colors.textLightMuted,
+    fontSize: K.font.sm,
+    lineHeight: 20,
+    marginBottom: 4,
+  },
+  warningBox: {
+    backgroundColor: "rgba(239, 68, 68, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(239, 68, 68, 0.25)",
+    borderRadius: K.radius.md,
+    padding: 12,
+    marginBottom: 16,
+  },
+  warningTitle: {
+    color: "#FCA5A5",
+    fontSize: K.font.sm,
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  warningText: {
+    color: "rgba(255, 255, 255, 0.75)",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  infoBox: {
+    backgroundColor: "rgba(0, 168, 107, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 168, 107, 0.25)",
+    borderRadius: K.radius.md,
+    padding: 10,
+    marginBottom: 12,
+  },
+  infoText: {
+    color: K.colors.accentLight,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  tokenHighlight: {
+    fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace",
+    fontWeight: "700",
+    color: "#fff",
   },
 });

@@ -208,12 +208,16 @@ export default function LoginScreen() {
 let _GoogleSignin: typeof import("@react-native-google-signin/google-signin")["GoogleSignin"] | null = null;
 try {
   _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin;
-  // Must be called once before any sign-in attempt
-  (_GoogleSignin as NonNullable<typeof _GoogleSignin>).configure({
+} catch { /* not available in Expo Go */ }
+
+function configureGoogleSignIn() {
+  if (!_GoogleSignin) return;
+  _GoogleSignin.configure({
     webClientId: process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"] ?? "",
+    iosClientId: process.env["EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID"],
     offlineAccess: true,
   });
-} catch { /* not available in Expo Go */ }
+}
 
 function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
   const setAuth = useAuthStore((s) => s.setAuth);
@@ -223,6 +227,7 @@ function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
       if (!_GoogleSignin) {
         throw Object.assign(new Error("Expo Go"), { code: "EXPO_GO" });
       }
+      configureGoogleSignIn();
       await _GoogleSignin.hasPlayServices();
       const signInResult = await _GoogleSignin.signIn();
       const idToken = (signInResult as any).data?.idToken ?? (signInResult as any).idToken;

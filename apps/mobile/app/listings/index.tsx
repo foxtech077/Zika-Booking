@@ -18,6 +18,21 @@ interface Listing {
   photos: { cdnUrl: string }[];
 }
 
+function normalizeListingsResponse(responseData: any): Listing[] {
+  const candidates = [
+    responseData,
+    responseData?.data,
+    responseData?.data?.listings,
+    responseData?.listings,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+  }
+
+  return [];
+}
+
 const STATUS_COLOR: Record<string, string> = {
   draft: "#6b7280",
   pending_review: "#d97706",
@@ -41,22 +56,17 @@ export default function MyListingsScreen() {
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
 
-  if (user?.userType !== "provider") {
-    return (
-      <SafeAreaView style={styles.center}>
-        <Text style={styles.emptyTitle}>Provider account required</Text>
-        <Text style={styles.emptySubtitle}>Listing management is only available to provider accounts.</Text>
-      </SafeAreaView>
-    );
-  }
-
+  // All hooks must be called unconditionally before any early return
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["myListings"],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: { listings: Listing[] } }>("/listings");
-      return res.data.data.listings;
+      const res = await listingApi.get("/listings");
+      return normalizeListingsResponse(res.data);
     },
+    enabled: user?.userType === "provider",
   });
+
+  const listings = Array.isArray(data) ? data : [];
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -71,6 +81,15 @@ export default function MyListingsScreen() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["myListings"] }),
   });
+
+  if (user?.userType !== "provider") {
+    return (
+      <SafeAreaView style={styles.center}>
+        <Text style={styles.emptyTitle}>Provider account required</Text>
+        <Text style={styles.emptySubtitle}>Listing management is only available to provider accounts.</Text>
+      </SafeAreaView>
+    );
+  }
 
   function handleDelete(id: string) {
     Alert.alert("Delete Draft", "Delete this draft? This cannot be undone.", [
@@ -96,14 +115,14 @@ export default function MyListingsScreen() {
           <Text style={styles.addButtonText}>+ Add new listing</Text>
         </TouchableOpacity>
 
-        {(!data || data.length === 0) && !isLoading && (
+        {listings.length === 0 && !isLoading && (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No listings yet</Text>
             <Text style={styles.emptySubtitle}>Add your first hotel, apartment, or car rental listing.</Text>
           </View>
         )}
 
-        {data?.map((listing) => (
+        {listings.map((listing) => (
           <View key={listing.id} style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
