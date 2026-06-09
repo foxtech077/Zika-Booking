@@ -704,3 +704,34 @@ model Message {
   @@map("messages")
   @@schema("listing")
 }
+
+enum ReportStatus {
+  pending
+  investigating
+  resolved
+  dismissed
+
+  @@schema("listing")
+}
+
+// ── E20 — User Reports ────────────────────────────────────────────────────────
+
+model Report {
+  id           String       @id @default(uuid())
+  reporterId   String       @map("reporter_id")
+  targetType   String       @map("target_type") @db.VarChar(50) // e.g. "listing", "user", "review"
+  targetId     String       @map("target_id")
+  reason       String       @db.VarChar(100)
+  description  String?      @db.Text
+  status       ReportStatus @default(pending)
+  adminNote    String?      @map("admin_note") @db.Text
+  resolvedAt   DateTime?    @map("resolved_at")
+  resolvedBy   String?      @map("resolved_by")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([targetType, targetId])
+  @@map("reports")
+  @@schema("listing")
+}

@@ -6,6 +6,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import { paymentRoutes } from "./routes/payments.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { paymentMethodRoutes } from "./routes/payment-methods.js";
+import { adminPaymentRoutes } from "./routes/admin-payments.js";
 
 const PORT = Number(process.env["PORT"] ?? 3004);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
@@ -99,6 +100,7 @@ async function build() {
   await app.register(paymentRoutes);
   await app.register(webhookRoutes);
   await app.register(paymentMethodRoutes);
+  await app.register(adminPaymentRoutes);
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler((error: any, _req, reply) => {
