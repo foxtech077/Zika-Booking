@@ -89,6 +89,11 @@ export interface ProviderBooking {
   guestPhone: string | null;
   adults: number | null;
   children: number | null;
+  driverFirstName?: string | null;
+  driverLastName?: string | null;
+  driverAge?: number | null;
+  deliveryRequested?: boolean;
+  deliveryAddress?: string | null;
   checkIn: string | null;
   checkOut: string | null;
   pickupDatetime: string | null;

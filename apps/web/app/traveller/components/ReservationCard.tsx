@@ -6,6 +6,7 @@ interface Booking {
   id: string;
   reference: string;
   status: string;
+  listingId: string;
   listingTitle: string;
   listingCategory: string;
   checkIn?: string | null;

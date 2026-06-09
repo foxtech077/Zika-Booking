@@ -732,6 +732,124 @@ try {
     return sendSuccess(reply, 200, { message: "Review task escalated." });
   });
 
+  // ── POST /admin/listings/review-tasks/:taskId/resolve (Agent Unblock Process) ──
+  app.post("/admin/listings/review-tasks/:taskId/resolve", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Listings"],
+      summary: "Resolve a listing review task (Agent unblock process)",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["taskId"],
+        properties: { taskId: { type: "string" } },
+      },
+      body: {
+        type: "object",
+        required: ["decision"],
+        properties: {
+          decision: { 
+            type: "string", 
+            enum: ["unblock_warning", "unblock_no_warning", "keep_suspended", "ban"] 
+          },
+          adminNote: { type: "string", minLength: 1 },
+        },
+      },
+      response: {
+        200: ok({ type: "object", properties: { message: { type: "string" } } }),
+        400: ErrorResponse,
+        401: ErrorResponse,
+        403: ErrorResponse,
+        404: ErrorResponse,
+        409: ErrorResponse,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const admin = req as AdminRequest;
+    const { taskId } = req.params as { taskId: string };
+    const { decision, adminNote } = req.body as { decision: string; adminNote?: string };
+
+    const task = await prisma.listingReviewTask.findUnique({
+      where: { id: taskId },
+      include: { listing: true },
+    });
+
+    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+    if (!["open", "escalated"].includes(task.status)) {
+      return sendError(reply, 409, "TASK_RESOLVED", "This task is already resolved or in a different state.");
+    }
+
+    if (task.assignedTo && task.assignedTo !== admin.adminId) {
+      return sendError(reply, 403, "FORBIDDEN", "This task is assigned to someone else.");
+    }
+
+    if (decision === "unblock_no_warning" && !adminNote) {
+      return sendError(reply, 400, "VALIDATION_ERROR", "Internal note is mandatory when unblocking without a warning.");
+    }
+
+    if (decision === "ban" && !["admin", "super_admin"].includes(admin.adminRole)) {
+      return sendError(reply, 403, "FORBIDDEN", "Only Admin or Super Admin can permanently ban a listing.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      let nextStatus = "resolved";
+      let listingStatusUpdate: string | undefined = undefined;
+      let resetConsecutiveNegative = false;
+
+      switch (decision) {
+        case "unblock_warning":
+          // TODO: Send formal warning email to provider
+          listingStatusUpdate = "active";
+          resetConsecutiveNegative = true;
+          break;
+        case "unblock_no_warning":
+          listingStatusUpdate = "active";
+          resetConsecutiveNegative = true;
+          break;
+        case "keep_suspended":
+          nextStatus = "awaiting_provider_response";
+          // TODO: Send message to provider
+          break;
+        case "ban":
+          listingStatusUpdate = "permanently_banned";
+          // TODO: Notify provider of ban
+          break;
+      }
+
+      if (listingStatusUpdate) {
+        await tx.listing.update({
+          where: { id: task.listingId },
+          data: {
+            status: listingStatusUpdate as any,
+            ...(resetConsecutiveNegative ? { consecutiveNegative: 0 } : {}),
+          },
+        });
+      }
+
+      await tx.listingReviewTask.update({
+        where: { id: taskId },
+        data: {
+          status: nextStatus as any,
+          outcome: decision,
+          adminNote: adminNote ?? null,
+          ...(nextStatus === "resolved" ? { resolvedAt: new Date() } : {}),
+        },
+      });
+
+      await tx.listingModerationLog.create({
+        data: {
+          listingId: task.listingId,
+          action: "review_task_resolved",
+          actorId: admin.adminId,
+          actorRole: admin.adminRole,
+          metadata: { taskId, decision, adminNote: adminNote ?? null },
+        },
+      });
+    });
+
+    return sendSuccess(reply, 200, { message: `Task resolved with decision: ${decision}.` });
+  });
+
   // POST /admin/listings/:id/approve — Approve listing (UC-2.9)
   app.post("/admin/listings/:id/approve", {
     schema: {
@@ -1731,11 +1849,36 @@ try {
         },
       },
       response: {
-        200: ok({ type: "object", description: "Full booking object with statusLog and listing info" }),
-        404: ErrorResponse,
-        401: ErrorResponse,
-        403: ErrorResponse,
+  200: ok({
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      status: { type: "string" },
+      checkIn: { type: "string" },
+      checkOut: { type: "string" },
+      totalAmount: { type: "number" },
+
+      listing: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          country: { type: "string" },
+          category: { type: "string" }
+        }
       },
+
+      statusLog: {
+        type: "array",
+        items: {
+          type: "object"
+        }
+      }
+    }
+  }),
+  404: ErrorResponse,
+  401: ErrorResponse,
+  403: ErrorResponse,
+},
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };

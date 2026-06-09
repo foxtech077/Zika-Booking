@@ -16,6 +16,7 @@ import { voucherRoutes } from "./routes/vouchers.js";
 import { providerRoutes } from "./routes/provider.js";
 import { icalRoutes, startIcalPoller } from "./routes/ical.js";
 import { messagingRoutes } from "./routes/messaging.js";
+import { bookingDocumentRoutes } from "./routes/booking-documents.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
@@ -133,6 +134,7 @@ async function build() {
   await app.register(providerRoutes);
   await app.register(icalRoutes);
   await app.register(messagingRoutes);
+  await app.register(bookingDocumentRoutes);
 
   app.setErrorHandler((error: { statusCode?: number; message: string }, _req, reply) => {
     app.log.error(error);
