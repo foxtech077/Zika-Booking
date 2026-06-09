@@ -15,19 +15,67 @@ import {
   ImageIcon,
   Star,
   CheckCircle,
+  ArrowLeft,
+  ArrowRight,
+  AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { listingsService } from "@/services/listings";
+import { uploadToS3 } from "@/lib/listing-api";
+import { useAuthStore } from "@/stores/auth";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ACCEPTED_EXTENSIONS = ".jpg,.jpeg,.png,.webp";
 const MAX_SIZE_MB = 10;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+const TOKEN_KEY = "zika:access_token";
+
+let refreshPromise: Promise<string> | null = null;
+
+const refreshAccessToken = async () => {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const res = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "include",
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok)
+        throw new Error(body?.error?.message ?? "Session expired. Please sign in again.");
+      const accessToken =
+        body?.data?.tokens?.accessToken ??
+        body?.tokens?.accessToken ??
+        body?.data?.accessToken ??
+        body?.accessToken;
+      if (!accessToken)
+        throw new Error("Refresh succeeded, but no access token was returned.");
+      if (typeof window !== "undefined") sessionStorage.setItem(TOKEN_KEY, accessToken);
+      const { user, setSession } = useAuthStore.getState();
+      if (user) setSession(accessToken, user);
+      return accessToken as string;
+    })().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+};
+
+const withTokenRefresh = async <T,>(request: () => Promise<T>) => {
+  try {
+    return await request();
+  } catch (err: any) {
+    if (err?.response?.status !== 401) throw err;
+    await refreshAccessToken();
+    return request();
+  }
+};
 
 interface UploadItem {
   uid: string;
   file: File;
   preview: string;
   status: "uploading" | "done" | "error";
+  progress: number;
   error?: string;
 }
 
@@ -57,6 +105,8 @@ export function MediaUploader({
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isReordering, setIsReordering] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const canUpload =
@@ -65,6 +115,21 @@ export function MediaUploader({
 
   const processFiles = useCallback(
     async (files: File[]) => {
+      setValidationError(null);
+
+      const invalidType = files.find((f) => !ACCEPTED_TYPES.includes(f.type));
+      const tooLarge    = files.find((f) => f.size > MAX_SIZE_BYTES);
+
+      if (invalidType) {
+        setValidationError(
+          `"${invalidType.name}" is not a supported format. Use JPEG, PNG, or WEBP.`,
+        );
+      } else if (tooLarge) {
+        setValidationError(
+          `"${tooLarge.name}" exceeds the ${MAX_SIZE_MB} MB size limit.`,
+        );
+      }
+
       const valid = files.filter(
         (f) => ACCEPTED_TYPES.includes(f.type) && f.size <= MAX_SIZE_BYTES,
       );
@@ -75,6 +140,7 @@ export function MediaUploader({
         file,
         preview: URL.createObjectURL(file),
         status: "uploading" as const,
+        progress: 0,
       }));
 
       setUploads((prev) => [...prev, ...items]);
@@ -82,23 +148,31 @@ export function MediaUploader({
       await Promise.allSettled(
         items.map(async (item) => {
           try {
-            const { uploadUrl, s3Key } = await listingsService.presignPhoto(
-              listingId,
-              item.file.type,
-              item.file.name,
+            // Presign the photo with the listing service
+            const { uploadUrl, s3Key } = await withTokenRefresh(() =>
+              listingsService.presignPhoto(listingId, item.file.type, item.file.name)
             );
 
-            const res = await fetch(uploadUrl, {
-              method: "PUT",
-              body: item.file,
-              headers: { "Content-Type": item.file.type },
-            });
-            if (!res.ok) throw new Error(`S3 error ${res.status}`);
+            setUploads((prev) =>
+              prev.map((u) => (u.uid === item.uid ? { ...u, progress: 50 } : u)),
+            );
 
-            await listingsService.confirmPhoto(listingId, s3Key);
+            // Upload to S3 directly
+            await uploadToS3(uploadUrl, item.file);
 
             setUploads((prev) =>
-              prev.map((u) => u.uid === item.uid ? { ...u, status: "done" } : u),
+              prev.map((u) => (u.uid === item.uid ? { ...u, progress: 90 } : u)),
+            );
+
+            // Confirm the upload with the listing service
+            await withTokenRefresh(() =>
+              listingsService.confirmPhoto(listingId, s3Key)
+            );
+
+            setUploads((prev) =>
+              prev.map((u) =>
+                u.uid === item.uid ? { ...u, status: "done", progress: 100 } : u,
+              ),
             );
 
             onRefresh();
@@ -107,12 +181,11 @@ export function MediaUploader({
               () => setUploads((prev) => prev.filter((u) => u.uid !== item.uid)),
               1500,
             );
-          } catch {
+          } catch (err: any) {
+            const message = err?.message ?? "Upload failed. Retry?";
             setUploads((prev) =>
               prev.map((u) =>
-                u.uid === item.uid
-                  ? { ...u, status: "error", error: "Upload failed. Retry?" }
-                  : u,
+                u.uid === item.uid ? { ...u, status: "error", error: message } : u,
               ),
             );
           }
@@ -152,6 +225,31 @@ export function MediaUploader({
     void processFiles([item.file]);
   };
 
+  const movePhoto = async (photoId: string, direction: -1 | 1) => {
+    const ordered = [...existingPhotos].sort((a, b) => a.position - b.position);
+    const currentIndex = ordered.findIndex((p) => p.id === photoId);
+    const nextIndex = currentIndex + direction;
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= ordered.length) return;
+
+    const cur  = ordered[currentIndex]!;
+    const next = ordered[nextIndex]!;
+    ordered[currentIndex] = next;
+    ordered[nextIndex]    = cur;
+
+    setIsReordering(true);
+    try {
+      await withTokenRefresh(() =>
+        listingsService.reorderPhotos(
+          listingId,
+          ordered.map((p) => p.id),
+        ),
+      );
+      onRefresh();
+    } finally {
+      setIsReordering(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {canUpload && (
@@ -162,7 +260,9 @@ export function MediaUploader({
           onClick={() => inputRef.current?.click()}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+          }}
           className={cn(
             "border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-200 select-none",
             isDragging
@@ -174,7 +274,7 @@ export function MediaUploader({
             ref={inputRef}
             type="file"
             multiple
-            accept={ACCEPTED_TYPES.join(",")}
+            accept={ACCEPTED_EXTENSIONS}
             onChange={handleFileInput}
             className="hidden"
           />
@@ -191,45 +291,72 @@ export function MediaUploader({
         </div>
       )}
 
+      {validationError && (
+        <div className="flex items-center gap-2 px-3 py-2.5 bg-danger-50 border border-danger/30 rounded-xl text-xs text-danger font-medium">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          {validationError}
+        </div>
+      )}
+
       {(existingPhotos.length > 0 || uploads.length > 0) && (
         <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-          {existingPhotos.map((photo) => (
-            <div
-              key={photo.id}
-              className="group relative aspect-video rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shadow-card"
-            >
-              <img
-                src={photo.cdnUrl}
-                alt={`Photo at position ${photo.position}`}
-                className="w-full h-full object-cover"
-              />
-              {photo.position === 1 && (
-                <div className="absolute top-1.5 left-1.5 bg-primary/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                  <Star className="w-2.5 h-2.5" />
-                  Cover
-                </div>
-              )}
-              {!disabled && (
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all duration-200">
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete(photo.id)}
-                    disabled={deletingId === photo.id}
-                    className="w-8 h-8 rounded-lg bg-danger/90 hover:bg-danger text-white flex items-center justify-center transition-all"
-                  >
-                    {deletingId === photo.id ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <X className="w-3.5 h-3.5" />
-                    )}
-                  </button>
-                </div>
-              )}
-              <span className="absolute bottom-1.5 right-1.5 bg-black/50 text-white text-[10px] font-medium px-1.5 py-0.5 rounded">
-                #{photo.position}
-              </span>
-            </div>
-          ))}
+          {[...existingPhotos]
+            .sort((a, b) => a.position - b.position)
+            .map((photo, index, photos) => (
+              <div
+                key={photo.id}
+                className="group relative aspect-video rounded-xl bg-slate-100 border border-slate-200 overflow-hidden shadow-card"
+              >
+                <img
+                  src={photo.cdnUrl}
+                  alt={`Photo ${photo.position}`}
+                  className="w-full h-full object-cover"
+                />
+                {photo.position === 1 && (
+                  <div className="absolute top-1.5 left-1.5 bg-primary/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                    <Star className="w-2.5 h-2.5" />
+                    Cover
+                  </div>
+                )}
+                {!disabled && (
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center gap-1.5 transition-all duration-200">
+                    <button
+                      type="button"
+                      onClick={() => void movePhoto(photo.id, -1)}
+                      disabled={isReordering || index === 0}
+                      className="w-8 h-8 rounded-lg bg-white/90 hover:bg-white text-slate-700 disabled:opacity-40 flex items-center justify-center"
+                      title="Move left"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(photo.id)}
+                      disabled={deletingId === photo.id}
+                      className="w-8 h-8 rounded-lg bg-danger/90 hover:bg-danger text-white flex items-center justify-center"
+                    >
+                      {deletingId === photo.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <X className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void movePhoto(photo.id, 1)}
+                      disabled={isReordering || index === photos.length - 1}
+                      className="w-8 h-8 rounded-lg bg-white/90 hover:bg-white text-slate-700 disabled:opacity-40 flex items-center justify-center"
+                      title="Move right"
+                    >
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+                <span className="absolute bottom-1.5 right-1.5 bg-black/50 text-white text-[10px] font-medium px-1.5 py-0.5 rounded">
+                  #{photo.position}
+                </span>
+              </div>
+            ))}
 
           {uploads.map((item) => (
             <div
@@ -246,12 +373,20 @@ export function MediaUploader({
               <img
                 src={item.preview}
                 alt="Uploading"
-                className={cn("w-full h-full object-cover", item.status !== "done" && "opacity-50")}
+                className={cn(
+                  "w-full h-full object-cover",
+                  item.status !== "done" && "opacity-50",
+                )}
               />
               <div className="absolute inset-0 flex items-center justify-center">
                 {item.status === "uploading" && (
-                  <div className="bg-black/40 rounded-full p-2">
-                    <Loader2 className="w-5 h-5 text-white animate-spin" />
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="bg-black/40 rounded-full p-2">
+                      <Loader2 className="w-5 h-5 text-white animate-spin" />
+                    </div>
+                    <span className="text-[11px] text-white font-bold bg-black/50 px-1.5 py-0.5 rounded">
+                      {item.progress}%
+                    </span>
                   </div>
                 )}
                 {item.status === "done" && (
@@ -260,7 +395,11 @@ export function MediaUploader({
                   </div>
                 )}
                 {item.status === "error" && (
-                  <button type="button" onClick={() => retryItem(item)} className="flex flex-col items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => retryItem(item)}
+                    className="flex flex-col items-center gap-1"
+                  >
                     <div className="bg-danger/90 rounded-full p-2">
                       <RotateCcw className="w-4 h-4 text-white" />
                     </div>
@@ -270,6 +409,14 @@ export function MediaUploader({
                   </button>
                 )}
               </div>
+              {item.status === "uploading" && (
+                <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20">
+                  <div
+                    className="h-full bg-primary transition-all duration-200"
+                    style={{ width: `${item.progress}%` }}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -279,12 +426,16 @@ export function MediaUploader({
         <div className="border-2 border-dashed border-slate-200 rounded-2xl py-12 text-center">
           <ImageIcon className="w-10 h-10 text-slate-300 mx-auto mb-2" />
           <p className="text-sm font-semibold text-slate-500">No photos yet</p>
-          <p className="text-xs text-slate-400 mt-1">Upload high-quality photos to attract guests</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Upload high-quality photos to attract guests
+          </p>
         </div>
       )}
 
       {!canUpload && !disabled && existingPhotos.length >= maxPhotos && (
-        <p className="text-xs text-slate-400 text-center">Maximum of {maxPhotos} photos reached.</p>
+        <p className="text-xs text-slate-400 text-center">
+          Maximum of {maxPhotos} photos reached.
+        </p>
       )}
     </div>
   );
