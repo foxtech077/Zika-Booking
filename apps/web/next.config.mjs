@@ -11,6 +11,10 @@ const nextConfig = {
         source: "/listing-api/:path*",
         destination: `${process.env.NEXT_PUBLIC_LISTING_API_URL ?? "http://localhost:3003"}/:path*`,
       },
+      {
+        source: "/payment-api/:path*",
+        destination: `${process.env.NEXT_PUBLIC_PAYMENT_API_URL ?? "http://localhost:3004"}/:path*`,
+      },
     ];
   },
   images: {

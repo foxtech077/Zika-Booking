@@ -39,7 +39,13 @@ async function failBooking(bookingId: string) {
 export async function webhookRoutes(app: FastifyInstance) {
 
   // ── POST /payments/stripe/webhook ─────────────────────────────────────────
-  app.post("/payments/stripe/webhook", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/payments/stripe/webhook",{schema: {
+    tags: ["Webhooks"],
+    summary: "Stripe webhook endpoint",
+    description:
+      "Receives Stripe events such as payment_intent.succeeded and payment_intent.payment_failed.",
+
+  },}, async (req: FastifyRequest, reply: FastifyReply) => {
     const sig = req.headers["stripe-signature"];
     if (!sig || typeof sig !== "string") {
       return sendError(reply, 400, "MISSING_SIGNATURE", "Missing Stripe-Signature header.");
@@ -144,11 +150,73 @@ export async function webhookRoutes(app: FastifyInstance) {
       }
     }
 
+    //Setup intent code
+    else if (event.type === "setup_intent.succeeded") {
+      const setupIntent = event.data.object as any;
+
+      const paymentMethodId = setupIntent.payment_method;
+      const customerId = setupIntent.customer;
+
+      try {
+        // attach payment method
+        await stripe.paymentMethods
+          .attach(paymentMethodId, {
+            customer: customerId,
+          })
+          .catch(() => {}); // ignore already attached error
+
+        // set default payment method
+        await stripe.customers.update(customerId, {
+          invoice_settings: {
+            default_payment_method: paymentMethodId,
+          },
+        });
+
+        // find customer in DB
+        const customerAccount = await prisma.customerAccount.findFirst({
+          where: {
+            providerCustomerId: customerId,
+            paymentProvider: "stripe",
+          },
+        });
+
+        if (customerAccount) {
+          const exists = await prisma.paymentMethod.findFirst({
+            where: {
+              providerPmId: paymentMethodId,
+            },
+          });
+
+          if (!exists) {
+            await prisma.paymentMethod.create({
+              data: {
+                userId: customerAccount.userId,
+                providerPmId: paymentMethodId,
+                type: "card",
+                paymentProvider: "stripe",
+              },
+            });
+          }
+        }
+
+        app.log.info(
+          `[stripe-webhook] Card saved for customer ${customerId}`
+        );
+      } catch (err) {
+        app.log.error(`[stripe-webhook] SetupIntent error: ${err}`);
+      }
+    }
+
     return reply.status(200).send({ received: true });
   });
 
   // ── POST /payments/tara/webhook ───────────────────────────────────────────
-  app.post("/payments/tara/webhook", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/payments/tara/webhook",{schema: {
+    tags: ["Webhooks"],
+    summary: "Tara webhook endpoint",
+    description:
+      "Receives Tara payment status updates.",
+  },}, async (req: FastifyRequest, reply: FastifyReply) => {
     const signature = req.headers["x-tara-signature"];
     if (!signature || typeof signature !== "string") {
       return sendError(reply, 400, "MISSING_SIGNATURE", "Missing X-Tara-Signature header.");
