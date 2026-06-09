@@ -5,6 +5,9 @@ import { requireProvider, requireProviderRole, type ProviderRequest } from "../m
 import { getRedis } from "../lib/redis.js";
 import { randomUUID } from "crypto";
 import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../lib/email.js";
+import { ipDetect } from "../middleware/ipDetect.js";
+import { getPricing } from "../routes/pricing.routes.js";
+import { getPaymentProvider } from "../routes/paymentrouting.js";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 const DEFAULT_COMMISSION_RATE = 0.05;
@@ -173,6 +176,38 @@ export async function bookingRoutes(app: FastifyInstance) {
     app.log.error({ err }, "Failed to ensure booking_seq"),
   );
 
+ 
+    app.get("/booking/quote",{ preHandler: [ipDetect], schema: {
+      tags: ["Booking"],
+      summary: "Get pricing with IP-based currency + payment routing",
+
+      headers: {
+        type: "object",
+        properties: {
+          "cf-ipcountry": {
+            type: "string",
+            description: "Country code from Cloudflare (for testing override)",
+          }
+        }
+      }
+    }
+      },
+      async (req, reply) => {
+        const pricing = await getPricing(req, 100);
+  
+        const paymentProvider = getPaymentProvider(pricing.country);
+  
+        return reply.send({
+          success: true,
+          data: {
+            ...pricing,
+            paymentProvider,
+          },
+        });
+      }
+    );
+  
+
   // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
   app.post(
     "/bookings/initiate",
@@ -256,9 +291,10 @@ export async function bookingRoutes(app: FastifyInstance) {
         );
       }
 
-      // Pending booking limit (max 5)
+      // Pending booking limit (max 5) — only count non-expired locks (mirrors checkAvailability logic)
+      const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
       const pendingCount = await prisma.booking.count({
-        where: { guestId, status: "pending_payment" },
+        where: { guestId, status: "pending_payment", createdAt: { gt: pendingExpiry } },
       });
       if (pendingCount >= 5) {
         return reply.status(429).send({
@@ -518,7 +554,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             voucherCode:       { type: "string", maxLength: 30 },
           },
         },
-        response: {
+        response: { 
           201: {
             type: "object",
             properties: {

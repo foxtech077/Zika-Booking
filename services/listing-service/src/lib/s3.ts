@@ -46,6 +46,21 @@ export async function withSignedPhotos<T extends { s3Key: string }>(
   );
 }
 
+export async function uploadBuffer(
+  s3Key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<void> {
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: s3Key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+}
+
 export async function deleteObject(s3Key: string): Promise<void> {
   await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: s3Key }));
 }
