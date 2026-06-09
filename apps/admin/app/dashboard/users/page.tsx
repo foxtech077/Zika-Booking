@@ -12,13 +12,18 @@ import { Avatar } from "@/components/ui/Avatar";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
 import type { PlatformUser } from "@/types/admin";
 
 const fetchUsers = (params: Record<string, string>) =>
   api.get(`/admin/users?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 export default function UsersPage() {
+  const { user } = useAuthStore();
   const qc = useQueryClient();
+
+  // If this admin has a country scope, restrict the user list to those countries
+  const scopedCountries: string[] = user?.role === "admin" ? (user?.countryScope ?? []) : [];
 
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -28,7 +33,15 @@ export default function UsersPage() {
   const [confirm, setConfirm] = useState<{ action: "suspend" | "reinstate" | "ban"; user: PlatformUser } | null>(null);
   const [reason, setReason] = useState("");
 
-  const params = { q, status, userType, page: String(page), limit: "20" };
+  const params: Record<string, string> = {
+    q,
+    ...(status ? { status } : {}),
+    ...(userType ? { userType } : {}),
+    // Inject country filter when admin is country-scoped
+    ...(scopedCountries.length > 0 ? { country: scopedCountries.join(",") } : {}),
+    page: String(page),
+    limit: "20",
+  };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-users", params],
     queryFn: () => fetchUsers(params),
@@ -151,7 +164,7 @@ export default function UsersPage() {
     <div className="space-y-5 max-w-screen-xl">
       <SectionHeader
         title="Users"
-        description={`${total.toLocaleString()} registered users`}
+        description={`${total.toLocaleString()} registered users${scopedCountries.length > 0 ? ` · ${scopedCountries.join(", ")}` : ""}`}
         action={
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Users className="h-4 w-4" />

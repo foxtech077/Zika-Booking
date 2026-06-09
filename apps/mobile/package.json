@@ -1,19 +1,22 @@
 {
   "name": "@zika/mobile",
-  "version": "0.0.1",
+  "version": "0.0.5",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
     "dev": "cross-env NODE_OPTIONS=--no-experimental-require-module expo start",
+    "web": "cross-env NODE_OPTIONS=--no-experimental-require-module expo start --web --port 3000",
     "dev:tunnel": "cross-env NODE_OPTIONS=--no-experimental-require-module expo start --tunnel",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "build:android": "eas build --platform android",
     "build:ios": "eas build --platform ios",
     "typecheck": "tsc --noEmit",
     "postinstall": "pnpm --filter @zika/types --filter @zika/validators build"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1060.0",
+    "@aws-sdk/s3-request-presigner": "^3.1060.0",
     "@expo/metro-runtime": "^6.1.2",
     "@expo/vector-icons": "^15.1.1",
     "@react-native-google-signin/google-signin": "^13.1.0",
@@ -35,9 +38,11 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-get-random-values": "^2.0.0",
     "react-native-maps": "^1.27.2",
     "react-native-safe-area-context": "5.6.2",
     "react-native-screens": "~4.16.0",
+    "react-native-url-polyfill": "^3.0.0",
     "zod": "^3.24.1",
     "zustand": "^5.0.3"
   },

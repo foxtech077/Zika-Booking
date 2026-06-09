@@ -112,6 +112,22 @@ export function getRolePermissions(role: AdminRole): Permission[] {
   return ROLE_PERMISSIONS[role] ?? [];
 }
 
+/**
+ * Returns the set of roles that the given role is allowed to create or assign.
+ * - super_admin → all non-super_admin roles
+ * - admin       → only country_manager and sales
+ * - others      → none
+ */
+export function getAllowedRolesToCreate(role: AdminRole | undefined | null): AdminRole[] {
+  if (role === "super_admin") {
+    return ["admin", "country_manager", "sales", "support", "finance"];
+  }
+  if (role === "admin") {
+    return ["country_manager", "sales"];
+  }
+  return [];
+}
+
 // ── Sidebar navigation with RBAC ─────────────────────────────────────────────
 
 export interface NavItem {

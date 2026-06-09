@@ -39,7 +39,6 @@ import {
   InfoBanner,
   WizardHeader,
   WizardFooter,
-  Stepper,
 } from "../_components";
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -76,15 +75,22 @@ const HOTEL_DOCS = [
 ];
 
 const CAR_DOCS = [
+  { key: "vehicle_registration", label: "Vehicle Registration", icon: "file-text" as const },
   { key: "insurance_certificate", label: "Insurance Certificate", icon: "shield" as const },
   { key: "roadworthiness_certificate", label: "Roadworthiness Certificate", icon: "check-circle" as const },
 ];
 
-const BODY_TYPES = [
-  { key: "sedan", label: "Sedan" }, { key: "suv", label: "SUV" },
-  { key: "minivan", label: "Minivan" }, { key: "pickup", label: "Pickup" },
-  { key: "van", label: "Van" }, { key: "convertible", label: "Convertible" },
-  { key: "sports", label: "Sports" }, { key: "other", label: "Other" },
+const CAR_CATEGORIES = [
+  { key: "Economy", label: "Economy" }, { key: "Compact", label: "Compact" },
+  { key: "SUV", label: "SUV" }, { key: "Minivan", label: "Minivan" },
+  { key: "Pickup", label: "Pickup" }, { key: "Luxury", label: "Luxury" },
+  { key: "Electric", label: "Electric" }, { key: "Convertible", label: "Convertible" },
+];
+
+const INSURANCE_TYPE_OPTIONS = [
+  { key: "basic", label: "Basic" }, { key: "standard", label: "Standard" },
+  { key: "comprehensive", label: "Comprehensive" }, { key: "premium", label: "Premium" },
+  { key: "basic_third_party", label: "Third Party" }, { key: "premium_zero_excess", label: "Zero Excess" },
 ];
 
 const TRANSMISSION_OPTIONS = [
@@ -97,7 +103,7 @@ const FUEL_TYPES = [
 ];
 
 const DRIVE_TYPES = [
-  { key: "2wd", label: "2WD" }, { key: "4wd", label: "4WD" }, { key: "awd", label: "AWD" },
+  { key: "2WD", label: "2WD" }, { key: "4WD", label: "4WD" }, { key: "AWD", label: "AWD" },
 ];
 
 const MILEAGE_OPTIONS = [
@@ -139,18 +145,20 @@ type EditForm = {
   longStayDiscountType: "percentage" | "fixed"; longStayDiscountValue: string;
   // car
   carMake: string; carModel: string; carYear: string;
-  bodyType: string; colour: string; licencePlate: string;
+  carCategory: string; colour: string; licencePlate: string;
   odometerReading: string; seats: string; doors: string;
   transmission: string; fuelType: string; driveType: string;
   engineSize: string; airConditioning: boolean;
   mileagePolicy: string; mileageLimitKm: string;
-  fuelPolicy: string; securityDeposit: string;
+  fuelPolicy: string; insuranceType: string; securityDeposit: string;
   minDriverAge: string;
   roadsideAssistance: boolean; crossBorderAllowed: boolean;
   airportPickup: boolean; returnSameLocation: boolean;
   deliveryAvailable: boolean; deliveryRadiusKm: string; deliveryFee: string;
   pickupHours: string;
 };
+
+type FormErrors = Partial<Record<keyof EditForm | "photos" | "documents", string>>;
 
 const DEFAULTS: EditForm = {
   name: "", description: "", pricePerNight: "",
@@ -165,12 +173,12 @@ const DEFAULTS: EditForm = {
   longStayEnabled: false, longStayMinNights: "7",
   longStayDiscountType: "percentage", longStayDiscountValue: "",
   carMake: "", carModel: "", carYear: "",
-  bodyType: "", colour: "", licencePlate: "",
+  carCategory: "", colour: "", licencePlate: "",
   odometerReading: "", seats: "5", doors: "4",
   transmission: "", fuelType: "", driveType: "",
   engineSize: "", airConditioning: true,
   mileagePolicy: "unlimited", mileageLimitKm: "",
-  fuelPolicy: "full_to_full", securityDeposit: "", minDriverAge: "21",
+  fuelPolicy: "full_to_full", insuranceType: "", securityDeposit: "", minDriverAge: "21",
   roadsideAssistance: false, crossBorderAllowed: false,
   airportPickup: false, returnSameLocation: true,
   deliveryAvailable: false, deliveryRadiusKm: "", deliveryFee: "",
@@ -191,8 +199,10 @@ export default function EditListingScreen() {
   const [photos, setPhotos] = useState<Array<{ id: string; cdnUrl: string; position: number }>>([]);
   const [documents, setDocuments] = useState<Array<{ id: string; documentType: string }>>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
   const [customAmenityInput, setCustomAmenityInput] = useState("");
+  const [errors, setErrors] = useState<FormErrors>({});
   const [form, setForm] = useState<EditForm>(DEFAULTS);
 
   const { data: listing, isLoading } = useQuery({
@@ -209,11 +219,11 @@ export default function EditListingScreen() {
     const cur = getCurrencyForCountry(listing.country);
     const cData = ALL_COUNTRIES.find((c) => c.code === listing.country) ?? null;
     setSelectedCountry(cData);
-    const parsedAmenities = parseAmenitiesToGrouped(Array.isArray(listing.amenities) ? listing.amenities : []);
+    const parsedAmenities = parseAmenitiesToGrouped(listing.amenities);
     setForm({
       name: listing.name ?? "",
       description: listing.description ?? "",
-      pricePerNight: String(listing.pricePerNight ?? ""),
+      pricePerNight: String(listing.pricePerDay ?? listing.pricePerNight ?? ""),
       currency: cur.code,
       currencySymbol: cur.symbol,
       country: listing.country ?? "",
@@ -230,7 +240,7 @@ export default function EditListingScreen() {
         ? listing.customAmenities.map((a: any) => a.label ?? a)
         : [],
       roomType: listing.roomType ?? "",
-      unitCount: String(listing.unitCount ?? ""),
+      unitCount: listing.unitCount != null ? String(listing.unitCount) : "",
       claimedStarRating: String(listing.claimedStarRating ?? ""),
       bedrooms: String(listing.bedrooms ?? 1),
       bathrooms: String(listing.bathrooms ?? 1),
@@ -242,7 +252,7 @@ export default function EditListingScreen() {
       carMake: listing.carMake ?? "",
       carModel: listing.carModel ?? "",
       carYear: String(listing.carYear ?? ""),
-      bodyType: listing.bodyType ?? "",
+      carCategory: listing.carCategory ?? "",
       colour: listing.colour ?? "",
       licencePlate: listing.licencePlate ?? "",
       odometerReading: String(listing.odometerReading ?? ""),
@@ -256,8 +266,9 @@ export default function EditListingScreen() {
       mileagePolicy: listing.mileagePolicy ?? "unlimited",
       mileageLimitKm: String(listing.mileageLimitKm ?? ""),
       fuelPolicy: listing.fuelPolicy ?? "full_to_full",
+      insuranceType: listing.insuranceType ?? "",
       securityDeposit: String(listing.securityDeposit ?? ""),
-      minDriverAge: String(listing.minDriverAge ?? "21"),
+      minDriverAge: String(listing.minimumDriverAge ?? "21"),
       roadsideAssistance: listing.roadsideAssistance ?? false,
       crossBorderAllowed: listing.crossBorderAllowed ?? false,
       airportPickup: listing.airportPickup ?? false,
@@ -277,15 +288,98 @@ export default function EditListingScreen() {
 
   function set<K extends keyof EditForm>(key: K, value: EditForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+    if (errors[key as keyof FormErrors]) setErrors((e) => ({ ...e, [key]: undefined }));
   }
 
   function selectCountry(c: CountryData) {
     const cur = getCurrencyForCountry(c.code);
     setSelectedCountry(c);
     setForm((f) => ({ ...f, country: c.code, currency: cur.code, currencySymbol: cur.symbol }));
+    if (errors.country) setErrors((e) => ({ ...e, country: undefined }));
   }
 
-  // Step-based payload — only sends fields for the current step
+  // ── Step validation ────────────────────────────────────────────────────────
+
+  function validateStep(s: number): boolean {
+    const e: FormErrors = {};
+
+    if (category === "hotel") {
+      switch (s) {
+        case 0:
+          if (!form.name.trim()) e.name = "Hotel name is required.";
+          if (!form.country) e.country = "Country is required.";
+          if (!form.roomType) e.roomType = "Room type is required.";
+          if (!form.unitCount.trim() || parseInt(form.unitCount, 10) < 1)
+            e.unitCount = "Number of units is required (minimum 1).";
+          if (!form.pricePerNight.trim() || parseFloat(form.pricePerNight) <= 0)
+            e.pricePerNight = "Price per night is required.";
+          break;
+        case 1:
+          if (!form.address.trim()) e.address = "Street address is required.";
+          if (!form.town.trim()) e.town = "Town / city is required.";
+          break;
+        case 2:
+          if (!form.checkinTime.trim()) e.checkinTime = "Check-in time is required.";
+          if (!form.checkoutTime.trim()) e.checkoutTime = "Check-out time is required.";
+          if (!form.cancellationPolicy) e.cancellationPolicy = "Cancellation policy is required.";
+          break;
+        case 5:
+          if (!allHotelDocs) e.documents = "All 3 required documents must be uploaded before submitting.";
+          break;
+      }
+    } else if (category === "apartment") {
+      switch (s) {
+        case 0:
+          if (!form.name.trim()) e.name = "Apartment name is required.";
+          if (!form.country) e.country = "Country is required.";
+          if (!form.pricePerNight.trim() || parseFloat(form.pricePerNight) <= 0)
+            e.pricePerNight = "Price per night is required.";
+          break;
+        case 1:
+          if (!form.address.trim()) e.address = "Street address is required.";
+          if (!form.town.trim()) e.town = "Town / city is required.";
+          break;
+        case 2:
+          if (!form.cancellationPolicy) e.cancellationPolicy = "Cancellation policy is required.";
+          break;
+        case 4:
+          if (photos.length < 3) e.photos = "At least 3 photos are required to activate your listing.";
+          break;
+      }
+    } else {
+      // car
+      switch (s) {
+        case 0:
+          if (!form.name.trim()) e.name = "Listing title is required.";
+          if (!form.country) e.country = "Country is required.";
+          if (!form.carMake.trim()) e.carMake = "Make is required.";
+          if (!form.carModel.trim()) e.carModel = "Model is required.";
+          if (!form.carYear.trim()) e.carYear = "Year is required.";
+          if (!form.unitCount.trim() || parseInt(form.unitCount, 10) < 1)
+            e.unitCount = "Number of units is required (minimum 1).";
+          if (!form.pricePerNight.trim() || parseFloat(form.pricePerNight) <= 0)
+            e.pricePerNight = "Price per day is required.";
+          break;
+        case 1:
+          if (!form.transmission) e.transmission = "Transmission type is required.";
+          if (!form.fuelType) e.fuelType = "Fuel type is required.";
+          break;
+        case 4:
+          if (!form.address.trim()) e.address = "Pickup address is required.";
+          if (!form.town.trim()) e.town = "Town / city is required.";
+          break;
+        case 5:
+          if (photos.length < 1) e.photos = "At least 1 photo is required.";
+          break;
+      }
+    }
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  // ── Step payloads ──────────────────────────────────────────────────────────
+
   function buildStepPayload(currentStep: number): Record<string, unknown> {
     if (category === "hotel") {
       switch (currentStep) {
@@ -340,10 +434,11 @@ export default function EditListingScreen() {
     switch (currentStep) {
       case 0: return {
         name: form.name, carMake: form.carMake, carModel: form.carModel,
-        carYear: parseInt(form.carYear, 10) || null, bodyType: form.bodyType || null,
+        carYear: parseInt(form.carYear, 10) || null, carCategory: form.carCategory || null,
+        unitCount: parseInt(form.unitCount, 10) || null,
         colour: form.colour, licencePlate: form.licencePlate,
         odometerReading: parseInt(form.odometerReading, 10) || null,
-        pricePerNight: parseFloat(form.pricePerNight) || null,
+        pricePerDay: parseFloat(form.pricePerNight) || null,
         currency: form.currency, country: form.country?.trim()?.toUpperCase() || null,
       };
       case 1: return {
@@ -355,10 +450,11 @@ export default function EditListingScreen() {
       case 2: return {
         securityDeposit: parseFloat(form.securityDeposit) || null,
         minStayNights: parseInt(form.minStayNights, 10) || 1,
-        minDriverAge: parseInt(form.minDriverAge, 10) || null,
+        minimumDriverAge: parseInt(form.minDriverAge, 10) || null,
         mileagePolicy: form.mileagePolicy,
         mileageLimitKm: form.mileagePolicy === "limited" ? parseInt(form.mileageLimitKm, 10) || null : null,
-        fuelPolicy: form.fuelPolicy || null, cancellationPolicy: form.cancellationPolicy || null,
+        fuelPolicy: form.fuelPolicy || null, insuranceType: form.insuranceType || null,
+        cancellationPolicy: form.cancellationPolicy || null,
       };
       case 3: return {
         roadsideAssistance: form.roadsideAssistance, crossBorderAllowed: form.crossBorderAllowed,
@@ -373,6 +469,7 @@ export default function EditListingScreen() {
   }
 
   async function handleNext() {
+    if (!validateStep(step)) return;
     setSaving(true);
     try {
       const payload = buildStepPayload(step);
@@ -390,6 +487,7 @@ export default function EditListingScreen() {
   }
 
   async function handleFinalSave() {
+    if (!validateStep(step)) return;
     setSaving(true);
     try {
       const payload = buildStepPayload(step);
@@ -398,9 +496,14 @@ export default function EditListingScreen() {
       }
       qc.invalidateQueries({ queryKey: ["myListings"] });
       qc.invalidateQueries({ queryKey: ["listing", id] });
-      Alert.alert("Saved", "Your listing has been updated.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      Alert.alert(
+        "Listing Saved",
+        "Your changes have been saved. Would you like to go to the activation and submission screen now?",
+        [
+          { text: "Later", onPress: () => router.back() },
+          { text: "Go Live / Submit", onPress: () => router.replace(`/listings/${id}/submit` as any) },
+        ]
+      );
     } catch {
       Alert.alert("Save Failed", "Could not save. Please try again.");
     } finally {
@@ -409,6 +512,7 @@ export default function EditListingScreen() {
   }
 
   async function handleHotelResubmit() {
+    if (!validateStep(step)) return;
     setSubmitting(true);
     try {
       const payload = buildStepPayload(step);
@@ -441,7 +545,10 @@ export default function EditListingScreen() {
         allowsMultipleSelection: true, selectionLimit: 30 - photos.length,
       });
       if (result.canceled) return;
-      for (const asset of result.assets) {
+      const total = result.assets.length;
+      for (let i = 0; i < total; i++) {
+        const asset = result.assets[i];
+        setUploadProgress({ current: i + 1, total });
         const contentType = asset.mimeType ?? "image/jpeg";
         const presign = await listingApi.post<{ data: { uploadUrl: string; s3Key: string } }>(
           `/listings/${id}/photos/presign`, { contentType, filename: asset.fileName ?? "photo.jpg" }
@@ -452,10 +559,12 @@ export default function EditListingScreen() {
         );
         setPhotos((p) => [...p, confirm.data.data]);
       }
+      if (errors.photos) setErrors((e) => ({ ...e, photos: undefined }));
     } catch {
-      Alert.alert("Upload Failed", "Some photos could not be uploaded. Please try again.");
+      Alert.alert("Upload Failed", "Some photos could not be uploaded. Already uploaded photos have been saved.");
     } finally {
       setUploadingPhoto(false);
+      setUploadProgress(null);
     }
   }
 
@@ -463,7 +572,7 @@ export default function EditListingScreen() {
     try {
       await listingApi.delete(`/listings/${id}/photos/${photoId}`);
       setPhotos((p) => p.filter((ph) => ph.id !== photoId));
-    } catch { Alert.alert("Error", "Could not remove this photo."); }
+    } catch { Alert.alert("Error", "Could not delete this photo. Please try again."); }
   }
 
   async function pickAndUploadDocument(docType: string, docLabel: string) {
@@ -484,8 +593,16 @@ export default function EditListingScreen() {
         { s3Key: presign.data.data.s3Key, documentType: docType, contentType }
       );
       setDocuments((d) => [...d.filter((doc) => doc.documentType !== docType), confirm.data.data]);
+      if (errors.documents) setErrors((e) => ({ ...e, documents: undefined }));
     } catch { Alert.alert("Upload Failed", `Could not upload ${docLabel}. Please try again.`); }
     finally { setUploadingDoc(null); }
+  }
+
+  async function deleteDocument(docId: string, docLabel: string) {
+    try {
+      await listingApi.delete(`/listings/${id}/documents/${docId}`);
+      setDocuments((d) => d.filter((doc) => doc.id !== docId));
+    } catch { Alert.alert("Error", `Could not delete ${docLabel}. Please try again.`); }
   }
 
   const allHotelDocs = HOTEL_DOCS.every((d) => documents.some((doc) => doc.documentType === d.key));
@@ -500,7 +617,6 @@ export default function EditListingScreen() {
     );
   }
 
-  // ── Determine submit label ─────────────────────────────────────────────────
   const lastLabel = category === "hotel"
     ? (listing?.status === "rejected" ? "Re-submit for Review" : "Submit for Review")
     : "Save Changes";
@@ -525,27 +641,26 @@ export default function EditListingScreen() {
             <View>
               <SectionHeader title="Hotel Details" icon="home" />
               <FormField label="Hotel Name" required value={form.name}
-                onChangeText={(t) => set("name", t)} placeholder="e.g. Grand Nairobi Hotel" maxLength={200} />
+                onChangeText={(t) => set("name", t)} placeholder="e.g. Grand Nairobi Hotel" maxLength={200}
+                error={errors.name} />
               <CountryPickerButton label="Country" required selectedCountry={selectedCountry}
-                onPress={() => setCountryModalOpen(true)} />
+                onPress={() => setCountryModalOpen(true)} error={errors.country} />
               {selectedCountry && (
-                <InfoBanner
-                  message={`Currency set to ${form.currency} (${form.currencySymbol})`}
-                  variant="success"
-                />
+                <InfoBanner message={`Currency set to ${form.currency} (${form.currencySymbol})`} variant="success" />
               )}
               <ChipSelector label="Room Type" required options={ROOM_TYPES}
-                selected={form.roomType} onSelect={(k) => set("roomType", k)} horizontal />
+                selected={form.roomType} onSelect={(k) => set("roomType", k)} horizontal error={errors.roomType} />
               <FormField label="Number of Units" required value={form.unitCount}
                 onChangeText={(t) => set("unitCount", t.replace(/\D/g, ""))}
-                placeholder="e.g. 45" keyboardType="numeric" />
+                placeholder="e.g. 45" keyboardType="numeric" error={errors.unitCount} />
               <ChipSelector label="Star Rating" options={STAR_OPTIONS}
                 selected={form.claimedStarRating} onSelect={(k) => set("claimedStarRating", k)} horizontal />
               <SectionHeader title="Pricing" icon="tag" />
               <View style={s.priceRow}>
                 <View style={{ flex: 1 }}>
                   <FormField label="Price Per Night" required value={form.pricePerNight}
-                    onChangeText={(t) => set("pricePerNight", t)} placeholder="0.00" keyboardType="decimal-pad" />
+                    onChangeText={(t) => set("pricePerNight", t)} placeholder="0.00" keyboardType="decimal-pad"
+                    error={errors.pricePerNight} />
                 </View>
                 <View style={s.currencyWrap}>
                   <CurrencyDisplay code={form.currency} symbol={form.currencySymbol} />
@@ -562,11 +677,13 @@ export default function EditListingScreen() {
           {category === "hotel" && step === 1 && (
             <View>
               <SectionHeader title="Property Location" icon="map-pin"
-                subtitle="Geocoding will be enabled in a future update." />
+                subtitle="Enter the property's full address below." />
               <FormField label="Street Address" required value={form.address}
-                onChangeText={(t) => set("address", t)} placeholder="e.g. Upper Hill Road" />
+                onChangeText={(t) => set("address", t)} placeholder="e.g. Upper Hill Road"
+                error={errors.address} />
               <FormField label="Town / City" required value={form.town}
-                onChangeText={(t) => set("town", t)} placeholder="e.g. Nairobi" />
+                onChangeText={(t) => set("town", t)} placeholder="e.g. Nairobi"
+                error={errors.town} />
             </View>
           )}
 
@@ -575,16 +692,18 @@ export default function EditListingScreen() {
               <SectionHeader title="Check-in & Check-out" icon="clock" />
               <View style={s.twoCol}>
                 <View style={{ flex: 1 }}>
-                  <FormField label="Check-in Time" value={form.checkinTime}
-                    onChangeText={(t) => set("checkinTime", t)} placeholder="14:00" />
+                  <FormField label="Check-in Time" required value={form.checkinTime}
+                    onChangeText={(t) => set("checkinTime", t)} placeholder="14:00"
+                    error={errors.checkinTime} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <FormField label="Check-out Time" value={form.checkoutTime}
-                    onChangeText={(t) => set("checkoutTime", t)} placeholder="11:00" />
+                  <FormField label="Check-out Time" required value={form.checkoutTime}
+                    onChangeText={(t) => set("checkoutTime", t)} placeholder="11:00"
+                    error={errors.checkoutTime} />
                 </View>
               </View>
               <FormField label="Minimum Stay (nights)" value={form.minStayNights}
-                onChangeText={(t) => set("minStayNights", t.replace(/\D/g, "") || "1")}
+                onChangeText={(t) => set("minStayNights", t.replace(/\D/g, ""))}
                 placeholder="1" keyboardType="numeric" />
               <RadioGroup label="Cancellation Policy" required options={CANCELLATION_OPTIONS}
                 selected={form.cancellationPolicy} onSelect={(k) => set("cancellationPolicy", k)} />
@@ -612,12 +731,14 @@ export default function EditListingScreen() {
 
           {category === "hotel" && step === 4 && (
             <PhotosSection photos={photos} uploading={uploadingPhoto}
-              onAdd={pickAndUploadPhoto} onDelete={deletePhoto} minPhotos={1} maxPhotos={30} />
+              uploadProgress={uploadProgress ?? undefined}
+              onAdd={pickAndUploadPhoto} onDelete={deletePhoto} minPhotos={1} maxPhotos={30}
+              error={errors.photos} />
           )}
 
           {category === "hotel" && step === 5 && (
             <DocumentsSection docTypes={HOTEL_DOCS} documents={documents}
-              uploadingDoc={uploadingDoc} onUpload={pickAndUploadDocument}
+              uploadingDoc={uploadingDoc} onUpload={pickAndUploadDocument} onDelete={deleteDocument}
               note="All 3 documents are required to submit or resubmit your hotel listing." />
           )}
 
@@ -627,9 +748,10 @@ export default function EditListingScreen() {
             <View>
               <SectionHeader title="Apartment Details" icon="home" />
               <FormField label="Apartment Name" required value={form.name}
-                onChangeText={(t) => set("name", t)} placeholder="e.g. Cosy 2-bed" maxLength={200} />
+                onChangeText={(t) => set("name", t)} placeholder="e.g. Cosy 2-bed" maxLength={200}
+                error={errors.name} />
               <CountryPickerButton label="Country" required selectedCountry={selectedCountry}
-                onPress={() => setCountryModalOpen(true)} />
+                onPress={() => setCountryModalOpen(true)} error={errors.country} />
               {selectedCountry && (
                 <InfoBanner message={`Currency: ${form.currency} (${form.currencySymbol})`} variant="success" />
               )}
@@ -642,7 +764,8 @@ export default function EditListingScreen() {
               <View style={s.priceRow}>
                 <View style={{ flex: 1 }}>
                   <FormField label="Price Per Night" required value={form.pricePerNight}
-                    onChangeText={(t) => set("pricePerNight", t)} placeholder="0.00" keyboardType="decimal-pad" />
+                    onChangeText={(t) => set("pricePerNight", t)} placeholder="0.00" keyboardType="decimal-pad"
+                    error={errors.pricePerNight} />
                 </View>
                 <View style={s.currencyWrap}>
                   <CurrencyDisplay code={form.currency} symbol={form.currencySymbol} />
@@ -658,9 +781,11 @@ export default function EditListingScreen() {
             <View>
               <SectionHeader title="Property Location" icon="map-pin" />
               <FormField label="Street Address" required value={form.address}
-                onChangeText={(t) => set("address", t)} placeholder="e.g. Kilimani Road" />
+                onChangeText={(t) => set("address", t)} placeholder="e.g. Kilimani Road"
+                error={errors.address} />
               <FormField label="Town / City" required value={form.town}
-                onChangeText={(t) => set("town", t)} placeholder="e.g. Nairobi" />
+                onChangeText={(t) => set("town", t)} placeholder="e.g. Nairobi"
+                error={errors.town} />
             </View>
           )}
 
@@ -678,7 +803,7 @@ export default function EditListingScreen() {
                 </View>
               </View>
               <FormField label="Minimum Stay (nights)" value={form.minStayNights}
-                onChangeText={(t) => set("minStayNights", t.replace(/\D/g, "") || "1")}
+                onChangeText={(t) => set("minStayNights", t.replace(/\D/g, ""))}
                 placeholder="1" keyboardType="numeric" />
               <RadioGroup label="Cancellation Policy" required options={CANCELLATION_OPTIONS}
                 selected={form.cancellationPolicy} onSelect={(k) => set("cancellationPolicy", k)} />
@@ -725,7 +850,9 @@ export default function EditListingScreen() {
               <InfoBanner message="At least 3 photos required for auto-activation." variant="info" />
               <View style={{ height: 16 }} />
               <PhotosSection photos={photos} uploading={uploadingPhoto}
-                onAdd={pickAndUploadPhoto} onDelete={deletePhoto} minPhotos={3} maxPhotos={30} />
+                uploadProgress={uploadProgress ?? undefined}
+                onAdd={pickAndUploadPhoto} onDelete={deletePhoto} minPhotos={3} maxPhotos={30}
+                error={errors.photos} />
             </View>
           )}
 
@@ -735,42 +862,49 @@ export default function EditListingScreen() {
             <View>
               <SectionHeader title="Vehicle Identity" icon="truck" />
               <FormField label="Listing Title" required value={form.name}
-                onChangeText={(t) => set("name", t)} placeholder="e.g. Toyota Land Cruiser 2022" maxLength={200} />
+                onChangeText={(t) => set("name", t)} placeholder="e.g. Toyota Land Cruiser 2022" maxLength={200}
+                error={errors.name} />
               <CountryPickerButton label="Country" required selectedCountry={selectedCountry}
-                onPress={() => setCountryModalOpen(true)} />
+                onPress={() => setCountryModalOpen(true)} error={errors.country} />
               {selectedCountry && (
                 <InfoBanner message={`Currency: ${form.currency} (${form.currencySymbol})`} variant="success" />
               )}
               <View style={s.twoCol}>
                 <View style={{ flex: 1 }}>
                   <FormField label="Make" required value={form.carMake}
-                    onChangeText={(t) => set("carMake", t)} placeholder="Toyota" />
+                    onChangeText={(t) => set("carMake", t)} placeholder="Toyota" error={errors.carMake} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <FormField label="Model" required value={form.carModel}
-                    onChangeText={(t) => set("carModel", t)} placeholder="Land Cruiser" />
+                    onChangeText={(t) => set("carModel", t)} placeholder="Land Cruiser" error={errors.carModel} />
                 </View>
               </View>
               <View style={s.twoCol}>
                 <View style={{ flex: 1 }}>
                   <FormField label="Year" required value={form.carYear}
                     onChangeText={(t) => set("carYear", t.replace(/\D/g, "").slice(0, 4))}
-                    placeholder="2022" keyboardType="numeric" maxLength={4} />
+                    placeholder="2022" keyboardType="numeric" maxLength={4} error={errors.carYear} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <FormField label="Colour" value={form.colour}
                     onChangeText={(t) => set("colour", t)} placeholder="Silver" />
                 </View>
               </View>
-              <ChipSelector label="Vehicle Category" options={BODY_TYPES}
-                selected={form.bodyType} onSelect={(k) => set("bodyType", k)} />
+              <ChipSelector label="Vehicle Category" required options={CAR_CATEGORIES}
+                selected={form.carCategory} onSelect={(k) => set("carCategory", k)} error={errors.carCategory} />
+              <FormField label="Number of Units" required
+                hint="How many vehicles of this type do you have?"
+                value={form.unitCount}
+                onChangeText={(t) => set("unitCount", t.replace(/\D/g, ""))}
+                placeholder="e.g. 3" keyboardType="numeric" error={errors.unitCount} />
               <FormField label="Licence Plate" hint="Shown only after booking confirmation"
                 value={form.licencePlate} onChangeText={(t) => set("licencePlate", t.toUpperCase())}
                 placeholder="KAA 123A" autoCapitalize="characters" />
               <View style={s.priceRow}>
                 <View style={{ flex: 1 }}>
                   <FormField label="Price Per Day" required value={form.pricePerNight}
-                    onChangeText={(t) => set("pricePerNight", t)} placeholder="0.00" keyboardType="decimal-pad" />
+                    onChangeText={(t) => set("pricePerNight", t)} placeholder="0.00" keyboardType="decimal-pad"
+                    error={errors.pricePerNight} />
                 </View>
                 <View style={s.currencyWrap}>
                   <CurrencyDisplay code={form.currency} symbol={form.currencySymbol} />
@@ -787,9 +921,9 @@ export default function EditListingScreen() {
               <FormField label="Doors" value={form.doors}
                 onChangeText={(t) => set("doors", t.replace(/\D/g, ""))} placeholder="4" keyboardType="numeric" />
               <ChipSelector label="Transmission" required options={TRANSMISSION_OPTIONS}
-                selected={form.transmission} onSelect={(k) => set("transmission", k)} />
+                selected={form.transmission} onSelect={(k) => set("transmission", k)} error={errors.transmission} />
               <ChipSelector label="Fuel Type" required options={FUEL_TYPES}
-                selected={form.fuelType} onSelect={(k) => set("fuelType", k)} />
+                selected={form.fuelType} onSelect={(k) => set("fuelType", k)} error={errors.fuelType} />
               <ChipSelector label="Drive Type" options={DRIVE_TYPES}
                 selected={form.driveType} onSelect={(k) => set("driveType", k)} />
               <FormField label="Engine Size" hint="e.g. 2.5L" value={form.engineSize}
@@ -807,7 +941,7 @@ export default function EditListingScreen() {
               <View style={s.twoCol}>
                 <View style={{ flex: 1 }}>
                   <FormField label="Min Rental Days" value={form.minStayNights}
-                    onChangeText={(t) => set("minStayNights", t.replace(/\D/g, "") || "1")}
+                    onChangeText={(t) => set("minStayNights", t.replace(/\D/g, ""))}
                     placeholder="1" keyboardType="numeric" />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -825,6 +959,8 @@ export default function EditListingScreen() {
               )}
               <RadioGroup label="Fuel Policy" required options={FUEL_POLICY_OPTIONS}
                 selected={form.fuelPolicy} onSelect={(k) => set("fuelPolicy", k)} />
+              <ChipSelector label="Insurance Type" required options={INSURANCE_TYPE_OPTIONS}
+                selected={form.insuranceType} onSelect={(k) => set("insuranceType", k)} />
               <RadioGroup label="Cancellation Policy" required options={CANCELLATION_OPTIONS}
                 selected={form.cancellationPolicy} onSelect={(k) => set("cancellationPolicy", k)} />
             </View>
@@ -859,9 +995,11 @@ export default function EditListingScreen() {
             <View>
               <SectionHeader title="Pickup Location" icon="map-pin" />
               <FormField label="Pickup Address" required value={form.address}
-                onChangeText={(t) => set("address", t)} placeholder="e.g. Jomo Kenyatta Airport" />
+                onChangeText={(t) => set("address", t)} placeholder="e.g. Jomo Kenyatta Airport"
+                error={errors.address} />
               <FormField label="Town / City" required value={form.town}
-                onChangeText={(t) => set("town", t)} placeholder="e.g. Nairobi" />
+                onChangeText={(t) => set("town", t)} placeholder="e.g. Nairobi"
+                error={errors.town} />
               <FormField label="Pickup Hours" value={form.pickupHours}
                 onChangeText={(t) => set("pickupHours", t)} placeholder="08:00 – 18:00" />
             </View>
@@ -870,10 +1008,12 @@ export default function EditListingScreen() {
           {category === "car" && step === 5 && (
             <View>
               <PhotosSection photos={photos} uploading={uploadingPhoto}
-                onAdd={pickAndUploadPhoto} onDelete={deletePhoto} minPhotos={1} maxPhotos={30} />
+                uploadProgress={uploadProgress ?? undefined}
+                onAdd={pickAndUploadPhoto} onDelete={deletePhoto} minPhotos={1} maxPhotos={30}
+                error={errors.photos} />
               <View style={{ height: 20 }} />
               <DocumentsSection docTypes={CAR_DOCS} documents={documents}
-                uploadingDoc={uploadingDoc} onUpload={pickAndUploadDocument}
+                uploadingDoc={uploadingDoc} onUpload={pickAndUploadDocument} onDelete={deleteDocument}
                 note="Insurance and roadworthiness documents required." />
             </View>
           )}
@@ -905,12 +1045,35 @@ export default function EditListingScreen() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function parseAmenitiesToGrouped(raw: any[]): Record<AmenityCategory, string[]> {
+function parseAmenitiesToGrouped(raw: any): Record<AmenityCategory, string[]> {
   const result = emptyAmenities();
-  const keys = raw.map((a: any) => a.amenityKey ?? a);
-  for (const cat of AMENITY_CATEGORIES) {
-    for (const item of AMENITY_CONFIG[cat]) {
-      if (keys.includes(item.key)) result[cat].push(item.key);
+  if (!raw) return result;
+
+  if (Array.isArray(raw)) {
+    const keys = raw.map((a: any) => a?.amenityKey ?? a).filter((k): k is string => typeof k === "string");
+    for (const cat of AMENITY_CATEGORIES) {
+      for (const item of AMENITY_CONFIG[cat]) {
+        if (keys.includes(item.key) || keys.includes(`${cat}:${item.key}`)) {
+          result[cat].push(item.key);
+        }
+      }
+    }
+  } else if (typeof raw === "object") {
+    for (const cat of AMENITY_CATEGORIES) {
+      const vals = raw[cat];
+      if (Array.isArray(vals)) {
+        for (const val of vals) {
+          const itemKey = typeof val === "object" ? val?.amenityKey ?? val : val;
+          if (typeof itemKey === "string") {
+            const cleanKey = itemKey.includes(":") ? itemKey.split(":")[1] : itemKey;
+            if (AMENITY_CONFIG[cat].some((item) => item.key === cleanKey)) {
+              if (!result[cat].includes(cleanKey)) {
+                result[cat].push(cleanKey);
+              }
+            }
+          }
+        }
+      }
     }
   }
   return result;

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  BackHandler,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -69,26 +70,24 @@ type ApartmentForm = {
   currency: string;
   currencySymbol: string;
   description: string;
-  // location — geocoding disabled; manual text fields
   address: string;
   town: string;
   country: string;
-  // policies
   checkinTime: string;
   checkoutTime: string;
   cancellationPolicy: string;
   minStayNights: string;
   smokingAllowed: boolean;
   petsAllowed: boolean;
-  // long-stay discount
   longStayEnabled: boolean;
   longStayMinNights: string;
   longStayDiscountType: "percentage" | "fixed";
   longStayDiscountValue: string;
-  // amenities
   amenities: Record<AmenityCategory, string[]>;
   customAmenities: string[];
 };
+
+type FormErrors = Partial<Record<keyof ApartmentForm | "photos", string>>;
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -101,7 +100,9 @@ export default function ApartmentListingScreen() {
   const [selectedCountry, setSelectedCountry] = useState<CountryData | null>(null);
   const [photos, setPhotos] = useState<Array<{ id: string; cdnUrl: string; position: number }>>([]);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [customAmenityInput, setCustomAmenityInput] = useState("");
+  const [errors, setErrors] = useState<FormErrors>({});
 
   const [form, setForm] = useState<ApartmentForm>({
     name: "",
@@ -143,9 +144,7 @@ export default function ApartmentListingScreen() {
     const cur = getCurrencyForCountry(listing.country);
     const cData = ALL_COUNTRIES.find((c) => c.code === listing.country) ?? null;
     setSelectedCountry(cData);
-    const parsedAmenities = parseAmenitiesToGrouped(
-      Array.isArray(listing.amenities) ? listing.amenities : []
-    );
+    const parsedAmenities = parseAmenitiesToGrouped(listing.amenities);
     setForm({
       name: listing.name ?? "",
       bedrooms: String(listing.bedrooms ?? 1),
@@ -178,6 +177,7 @@ export default function ApartmentListingScreen() {
 
   function set<K extends keyof ApartmentForm>(key: K, value: ApartmentForm[K]) {
     setForm((f) => ({ ...f, [key]: value }));
+    if (errors[key as keyof FormErrors]) setErrors((e) => ({ ...e, [key]: undefined }));
   }
 
   function selectCountry(c: CountryData) {
@@ -189,11 +189,49 @@ export default function ApartmentListingScreen() {
       currency: cur.code,
       currencySymbol: cur.symbol,
     }));
+    if (errors.country) setErrors((e) => ({ ...e, country: undefined }));
+  }
+
+  // ── Step validation ────────────────────────────────────────────────────────
+
+  function validateStep(s: number): boolean {
+    const e: FormErrors = {};
+    switch (s) {
+      case 0:
+        if (!form.name.trim()) e.name = "Apartment name is required.";
+        if (!form.country) e.country = "Country is required.";
+        if (!form.pricePerNight.trim() || parseFloat(form.pricePerNight) <= 0)
+          e.pricePerNight = "Price per night is required.";
+        if (!form.description.trim()) e.description = "Description is required.";
+        if (!form.maxGuests.trim() || parseInt(form.maxGuests, 10) < 1)
+          e.maxGuests = "Maximum guests must be at least 1.";
+        break;
+      case 1:
+        if (!form.address.trim()) e.address = "Street address is required.";
+        if (!form.town.trim()) e.town = "Town / city is required.";
+        break;
+      case 2:
+        if (!form.checkinTime.trim()) e.checkinTime = "Check-in time is required.";
+        if (!form.checkoutTime.trim()) e.checkoutTime = "Check-out time is required.";
+        if (!form.cancellationPolicy) e.cancellationPolicy = "Cancellation policy is required.";
+        if (form.longStayEnabled) {
+          if (!form.longStayMinNights.trim() || parseInt(form.longStayMinNights, 10) < 2)
+            e.longStayMinNights = "Minimum nights threshold must be at least 2.";
+          if (!form.longStayDiscountValue.trim() || parseFloat(form.longStayDiscountValue) <= 0)
+            e.longStayDiscountValue = "Discount value is required.";
+        }
+        break;
+      case 4:
+        if (photos.length < 3) e.photos = "At least 3 photos are required to activate your listing.";
+        break;
+    }
+    setErrors(e);
+    return Object.keys(e).length === 0;
   }
 
   function buildStepPayload(currentStep: number): Record<string, unknown> {
     switch (currentStep) {
-      case 0: // Basic Info
+      case 0:
         return {
           name: form.name,
           bedrooms: parseInt(form.bedrooms, 10) || 0,
@@ -204,12 +242,12 @@ export default function ApartmentListingScreen() {
           country: form.country?.trim()?.toUpperCase() || null,
           description: form.description,
         };
-      case 1: // Location
+      case 1:
         return {
           address: form.address,
           town: form.town,
         };
-      case 2: // Policies
+      case 2:
         return {
           checkinTime: form.checkinTime,
           checkoutTime: form.checkoutTime,
@@ -224,18 +262,19 @@ export default function ApartmentListingScreen() {
             ? parseFloat(form.longStayDiscountValue) || null
             : null,
         };
-      case 3: // Amenities — send as grouped object, never as empty array
+      case 3:
         return {
           amenities: toAmenitiesPayload(form.amenities),
           customAmenities: form.customAmenities,
         };
-      case 4: // Photos — uploaded via presign/confirm, no PATCH needed
+      case 4:
       default:
         return {};
     }
   }
 
   async function handleNext() {
+    if (!validateStep(step)) return;
     setSaving(true);
     try {
       const payload = buildStepPayload(step);
@@ -258,19 +297,68 @@ export default function ApartmentListingScreen() {
     qc.invalidateQueries({ queryKey: ["myListings"] });
     Alert.alert(
       "Listing Saved",
-      "Your apartment listing has been saved. It will activate automatically once all required fields are complete and at least 3 photos are uploaded.",
+      "Your apartment listing has been saved. Would you like to go to the activation screen to publish it now?",
       [
-        {
-          text: "View My Listings",
-          onPress: () => router.replace("/(provider)/listings" as any),
+        { text: "Later", onPress: () => router.replace("/(provider)/listings" as any) },
+        { text: "Go Live", onPress: () => router.replace(`/listings/${id}/submit` as any) },
+      ]
+    );
+  }
+
+  function handleExitWizard() {
+    Alert.alert(
+      "Discard listing changes?",
+      "You can save this listing as a draft or discard it completely.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Save Draft", 
+          onPress: () => {
+            qc.invalidateQueries({ queryKey: ["myListings"] });
+            router.replace("/(provider)/listings" as any);
+          } 
+        },
+        { 
+          text: "Discard", 
+          style: "destructive", 
+          onPress: async () => {
+            if (!id) {
+              router.replace("/(provider)/listings" as any);
+              return;
+            }
+            setSaving(true);
+            try {
+              await listingApi.delete(`/listings/${id}`);
+              qc.invalidateQueries({ queryKey: ["myListings"] });
+              router.replace("/(provider)/listings" as any);
+            } catch {
+              Alert.alert("Error", "Could not delete the draft. Please try again.");
+            } finally {
+              setSaving(false);
+            }
+          } 
         },
       ]
     );
   }
 
+  useEffect(() => {
+    const onBackPress = () => {
+      if (step > 0) {
+        setStep((s) => s - 1);
+        return true;
+      }
+      handleExitWizard();
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener("hardwareBackPress", onBackPress);
+    return () => subscription.remove();
+  }, [step, id]);
+
   function handleBack() {
     if (step > 0) setStep((s) => s - 1);
-    else router.back();
+    else handleExitWizard();
   }
 
   async function pickAndUploadPhoto() {
@@ -287,7 +375,10 @@ export default function ApartmentListingScreen() {
         selectionLimit: 30 - photos.length,
       });
       if (result.canceled) return;
-      for (const asset of result.assets) {
+      const total = result.assets.length;
+      for (let i = 0; i < total; i++) {
+        const asset = result.assets[i];
+        setUploadProgress({ current: i + 1, total });
         const contentType = asset.mimeType ?? "image/jpeg";
         const presignRes = await listingApi.post<{ data: { uploadUrl: string; s3Key: string } }>(
           `/listings/${id}/photos/presign`,
@@ -301,10 +392,12 @@ export default function ApartmentListingScreen() {
         );
         setPhotos((p) => [...p, confirmRes.data.data]);
       }
+      if (errors.photos) setErrors((e) => ({ ...e, photos: undefined }));
     } catch {
-      Alert.alert("Upload Failed", "Some photos could not be uploaded. Please try again.");
+      Alert.alert("Upload Failed", "Some photos could not be uploaded. Already uploaded photos have been saved.");
     } finally {
       setUploadingPhoto(false);
+      setUploadProgress(null);
     }
   }
 
@@ -313,7 +406,7 @@ export default function ApartmentListingScreen() {
       await listingApi.delete(`/listings/${id}/photos/${photoId}`);
       setPhotos((p) => p.filter((ph) => ph.id !== photoId));
     } catch {
-      Alert.alert("Error", "Could not remove this photo.");
+      Alert.alert("Error", "Could not delete this photo. Please try again.");
     }
   }
 
@@ -365,6 +458,7 @@ export default function ApartmentListingScreen() {
               onChangeText={(t) => set("name", t)}
               placeholder="e.g. Cosy 2-bed in Westlands"
               maxLength={200}
+              error={errors.name}
             />
 
             <CountryPickerButton
@@ -372,6 +466,7 @@ export default function ApartmentListingScreen() {
               required
               selectedCountry={selectedCountry}
               onPress={() => setCountryModalOpen(true)}
+              error={errors.country}
             />
             {selectedCountry && (
               <InfoBanner
@@ -406,6 +501,7 @@ export default function ApartmentListingScreen() {
               onChangeText={(t) => set("maxGuests", t.replace(/\D/g, ""))}
               placeholder="e.g. 4"
               keyboardType="numeric"
+              error={errors.maxGuests}
             />
 
             <View style={s.gap} />
@@ -420,6 +516,7 @@ export default function ApartmentListingScreen() {
                   onChangeText={(t) => set("pricePerNight", t)}
                   placeholder="0.00"
                   keyboardType="decimal-pad"
+                  error={errors.pricePerNight}
                 />
               </View>
               <View style={s.currencyBadgeWrap}>
@@ -440,6 +537,7 @@ export default function ApartmentListingScreen() {
               placeholder="Describe your apartment, neighbourhood, and what makes it special…"
               multiline
               numberOfLines={5}
+              error={errors.description}
             />
           </View>
         )}
@@ -449,7 +547,7 @@ export default function ApartmentListingScreen() {
           <View>
             <SectionHeader
               title="Property Location"
-              subtitle="Enter your apartment's address manually. Geocoding will be enabled in a future update."
+              subtitle="Enter your apartment's full address below."
               icon="map-pin"
             />
 
@@ -459,6 +557,7 @@ export default function ApartmentListingScreen() {
               value={form.address}
               onChangeText={(t) => set("address", t)}
               placeholder="e.g. Kilimani Road, Apt 4B"
+              error={errors.address}
             />
 
             <FormField
@@ -467,6 +566,7 @@ export default function ApartmentListingScreen() {
               value={form.town}
               onChangeText={(t) => set("town", t)}
               placeholder="e.g. Nairobi"
+              error={errors.town}
             />
           </View>
         )}
@@ -484,6 +584,7 @@ export default function ApartmentListingScreen() {
                   value={form.checkinTime}
                   onChangeText={(t) => set("checkinTime", t)}
                   placeholder="15:00"
+                  error={errors.checkinTime}
                 />
               </View>
               <View style={{ flex: 1 }}>
@@ -493,6 +594,7 @@ export default function ApartmentListingScreen() {
                   value={form.checkoutTime}
                   onChangeText={(t) => set("checkoutTime", t)}
                   placeholder="11:00"
+                  error={errors.checkoutTime}
                 />
               </View>
             </View>
@@ -500,7 +602,7 @@ export default function ApartmentListingScreen() {
             <FormField
               label="Minimum Stay (nights)"
               value={form.minStayNights}
-              onChangeText={(t) => set("minStayNights", t.replace(/\D/g, "") || "1")}
+              onChangeText={(t) => set("minStayNights", t.replace(/\D/g, ""))}
               placeholder="1"
               keyboardType="numeric"
             />
@@ -549,6 +651,7 @@ export default function ApartmentListingScreen() {
                   onChangeText={(t) => set("longStayMinNights", t.replace(/\D/g, ""))}
                   placeholder="e.g. 7"
                   keyboardType="numeric"
+                  error={errors.longStayMinNights}
                 />
 
                 <RadioGroup
@@ -570,6 +673,7 @@ export default function ApartmentListingScreen() {
                   onChangeText={(t) => set("longStayDiscountValue", t)}
                   placeholder={form.longStayDiscountType === "percentage" ? "e.g. 15" : "e.g. 50"}
                   keyboardType="decimal-pad"
+                  error={errors.longStayDiscountValue}
                 />
 
                 {form.longStayMinNights && form.longStayDiscountValue ? (
@@ -618,10 +722,12 @@ export default function ApartmentListingScreen() {
             <PhotosSection
               photos={photos}
               uploading={uploadingPhoto}
+              uploadProgress={uploadProgress ?? undefined}
               onAdd={pickAndUploadPhoto}
               onDelete={deletePhoto}
               minPhotos={3}
               maxPhotos={30}
+              error={errors.photos}
             />
           </View>
         )}
@@ -636,6 +742,12 @@ export default function ApartmentListingScreen() {
         isLast={isLastStep}
         lastLabel="Save & Activate"
         loading={saving}
+        disabled={isLastStep && photos.length < 3}
+        disabledHint={
+          isLastStep && photos.length < 3
+            ? `Upload at least 3 photos to activate. ${photos.length} of 3 uploaded.`
+            : undefined
+        }
       />
       </KeyboardAvoidingView>
 
@@ -651,12 +763,35 @@ export default function ApartmentListingScreen() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function parseAmenitiesToGrouped(raw: any[]): Record<AmenityCategory, string[]> {
+function parseAmenitiesToGrouped(raw: any): Record<AmenityCategory, string[]> {
   const result = emptyAmenities();
-  const keys = raw.map((a: any) => a.amenityKey ?? a);
-  for (const cat of AMENITY_CATEGORIES) {
-    for (const item of AMENITY_CONFIG[cat]) {
-      if (keys.includes(item.key)) result[cat].push(item.key);
+  if (!raw) return result;
+
+  if (Array.isArray(raw)) {
+    const keys = raw.map((a: any) => a?.amenityKey ?? a).filter((k): k is string => typeof k === "string");
+    for (const cat of AMENITY_CATEGORIES) {
+      for (const item of AMENITY_CONFIG[cat]) {
+        if (keys.includes(item.key) || keys.includes(`${cat}:${item.key}`)) {
+          result[cat].push(item.key);
+        }
+      }
+    }
+  } else if (typeof raw === "object") {
+    for (const cat of AMENITY_CATEGORIES) {
+      const vals = raw[cat];
+      if (Array.isArray(vals)) {
+        for (const val of vals) {
+          const itemKey = typeof val === "object" ? val?.amenityKey ?? val : val;
+          if (typeof itemKey === "string") {
+            const cleanKey = itemKey.includes(":") ? itemKey.split(":")[1] : itemKey;
+            if (AMENITY_CONFIG[cat].some((item) => item.key === cleanKey)) {
+              if (!result[cat].includes(cleanKey)) {
+                result[cat].push(cleanKey);
+              }
+            }
+          }
+        }
+      }
     }
   }
   return result;

@@ -69,40 +69,37 @@ export default function SettingsPage() {
         description="Platform configuration and system status"
       />
 
-      {/* Service health — super_admin only */}
-      {isGlobalAdmin && (
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Service Health" description="Live status of backend microservices" />
-          </div>
-          <div className="divide-y divide-border">
-            {services.map((svc) => (
-              <div key={svc.service} className="flex items-center gap-4 px-5 py-4">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                  svc.status === "healthy" ? "bg-success/10" :
+      {/* Service health */}
+      <Card padding="none">
+        <div className="p-5 border-b border-border">
+          <CardHeader title="Service Health" description="Live status of backend microservices" />
+        </div>
+        <div className="divide-y divide-border">
+          {services.map((svc) => (
+            <div key={svc.service} className="flex items-center gap-4 px-5 py-4">
+              <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${svc.status === "healthy" ? "bg-success/10" :
                   svc.status === "degraded" ? "bg-danger/10" : "bg-slate-100"
                 }`}>
-                  {svc.status === "healthy" ? (
-                    <CheckCircle className="h-4 w-4 text-success" />
-                  ) : svc.status === "degraded" ? (
-                    <AlertCircle className="h-4 w-4 text-danger" />
-                  ) : (
-                    <Server className="h-4 w-4 text-slate-400" />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-slate-900">{svc.service}</p>
-                  <p className="text-xs text-slate-500">{svc.endpoint} - {svc.description}</p>
-                </div>
-                <Badge
-                  label={svc.status === "checking" ? "Checking…" : svc.status === "healthy" ? "Healthy" : "Degraded"}
-                  status={svc.status === "healthy" ? "active" : svc.status === "degraded" ? "rejected" : "pending_review"}
-                />
+                {svc.status === "healthy" ? (
+                  <CheckCircle className="h-4 w-4 text-success" />
+                ) : svc.status === "degraded" ? (
+                  <AlertCircle className="h-4 w-4 text-danger" />
+                ) : (
+                  <Server className="h-4 w-4 text-slate-400" />
+                )}
               </div>
-            ))}
-          </div>
-        </Card>
-      )}
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-slate-900">{svc.service}</p>
+                <p className="text-xs text-slate-500">{svc.endpoint} - {svc.description}</p>
+              </div>
+              <Badge
+                label={svc.status === "checking" ? "Checking…" : svc.status === "healthy" ? "Healthy" : "Degraded"}
+                status={svc.status === "healthy" ? "active" : svc.status === "degraded" ? "rejected" : "pending_review"}
+              />
+            </div>
+          ))}
+        </div>
+      </Card>
 
       {/* Current session */}
       <Card padding="none">

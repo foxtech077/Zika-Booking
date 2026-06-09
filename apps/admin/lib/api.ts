@@ -70,7 +70,9 @@ api.interceptors.response.use(
       status === 401 ||
       (status === 403 && ["ACCOUNT_BANNED", "ACCOUNT_SUSPENDED", "ACCOUNT_INACTIVE", "FORBIDDEN"].includes(code));
 
-    if (isAuthFailure && !isAuthFlow && typeof window !== "undefined") {
+    const isLoginPage = typeof window !== "undefined" && window.location.pathname.includes("/login");
+
+    if (isAuthFailure && !isLoginPage && typeof window !== "undefined") {
       // Clear all admin session data then hard-navigate to login
       sessionStorage.removeItem("zika:admin_session");
       sessionStorage.removeItem("zika:admin_auth");

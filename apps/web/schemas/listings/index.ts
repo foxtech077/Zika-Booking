@@ -89,11 +89,17 @@ export const carSpecsSchema = z.object({
     .number({ required_error: "Year is required" })
     .int()
     .min(1990, "Year must be 1990 or later")
-    .max(2100),
-  transmission: z.enum(["manual", "automatic"], {
+    .max(new Date().getFullYear(), "Year cannot be in the future"),
+  carCategory: z.enum(["Economy", "Compact", "SUV", "Minivan", "Pickup", "Luxury", "Electric", "Convertible"], {
+    required_error: "Vehicle category is required",
+  }),
+  driveType: z.enum(["2WD", "4WD", "AWD"], {
+    required_error: "Drive type is required",
+  }),
+  transmission: z.enum(["manual", "automatic", "semi_auto"], {
     required_error: "Transmission type is required",
   }),
-  fuelType: z.enum(["petrol", "diesel", "electric", "hybrid"], {
+  fuelType: z.enum(["petrol", "diesel", "electric", "hybrid", "lpg"], {
     required_error: "Fuel type is required",
   }),
   seats: z

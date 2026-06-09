@@ -18,32 +18,14 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { api, clearAdminToken, clearRefreshTokenCookie, storeAdminToken } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
 
 type Step = "credentials" | "totp" | "totp-setup" | "recovery-codes";
-const INTERMEDIATE_TOKEN_KEY = "zika:admin_intermediate";
-
-function getStoredIntermediateToken() {
-  if (typeof window === "undefined") return "";
-  return sessionStorage.getItem(INTERMEDIATE_TOKEN_KEY) ?? "";
-}
-
-function storeIntermediateToken(token: string) {
-  if (typeof window !== "undefined") {
-    sessionStorage.setItem(INTERMEDIATE_TOKEN_KEY, token);
-  }
-}
-
-function clearIntermediateToken() {
-  if (typeof window !== "undefined") {
-    sessionStorage.removeItem(INTERMEDIATE_TOKEN_KEY);
-  }
-}
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setSession, clearSession } = useAuthStore();
+  const { setSession } = useAuthStore();
 
   const [step, setStep] = useState<Step>("credentials");
   const [showPassword, setShowPassword] = useState(false);
@@ -65,52 +47,31 @@ export default function LoginPage() {
   const [isRecovery, setIsRecovery] = useState(false);
   const [recoveryCodeInput, setRecoveryCodeInput] = useState("");
 
-
   // Handle standard credential login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
+     console.log("EMAIL RAW =", JSON.stringify(email));
+  console.log("PASSWORD RAW =", JSON.stringify(password));
+
+  console.log("ALL COOKIES =", document.cookie);
+  console.log("REQUEST URL SHOULD BE:");
+console.log(`${window.location.origin}/admin/api/admin/auth/login`);
     try {
-      const credentials = {
-        email: email.trim().toLowerCase(),
-        password,
-      };
-
-      if (!credentials.email || !credentials.password) {
-        setError("Email and password are required.");
-        return;
-      }
-
-      clearAdminToken();
-      clearIntermediateToken();
-      clearRefreshTokenCookie();
-      clearSession();
-      if (process.env.NODE_ENV === "development") {
-        console.info("Admin login request", { email: credentials.email, passwordLength: credentials.password.length });
-      }
-
-      const { data } = await api.post("/admin/auth/login", credentials, {
-        withCredentials: false,
-        headers: {
-          "Content-Type": "application/json",
-        },
-      });
-      const loginData = data.data ?? data;
-      const { totpRequired, setupRequired, intermediateToken: token } = loginData;
+      console.log("LOGIN REQUEST", { email, password });
+      const { data } = await api.post("/admin/auth/login", { email, password });
+      console.log("LOGIN PAYLOAD", {
+  email,
+  password,
+  emailLength: email.length,
+  passwordLength: password.length,
+});
+      console.log("LOGIN RESPONSE", data);
+      const { totpRequired, setupRequired, intermediateToken: token } = data.data ?? data;
 
       if (totpRequired) {
-        if (!token) {
-          setError("Login response did not include the intermediate token. Please try again.");
-          return;
-        }
-
-        setIntermediateToken(token);
-        storeIntermediateToken(token);
-        setTotp("");
-        setRecoveryCodeInput("");
-        setIsRecovery(false);
-
+        setIntermediateToken(token ?? "");
         if (setupRequired) {
           setStep("totp-setup");
           await fetchSetupData(token);
@@ -119,41 +80,33 @@ export default function LoginPage() {
         }
       } else {
         // Fallback or bypass (not standard under security policy but safe fallback)
-        if (!loginData.sessionToken) {
-          setError("Login succeeded but no session token was returned. Please try again.");
-          return;
-        }
-
-        storeAdminToken(loginData.sessionToken);
         const meRes = await api.get("/admin/auth/me", {
-          headers: { Authorization: `Bearer ${loginData.sessionToken}` },
+          headers: { Authorization: `Bearer ${data.sessionToken}` },
         });
         const user = meRes.data?.data?.user ?? meRes.data?.user;
-        clearIntermediateToken();
-        setSession(loginData.sessionToken, user);
+        setSession(data.sessionToken, user);
         router.replace("/dashboard");
       }
     } catch (err: any) {
-      if (process.env.NODE_ENV === "development") {
-        console.info("Admin login failed", {
-          status: err?.response?.status,
-          body: err?.response?.data,
-        });
-      }
-
       const msg = err?.response?.data?.error?.message ?? "Invalid email or password.";
       setError(msg);
+      
     } finally {
       setLoading(false);
     }
   };
+
+  
 
   // Fetch TOTP QR code and setup secret
   const fetchSetupData = async (token: string) => {
     try {
       const { data } = await api.post(
         "/admin/auth/totp/setup",
-        { intermediateToken: token }
+        { intermediateToken: token },
+        {
+          headers: { "x-intermediate-token": token },
+        }
       );
       const { qrCodeDataUrl, secret } = data.data ?? data;
       setQrCode(qrCodeDataUrl ?? "");
@@ -169,19 +122,14 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const token = intermediateToken || getStoredIntermediateToken();
-      if (!token) {
-        setError("Your two-factor setup session expired. Please sign in again.");
-        setStep("credentials");
-        return;
-      }
-
       const { data } = await api.post(
         "/admin/auth/totp/confirm",
-        { code: totp.replace(/\s/g, ""), intermediateToken: token }
+        { code: totp.replace(/\s/g, "") },
+        {
+          headers: { "x-intermediate-token": intermediateToken },
+        }
       );
       const { recoveryCodes: codes, sessionToken } = data.data ?? data;
-      clearIntermediateToken();
       setRecoveryCodes(codes ?? []);
       setPendingSessionToken(sessionToken ?? "");
       setStep("recovery-codes");
@@ -199,34 +147,24 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const token = intermediateToken || getStoredIntermediateToken();
-      if (!token) {
-        setError("Your two-factor login session expired. Please sign in again.");
-        setStep("credentials");
-        return;
-      }
-
       const payload = isRecovery
-        ? { recoveryCode: recoveryCodeInput.trim(), intermediateToken: token }
-        : { code: totp.replace(/\s/g, ""), intermediateToken: token };
+        ? { recoveryCode: recoveryCodeInput.trim(), intermediateToken }
+        : { code: totp.replace(/\s/g, ""), intermediateToken };
 
       const { data } = await api.post(
         "/admin/auth/totp/verify",
-        payload
+        payload,
+        {
+          headers: { "x-intermediate-token": intermediateToken },
+        }
       );
       const { sessionToken } = data.data ?? data;
-      if (!sessionToken) {
-        setError("Verification succeeded but no session token was returned. Please try again.");
-        return;
-      }
 
       // Fetch profile
-      storeAdminToken(sessionToken);
       const meRes = await api.get("/admin/auth/me", {
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
       const user = meRes.data?.data?.user ?? meRes.data?.user;
-      clearIntermediateToken();
       setSession(sessionToken, user);
       router.replace("/dashboard");
     } catch (err: any) {
@@ -241,12 +179,6 @@ export default function LoginPage() {
   const handleCompleteSetup = async () => {
     setLoading(true);
     try {
-      if (!pendingSessionToken) {
-        setError("Login session is missing. Please sign in again.");
-        return;
-      }
-
-      storeAdminToken(pendingSessionToken);
       const meRes = await api.get("/admin/auth/me", {
         headers: { Authorization: `Bearer ${pendingSessionToken}` },
       });
@@ -472,13 +404,7 @@ export default function LoginPage() {
                 </Button>
                 <button
                   type="button"
-                  onClick={() => {
-                    clearIntermediateToken();
-                    setIntermediateToken("");
-                    setStep("credentials");
-                    setError("");
-                    setTotp("");
-                  }}
+                  onClick={() => { setStep("credentials"); setError(""); setTotp(""); }}
                   className="w-full text-center text-sm text-slate-500 hover:text-slate-700 transition-colors flex items-center justify-center gap-1 mt-2"
                 >
                   <ArrowLeft className="h-3 w-3" /> Back to sign in
@@ -636,14 +562,7 @@ export default function LoginPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      clearIntermediateToken();
-                      setIntermediateToken("");
-                      setStep("credentials");
-                      setError("");
-                      setTotp("");
-                      setIsRecovery(false);
-                    }}
+                    onClick={() => { setStep("credentials"); setError(""); setTotp(""); setIsRecovery(false); }}
                     className="text-xs text-slate-500 hover:text-slate-700 transition"
                   >
                     ← Back to sign in
