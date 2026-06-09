@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
 import { withSignedPhotos } from "../lib/s3.js";
+import { DriveType } from "../generated/index.js";
 
 // ── Geo helper ────────────────────────────────────────────────────────────────
 
@@ -134,7 +135,11 @@ export async function searchRoutes(app: FastifyInstance) {
     if (seatsMin !== undefined) where.seats = { gte: seatsMin };
     if (mileagePolicy) where.mileagePolicy = mileagePolicy;
     if (carCategory) where.carCategory = carCategory;
-    if (driveType) where.driveType = driveType;
+    if (driveType) {
+      if (driveType === "2WD") where.driveType = DriveType.TWO_WD;
+      else if (driveType === "4WD") where.driveType = DriveType.FOUR_WD;
+      else if (driveType === "AWD") where.driveType = DriveType.AWD;
+    }
     if (airConditioning !== undefined) where.airConditioning = airConditioning === "true";
     if (driverAge !== undefined) {
       where.OR = [
@@ -257,7 +262,59 @@ export async function searchRoutes(app: FastifyInstance) {
   }
 
   // Register at /search (direct service calls) and /listings/search (mobile app via listingApi)
-  const searchOpts = { schema: { tags: ["Search"] }, preHandler: [optionalGuest] };
+  const searchOpts = {
+    schema: {
+      tags: ["Search"],
+      querystring: {
+        type: "object",
+        properties: {
+          category: { type: "string", enum: ["hotel", "apartment", "car"], description: "Listing category (required)" },
+          lat: { type: "number", description: "Latitude of search centre (required)" },
+          lng: { type: "number", description: "Longitude of search centre (required)" },
+          place_name: { type: "string", description: "Human-readable place name (for logging)" },
+          radius_km: { type: "integer", default: 25, description: "Search radius in km (default 25)" },
+          check_in: { type: "string", description: "Hotel/apartment check-in date (YYYY-MM-DD)" },
+          check_out: { type: "string", description: "Hotel/apartment check-out date (YYYY-MM-DD)" },
+          pickup_datetime: { type: "string", description: "Car pickup datetime (ISO 8601)" },
+          return_datetime: { type: "string", description: "Car return datetime (ISO 8601)" },
+          guests: { type: "integer", description: "Number of guests" },
+          sort: {
+            type: "string",
+            enum: ["recommended", "price_asc", "price_desc", "distance", "newest"],
+            default: "recommended",
+            description: "Sort order",
+          },
+          limit: { type: "integer", default: 20, description: "Page size (max 50)" },
+          cursor: { type: "integer", default: 0, description: "Pagination offset cursor" },
+          price_min: { type: "number", description: "Minimum price per night/day" },
+          price_max: { type: "number", description: "Maximum price per night/day" },
+          rating_min: { type: "number", description: "Minimum rating" },
+          cancellation_policy: { type: "string", description: "Cancellation policy filter" },
+          amenity_ids: { type: "string", description: "Comma-separated amenity keys" },
+          // Hotel filters
+          star_rating: { type: "string", description: "Comma-separated star ratings e.g. 3,4,5" },
+          // Apartment filters
+          bedrooms_min: { type: "integer", description: "Minimum number of bedrooms" },
+          max_guests_min: { type: "integer", description: "Minimum max-guests capacity" },
+          long_stay_discount: { type: "string", enum: ["true", "false"], description: "Filter listings with long-stay discount" },
+          // Car filters
+          transmission: { type: "string", enum: ["automatic", "manual"], description: "Transmission type" },
+          seats_min: { type: "integer", description: "Minimum number of seats" },
+          mileage_policy: { type: "string", description: "Mileage policy filter" },
+          car_category: { type: "string", description: "Car category (e.g. suv, sedan)" },
+          drive_type: {
+            type: "string",
+            enum: ["2WD", "4WD", "AWD"],
+            description: "Drive type (2WD, 4WD, AWD)"
+          },
+          air_conditioning: { type: "string", enum: ["true", "false"], description: "Air conditioning filter" },
+          driver_age: { type: "integer", description: "Driver age for minimum age check" },
+        },
+        required: ["category", "lat", "lng"],
+      },
+    },
+    preHandler: [optionalGuest],
+  };
   app.get("/search", searchOpts, handleSearch);
   app.get("/listings/search", searchOpts, handleSearch);
 

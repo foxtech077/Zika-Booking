@@ -109,6 +109,26 @@ export async function reviewRoutes(app: FastifyInstance) {
     if (booking.status !== "completed") return sendError(reply, 409, "INVALID_STATUS", "Reviews can only be submitted for completed bookings.");
     if (booking.review) return sendError(reply, 409, "ALREADY_REVIEWED", "You have already reviewed this booking.");
 
+    if (booking.checkOut) {
+      const fourteenDaysAgo = new Date();
+      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+      if (booking.checkOut < fourteenDaysAgo) {
+        return sendError(reply, 409, "EXPIRED_WINDOW", "Reviews can only be submitted within 14 days of checkout.");
+      }
+    }
+
+    // Fraud Safeguards Placeholder
+    // TODO: Verify if guest account was created within 7 days.
+    // TODO: Verify if req.ip matches provider's subnet / device fingerprint.
+    const isNewAccountFlag = false; // Mocked until Auth integration
+    const isDeviceFlag = false;     // Mocked until fingerprint integration
+    const isFraudFlagged = isNewAccountFlag || isDeviceFlag;
+
+    if (isFraudFlagged) {
+      // TODO: Create a fraud alert for admins
+      console.warn("Review flagged for fraud (IP/New Account).");
+    }
+
     const review = await prisma.listingReview.create({
       data: {
         bookingId: body.bookingId,
@@ -117,41 +137,52 @@ export async function reviewRoutes(app: FastifyInstance) {
         rating: body.rating,
         title: body.title,
         body: body.body,
+        isHidden: isFraudFlagged, // Hide if flagged
+        hiddenReason: isFraudFlagged ? "Flagged for fraud (IP/New Account)" : null,
       },
     });
 
     // Auto-suspension logic (non-hotel listings only)
     const listing = await prisma.listing.findUnique({ where: { id: booking.listingId } });
 
-    if (listing && listing.category !== "hotel") {
-      if (body.rating >= 4) {
-        // Reset consecutiveNegative on positive review
-        await prisma.listing.update({
-          where: { id: listing.id },
-          data: { consecutiveNegative: 0 },
-        });
-      } else if (body.rating <= 2) {
-        // FIX: exclude the newly created review so we check the 2 most recent *prior* reviews
-        const lastTwoReviews = await prisma.listingReview.findMany({
-          where: { listingId: listing.id, isHidden: false, id: { not: review.id } },
-          orderBy: { createdAt: "desc" },
-          take: 2,
-        });
-
-        const allNegative = lastTwoReviews.length === 2 && lastTwoReviews.every((r) => r.rating <= 2);
-        if (allNegative) {
+    if (listing && listing.category !== "hotel" && !isFraudFlagged) {
+      if (body.rating >= 3) {
+        // Reset consecutiveNegative on positive/neutral review (3+)
+        if (listing.consecutiveNegative > 0) {
           await prisma.listing.update({
             where: { id: listing.id },
-            data: {
-              status: "auto_suspended",
-              consecutiveNegative: { increment: 1 },
-              suspendedAt: new Date(),
-            },
+            data: { consecutiveNegative: 0 },
           });
+        }
+      } else if (body.rating <= 2) {
+        const newCount = listing.consecutiveNegative + 1;
+        
+        if (newCount >= 2) {
+          // Suspend on 2nd straight negative review
+          await prisma.$transaction([
+            prisma.listing.update({
+              where: { id: listing.id },
+              data: {
+                status: "auto_suspended",
+                consecutiveNegative: newCount,
+                suspendedAt: new Date(),
+              },
+            }),
+            prisma.listingReviewTask.create({
+              data: {
+                listingId: listing.id,
+                submissionNumber: listing.submissionCount,
+                status: "open",
+                slaDeadline: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48h SLA
+              }
+            })
+          ]);
+          // TODO: Cancel active reservations, void payments.
+          // TODO: Notify provider by email.
         } else {
           await prisma.listing.update({
             where: { id: listing.id },
-            data: { consecutiveNegative: { increment: 1 } },
+            data: { consecutiveNegative: newCount },
           });
         }
       }
