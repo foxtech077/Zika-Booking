@@ -59,7 +59,7 @@ interface Booking {
   status: BookingStatus;
   paymentStatus: PaymentStatus;
 }
-
+console.log("WEB PROVIDER DASHBOARD");
 interface Review {
   id: string;
   guestName: string;
