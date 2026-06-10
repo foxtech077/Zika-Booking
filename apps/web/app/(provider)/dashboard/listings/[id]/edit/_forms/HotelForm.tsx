@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import type { Listing } from "@/types/provider";
 import { FormShell, type FormStep } from "./shared/FormShell";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
-import { AMENITY_OPTIONS, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
+import { AMENITY_OPTIONS, CATEGORY_MAP, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
 
@@ -511,40 +511,55 @@ export function HotelForm({ listingId, listing }: Props) {
                   />
                 </div>
 
-                {/* Amenities grid */}
+                {/* Amenities grouped by category */}
                 <div>
-                  <p className="text-sm font-medium text-slate-700 mb-2">Amenities</p>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {AMENITY_OPTIONS.map((opt) => {
-                      const active = s.selectedAmenities.includes(opt.value);
-                      return (
-                        <button
-                          type="button"
-                          key={opt.value}
-                          onClick={() => set(
-                            "selectedAmenities",
-                            active
-                              ? s.selectedAmenities.filter((k) => k !== opt.value)
-                              : [...s.selectedAmenities, opt.value],
-                          )}
-                          className={cn(
-                            "flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
-                            active
-                              ? "border-primary bg-primary-50 text-primary-700 font-semibold"
-                              : "border-border bg-white text-slate-600 hover:border-slate-300",
-                          )}
-                        >
-                          <div className={cn(
-                            "w-4 h-4 rounded flex items-center justify-center border text-xs",
-                            active ? "bg-primary border-primary text-white" : "border-slate-300",
-                          )}>
-                            {active ? "✓" : ""}
-                          </div>
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {(() => {
+                    const grouped = AMENITY_OPTIONS.reduce((acc, opt) => {
+                      const cat = CATEGORY_MAP[opt.value] ?? "Services";
+                      (acc[cat] ??= []).push(opt);
+                      return acc;
+                    }, {} as Record<string, typeof AMENITY_OPTIONS[number][]>);
+                    return Object.entries(grouped).map(([cat, opts]) => (
+                      <div key={cat} className="mb-4">
+                        <h4 className="text-sm font-medium text-slate-700 mb-1">{cat}</h4>
+                        <div className="grid grid-cols-2 gap-2.5">
+                          {opts.map((opt) => {
+                            const active = s.selectedAmenities.includes(opt.value);
+                            return (
+                              <button
+                                type="button"
+                                key={opt.value}
+                                onClick={() =>
+                                  set(
+                                    "selectedAmenities",
+                                    active
+                                      ? s.selectedAmenities.filter((k) => k !== opt.value)
+                                      : [...s.selectedAmenities, opt.value]
+                                  )
+                                }
+                                className={cn(
+                                  "flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
+                                  active
+                                    ? "border-primary bg-primary-50 text-primary-700 font-semibold"
+                                    : "border-border bg-white text-slate-600 hover:border-slate-300"
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    "w-4 h-4 rounded flex items-center justify-center border text-xs",
+                                    active ? "bg-primary border-primary text-white" : "border-slate-300"
+                                  )}
+                                >
+                                  {active ? "✓" : ""}
+                                </div>
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
                 </div>
 
                 {/* Custom amenities */}
