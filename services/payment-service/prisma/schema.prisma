@@ -102,3 +102,16 @@ model PaymentMethod {
   @@index([userId, isDeleted])
   @@schema("payments")
 }
+
+model CustomerAccount {
+  id                 String          @id @default(uuid())
+  userId             String
+  paymentProvider    PaymentProvider
+  providerCustomerId String
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@unique([userId, paymentProvider])
+  @@index([userId])
+  @@schema("payments")
+}

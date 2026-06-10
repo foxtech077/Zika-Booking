@@ -2,9 +2,9 @@ import { S3Client, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
-const REGION = process.env["AWS_REGION"] ?? "us-east-1";
-const BUCKET = process.env["S3_BUCKET_NAME"] ?? "zika-listings";
-const CDN_BASE = process.env["S3_CDN_BASE_URL"] ?? `https://${BUCKET}.s3.${REGION}.amazonaws.com`;
+const REGION = process.env["AWS_REGION"] ?? "af-south-1";
+const BUCKET = process.env["S3_BUCKET_NAME"] ?? "zika-storage";
+const CDN_BASE = process.env["S3_CDN_BASE_URL"] ?? "https://zika-storage.s3.af-south-1.amazonaws.com";
 
 const s3 = new S3Client({
   region: REGION,
@@ -43,6 +43,21 @@ export async function withSignedPhotos<T extends { s3Key: string }>(
 ): Promise<(T & { cdnUrl: string })[]> {
   return Promise.all(
     photos.map(async (p) => ({ ...p, cdnUrl: await createPresignedDownloadUrl(p.s3Key) })),
+  );
+}
+
+export async function uploadBuffer(
+  s3Key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<void> {
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: s3Key,
+      Body: body,
+      ContentType: contentType,
+    }),
   );
 }
 

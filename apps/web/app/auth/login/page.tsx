@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -15,6 +16,28 @@ declare global {
   interface Window {
     google?: any;
   }
+}
+
+let gsiInitialized = false;
+
+function getPostLoginPath(user: AuthResponse["user"]) {
+  return user.userType === "provider" ? "/dashboard" : "/traveller";
+}
+
+function getAccountAccessError(user: AuthResponse["user"]) {
+  if (!user.emailVerified || user.status === "pending_verification") {
+    return "Please verify your email address to sign in.";
+  }
+
+  if (user.status === "suspended") {
+    return "Your account has been suspended. Please contact support for assistance.";
+  }
+
+  if (user.status === "banned") {
+    return "Your account has been permanently removed from ZikaBooking.";
+  }
+
+  return null;
 }
 
 export default function LoginPage() {
@@ -34,26 +57,28 @@ export default function LoginPage() {
     document.body.appendChild(script);
 
     script.onload = () => {
-      if (window.google) {
+      if (window.google && !gsiInitialized) {
+        gsiInitialized = true;
         window.google.accounts.id.initialize({
           client_id: "397191986681-clt35826mp608u6ptq9udm8m7c7dk80u.apps.googleusercontent.com",
           callback: handleGoogleCredentialResponse,
 
         });
-        window.google.accounts.id.renderButton(
-          document.getElementById("google-signin-btn"),
-          {
-            theme: "outline",
-            size: "large",
-            width: "100%",
-            text: "continue_with",
-            shape: "rectangular",
-          }
-        );
+
+        const btn = document.getElementById("google-signin-btn");
+        const btnWidth = btn?.offsetWidth ?? 400;
+        window.google.accounts.id.renderButton(btn, {
+          theme: "outline",
+          size: "large",
+          width: btnWidth,
+          text: "continue_with",
+          shape: "rectangular",
+        });
       }
     };
 
     return () => {
+      gsiInitialized = false;
       document.body.removeChild(script);
     };
   }, []);
@@ -66,8 +91,13 @@ export default function LoginPage() {
       });
       if (!res.data.success) throw res.data;
       const data = res.data.data;
+      const accessError = getAccountAccessError(data.user);
+      if (accessError) {
+        setError(accessError);
+        return;
+      }
       setSession(data.tokens.accessToken, data.user as any);
-      router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
+      router.replace(getPostLoginPath(data.user));
     } catch (err: any) {
       const msg = err.response?.data?.error?.message ?? "Sign in with Google failed. Please try again.";
       setError(msg);
@@ -104,13 +134,26 @@ export default function LoginPage() {
       return res.data.data;
     },
     onSuccess: (data) => {
+      const accessError = getAccountAccessError(data.user);
+      if (accessError) {
+        setError(accessError);
+        return;
+      }
+
       setSession(data.tokens.accessToken, data.user as any);
-      router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
+      router.replace(getPostLoginPath(data.user));
     },
     onError: (err: any) => {
       const e = err.response?.data?.error;
       if (e?.code === "EMAIL_NOT_VERIFIED") {
         router.push(`/auth/verify-pending?email=${encodeURIComponent(form.email)}`);
+        return;
+      }
+      if (
+        e?.code === "ACCOUNT_PENDING_APPROVAL" ||
+        (e?.message ?? "").toLowerCase().includes("pending admin approval")
+      ) {
+        router.replace("/dashboard");
         return;
       }
       setError(e?.message ?? "Unable to connect. Please check your network and try again.");
@@ -129,10 +172,20 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4 relative">
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 max-w-md w-full">
-        <Link href="/" className="text-2xl font-bold text-primary block mb-1">
-          ZikaBooking
-        </Link>
-        <p className="text-gray-500 text-sm mb-6">Sign in to your account</p>
+        <div className="flex flex-col items-center justify-center mb-6">
+          <Image
+            src="/images/kainook-logo.jpeg"
+            alt="Kainook Logo"
+            width={90}
+            height={90}
+            priority
+            className="mb-4"
+          />
+          <Link href="/" className="text-2xl font-bold text-primary block mb-1">
+            Kainook
+          </Link>
+          <p className="text-gray-500 text-sm">Sign in to your account</p>
+        </div>
 
         <form onSubmit={handleSubmit} noValidate>
           <FormField

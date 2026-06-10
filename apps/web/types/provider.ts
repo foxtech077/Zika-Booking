@@ -23,6 +23,7 @@ export interface Listing {
   town: string | null;
   country: string | null;
   pricePerNight: string | null;
+  pricePerDay?: string | null;
   currency: string | null;
   submissionCount: number;
   submittedAt?: string | null;

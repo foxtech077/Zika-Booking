@@ -1,4 +1,5 @@
 import { listingApi } from "@/lib/listing-api";
+import type { DashboardData } from "@/types/provider";
 
 // ── Response types ─────────────────────────────────────────────────────────────
 
@@ -77,6 +78,9 @@ export const listingsService = {
   deactivate: (id: string) =>
     listingApi.post(`/listings/${id}/deactivate`).then((r) => r.data.data ?? r.data),
 
+  reactivate: (id: string) =>
+    listingApi.post(`/listings/${id}/reactivate`).then((r) => r.data.data ?? r.data),
+
   remove: (id: string) =>
     listingApi.delete(`/listings/${id}`).then((r) => r.data),
 
@@ -130,6 +134,9 @@ export const listingsService = {
       .then((r) => r.data.data ?? r.data),
 
   // ── Provider analytics ─────────────────────────────────────────────────────
+  getDashboard: (): Promise<DashboardData> =>
+    listingApi.get("/provider/dashboard").then((r) => r.data.data ?? r.data),
+
   getSummary: (): Promise<{ listings: ListingSummaryItem[] }> =>
     listingApi.get("/provider/listings/summary").then((r) => r.data.data ?? r.data),
 
