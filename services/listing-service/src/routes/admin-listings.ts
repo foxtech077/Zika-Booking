@@ -1945,9 +1945,9 @@ try {
     await prisma.booking.update({
       where: { id },
       data: {
-        status: "cancelled_by_system",
-        cancelledAt: new Date(),
-        cancelledBy: admin.adminId,
+        status:             "cancelled_by_system",
+        cancelledAt:        new Date(),
+        cancelledBy:        "admin",
         cancellationReason: reason,
         refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
       },

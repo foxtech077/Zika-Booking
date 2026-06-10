@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { ZodError } from "zod";
 import {
   registerSchema,
@@ -260,7 +260,7 @@ export async function authRoutes(app: FastifyInstance) {
       const deepLinkScript = showOpenBtn ? `
   <script>
     function openApp() {
-      window.location.href = 'zikabooking://';
+      window.location.href = 'Kainook://';
       setTimeout(function() {
         var msg = document.getElementById('fallback-msg');
         if (msg) { msg.style.display = 'block'; }
@@ -271,18 +271,18 @@ export async function authRoutes(app: FastifyInstance) {
       const openBtn = showOpenBtn
         ? isMobile
           ? `
-    <button class="btn" onclick="openApp()">Open ZikaBooking App</button>
+    <button class="btn" onclick="openApp()">Open Kainook App</button>
     <div id="fallback-msg" style="display:none;margin-top:16px;padding:14px 16px;background:#f1f5f9;border-radius:10px;font-size:13px;color:#475569;line-height:1.7;text-align:left">
       <strong>App didn't open?</strong><br/>
-      • Make sure the ZikaBooking app is installed<br/>
+      • Make sure the Kainook app is installed<br/>
       • Open the app manually and sign in
     </div>`
           : `
     <div style="margin-top:8px;padding:16px;background:#f0fdf4;border-radius:10px;font-size:14px;color:#166534;line-height:1.7;border:1px solid #bbf7d0">
       Your email is verified!<br/>
-      <strong>Open the ZikaBooking app on your phone</strong> and sign in.
+      <strong>Open the Kainook app on your phone</strong> and sign in.
     </div>`
-        : `<p style="font-size:13px;color:#94a3b8;margin-top:8px">Please open the ZikaBooking app and sign in.</p>`;
+        : `<p style="font-size:13px;color:#94a3b8;margin-top:8px">Please open the Kainook app and sign in.</p>`;
 
       return reply
         .code(200)
@@ -292,7 +292,7 @@ export async function authRoutes(app: FastifyInstance) {
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>${title} — ZikaBooking</title>
+  <title>${title} — Kainook</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
@@ -317,7 +317,7 @@ export async function authRoutes(app: FastifyInstance) {
     <h1>${title}</h1>
     <p>${body}</p>
     ${openBtn}
-    <div class="brand">ZIKABOOKING</div>
+    <div class="brand">Kainook</div>
   </div>
 </body>
 </html>`);
@@ -374,7 +374,7 @@ export async function authRoutes(app: FastifyInstance) {
       return html("⚠️", "Something Went Wrong", "We could not complete your verification. Please try again or contact support.", "#dc2626");
     }
 
-    return html("🎉", "Email Verified!", "Your ZikaBooking account is now active. Tap the button below to open the app and sign in.", "#16a34a", true);
+    return html("🎉", "Email Verified!", "Your Kainook account is now active. Tap the button below to open the app and sign in.", "#16a34a", true);
   });
 
   // ── GET /auth/verify  (UC-1.3) ─────────────────────────────────────────────
@@ -501,7 +501,7 @@ export async function authRoutes(app: FastifyInstance) {
       );
 
       return sendSuccess(reply, 200, {
-        message: "Email verified — welcome to ZikaBooking!",
+        message: "Email verified — welcome to Kainook!",
         user: publicUser(updatedUser),
         tokens,
       });
@@ -639,7 +639,7 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended. Please contact support for assistance.");
     }
     if (user.status === "banned") {
-      return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from ZikaBooking.");
+      return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
     }
 
     console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
@@ -874,7 +874,7 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
     }
     if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
-    if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from ZikaBooking.");
+    if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
 
     const tokens = await issueTokens(reply, user.id, user.userType, user.status);
     return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
@@ -964,7 +964,7 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
     }
     if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
-    if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from ZikaBooking.");
+    if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
 
     const tokens = await issueTokens(reply, user.id, user.userType, user.status);
     return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
@@ -1249,7 +1249,7 @@ export async function authRoutes(app: FastifyInstance) {
 </head>
 <body>
   <div class="container">
-    <div class="logo">ZikaBooking</div>
+    <div class="logo">Kainook</div>
     <div class="subtitle">Secure Google Authentication</div>
     <div class="spinner"></div>
     <div class="status" id="status-text">Completing sign-in...</div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,11 +10,14 @@ import {
   ActivityIndicator,
   Modal,
   StyleSheet,
+  Animated,
+  AppState,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
+import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 
@@ -38,6 +41,19 @@ interface LockState {
   lockToken: string;
   expiresAt: string; // ISO
   pricingPreview: PricingPreview;
+}
+
+interface PendingBooking {
+  id: string;
+  reference: string;
+  status: string;
+  listingTitle: string;
+  totalAmount: number;
+  currency: string;
+  checkIn?: string;
+  checkOut?: string;
+  pickupDatetime?: string;
+  returnDatetime?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -102,9 +118,17 @@ function useCountdown(expiresAt: string | null) {
       setMsLeft(Math.max(0, remaining));
     };
     tick();
+
+    const appStateSub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        tick();
+      }
+    });
+
     intervalRef.current = setInterval(tick, 500);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      appStateSub.remove();
     };
   }, [expiresAt]);
 
@@ -123,6 +147,7 @@ export default function BookingFlowScreen() {
     pickupDatetime?: string;
     returnDatetime?: string;
     guests?: string;
+    listingTitle?: string;
   }>();
 
   const {
@@ -132,6 +157,7 @@ export default function BookingFlowScreen() {
     pickupDatetime,
     returnDatetime,
     guests,
+    listingTitle,
   } = params;
 
   const isCar = !!pickupDatetime;
@@ -143,8 +169,21 @@ export default function BookingFlowScreen() {
   // ── Lock state ────────────────────────────────────────────────────────────
   const [lockState, setLockState] = useState<LockState | null>(null);
   const [lockError, setLockError] = useState<string | null>(null);
+  const [lockErrorMessage, setLockErrorMessage] = useState<string | null>(null);
   const [lockLoading, setLockLoading] = useState(true);
   const [expiredModal, setExpiredModal] = useState(false);
+  const [lockRetryKey, setLockRetryKey] = useState(0);
+  const [reBookingLoading, setReBookingLoading] = useState(false);
+  // Records the timestamp when the current lock was first established (for progress bar)
+  const lockStartMsRef = useRef<number | null>(null);
+  // Animated value for red-state pulse
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // ── Pending-payment bookings (shown when 429 occurs) ──────────────────────
+  const [pendingBookings, setPendingBookings] = useState<PendingBooking[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [discardingId, setDiscardingId] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   // ── Guest Details form ────────────────────────────────────────────────────
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
@@ -175,9 +214,39 @@ export default function BookingFlowScreen() {
 
   // ── Countdown ─────────────────────────────────────────────────────────────
   const msLeft = useCountdown(lockState?.expiresAt ?? null);
-  const showExpiringWarning = msLeft > 0 && msLeft <= 120_000; // 2-minute grace period
   // msLeft === -1 means "not yet calculated" — only treat as expired when it genuinely hits 0
   const isExpired = lockState !== null && msLeft === 0;
+
+  // Derive timer state label
+  const timerState: "green" | "amber" | "red" | null =
+    msLeft < 0 || !lockState ? null
+    : msLeft > 120_000 ? "green"
+    : msLeft > 30_000 ? "amber"
+    : msLeft > 0 ? "red"
+    : null;
+
+  // Record the lock start time once the lock is first set
+  useEffect(() => {
+    if (lockState && lockStartMsRef.current === null) {
+      lockStartMsRef.current = Date.now();
+    }
+  }, [lockState]);
+
+  // Pulse animation — only active during red state
+  useEffect(() => {
+    if (timerState === "red") {
+      const loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 0.55, duration: 500, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        ])
+      );
+      loop.start();
+      return () => loop.stop();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [timerState, pulseAnim]);
 
   useEffect(() => {
     if (isExpired && step < 2) {
@@ -185,10 +254,157 @@ export default function BookingFlowScreen() {
     }
   }, [isExpired, step]);
 
-  // ── Initiate lock on mount ────────────────────────────────────────────────
+  // Progress bar: fraction of time remaining vs. total lock duration (5 min)
+  const LOCK_TOTAL_MS = 300_000;
+  const progressFraction =
+    msLeft < 0 ? 1
+    : Math.max(0, Math.min(1, msLeft / LOCK_TOTAL_MS));
+
+  // ── Try to Rebook handler ─────────────────────────────────────────────────
+  async function handleTryRebook() {
+    setReBookingLoading(true);
+    try {
+      const body: Record<string, unknown> = { listingId, deliveryRequested: false };
+      if (checkIn) body.checkIn = checkIn;
+      if (checkOut) body.checkOut = checkOut;
+      if (pickupDatetime) body.pickupDatetime = pickupDatetime;
+      if (returnDatetime) body.returnDatetime = returnDatetime;
+      if (guests) body.guests = parseInt(guests, 10);
+
+      const res = await listingApi.post<{ data: { lockToken: string; expiresAt: string; pricingPreview: any } }>(
+        "/bookings/initiate", body,
+      );
+      const raw = res.data.data.pricingPreview ?? {};
+      const isCarRebook = !!raw.days;
+      const mapped: PricingPreview = {
+        ratePerUnit: isCarRebook ? (raw.dailyRate ?? 0) : (raw.nightlyRate ?? 0),
+        units: isCarRebook ? (raw.days ?? 0) : (raw.nights ?? 0),
+        unitLabel: isCarRebook ? "days" : "nights",
+        subtotal: raw.subtotal ?? 0,
+        discountAmount: raw.discountAmount ?? undefined,
+        serviceFee: raw.serviceFee ?? undefined,
+        taxAmount: raw.taxAmount ?? undefined,
+        deliveryFee: raw.deliveryFee ?? undefined,
+        total: raw.totalAmount ?? 0,
+        currency: raw.currency ?? "",
+      };
+
+      const lockStateObj = {
+        lockToken: res.data.data.lockToken,
+        expiresAt: res.data.data.expiresAt,
+        pricingPreview: mapped,
+      };
+      const startMs = Date.now();
+      lockStartMsRef.current = startMs;
+      setLockState(lockStateObj);
+
+      // Persist new lock
+      const cacheData = {
+        listingId,
+        checkIn,
+        checkOut,
+        pickupDatetime,
+        returnDatetime,
+        guests,
+        expiresAt: res.data.data.expiresAt,
+        lockStartMs: startMs,
+        lockState: lockStateObj,
+      };
+      await SecureStore.setItemAsync("ZIKA_ACTIVE_LOCK", JSON.stringify(cacheData));
+
+      setStep(0);
+      setExpiredModal(false);
+    } catch (err: any) {
+      const code = err?.response?.data?.error?.code ?? err?.response?.data?.code ?? err?.response?.data?.errors?.[0]?.code;
+      const isUnavailable =
+        code === "LISTING_UNAVAILABLE" || code === "LISTING_NOT_AVAILABLE" ||
+        err?.response?.status === 404;
+      if (isUnavailable) {
+        Alert.alert("Unavailable", "Listing is no longer available for the selected dates.");
+      } else {
+        Alert.alert("Could not rebook", err?.response?.data?.message ?? "Please try again.");
+      }
+    } finally {
+      setReBookingLoading(false);
+    }
+  }
+
+  // ── Fetch pending-payment bookings from backend ───────────────────────────
+  const fetchPendingBookings = useCallback(async () => {
+    setPendingLoading(true);
+    try {
+      const res = await listingApi.get<{ data: { bookings: any[] } }>(
+        "/guests/me/bookings?status=upcoming&cursor=0"
+      );
+      const all: any[] = res.data.data.bookings ?? [];
+      setPendingBookings(
+        all
+          .filter((b) => b.status === "pending_payment")
+          .map((b) => ({
+            id: b.id,
+            reference: b.reference,
+            status: b.status,
+            listingTitle: b.listingTitle,
+            totalAmount: b.totalAmount,
+            currency: b.currency,
+            checkIn: b.checkIn,
+            checkOut: b.checkOut,
+            pickupDatetime: b.pickupDatetime,
+            returnDatetime: b.returnDatetime,
+          }))
+      );
+    } catch {
+      // silent — user can still use "View My Bookings" fallback
+    } finally {
+      setPendingLoading(false);
+    }
+  }, []);
+
+  // ── Discard a single pending-payment booking ──────────────────────────────
+  async function handleDiscardPending(bookingId: string) {
+    setDiscardingId(bookingId);
+    try {
+      await listingApi.patch(`/bookings/${bookingId}/fail`, { failureReason: "Cancelled by guest" });
+      setPendingBookings((prev) => prev.filter((b) => b.id !== bookingId));
+    } catch (err: any) {
+      Alert.alert("Error", err?.response?.data?.message ?? "Could not discard booking. Please try again.");
+    } finally {
+      setDiscardingId(null);
+    }
+  }
+
+  // ── Initiate lock — runs on mount and on retry ────────────────────────────
   useEffect(() => {
     async function initiateLock() {
       setLockLoading(true);
+      setLockError(null);
+      setLockErrorMessage(null);
+
+      // Try active lock recovery first
+      try {
+        const cachedLockRaw = await SecureStore.getItemAsync("ZIKA_ACTIVE_LOCK");
+        if (cachedLockRaw) {
+          const cached = JSON.parse(cachedLockRaw);
+          const isMatch =
+            cached.listingId === listingId &&
+            cached.checkIn === checkIn &&
+            cached.checkOut === checkOut &&
+            cached.pickupDatetime === pickupDatetime &&
+            cached.returnDatetime === returnDatetime &&
+            (guests ? cached.guests === guests : !cached.guests);
+          
+          const expiresAtMs = new Date(cached.expiresAt).getTime();
+          if (isMatch && expiresAtMs > Date.now()) {
+            lockStartMsRef.current = cached.lockStartMs ?? Date.now();
+            setLockState(cached.lockState);
+            setLockLoading(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to retrieve active lock from SecureStore:", e);
+      }
+
       try {
         const body: Record<string, unknown> = {
           listingId,
@@ -205,43 +421,74 @@ export default function BookingFlowScreen() {
         );
 
         // Map backend field names → component's PricingPreview shape
-        const raw = res.data.data.pricingPreview;
+        const raw = res.data.data.pricingPreview ?? {};
         const isCar = !!raw.days;
         const mapped: PricingPreview = {
-          ratePerUnit: isCar ? raw.dailyRate : raw.nightlyRate,
-          units: isCar ? raw.days : raw.nights,
+          ratePerUnit: isCar ? (raw.dailyRate ?? 0) : (raw.nightlyRate ?? 0),
+          units: isCar ? (raw.days ?? 0) : (raw.nights ?? 0),
           unitLabel: isCar ? "days" : "nights",
-          subtotal: raw.subtotal,
+          subtotal: raw.subtotal ?? 0,
           discountAmount: raw.discountAmount ?? undefined,
           serviceFee: raw.serviceFee ?? undefined,
           taxAmount: raw.taxAmount ?? undefined,
           deliveryFee: raw.deliveryFee ?? undefined,
-          total: raw.totalAmount,
-          currency: raw.currency,
+          total: raw.totalAmount ?? 0,
+          currency: raw.currency ?? "",
         };
 
-        setLockState({
+        const lockStateObj = {
           lockToken: res.data.data.lockToken,
           expiresAt: res.data.data.expiresAt,
           pricingPreview: mapped,
-        });
+        };
+        const startMs = Date.now();
+        lockStartMsRef.current = startMs;
+        setLockState(lockStateObj);
+
+        // Persist lock
+        const cacheData = {
+          listingId,
+          checkIn,
+          checkOut,
+          pickupDatetime,
+          returnDatetime,
+          guests,
+          expiresAt: res.data.data.expiresAt,
+          lockStartMs: startMs,
+          lockState: lockStateObj,
+        };
+        await SecureStore.setItemAsync("ZIKA_ACTIVE_LOCK", JSON.stringify(cacheData));
       } catch (err: any) {
+        console.warn("LOCK INITIATION ERROR:", JSON.stringify(err?.response?.data), "status:", err?.response?.status, "msg:", err?.message);
         const status = err?.response?.status;
-        const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
-        if (code === "LISTING_UNAVAILABLE") {
+        const code = err?.response?.data?.error?.code ?? err?.response?.data?.code ?? err?.response?.data?.errors?.[0]?.code;
+        const errMsg =
+          err?.response?.data?.error?.message ??
+          err?.response?.data?.message ??
+          err?.response?.data?.errors?.[0]?.message ??
+          err?.message;
+        if (code === "LISTING_UNAVAILABLE" || code === "LISTING_NOT_AVAILABLE") {
           setLockError("unavailable");
-        } else if (status === 401 || code === "NO_TOKEN" || code === "INVALID_TOKEN") {
+        } else if (status === 401 || code === "NO_TOKEN" || code === "INVALID_TOKEN" || code === "UNAUTHORIZED") {
           setLockError("auth");
+        } else if (status === 404) {
+          setLockError("unavailable");
+        } else if (status === 429) {
+          setLockError("pending_limit");
+          void fetchPendingBookings();
         } else {
           setLockError("generic");
+          const statusHint = status ? ` (HTTP ${status})` : "";
+          setLockErrorMessage(errMsg ? `${errMsg}${statusHint}` : `Unable to secure this reservation${statusHint}. The listing may not be available for booking yet. Please go back and try again.`);
         }
       } finally {
         setLockLoading(false);
+        setRetrying(false);
       }
     }
     void initiateLock();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [lockRetryKey]);
 
   // ── Renew lock mutation ───────────────────────────────────────────────────
   const renewMutation = useMutation({
@@ -253,7 +500,22 @@ export default function BookingFlowScreen() {
       return res.data.data.expiresAt;
     },
     onSuccess: (newExpiresAt) => {
-      setLockState((prev) => prev ? { ...prev, expiresAt: newExpiresAt } : prev);
+      setLockState((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, expiresAt: newExpiresAt };
+        
+        // Update persisted lock
+        SecureStore.getItemAsync("ZIKA_ACTIVE_LOCK").then((cachedLockRaw) => {
+          if (cachedLockRaw) {
+            const cached = JSON.parse(cachedLockRaw);
+            cached.expiresAt = newExpiresAt;
+            cached.lockState.expiresAt = newExpiresAt;
+            SecureStore.setItemAsync("ZIKA_ACTIVE_LOCK", JSON.stringify(cached));
+          }
+        }).catch(() => {});
+
+        return updated;
+      });
     },
     onError: () => {
       Alert.alert("Renewal failed", "Could not extend your reservation. Please try again.");
@@ -302,6 +564,7 @@ export default function BookingFlowScreen() {
       return res.data.data;
     },
     onSuccess: (data) => {
+      SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => {});
       router.push({ pathname: "/pay/[bookingId]", params: { bookingId: data.bookingId } });
     },
     onError: (err: any) => {
@@ -326,7 +589,10 @@ export default function BookingFlowScreen() {
     if (isCar) {
       if (!driverFirstName.trim()) return "Driver first name is required.";
       if (!driverLastName.trim()) return "Driver last name is required.";
-      if (!driverAge.trim() || isNaN(parseInt(driverAge, 10))) return "Driver age is required.";
+      const parsedAge = parseInt(driverAge, 10);
+      if (!driverAge.trim() || isNaN(parsedAge)) return "Driver age is required.";
+      if (parsedAge < 18) return "Driver must be at least 18 years old.";
+      if (parsedAge > 120) return "Please enter a valid driver age.";
       if (deliveryRequested && !deliveryAddress.trim()) return "Delivery address is required.";
     }
     return null;
@@ -404,6 +670,7 @@ export default function BookingFlowScreen() {
   if (lockLoading) {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#1a73e8" />
           <Text style={styles.loadingText}>Securing your reservation...</Text>
@@ -416,6 +683,7 @@ export default function BookingFlowScreen() {
   if (lockError === "unavailable") {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <Ionicons name="close-circle" size={64} color="#dc2626" />
           <Text style={styles.errorTitle}>Listing Unavailable</Text>
@@ -433,6 +701,7 @@ export default function BookingFlowScreen() {
   if (lockError === "auth") {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <Ionicons name="lock-closed" size={64} color="#1a73e8" />
           <Text style={styles.errorTitle}>Sign in to book</Text>
@@ -450,14 +719,111 @@ export default function BookingFlowScreen() {
     );
   }
 
+  if (lockError === "pending_limit") {
+    const allCleared = !pendingLoading && pendingBookings.length === 0;
+    return (
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          {/* Header */}
+          <View style={styles.pendingHeader}>
+            <Ionicons name="time-outline" size={52} color="#f59e0b" />
+            <Text style={styles.errorTitle}>Bookings Awaiting Payment</Text>
+            <Text style={styles.errorBody}>
+              You have one or more bookings waiting for payment. Complete payment or discard them below to create a new booking.
+            </Text>
+          </View>
+
+          {/* Pending bookings list from backend */}
+          {pendingLoading ? (
+            <ActivityIndicator color="#1a73e8" style={{ marginVertical: 24 }} />
+          ) : pendingBookings.length > 0 ? (
+            <View style={styles.pendingList}>
+              {pendingBookings.map((b) => {
+                const dateStr = b.checkIn && b.checkOut
+                  ? `${b.checkIn} – ${b.checkOut}`
+                  : b.pickupDatetime
+                    ? new Date(b.pickupDatetime).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                    : "";
+                return (
+                  <View key={b.id} style={styles.pendingCard}>
+                    <View style={{ flex: 1, marginRight: 12 }}>
+                      <Text style={styles.pendingCardTitle} numberOfLines={1}>{b.listingTitle}</Text>
+                      <Text style={styles.pendingCardRef}>{b.reference}</Text>
+                      {dateStr ? <Text style={styles.pendingCardDate}>{dateStr}</Text> : null}
+                      <Text style={styles.pendingCardAmount}>
+                        {b.currency} {b.totalAmount?.toLocaleString()}
+                      </Text>
+                    </View>
+                    <View style={styles.pendingCardBtns}>
+                      <TouchableOpacity
+                        style={styles.pendingPayBtn}
+                        onPress={() => router.push({ pathname: "/pay/[bookingId]", params: { bookingId: b.id } })}
+                      >
+                        <Text style={styles.pendingPayBtnText}>Pay</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.pendingDiscardBtn}
+                        onPress={() => void handleDiscardPending(b.id)}
+                        disabled={discardingId === b.id}
+                      >
+                        {discardingId === b.id
+                          ? <ActivityIndicator size="small" color="#dc2626" />
+                          : <Text style={styles.pendingDiscardBtnText}>Discard</Text>
+                        }
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          {/* After all discarded — retry lock */}
+          {allCleared && (
+            <View style={styles.pendingRetryBox}>
+              <Ionicons name="checkmark-circle-outline" size={28} color="#16a34a" />
+              <Text style={styles.pendingRetryText}>All cleared! You can now create your booking.</Text>
+              <TouchableOpacity
+                style={[styles.primaryBtn, retrying && styles.primaryBtnDisabled, { marginTop: 8 }]}
+                onPress={() => { setRetrying(true); setLockRetryKey((k) => k + 1); }}
+                disabled={retrying}
+              >
+                {retrying
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.primaryBtnText}>Try Booking Again</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Fallback navigation */}
+          {!allCleared && (
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => router.replace("/(tabs)/bookings" as any)}
+            >
+              <Text style={styles.primaryBtnText}>View My Bookings</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity style={[styles.secondaryBtn, { marginTop: 8 }]} onPress={() => router.back()}>
+            <Text style={styles.secondaryBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   if (lockError === "generic") {
     return (
       <SafeAreaView style={styles.container}>
+        <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
           <Ionicons name="warning" size={64} color="#f59e0b" />
           <Text style={styles.errorTitle}>Could not secure reservation</Text>
           <Text style={styles.errorBody}>
-            An error occurred while trying to reserve this listing. Please go back and try again.
+            {lockErrorMessage}
           </Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => router.back()}>
             <Text style={styles.primaryBtnText}>Go Back</Text>
@@ -471,38 +837,63 @@ export default function BookingFlowScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Dynamic header title */}
+      <Stack.Screen options={{ title: listingTitle ? listingTitle : "Book", headerBackTitle: "Back" }} />
+
       {/* Step indicator */}
       <StepIndicator current={step} />
 
-      {/* Timer bar (steps 0 and 1) */}
-      {step < 2 && lockState && msLeft >= 0 && (
-        <View style={styles.timerBar}>
-          <Ionicons name="time-outline" size={14} color={showExpiringWarning ? "#92400e" : "#374151"} />
-          <Text style={[styles.timerText, showExpiringWarning && styles.timerTextWarning]}>
-            {"Reservation held for "}
-            <Text style={styles.timerCountdown}>{msToCountdown(msLeft)}</Text>
-          </Text>
-          {showExpiringWarning && (
-            <TouchableOpacity
-              style={styles.renewBtn}
-              onPress={() => renewMutation.mutate()}
-              disabled={renewMutation.isPending}
-            >
-              {renewMutation.isPending ? (
-                <ActivityIndicator size="small" color="#92400e" />
-              ) : (
-                <Text style={styles.renewBtnText}>Renew (30s)</Text>
-              )}
-            </TouchableOpacity>
+      {/* ── Timer section (steps 0 and 1) ────────────────────────────── */}
+      {step < 2 && lockState && msLeft >= 0 && timerState !== null && (
+        <View>
+          {/* Colour-coded banner */}
+          {timerState === "green" && (
+            <View style={styles.timerBannerGreen}>
+              <Ionicons name="checkmark-circle-outline" size={15} color="#15803d" />
+              <Text style={styles.timerTextGreen}>Booking held — complete payment</Text>
+            </View>
           )}
-        </View>
-      )}
+          {timerState === "amber" && (
+            <View style={styles.timerBannerAmber}>
+              <Ionicons name="warning-outline" size={15} color="#92400e" />
+              <Text style={styles.timerTextAmber}>
+                Hurry — only{" "}
+                <Text style={{ fontWeight: "800" }}>{msToCountdown(msLeft)}</Text>
+                {" "}remaining!
+              </Text>
+              <TouchableOpacity
+                style={styles.renewBtn}
+                onPress={() => renewMutation.mutate()}
+                disabled={renewMutation.isPending}
+              >
+                {renewMutation.isPending
+                  ? <ActivityIndicator size="small" color="#92400e" />
+                  : <Text style={styles.renewBtnText}>Extend</Text>}
+              </TouchableOpacity>
+            </View>
+          )}
+          {timerState === "red" && (
+            <Animated.View style={[styles.timerBannerRed, { opacity: pulseAnim }]}>
+              <Ionicons name="alert-circle" size={15} color="#fff" />
+              <Text style={styles.timerTextRed}>Less than 30 seconds — pay now!</Text>
+            </Animated.View>
+          )}
 
-      {/* Expiring soon banner */}
-      {step < 2 && showExpiringWarning && !expiredModal && (
-        <View style={styles.expiringBanner}>
-          <Ionicons name="warning-outline" size={16} color="#92400e" />
-          <Text style={styles.expiringBannerText}>Expiring soon!</Text>
+          {/* Progress bar */}
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${Math.round(progressFraction * 100)}%` as any,
+                  backgroundColor:
+                    timerState === "green" ? "#16a34a"
+                    : timerState === "amber" ? "#d97706"
+                    : "#dc2626",
+                },
+              ]}
+            />
+          </View>
         </View>
       )}
 
@@ -513,13 +904,25 @@ export default function BookingFlowScreen() {
             <Ionicons name="time" size={48} color="#dc2626" />
             <Text style={styles.modalTitle}>Reservation Expired</Text>
             <Text style={styles.modalBody}>
-              The listing has been released. Please search again to find available options.
+              Your reservation lock has expired and the selected dates are no longer guaranteed.
             </Text>
+            {/* Primary: Try to Rebook */}
             <TouchableOpacity
-              style={styles.primaryBtn}
-              onPress={() => router.push("/(tabs)")}
+              style={[styles.primaryBtn, reBookingLoading && styles.primaryBtnDisabled]}
+              onPress={() => void handleTryRebook()}
+              disabled={reBookingLoading}
             >
-              <Text style={styles.primaryBtnText}>Search Again</Text>
+              {reBookingLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.primaryBtnText}>Try to Rebook</Text>}
+            </TouchableOpacity>
+            {/* Secondary: Search Again */}
+            <TouchableOpacity
+              style={styles.modalSecondaryBtn}
+              onPress={() => { setExpiredModal(false); router.replace("/(tabs)"); }}
+              disabled={reBookingLoading}
+            >
+              <Text style={styles.modalSecondaryBtnText}>Search Again</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -681,7 +1084,7 @@ export default function BookingFlowScreen() {
 
                 <View style={styles.priceRow}>
                   <Text style={styles.priceLabel}>
-                    Rate: {pricing.currency} {pricing.ratePerUnit.toLocaleString()} × {pricing.units}{" "}
+                    Rate: {pricing.currency} {(pricing.ratePerUnit ?? 0).toLocaleString()} × {pricing.units ?? 0}{" "}
                     {pricing.unitLabel}
                   </Text>
                   <Text style={styles.priceValue}>
@@ -792,17 +1195,32 @@ export default function BookingFlowScreen() {
                   autoCapitalize="characters"
                   editable={!voucherCode}
                 />
-                <TouchableOpacity
-                  style={[styles.promoBtn, (!!voucherCode || voucherLoading) && styles.promoBtnDisabled]}
-                  onPress={handleApplyVoucher}
-                  disabled={!!voucherCode || voucherLoading}
-                >
-                  {voucherLoading ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.promoBtnText}>{voucherCode ? "Applied" : "Apply"}</Text>
-                  )}
-                </TouchableOpacity>
+                {voucherCode ? (
+                  <TouchableOpacity
+                    style={[styles.promoBtn, { backgroundColor: "#dc2626" }]}
+                    onPress={() => {
+                      setVoucherCode("");
+                      setVoucherInput("");
+                      setVoucherDiscount(null);
+                      setVoucherMessage(null);
+                      setVoucherError(null);
+                    }}
+                  >
+                    <Text style={styles.promoBtnText}>Remove</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[styles.promoBtn, voucherLoading && styles.promoBtnDisabled]}
+                    onPress={handleApplyVoucher}
+                    disabled={voucherLoading}
+                  >
+                    {voucherLoading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.promoBtnText}>Apply</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
               </View>
               {voucherMessage && voucherDiscount != null && (
                 <Text style={styles.promoSuccess}>
@@ -824,7 +1242,7 @@ export default function BookingFlowScreen() {
                 {termsChecked && <Ionicons name="checkmark" size={14} color="#fff" />}
               </View>
               <Text style={styles.termsText}>
-                I agree to ZikaBooking's Terms of Service and the cancellation policy above.
+                I agree to Kainook's Terms of Service and the cancellation policy above.
               </Text>
             </TouchableOpacity>
 
@@ -945,20 +1363,43 @@ const styles = StyleSheet.create({
   stepLabelActive: { color: "#1a73e8", fontWeight: "600" },
   stepLabelDone: { color: "#16a34a" },
 
-  // Timer bar
-  timerBar: {
+  // ── Timer banners ───────────────────────────────────────────────────────────
+  timerBannerGreen: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: "#f0fdf4",
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
+    gap: 7,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-    gap: 6,
+    borderBottomColor: "#bbf7d0",
   },
-  timerText: { fontSize: 13, color: "#374151", flex: 1 },
-  timerTextWarning: { color: "#92400e" },
-  timerCountdown: { fontWeight: "700" },
+  timerTextGreen: { fontSize: 13, color: "#15803d", fontWeight: "600", flex: 1 },
+
+  timerBannerAmber: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fffbeb",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    gap: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: "#fde68a",
+  },
+  timerTextAmber: { fontSize: 13, color: "#92400e", fontWeight: "600", flex: 1 },
+
+  timerBannerRed: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    gap: 7,
+    borderBottomWidth: 1,
+    borderBottomColor: "#b91c1c",
+  },
+  timerTextRed: { fontSize: 13, color: "#fff", fontWeight: "700", flex: 1 },
+
   renewBtn: {
     backgroundColor: "#fef3c7",
     borderRadius: 8,
@@ -969,18 +1410,16 @@ const styles = StyleSheet.create({
   },
   renewBtnText: { fontSize: 12, color: "#92400e", fontWeight: "600" },
 
-  // Expiring banner
-  expiringBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fef3c7",
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    gap: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: "#fde68a",
+  // Progress bar
+  progressTrack: {
+    height: 3,
+    backgroundColor: "#e5e7eb",
+    width: "100%",
   },
-  expiringBannerText: { fontSize: 13, color: "#92400e", fontWeight: "600" },
+  progressFill: {
+    height: 3,
+    borderRadius: 2,
+  },
 
   // Modal
   modalOverlay: {
@@ -1001,6 +1440,15 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: "700", color: "#111827", textAlign: "center" },
   modalBody: { fontSize: 14, color: "#6b7280", textAlign: "center", lineHeight: 20 },
+  modalSecondaryBtn: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 12,
+    paddingVertical: 13,
+    alignItems: "center",
+    width: "100%",
+  },
+  modalSecondaryBtnText: { color: "#374151", fontWeight: "600", fontSize: 15 },
 
   // Loading / error
   loadingText: { fontSize: 15, color: "#6b7280", marginTop: 16, textAlign: "center" },
@@ -1119,6 +1567,53 @@ const styles = StyleSheet.create({
   },
   primaryBtnDisabled: { opacity: 0.5 },
   primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
+
+  // ── Pending-limit screen ──────────────────────────────────────────────────
+  pendingHeader: { alignItems: "center", paddingTop: 24, paddingBottom: 16, gap: 10 },
+  pendingList: { gap: 12, marginBottom: 20 },
+  pendingCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    padding: 14,
+  },
+  pendingCardTitle: { fontSize: 14, fontWeight: "700", color: "#111827", marginBottom: 2 },
+  pendingCardRef: { fontSize: 11, color: "#6b7280", fontFamily: "monospace", marginBottom: 2 },
+  pendingCardDate: { fontSize: 12, color: "#374151", marginBottom: 2 },
+  pendingCardAmount: { fontSize: 13, fontWeight: "700", color: "#1a73e8" },
+  pendingCardBtns: { gap: 8 },
+  pendingPayBtn: {
+    backgroundColor: "#1a73e8",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+  },
+  pendingPayBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
+  pendingDiscardBtn: {
+    borderWidth: 1.5,
+    borderColor: "#dc2626",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: "center",
+    minWidth: 72,
+  },
+  pendingDiscardBtnText: { color: "#dc2626", fontWeight: "700", fontSize: 13 },
+  pendingRetryBox: {
+    alignItems: "center",
+    backgroundColor: "#f0fdf4",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    padding: 20,
+    marginBottom: 16,
+    gap: 6,
+  },
+  pendingRetryText: { fontSize: 14, color: "#15803d", fontWeight: "600", textAlign: "center" },
   secondaryBtn: {
     borderWidth: 1,
     borderColor: "#d1d5db",
