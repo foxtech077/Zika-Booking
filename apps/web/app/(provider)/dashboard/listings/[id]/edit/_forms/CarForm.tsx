@@ -376,9 +376,9 @@ function validateStep(step: Step, s: CarState): string[] {
 }
 
 const STEPS: FormStep[] = [
-  { id: "vehicle", label: "Vehicle Info", sublabel: "Make, model, location & ID" },
-  { id: "specs", label: "Specifications", sublabel: "Engine, transmission & features" },
-  { id: "pricing", label: "Pricing & Policy", sublabel: "Daily rate, mileage & extras" },
+  { id: "vehicle", label: "Identity & classification", sublabel: "Listing title, make, model, year, category, units, colour, licence plate, odometer" },
+  { id: "specs", label: "Technical specs", sublabel: "Seats, doors, transmission, fuel type, drive type, engine size, air conditioning" },
+  { id: "pricing", label: "Rental terms & insurance", sublabel: "Price, currency, rental days, driver age, mileage, fuel policy, security deposit, cancellation, insurance, roadside, cross‑border, documents" },
   { id: "media", label: "Media & Documents", sublabel: "Photos & vehicle documents" },
 ];
 
