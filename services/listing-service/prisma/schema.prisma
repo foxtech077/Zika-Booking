@@ -433,88 +433,88 @@ enum BookingStatus {
   @@schema("listing")
 }
 
-model Booking {
-  id          String        @id @default(uuid())
-  reference   String        @unique @db.VarChar(25)
-  listingId   String        @map("listing_id")
-  guestId     String        @map("guest_id")
-  providerId  String        @map("provider_id")
-  listingType String        @map("listing_type") @db.VarChar(20)
+  model Booking {
+    id          String        @id @default(uuid())
+    reference   String        @unique @db.VarChar(25)
+    listingId   String        @map("listing_id")
+    guestId     String        @map("guest_id")
+    providerId  String        @map("provider_id")
+    listingType String        @map("listing_type") @db.VarChar(20)
 
-  status BookingStatus @default(pending_payment)
+    status BookingStatus @default(pending_payment)
 
-  checkIn        DateTime? @map("check_in") @db.Date
-  checkOut       DateTime? @map("check_out") @db.Date
-  pickupDatetime DateTime? @map("pickup_datetime")
-  returnDatetime DateTime? @map("return_datetime")
-  nightsOrDays   Int       @map("nights_or_days")
+    checkIn        DateTime? @map("check_in") @db.Date
+    checkOut       DateTime? @map("check_out") @db.Date
+    pickupDatetime DateTime? @map("pickup_datetime")
+    returnDatetime DateTime? @map("return_datetime")
+    nightsOrDays   Int       @map("nights_or_days")
 
-  guestFirstName  String  @map("guest_first_name") @db.VarChar(100)
-  guestLastName   String  @map("guest_last_name") @db.VarChar(100)
-  guestEmail      String  @map("guest_email") @db.VarChar(255)
-  guestPhone      String? @map("guest_phone") @db.VarChar(30)
-  adults          Int?
-  children        Int?    @default(0)
-  specialRequests String? @map("special_requests") @db.Text
+    guestFirstName  String  @map("guest_first_name") @db.VarChar(100)
+    guestLastName   String  @map("guest_last_name") @db.VarChar(100)
+    guestEmail      String  @map("guest_email") @db.VarChar(255)
+    guestPhone      String? @map("guest_phone") @db.VarChar(30)
+    adults          Int?
+    children        Int?    @default(0)
+    specialRequests String? @map("special_requests") @db.Text
 
-  driverFirstName   String?  @map("driver_first_name") @db.VarChar(100)
-  driverLastName    String?  @map("driver_last_name") @db.VarChar(100)
-  driverAge         Int?     @map("driver_age")
-  deliveryRequested Boolean  @default(false) @map("delivery_requested")
-  deliveryAddress   String?  @map("delivery_address") @db.Text
+    driverFirstName   String?  @map("driver_first_name") @db.VarChar(100)
+    driverLastName    String?  @map("driver_last_name") @db.VarChar(100)
+    driverAge         Int?     @map("driver_age")
+    deliveryRequested Boolean  @default(false) @map("delivery_requested")
+    deliveryAddress   String?  @map("delivery_address") @db.Text
 
-  nightlyRate     Decimal? @map("nightly_rate") @db.Decimal(12, 2)
-  dailyRate       Decimal? @map("daily_rate") @db.Decimal(12, 2)
-  subtotal        Decimal  @db.Decimal(12, 2)
-  discountAmount  Decimal  @default(0) @map("discount_amount") @db.Decimal(12, 2)
-  deliveryFee     Decimal  @default(0) @map("delivery_fee") @db.Decimal(12, 2)
-  totalAmount     Decimal  @map("total_amount") @db.Decimal(12, 2)
-  currency        String   @db.Char(3)
-  securityDeposit Decimal? @map("security_deposit") @db.Decimal(12, 2)
+    nightlyRate     Decimal? @map("nightly_rate") @db.Decimal(12, 2)
+    dailyRate       Decimal? @map("daily_rate") @db.Decimal(12, 2)
+    subtotal        Decimal  @db.Decimal(12, 2)
+    discountAmount  Decimal  @default(0) @map("discount_amount") @db.Decimal(12, 2)
+    deliveryFee     Decimal  @default(0) @map("delivery_fee") @db.Decimal(12, 2)
+    totalAmount     Decimal  @map("total_amount") @db.Decimal(12, 2)
+    currency        String   @db.Char(3)
+    securityDeposit Decimal? @map("security_deposit") @db.Decimal(12, 2)
 
-  commissionRate   Decimal @map("commission_rate") @db.Decimal(6, 4)
-  commissionAmount Decimal @map("commission_amount") @db.Decimal(12, 2)
-  providerPayout   Decimal @map("provider_payout") @db.Decimal(12, 2)
+    commissionRate   Decimal @map("commission_rate") @db.Decimal(6, 4)
+    commissionAmount Decimal @map("commission_amount") @db.Decimal(12, 2)
+    providerPayout   Decimal @map("provider_payout") @db.Decimal(12, 2)
 
-  cancellationPolicy String  @map("cancellation_policy") @db.VarChar(20)
-  refundAmount       Decimal? @map("refund_amount") @db.Decimal(12, 2)
+    cancellationPolicy String  @map("cancellation_policy") @db.VarChar(20)
+    refundAmount       Decimal? @map("refund_amount") @db.Decimal(12, 2)
 
-  cancelledAt        DateTime? @map("cancelled_at")
-  cancelledBy        String?   @map("cancelled_by") @db.VarChar(20)
-  cancellationReason String?   @map("cancellation_reason") @db.Text
+    cancelledAt        DateTime? @map("cancelled_at")
+    cancelledBy        String?   @map("cancelled_by") @db.VarChar(20)
+    cancellationReason String?   @map("cancellation_reason") @db.Text
 
-  paymentId   String?   @map("payment_id")
-  confirmedAt DateTime? @map("confirmed_at")
-  completedAt DateTime? @map("completed_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+    paymentId   String?   @map("payment_id")
+    confirmedAt DateTime? @map("confirmed_at")
+    completedAt DateTime? @map("completed_at")
+    createdAt   DateTime  @default(now()) @map("created_at")
+    updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  voucherCode     String?  @map("voucher_code") @db.VarChar(30)
-  voucherDiscount Decimal  @default(0) @map("voucher_discount") @db.Decimal(10, 2)
+    voucherCode     String?  @map("voucher_code") @db.VarChar(30)
+    voucherDiscount Decimal  @default(0) @map("voucher_discount") @db.Decimal(10, 2)
 
-  listing   Listing            @relation(fields: [listingId], references: [id])
-  statusLog BookingStatusLog[]
-  review    ListingReview?
+    listing   Listing            @relation(fields: [listingId], references: [id])
+    statusLog BookingStatusLog[]
+    review    ListingReview?
 
-  @@map("bookings")
-  @@schema("listing")
-}
+    @@map("bookings")
+    @@schema("listing")
+  }
 
-model BookingStatusLog {
-  id         String   @id @default(uuid())
-  bookingId  String   @map("booking_id")
-  fromStatus String?  @map("from_status") @db.VarChar(30)
-  toStatus   String   @map("to_status") @db.VarChar(30)
-  changedBy  String?  @map("changed_by")
-  actorType  String?  @map("actor_type") @db.VarChar(20)
-  reason     String?  @db.Text
-  createdAt  DateTime @default(now()) @map("created_at")
+  model BookingStatusLog {
+    id         String   @id @default(uuid())
+    bookingId  String   @map("booking_id")
+    fromStatus String?  @map("from_status") @db.VarChar(30)
+    toStatus   String   @map("to_status") @db.VarChar(30)
+    changedBy  String?  @map("changed_by")
+    actorType  String?  @map("actor_type") @db.VarChar(20)
+    reason     String?  @db.Text
+    createdAt  DateTime @default(now()) @map("created_at")
 
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+    booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
-  @@map("booking_status_log")
-  @@schema("listing")
-}
+    @@map("booking_status_log")
+    @@schema("listing")
+  }
 
 // ── E14 — Reviews ─────────────────────────────────────────────────────────────
 
@@ -702,5 +702,36 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@map("messages")
+  @@schema("listing")
+}
+
+enum ReportStatus {
+  pending
+  investigating
+  resolved
+  dismissed
+
+  @@schema("listing")
+}
+
+// ── E20 — User Reports ────────────────────────────────────────────────────────
+
+model Report {
+  id           String       @id @default(uuid())
+  reporterId   String       @map("reporter_id")
+  targetType   String       @map("target_type") @db.VarChar(50) // e.g. "listing", "user", "review"
+  targetId     String       @map("target_id")
+  reason       String       @db.VarChar(100)
+  description  String?      @db.Text
+  status       ReportStatus @default(pending)
+  adminNote    String?      @map("admin_note") @db.Text
+  resolvedAt   DateTime?    @map("resolved_at")
+  resolvedBy   String?      @map("resolved_by")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([targetType, targetId])
+  @@map("reports")
   @@schema("listing")
 }
