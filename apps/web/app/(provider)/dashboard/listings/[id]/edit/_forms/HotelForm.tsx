@@ -25,14 +25,6 @@ import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
-import {
-  DiscountSection,
-  initDiscountState,
-  appendDiscountPayload,
-  validateDiscount,
-  type DiscountState,
-  type DiscountField,
-} from "./shared/DiscountSection";
 
 // ── Enums (values match backend exactly) ────────────────────────────────────
 
@@ -84,7 +76,7 @@ type HotelState = {
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
-} & DiscountState;
+};
 
 function initState(l: Listing): HotelState {
   return {
@@ -110,39 +102,67 @@ function initState(l: Listing): HotelState {
     customAmenities:    ((l as any).customAmenities ?? []).map((a: any) =>
                           typeof a === "string" ? a : (a?.label ?? "")),
     customInput:        "",
-    ...initDiscountState(l as any),
   };
 }
 
 // ── Payload builder — HOTEL FIELDS ONLY ─────────────────────────────────────
 
 function buildPayload(s: HotelState): Record<string, unknown> {
+  // Normalize and sanitize values similar to ApartmentForm to avoid sending
+  // unexpected empty strings or NaN which can trip backend validation.
   const p: Record<string, unknown> = {};
-  if (s.name.trim())        p.name        = s.name.trim();
-  if (s.description.trim()) p.description = s.description.trim();
-  if (s.address.trim())     p.address     = s.address.trim();
-  if (s.lat !== null)       p.lat         = s.lat;
-  if (s.lng !== null)       p.lng         = s.lng;
-  if (s.town.trim())        p.town        = s.town.trim();
-  if (s.country.trim())     p.country     = s.country.trim();
-  // claimedStarRating intentionally excluded from payload — ratings are read-only
-  // and must only originate from traveller reviews, not from provider input.
-  const price = Number(s.pricePerNight);
-  if (price > 0)            p.pricePerNight = price;
-  if (s.currency)           p.currency    = s.currency;
-  const nights = Number(s.minStayNights);
-  if (nights >= 1)          p.minStayNights = nights;
-  if (s.checkinTime)        p.checkinTime  = s.checkinTime;
-  if (s.checkoutTime)       p.checkoutTime = s.checkoutTime;
+
+  const toNullableNumber = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const toNullableInt = (v: unknown): number | null => {
+    const n = toNullableNumber(v);
+    return n === null ? null : Math.trunc(n);
+  };
+
+  const trimOrNull = (v: string): string | null => {
+    const t = v?.trim();
+    return t ? t : null;
+  };
+
+  const countryOrNull = (v: string): string | null => {
+    const country = v?.trim().toUpperCase();
+    return country && country.length === 2 ? country : null;
+  };
+
+  p.name = s.name.trim();
+  p.description = trimOrNull(s.description);
+  p.address = trimOrNull(s.address);
+  p.lat = toNullableNumber(s.lat);
+  p.lng = toNullableNumber(s.lng);
+  p.town = trimOrNull(s.town);
+  p.country = countryOrNull(s.country);
+
+  // Pricing
+  const price = toNullableNumber(s.pricePerNight);
+  if (price !== null && price > 0) p.pricePerNight = price;
+  if (s.currency) p.currency = s.currency;
+
+  const nights = toNullableInt(s.minStayNights);
+  if (nights !== null && nights >= 1) p.minStayNights = nights;
+
+  p.checkinTime = s.checkinTime || null;
+  p.checkoutTime = s.checkoutTime || null;
   if (s.cancellationPolicy) p.cancellationPolicy = s.cancellationPolicy;
+
   p.smokingAllowed = s.smokingAllowed;
-  p.petsAllowed    = s.petsAllowed;
-  if (s.roomType) p.roomType = s.roomType;
-  const units = Number(s.unitCount);
-  if (units >= 1) p.unitCount = units;
-  p.amenities       = groupAmenities(s.selectedAmenities);
-  p.customAmenities = s.customAmenities;
-  appendDiscountPayload(p, s);
+  p.petsAllowed = s.petsAllowed;
+
+  p.roomType = s.roomType || null;
+
+  const units = toNullableInt(s.unitCount);
+  p.unitCount = units !== null && units >= 1 ? units : null;
+
+  p.amenities = groupAmenities(s.selectedAmenities);
+  p.customAmenities = s.customAmenities.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean);
   return p;
 }
 
@@ -156,8 +176,6 @@ function validateStep(step: Step, s: HotelState): string[] {
       return [
         !s.name.trim()    && "Hotel name is required.",
         !s.address.trim() && "Address is required.",
-        !s.town.trim()    && "Town / City is required — geocode the address.",
-        !s.country.trim() && "Country code is required — geocode the address.",
       ].filter(Boolean) as string[];
     case "pricing":
       return [
@@ -168,7 +186,6 @@ function validateStep(step: Step, s: HotelState): string[] {
         !s.checkoutTime                && "Check-out time is required.",
         !s.cancellationPolicy          && "Cancellation policy is required.",
         // Discount validation — only blocks when discount is enabled
-        ...validateDiscount(s, s.pricePerNight),
       ].filter(Boolean) as string[];
     case "rooms":
       return [
@@ -250,13 +267,13 @@ export function HotelForm({ listingId, listing }: Props) {
 
   const submitMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/submit`),
-    onSuccess:  () => { refetch(); flash("Submitted for admin review!", "ok"); },
+    onSuccess:  () => { refetch(); flash("Submitted for admin review!", "ok"); router.push("/dashboard/listings"); },
     onError:    (e: any) => flash(apiErr(e), "err"),
   });
 
   const reactivateMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/reactivate`),
-    onSuccess:  () => { refetch(); flash("Listing reactivated.", "ok"); },
+    onSuccess:  () => { refetch(); flash("Listing reactivated.", "ok"); router.push("/dashboard/listings"); },
     onError:    (e: any) => flash(apiErr(e), "err"),
   });
 
@@ -468,18 +485,6 @@ export function HotelForm({ listingId, listing }: Props) {
                     <span className="text-sm text-slate-700">Pets Allowed</span>
                   </label>
                 </div>
-                <DiscountSection
-                  discountEnabled={s.discountEnabled}
-                  discountType={s.discountType}
-                  discountValue={s.discountValue}
-                  discountStartDate={s.discountStartDate}
-                  discountEndDate={s.discountEndDate}
-                  basePrice={s.pricePerNight}
-                  currency={s.currency}
-                  priceLabel="night"
-                  tried={tried}
-                  onChange={(field: DiscountField, value) => set(field, value)}
-                />
               </div>
             )}
 

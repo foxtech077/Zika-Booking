@@ -155,6 +155,7 @@ export default function ListingsPage() {
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
   const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(5);
   const [selected, setSelected] = useState<Listing | null>(null);
   const [confirm, setConfirm] = useState<{ action: string; listing: Listing } | null>(null);
   const [createError, setCreateError] = useState("");
@@ -164,7 +165,7 @@ export default function ListingsPage() {
   }, [token]);
 
   const hasClientFilters = Boolean(search.trim() || category);
-  const limit = hasClientFilters ? 50 : 20;
+  const limit = hasClientFilters ? 50 : pageSize;
   const page = Math.floor(offset / limit) + 1;
   const params = { status, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
@@ -177,17 +178,8 @@ export default function ListingsPage() {
     const q = search.trim().toLowerCase();
     return listings.filter((listing) => {
       const matchesCategory = !category || listing.category === category;
-      const searchable = [
-        getListingTitle(listing),
-        listing.category,
-        listing.status,
-        listing.town,
-        listing.country,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      const matchesSearch = !q || searchable.includes(q);
+      const name = (getListingTitle(listing) || "").toLowerCase();
+      const matchesSearch = !q || name.includes(q);
       return matchesCategory && matchesSearch;
     });
   }, [category, listings, search]);
@@ -433,6 +425,20 @@ export default function ListingsPage() {
                 ],
               },
             ]}
+            actions={
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500">Per page</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setOffset(0); }}
+                  className="h-10 rounded-xl border border-border bg-white px-3 text-sm text-slate-700 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                >
+                  {[5,10,15,20,25,30].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+            }
           />
         </div>
 

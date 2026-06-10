@@ -21,26 +21,8 @@ import { FormShell, type FormStep } from "./shared/FormShell";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
-import {
-  DiscountSection,
-  initDiscountState,
-  appendDiscountPayload,
-  validateDiscount,
-  type DiscountState,
-  type DiscountField,
-} from "./shared/DiscountSection";
 
 // ── Enums ────────────────────────────────────────────────────────────────────
-
-const APARTMENT_TYPES = [
-  { value: "entire_place",  label: "Entire Place" },
-  { value: "private_room",  label: "Private Room" },
-  { value: "shared_room",   label: "Shared Room" },
-  { value: "studio",        label: "Studio" },
-  { value: "loft",          label: "Loft" },
-  { value: "villa",         label: "Villa" },
-  { value: "townhouse",     label: "Townhouse" },
-];
 
 const CANCELLATION_POLICIES = [
   { value: "flexible", label: "Flexible – free cancellation up to 24 h" },
@@ -55,19 +37,12 @@ const CURRENCIES = [
   { value: "ZAR", label: "ZAR (R)" },
 ];
 
-const LONG_STAY_TYPES = [
-  { value: "percentage", label: "Percentage (%)" },
-  { value: "fixed",      label: "Fixed Amount" },
-];
-
 const CANCELLATION_POLICY_VALUES = new Set(CANCELLATION_POLICIES.map((x) => x.value));
-const LONG_STAY_TYPE_VALUES = new Set(LONG_STAY_TYPES.map((x) => x.value));
 
 // ── State type ───────────────────────────────────────────────────────────────
 
 type ApartmentState = {
   name: string;
-  apartmentType: string;
   description: string;
   address: string;
   lat: number | null;
@@ -80,29 +55,18 @@ type ApartmentState = {
   checkinTime: string;
   checkoutTime: string;
   cancellationPolicy: string;
-  cleaningFee: string;
   smokingAllowed: boolean;
   petsAllowed: boolean;
   bedrooms: string;
   bathrooms: string;
   maxGuests: string;
-  floorNumber: string;
-  propertySizeM2: string;
-  extraGuestFee: string;
-  extraGuestAfter: string;
-  weeklyDiscount: string;
-  monthlyDiscount: string;
-  instantBooking: boolean;
-  selfCheckin: boolean;
-  selfCheckinDetails: string;
   longStayEnabled: boolean;
   longStayMinNights: string;
-  longStayDiscountType: string;
   longStayDiscountValue: string;
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
-} & DiscountState;
+};
 
 function toNullableNumber(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
@@ -129,7 +93,6 @@ function initState(l: Listing): ApartmentState {
   const a = l as any;
   return {
     name:                l.name              ?? "",
-    apartmentType:       a.apartmentType     ?? "entire_place",
     description:         l.description       ?? "",
     address:             l.address           ?? "",
     lat:                 toNullableNumber(a.lat),
@@ -142,29 +105,17 @@ function initState(l: Listing): ApartmentState {
     checkinTime:         l.checkinTime       ?? "14:00",
     checkoutTime:        l.checkoutTime      ?? "11:00",
     cancellationPolicy:  l.cancellationPolicy ?? "flexible",
-    cleaningFee:         a.cleaningFee       != null ? String(a.cleaningFee) : "",
     smokingAllowed:      l.smokingAllowed    ?? false,
     petsAllowed:         l.petsAllowed       ?? false,
     bedrooms:            l.bedrooms          != null ? String(l.bedrooms)  : "",
     bathrooms:           l.bathrooms         != null ? String(l.bathrooms) : "",
     maxGuests:           l.maxGuests         != null ? String(l.maxGuests) : "",
-    floorNumber:         a.floorNumber       != null ? String(a.floorNumber)    : "",
-    propertySizeM2:      a.propertySizeM2    != null ? String(a.propertySizeM2) : "",
-    extraGuestFee:       a.extraGuestFee     != null ? String(a.extraGuestFee)  : "",
-    extraGuestAfter:     a.extraGuestAfter   != null ? String(a.extraGuestAfter) : "",
-    weeklyDiscount:      a.weeklyDiscount    != null ? String(a.weeklyDiscount)  : "",
-    monthlyDiscount:     a.monthlyDiscount   != null ? String(a.monthlyDiscount) : "",
-    instantBooking:      a.instantBooking    ?? false,
-    selfCheckin:         a.selfCheckin       ?? false,
-    selfCheckinDetails:  a.selfCheckinDetails ?? "",
     longStayEnabled:     l.longStayEnabled   ?? false,
     longStayMinNights:   l.longStayMinNights != null ? String(l.longStayMinNights)  : "30",
-    longStayDiscountType: l.longStayDiscountType ?? "percentage",
     longStayDiscountValue: a.longStayDiscountValue != null ? String(a.longStayDiscountValue) : "",
     selectedAmenities:   flattenGroupedAmenities(a.amenities),
     customAmenities:     (a.customAmenities ?? []).map((x: any) => typeof x === "string" ? x : (x?.label ?? "")),
     customInput:         "",
-    ...initDiscountState(a),
   };
 }
 
@@ -206,28 +157,17 @@ function buildPayload(s: ApartmentState): Record<string, unknown> {
 
   const lsNights = toNullableInt(s.longStayMinNights);
   const lsValue = toNullableNumber(s.longStayDiscountValue);
-  const lsType = LONG_STAY_TYPE_VALUES.has(s.longStayDiscountType)
-    ? s.longStayDiscountType
-    : "percentage";
   const hasValidLongStay =
     s.longStayEnabled &&
     lsNights !== null &&
     lsNights >= 1 &&
     lsValue !== null &&
     lsValue > 0 &&
-    (lsType !== "percentage" || lsValue <= 100);
+    lsValue <= 100;
 
   p.longStayEnabled = hasValidLongStay;
   p.longStayMinNights = hasValidLongStay ? lsNights : null;
-  p.longStayDiscountType = hasValidLongStay ? lsType : null;
   p.longStayDiscountValue = hasValidLongStay ? lsValue : null;
-
-  if (s.discountEnabled) {
-    const discountErrors = validateDiscount(s, s.pricePerNight).filter(Boolean);
-    if (discountErrors.length === 0 && s.discountValue !== "") {
-      appendDiscountPayload(p, s);
-    }
-  }
 
   p.amenities       = groupAmenities(s.selectedAmenities);
   p.customAmenities = s.customAmenities.map((x) => x.trim()).filter(Boolean);
@@ -245,8 +185,6 @@ function validateStep(step: Step, s: ApartmentState): string[] {
       return [
         !s.name.trim()    && "Apartment name is required.",
         !s.address.trim() && "Address is required.",
-        !s.town.trim()    && "Town / City is required — geocode the address.",
-        !s.country.trim() && "Country code is required — geocode the address.",
       ].filter(Boolean) as string[];
     case "pricing":
       return [
@@ -256,8 +194,6 @@ function validateStep(step: Step, s: ApartmentState): string[] {
         !s.checkinTime                 && "Check-in time is required.",
         !s.checkoutTime                && "Check-out time is required.",
         !s.cancellationPolicy          && "Cancellation policy is required.",
-        // Discount validation — only blocks when discount is enabled
-        ...validateDiscount(s, s.pricePerNight),
       ].filter(Boolean) as string[];
     case "details":
       return [
@@ -265,7 +201,6 @@ function validateStep(step: Step, s: ApartmentState): string[] {
         s.bedrooms  !== "" && Number(s.bedrooms)  < 0 && "Bedrooms cannot be negative.",
         s.bathrooms !== "" && Number(s.bathrooms) < 0 && "Bathrooms cannot be negative.",
         s.longStayEnabled && !(Number(s.longStayMinNights) >= 1)       && "Long-stay minimum nights must be ≥ 1.",
-        s.longStayEnabled && !s.longStayDiscountType                    && "Long-stay discount type is required.",
         s.longStayEnabled && !(Number(s.longStayDiscountValue) > 0)    && "Long-stay discount value must be > 0.",
       ].filter(Boolean) as string[];
     default:
@@ -339,7 +274,7 @@ export function ApartmentForm({ listingId, listing }: Props) {
 
   const activateMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/activate`),
-    onSuccess:  (r: any) => { refetch(); flash(r.data?.data?.message ?? "Listing is now live!", "ok"); },
+    onSuccess:  (r: any) => { refetch(); flash(r.data?.data?.message ?? "Listing is now live!", "ok"); router.push("/dashboard/listings"); },
     onError:    (e: any) => flash(apiErr(e), "err"),
   });
 
@@ -418,12 +353,6 @@ export function ApartmentForm({ listingId, listing }: Props) {
                   required
                   error={tried && !s.name.trim() ? "Title is required." : undefined}
                 />
-                <Select
-                  label="Property Type"
-                  value={s.apartmentType}
-                  onChange={(e) => set("apartmentType", e.target.value)}
-                  options={APARTMENT_TYPES}
-                />
                 <div>
                   <Textarea
                     label="Description"
@@ -443,8 +372,6 @@ export function ApartmentForm({ listingId, listing }: Props) {
                   onGeocoded={(r) => setS((p) => ({ ...p, lat: r.lat, lng: r.lng, town: r.town, country: r.country }))}
                   errors={tried ? {
                     address: !s.address.trim() ? "Address is required." : undefined,
-                    town:    !s.town.trim()    ? "Town is required."    : undefined,
-                    country: !s.country.trim() ? "Country is required." : undefined,
                   } : undefined}
                 />
               </div>
@@ -484,15 +411,6 @@ export function ApartmentForm({ listingId, listing }: Props) {
                   <Input label="Check-in Time"  type="time" value={s.checkinTime}  onChange={(e) => set("checkinTime",  e.target.value)} />
                   <Input label="Check-out Time" type="time" value={s.checkoutTime} onChange={(e) => set("checkoutTime", e.target.value)} />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Cleaning Fee (optional)"    type="number" min="0" value={s.cleaningFee}    onChange={(e) => set("cleaningFee", e.target.value)}    placeholder="0.00" />
-                  <Input label="Extra Guest Fee (optional)" type="number" min="0" value={s.extraGuestFee}  onChange={(e) => set("extraGuestFee", e.target.value)}  placeholder="0.00" />
-                </div>
-                {/* <div className="grid grid-cols-2 gap-4">
-                  <Input label="Extra Guest After (guests)" type="number" min="1" value={s.extraGuestAfter} onChange={(e) => set("extraGuestAfter", e.target.value)} placeholder="E.g., 2" />
-                  <Input label="Weekly Discount (%)"        type="number" min="0" max="100" value={s.weeklyDiscount}  onChange={(e) => set("weeklyDiscount",  e.target.value)} placeholder="0" />
-                </div> */}
-                {/* <Input label="Monthly Discount (%)" type="number" min="0" max="100" value={s.monthlyDiscount} onChange={(e) => set("monthlyDiscount", e.target.value)} placeholder="0" /> */}
                 <div className="flex items-center gap-6 pt-1">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input type="checkbox" checked={s.smokingAllowed} onChange={(e) => set("smokingAllowed", e.target.checked)} className="rounded border-slate-300 text-primary focus:ring-primary" />
@@ -522,29 +440,6 @@ export function ApartmentForm({ listingId, listing }: Props) {
                     error={tried && !(Number(s.maxGuests) >= 1) ? "At least 1 guest required." : undefined}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <Input label="Floor Number (optional)"       type="number" value={s.floorNumber}    onChange={(e) => set("floorNumber",    e.target.value)} placeholder="E.g., 3" />
-                  <Input label="Property Size m² (optional)"  type="number" min="0" value={s.propertySizeM2} onChange={(e) => set("propertySizeM2", e.target.value)} placeholder="E.g., 75" />
-                </div>
-                <div className="flex items-center gap-6">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input type="checkbox" checked={s.instantBooking} onChange={(e) => set("instantBooking", e.target.checked)} className="rounded border-slate-300 text-primary focus:ring-primary" />
-                    <span className="text-sm text-slate-700">Instant Booking</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input type="checkbox" checked={s.selfCheckin} onChange={(e) => set("selfCheckin", e.target.checked)} className="rounded border-slate-300 text-primary focus:ring-primary" />
-                    <span className="text-sm text-slate-700">Self Check-in</span>
-                  </label>
-                </div>
-                {s.selfCheckin && (
-                  <Input
-                    label="Self Check-in Instructions"
-                    value={s.selfCheckinDetails}
-                    onChange={(e) => set("selfCheckinDetails", e.target.value)}
-                    placeholder="E.g., Key lockbox code is 1234"
-                  />
-                )}
-
                 {/* Long-stay */}
                 <div className="border-t border-border pt-4 space-y-3">
                   <div className="flex items-center justify-between">
@@ -558,7 +453,7 @@ export function ApartmentForm({ listingId, listing }: Props) {
                     </label>
                   </div>
                   {s.longStayEnabled && (
-                    <div className="grid grid-cols-3 gap-4 p-4 rounded-xl bg-slate-50 animate-fade-in">
+                    <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 animate-fade-in">
                       <Input
                         label="Min Nights"
                         type="number" min="1"
@@ -566,15 +461,9 @@ export function ApartmentForm({ listingId, listing }: Props) {
                         onChange={(e) => set("longStayMinNights", e.target.value)}
                         error={tried && !(Number(s.longStayMinNights) >= 1) ? "Required." : undefined}
                       />
-                      <Select
-                        label="Discount Type"
-                        value={s.longStayDiscountType}
-                        onChange={(e) => set("longStayDiscountType", e.target.value)}
-                        options={LONG_STAY_TYPES}
-                      />
                       <Input
-                        label="Value"
-                        type="number" min="0.01"
+                        label="Discount (%)"
+                        type="number" min="0.01" max="100"
                         value={s.longStayDiscountValue}
                         onChange={(e) => set("longStayDiscountValue", e.target.value)}
                         placeholder="E.g., 10"
