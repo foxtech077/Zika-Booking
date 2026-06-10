@@ -262,7 +262,7 @@ export default function ProviderBookingDetailScreen() {
       "",
       "─── Your Net Payout ───────",
       `${booking.currency} ${booking.providerPayout.toLocaleString()}`,
-      `(after ${commissionRatePct(booking)}% ZikaBooking fee)`,
+      `(after ${commissionRatePct(booking)}% Kainook fee)`,
       "══════════════════════════",
     ].filter(Boolean).join("\n");
 
@@ -411,7 +411,7 @@ export default function ProviderBookingDetailScreen() {
         {/* ── Payout breakdown ────────────────────────────────────────── */}
         <SectionCard title="Payout Breakdown" icon="dollar-sign">
           <Row label="Guest total paid"          value={`${booking.currency} ${booking.totalAmount.toLocaleString()}`} />
-          <Row label={`ZikaBooking fee (${commPct}%)`} value={`− ${booking.currency} ${booking.commissionAmount.toLocaleString()}`} />
+          <Row label={`Kainook fee (${commPct}%)`} value={`− ${booking.currency} ${booking.commissionAmount.toLocaleString()}`} />
           <View style={s.payoutDivider} />
           <View style={s.payoutRow}>
             <View style={s.payoutLeft}>

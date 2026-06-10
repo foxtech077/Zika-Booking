@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -34,7 +34,7 @@ function getAccountAccessError(user: AuthResponse["user"]) {
   }
 
   if (user.status === "banned") {
-    return "Your account has been permanently removed from ZikaBooking.";
+    return "Your account has been permanently removed from Kainook.";
   }
 
   return null;

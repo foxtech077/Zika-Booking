@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+﻿import { useState, useCallback, useEffect } from "react";
 import {
   View,
   Text,
@@ -342,7 +342,7 @@ function ResultCard({
               </Text>
             )}
             {item.isAccredited && (
-              <Text style={cardStyles.detailText}> · Zika Accredited Stay</Text>
+              <Text style={cardStyles.detailText}> · Kainook Accredited Stay</Text>
             )}
           </View>
         )}

@@ -131,7 +131,7 @@ export default function RootLayout() {
   return (
     <StripeProvider
       publishableKey={getEnvStripePublishableKey()}
-      merchantIdentifier="merchant.com.zikabooking.app"
+      merchantIdentifier="merchant.com.kainook.app"
     >
       <QueryClientProvider client={queryClient}>
         <StatusBar style="auto" />

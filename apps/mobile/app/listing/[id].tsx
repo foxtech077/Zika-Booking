@@ -977,7 +977,7 @@ export default function ListingDetailScreen() {
               <Ionicons name="person" size={24} color={GREEN} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.hostName}>Zika Verified Host</Text>
+              <Text style={s.hostName}>Kainook Verified Host</Text>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
                   <Ionicons name="star" size={12} color="#F59E0B" />

@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "ZikaBooking",
-    "slug": "zika-booking",
+    "name": "kainook",
+    "slug": "kainook",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "zikabooking",
+    "scheme": "kainook",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
@@ -14,15 +14,15 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.zikabooking.app",
+      "bundleIdentifier": "com.kainook.app",
       "entitlements": {
         "com.apple.developer.applesignin": [
           "Default"
         ]
       },
       "associatedDomains": [
-        "applinks:zikabooking.com",
-        "webcredentials:zikabooking.com"
+        "applinks:kainook.com",
+        "webcredentials:kainook.com"
       ]
     },
     "android": {
@@ -30,7 +30,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1a73e8"
       },
-      "package": "com.zikabooking.app",
+      "package": "com.kainook.app",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -38,12 +38,12 @@
           "data": [
             {
               "scheme": "https",
-              "host": "zikabooking.com",
+              "host": "kainook.com",
               "pathPrefix": "/verify"
             },
             {
               "scheme": "https",
-              "host": "zikabooking.com",
+              "host": "kainook.com",
               "pathPrefix": "/reset-password"
             },
             {
@@ -75,7 +75,7 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.zikabooking.app"
+          "merchantIdentifier": "merchant.com.kainook.app"
         }
       ]
     ],
