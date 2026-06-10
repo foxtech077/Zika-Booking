@@ -23,9 +23,9 @@ jobs:
 
             pnpm install
 
-            pnpm --filter auth-service db:generate && pnpm --filter auth-service db:migrate:deploy
-            pnpm --filter listing-service db:generate && pnpm --filter listing-service db:migrate:deploy
-            pnpm --filter payment-service db:generate && pnpm --filter payment-service db:migrate:deploy
+            pnpm --filter auth-service db:migrate:deploy
+            pnpm --filter listing-service db:migrate:deploy
+            pnpm --filter payment-service db:migrate:deploy
 
             pnpm turbo run build --filter=\!@zika/provider
 
