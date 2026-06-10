@@ -15,7 +15,7 @@ const FROM = {
   name: cleanName,
 };
 
-const WEB = process.env["WEB_BASE_URL"] ?? "https://zikabooking.com";
+const WEB = (process.env["WEB_BASE_URL"] ?? "https://zikabooking.com").trim().replace(/\/$/, "");
 
 // ── Send logic ─────────────────────────────────────────────────────────────
 
@@ -63,7 +63,7 @@ export async function sendVerificationEmail(
   to: string,
   plainToken: string,
 ): Promise<void> {
-  const link = `${WEB}/auth/verify?token=${plainToken}`;
+  const link = `${WEB}/verify?token=${plainToken}`;
   console.log("VERIFICATION LINK:", link);
 
   await sendWithRetry({

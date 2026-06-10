@@ -9,6 +9,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import { getRedis } from "./lib/redis";
 import { authRoutes } from "./routes/auth";
 import { adminAuthRoutes, adminUserRoutes, adminOperatorRoutes } from "./routes/admin-auth";
+import { adminDashboardRoutes } from "./routes/admin-dashboard.js";
 import { startTokenPurger } from "./lib/tokenPurger.js";
 
 const PORT = Number(process.env["AUTH_SERVICE_PORT"] ?? 3001);
@@ -105,6 +106,7 @@ async function build() {
   await app.register(adminAuthRoutes);
   await app.register(adminUserRoutes);
   await app.register(adminOperatorRoutes);
+  await app.register(adminDashboardRoutes);
 
   // Global error handler
   app.setErrorHandler((error, _req, reply) => {

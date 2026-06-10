@@ -319,10 +319,11 @@ const promotionDiscount = baseAmount * promotionRate;
           `Max guests allowed: ${listing.maxGuests}`
         );
       }
-  
-      // ── 5. PENDING LIMIT ────────────────────────
+
+      // Pending booking limit (max 5) — only count non-expired locks (mirrors checkAvailability logic)
+      const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
       const pendingCount = await prisma.booking.count({
-        where: { guestId, status: "pending_payment" },
+        where: { guestId, status: "pending_payment", createdAt: { gt: pendingExpiry } },
       });
   
       if (pendingCount >= 5) {
