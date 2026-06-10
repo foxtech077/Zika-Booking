@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -252,7 +252,7 @@ export default function TravellerDashboard() {
   const [selectedMethodId, setSelectedMethodId] = useState<string | null>(null);
   const [loadingMethods, setLoadingMethods] = useState(false);
 
-  // Zika Rewards custom modal state
+  // Kainook Rewards custom modal state
   const [showRewardsModal, setShowRewardsModal] = useState(false);
 
   // Pre-fill checkout form from store user (no API call needed)
@@ -401,7 +401,7 @@ export default function TravellerDashboard() {
         try {
           const r = await fetch(
             `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
-            { headers: { "Accept-Language": "en", "User-Agent": "ZikaBooking/1.0" } }
+            { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
           );
           const d = await r.json();
           if (d?.[0]) { lat = parseFloat(d[0].lat); lng = parseFloat(d[0].lon); }
@@ -558,7 +558,7 @@ export default function TravellerDashboard() {
         try {
           const geoRes = await fetch(
             `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryText)}&format=json&limit=1`,
-            { headers: { "Accept-Language": "en", "User-Agent": "ZikaBooking/1.0" } }
+            { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
           );
           const geoData = await geoRes.json();
           if (geoData && geoData.length > 0) {
@@ -637,7 +637,7 @@ export default function TravellerDashboard() {
       else if (destinationLower.includes("paris")) { lat = 48.8566; lng = 2.3522; }
       else {
         try {
-          const g = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchDestination)}&format=json&limit=1`, { headers: { "Accept-Language": "en", "User-Agent": "ZikaBooking/1.0" } });
+          const g = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchDestination)}&format=json&limit=1`, { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } });
           const gd = await g.json();
           if (gd?.[0]) { lat = parseFloat(gd[0].lat); lng = parseFloat(gd[0].lon); }
         } catch { }
@@ -2251,7 +2251,7 @@ export default function TravellerDashboard() {
                                   try {
                                     const r = await fetch(
                                       `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&addressdetails=0`,
-                                      { headers: { "Accept-Language": "en", "User-Agent": "ZikaBooking/1.0" } }
+                                      { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
                                     );
                                     const data = await r.json();
                                     setNominatimResults(Array.isArray(data) ? data : []);
@@ -3480,7 +3480,7 @@ export default function TravellerDashboard() {
         </div>
       )}
 
-      {/* Zika Platinum Rewards interactive modal overlay */}
+      {/* Kainook Platinum Rewards interactive modal overlay */}
       {showRewardsModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-300">
           <div className="bg-gradient-to-br from-[#0B1E3F] via-[#0E1E38] to-[#040D1D] border border-white/10 rounded-3xl max-w-md w-full p-8 shadow-2xl space-y-6 text-center animate-scale-in relative overflow-hidden">
@@ -3493,7 +3493,7 @@ export default function TravellerDashboard() {
 
             <div className="space-y-2 relative z-10">
               <span className="bg-white/10 text-white text-[9px] font-semibold uppercase px-2.5 py-1 rounded-full tracking-widest border border-white/10">Rewards Program</span>
-              <h3 className="text-2xl md:text-3xl font-serif font-bold text-white leading-tight">Welcome to Zika Platinum!</h3>
+              <h3 className="text-2xl md:text-3xl font-serif font-bold text-white leading-tight">Welcome to Kainook Platinum!</h3>
               <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
                 You are automatically enrolled! Earn loyalty points on every checkout booking and unlock elite travel privileges.
               </p>

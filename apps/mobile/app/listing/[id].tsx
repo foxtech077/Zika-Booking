@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import {
-  View, Text, ScrollView, TouchableOpacity, FlatList,
+  View, Text, ScrollView, TouchableOpacity, FlatList, TextInput,
   ActivityIndicator, Alert, StyleSheet, Dimensions,
   NativeSyntheticEvent, NativeScrollEvent, Modal, Platform, Linking,
 } from "react-native";
@@ -110,7 +110,7 @@ function cancelText(p: string | null) {
 function Stars({ n, size = 13 }: { n: number; size?: number }) {
   return (
     <View style={{ flexDirection: "row", gap: 1 }}>
-      {[1,2,3,4,5].map(i => (
+      {[1, 2, 3, 4, 5].map(i => (
         <Text key={i} style={{ fontSize: size, color: i <= n ? "#F59E0B" : "#E5E7EB" }}>★</Text>
       ))}
     </View>
@@ -283,6 +283,253 @@ function Skeleton() {
   );
 }
 
+// ── Calendar Date Picker ──────────────────────────────────────────────────────
+const CAL_WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const CAL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function calToStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function isBeforeToday(d: Date): boolean {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return d.getTime() < today.getTime();
+}
+
+function isInUnavailable(ds: string, ranges: { start: string; end: string }[]): boolean {
+  return ranges.some(r => {
+    const s = r.start.split("T")[0]!;
+    const e = r.end.split("T")[0]!;
+    return ds >= s && ds <= e;
+  });
+}
+
+function buildMonthGrid(year: number, month: number): (Date | null)[] {
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const arr: (Date | null)[] = Array(firstWeekday).fill(null);
+  for (let d = 1; d <= daysInMonth; d++) arr.push(new Date(year, month, d));
+  return arr;
+}
+
+interface CalPickerProps {
+  visible: boolean;
+  onClose: () => void;
+  onConfirm: (start: string, end: string) => void;
+  isCar: boolean;
+  unavailableRanges: { start: string; end: string }[];
+}
+
+function CalendarPicker({ visible, onClose, onConfirm, isCar, unavailableRanges }: CalPickerProps) {
+  const now = new Date();
+  const [viewYear, setViewYear] = useState(now.getFullYear());
+  const [viewMonth, setViewMonth] = useState(now.getMonth());
+  const [selStart, setSelStart] = useState<string | null>(null);
+  const [selEnd, setSelEnd] = useState<string | null>(null);
+  const [pickupHr, setPickupHr] = useState("10");
+  const [pickupMin, setPickupMin] = useState("00");
+  const [returnHr, setReturnHr] = useState("10");
+  const [returnMin, setReturnMin] = useState("00");
+
+  function resetPicker() {
+    setSelStart(null); setSelEnd(null);
+    setPickupHr("10"); setPickupMin("00");
+    setReturnHr("10"); setReturnMin("00");
+  }
+
+  const monthDays = buildMonthGrid(viewYear, viewMonth);
+  const DAY_SIZE = (W - 32) / 7;
+
+  function prevMonth() {
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
+    else setViewMonth(m => m - 1);
+  }
+  function nextMonth() {
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
+    else setViewMonth(m => m + 1);
+  }
+
+  function handleDayPress(d: Date) {
+    const ds = calToStr(d);
+    if (!selStart || (selStart && selEnd)) {
+      setSelStart(ds); setSelEnd(null);
+    } else {
+      if (ds <= selStart) { setSelStart(ds); setSelEnd(null); }
+      else setSelEnd(ds);
+    }
+  }
+
+  type DayState = "start" | "end" | "range" | "normal" | "disabled";
+  function getDayState(d: Date): DayState {
+    const ds = calToStr(d);
+    if (isBeforeToday(d) || isInUnavailable(ds, unavailableRanges)) return "disabled";
+    if (ds === selStart) return "start";
+    if (ds === selEnd) return "end";
+    if (selStart && selEnd && ds > selStart && ds < selEnd) return "range";
+    return "normal";
+  }
+
+  function handleConfirm() {
+    if (!selStart || !selEnd) return;
+    if (isCar) {
+      const pu = `${selStart}T${pickupHr.padStart(2, "0")}:${pickupMin.padStart(2, "0")}:00`;
+      const rt = `${selEnd}T${returnHr.padStart(2, "0")}:${returnMin.padStart(2, "0")}:00`;
+      onConfirm(pu, rt);
+    } else {
+      onConfirm(selStart, selEnd);
+    }
+    resetPicker();
+    onClose();
+  }
+
+  const canConfirm = !!(selStart && selEnd);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { resetPicker(); onClose(); }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: "#fff" }}>
+        {/* Header */}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: BORDER }}>
+          <Text style={{ fontSize: 18, fontWeight: "800", color: TEXT }}>{isCar ? "Select Rental Period" : "Select Dates"}</Text>
+          <TouchableOpacity onPress={() => { resetPicker(); onClose(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close" size={24} color={TEXT} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+          {/* Month navigation */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 14 }}>
+            <TouchableOpacity onPress={prevMonth} style={{ padding: 8, borderRadius: 10, backgroundColor: GREEN_LIGHT }}>
+              <Ionicons name="chevron-back" size={20} color={GREEN} />
+            </TouchableOpacity>
+            <Text style={{ fontSize: 16, fontWeight: "700", color: TEXT }}>{CAL_MONTHS[viewMonth]} {viewYear}</Text>
+            <TouchableOpacity onPress={nextMonth} style={{ padding: 8, borderRadius: 10, backgroundColor: GREEN_LIGHT }}>
+              <Ionicons name="chevron-forward" size={20} color={GREEN} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Weekday labels */}
+          <View style={{ flexDirection: "row", paddingHorizontal: 16 }}>
+            {CAL_WEEKDAYS.map(w => (
+              <Text key={w} style={{ width: DAY_SIZE, textAlign: "center", fontSize: 12, fontWeight: "600", color: MUTED, paddingBottom: 6 }}>{w}</Text>
+            ))}
+          </View>
+
+          {/* Day grid */}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 16 }}>
+            {monthDays.map((d, i) => {
+              if (!d) return <View key={`e${i}`} style={{ width: DAY_SIZE, height: 44 }} />;
+              const st = getDayState(d);
+              const isStart = st === "start";
+              const isEnd = st === "end";
+              const isRange = st === "range";
+              const isDisabled = st === "disabled";
+              return (
+                <View key={i} style={{ width: DAY_SIZE, height: 44, alignItems: "center", justifyContent: "center" }}>
+                  {isRange && <View style={{ position: "absolute", left: 0, right: 0, top: 7, bottom: 7, backgroundColor: GREEN_LIGHT }} />}
+                  {isEnd && selStart && <View style={{ position: "absolute", left: 0, right: "50%", top: 7, bottom: 7, backgroundColor: GREEN_LIGHT }} />}
+                  {isStart && selEnd && <View style={{ position: "absolute", left: "50%", right: 0, top: 7, bottom: 7, backgroundColor: GREEN_LIGHT }} />}
+                  <TouchableOpacity
+                    onPress={() => !isDisabled && handleDayPress(d)}
+                    disabled={isDisabled}
+                    style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: (isStart || isEnd) ? GREEN : "transparent", alignItems: "center", justifyContent: "center" }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: (isStart || isEnd) ? "700" : "400", color: isDisabled ? "#D1D5DB" : (isStart || isEnd) ? "#fff" : TEXT }}>
+                      {d.getDate()}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+
+          {/* Status hint */}
+          <View style={{ paddingHorizontal: 20, paddingTop: 14 }}>
+            {!selStart && (
+              <Text style={{ fontSize: 13, color: MUTED, textAlign: "center" }}>
+                Tap to select your {isCar ? "pickup" : "check-in"} date
+              </Text>
+            )}
+            {selStart && !selEnd && (
+              <Text style={{ fontSize: 13, color: MUTED, textAlign: "center" }}>
+                Now tap your {isCar ? "return" : "check-out"} date
+              </Text>
+            )}
+            {selStart && selEnd && (
+              <Text style={{ fontSize: 13, fontWeight: "600", color: GREEN, textAlign: "center" }}>
+                {fmt(selStart)} → {fmt(selEnd)}
+                {!isCar ? ` · ${nights(selStart, selEnd)} night${nights(selStart, selEnd) !== 1 ? "s" : ""}` : ""}
+              </Text>
+            )}
+          </View>
+
+          {/* Time inputs for car rentals */}
+          {isCar && selStart && selEnd && (
+            <View style={{ paddingHorizontal: 20, paddingTop: 20, gap: 12 }}>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: TEXT }}>Set Times</Text>
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <View style={{ flex: 1, backgroundColor: BG, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: BORDER }}>
+                  <Text style={{ fontSize: 12, color: MUTED, fontWeight: "600", marginBottom: 8 }}>Pickup time</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <TextInput
+                      value={pickupHr}
+                      onChangeText={v => setPickupHr(v.replace(/\D/g, "").slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 8, width: 44, textAlign: "center", paddingVertical: 8, fontSize: 16, fontWeight: "700", color: TEXT }}
+                    />
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: TEXT }}>:</Text>
+                    <TextInput
+                      value={pickupMin}
+                      onChangeText={v => setPickupMin(v.replace(/\D/g, "").slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 8, width: 44, textAlign: "center", paddingVertical: 8, fontSize: 16, fontWeight: "700", color: TEXT }}
+                    />
+                  </View>
+                </View>
+                <View style={{ flex: 1, backgroundColor: BG, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: BORDER }}>
+                  <Text style={{ fontSize: 12, color: MUTED, fontWeight: "600", marginBottom: 8 }}>Return time</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <TextInput
+                      value={returnHr}
+                      onChangeText={v => setReturnHr(v.replace(/\D/g, "").slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 8, width: 44, textAlign: "center", paddingVertical: 8, fontSize: 16, fontWeight: "700", color: TEXT }}
+                    />
+                    <Text style={{ fontSize: 16, fontWeight: "700", color: TEXT }}>:</Text>
+                    <TextInput
+                      value={returnMin}
+                      onChangeText={v => setReturnMin(v.replace(/\D/g, "").slice(0, 2))}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                      style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 8, width: 44, textAlign: "center", paddingVertical: 8, fontSize: 16, fontWeight: "700", color: TEXT }}
+                    />
+                  </View>
+                </View>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+
+        {/* Confirm button */}
+        <View style={{ paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: BORDER }}>
+          <TouchableOpacity
+            style={{ backgroundColor: canConfirm ? GREEN : "#D1D5DB", borderRadius: 14, paddingVertical: 16, alignItems: "center" }}
+            onPress={handleConfirm}
+            disabled={!canConfirm}
+          >
+            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>Confirm Dates</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
+}
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 export default function ListingDetailScreen() {
   const { id, checkIn, checkOut, guests, pickupDatetime, returnDatetime } = useLocalSearchParams<{
@@ -298,6 +545,9 @@ export default function ListingDetailScreen() {
   const [descExpanded, setDescExpanded] = useState(false);
   const [amenExpanded, setAmenExpanded] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [localStart, setLocalStart] = useState<string | null>(null);
+  const [localEnd, setLocalEnd] = useState<string | null>(null);
 
   // ── Data ──
   const { data: listing, isLoading, isError } = useQuery<PublicListing>({
@@ -361,16 +611,22 @@ export default function ListingDetailScreen() {
   const rateLabel = isCar ? "per day" : "per night";
   const isFav = listing.isFavourited ?? false;
 
-  const hasDates = isCar ? !!(pickupDatetime && returnDatetime) : !!(checkIn && checkOut);
+  // Locally selected dates take priority over URL params
+  const effectivePU = localStart ?? pickupDatetime;
+  const effectiveRT = localEnd ?? returnDatetime;
+  const effectiveCI = localStart ?? checkIn;
+  const effectiveCO = localEnd ?? checkOut;
+
+  const hasDates = isCar ? !!(effectivePU && effectiveRT) : !!(effectiveCI && effectiveCO);
 
   const datesStr = (() => {
-    if (isCar && pickupDatetime && returnDatetime) {
-      const d = days(pickupDatetime, returnDatetime);
-      return `${fmtDT(pickupDatetime)} → ${fmtDT(returnDatetime)} · ${d} day${d !== 1 ? "s" : ""}`;
+    if (isCar && effectivePU && effectiveRT) {
+      const d = days(effectivePU, effectiveRT);
+      return `${fmtDT(effectivePU)} → ${fmtDT(effectiveRT)} · ${d} day${d !== 1 ? "s" : ""}`;
     }
-    if (!isCar && checkIn && checkOut) {
-      const n = nights(checkIn, checkOut);
-      return `${fmt(checkIn)} → ${fmt(checkOut)} · ${n} night${n !== 1 ? "s" : ""}`;
+    if (!isCar && effectiveCI && effectiveCO) {
+      const n = nights(effectiveCI, effectiveCO);
+      return `${fmt(effectiveCI)} → ${fmt(effectiveCO)} · ${n} night${n !== 1 ? "s" : ""}`;
     }
     return null;
   })();
@@ -378,8 +634,8 @@ export default function ListingDetailScreen() {
   // Pricing
   const pricingBreakout = (() => {
     if (!hasDates || !rate) return null;
-    const count = isCar && pickupDatetime && returnDatetime ? days(pickupDatetime, returnDatetime)
-      : !isCar && checkIn && checkOut ? nights(checkIn, checkOut) : 1;
+    const count = isCar && effectivePU && effectiveRT ? days(effectivePU, effectiveRT)
+      : !isCar && effectiveCI && effectiveCO ? nights(effectiveCI, effectiveCO) : 1;
     const base = rate * count;
     let discount = 0;
     if (!isCar && listing.longStayEnabled && listing.longStayMinNights && count >= listing.longStayMinNights) {
@@ -486,9 +742,9 @@ export default function ListingDetailScreen() {
       return;
     }
     if (isCar) {
-      router.push({ pathname: "/book/[listingId]", params: { listingId: id, pickupDatetime, returnDatetime } });
+      router.push({ pathname: "/book/[listingId]", params: { listingId: id, pickupDatetime: effectivePU, returnDatetime: effectiveRT } });
     } else {
-      router.push({ pathname: "/book/[listingId]", params: { listingId: id, checkIn, checkOut, guests } });
+      router.push({ pathname: "/book/[listingId]", params: { listingId: id, checkIn: effectiveCI, checkOut: effectiveCO, guests } });
     }
   }
 
@@ -631,11 +887,11 @@ export default function ListingDetailScreen() {
               <Text style={s.datesText}>{datesStr}</Text>
             </View>
           ) : (
-            <TouchableOpacity style={s.selectDatesCard} onPress={() => router.back()}>
+            <TouchableOpacity style={s.selectDatesCard} onPress={() => setShowDatePicker(true)}>
               <Ionicons name="calendar-outline" size={20} color={GREEN} />
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={{ fontSize: 14, fontWeight: "700", color: TEXT }}>Select {isCar ? "pickup & return" : "check-in & check-out"}</Text>
-                <Text style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Tap to go back and choose dates</Text>
+                <Text style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Tap to choose your dates</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={MUTED} />
             </TouchableOpacity>
@@ -721,7 +977,7 @@ export default function ListingDetailScreen() {
               <Ionicons name="person" size={24} color={GREEN} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.hostName}>Zika Verified Host</Text>
+              <Text style={s.hostName}>Kainook Verified Host</Text>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
                   <Ionicons name="star" size={12} color="#F59E0B" />
@@ -820,6 +1076,15 @@ export default function ListingDetailScreen() {
         />
       </Modal>
 
+      {/* ══ DATE PICKER MODAL ══ */}
+      <CalendarPicker
+        visible={showDatePicker}
+        onClose={() => setShowDatePicker(false)}
+        onConfirm={(start, end) => { setLocalStart(start); setLocalEnd(end); }}
+        isCar={isCar}
+        unavailableRanges={availability?.unavailableRanges ?? []}
+      />
+
       {/* ══ STICKY BOTTOM BAR ══ */}
       <View style={s.stickyBar}>
         <View>
@@ -831,7 +1096,7 @@ export default function ListingDetailScreen() {
             <Text style={s.providerBtnText}>Provider view</Text>
           </View>
         ) : !hasDates ? (
-          <TouchableOpacity style={s.selectDatesBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={s.selectDatesBtn} onPress={() => setShowDatePicker(true)}>
             <Text style={s.selectDatesBtnText}>Select dates</Text>
           </TouchableOpacity>
         ) : (

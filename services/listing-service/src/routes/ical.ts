@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
@@ -576,7 +576,7 @@ export async function icalRoutes(app: FastifyInstance) {
           startDate: toDateStr(b.checkIn ?? b.pickupDatetime),
           endDate: toDateStr(b.checkOut ?? b.returnDatetime),
           summary: `Booking ${b.reference}`,
-          platform: "zikabooking",
+          platform: "Kainook",
         })),
         // Held / pending payment (amber)
         ...heldBookings.map((b) => ({
@@ -585,7 +585,7 @@ export async function icalRoutes(app: FastifyInstance) {
           startDate: toDateStr(b.checkIn ?? b.pickupDatetime),
           endDate: toDateStr(b.checkOut ?? b.returnDatetime),
           summary: `Held ${b.reference}`,
-          platform: "zikabooking",
+          platform: "Kainook",
         })),
       ].sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? "")),
     });
@@ -730,16 +730,16 @@ export async function icalRoutes(app: FastifyInstance) {
       return chunks.join("\r\n");
     }
 
-    const prodId = "-//ZikaBooking//Listing Service//EN";
+    const prodId = "-//Kainook//Listing Service//EN";
     const now = toIcalUtc(new Date());
-    const listingName = (listing.name ?? "ZikaBooking").replace(/[\\;,]/g, "\\$&");
+    const listingName = (listing.name ?? "Kainook").replace(/[\\;,]/g, "\\$&");
 
     const vevents = bookings.map((b) => {
       const dtstart = b.checkIn ?? b.pickupDatetime;
       const dtend = b.checkOut ?? b.returnDatetime;
       if (!dtstart || !dtend) return "";
 
-      const uid = `${b.reference}@${id}.zikabooking`;
+      const uid = `${b.reference}@${id}.Kainook`;
       const dtstamp = toIcalUtc(b.updatedAt ?? new Date());
       const created = toIcalUtc(b.confirmedAt ?? new Date());
       const summary = foldLine(`SUMMARY:Booking - ${listingName}`);

@@ -20,7 +20,7 @@ import { registerSchema } from "@zika/validators";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
 import { K } from "../../constants/theme";
-import { handleRoleAndStatusRedirect } from "./login";
+import { handleRoleAndStatusRedirect, GoogleSignInButton } from "./login";
 import type { ApiResponse, PublicUser } from "@zika/types";
 import { ALL_COUNTRIES, POPULAR_COUNTRIES, type CountryData } from "../../constants/countries";
 
@@ -337,6 +337,18 @@ export default function RegisterScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* OAuth divider — only for travellers (providers must register with email) */}
+        {userType === "guest" && (
+          <>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+            <GoogleSignInButton onError={(msg) => setErrors({ general: msg })} />
+          </>
+        )}
+
         <View style={styles.loginRow}>
           <Text style={styles.loginText}>Already a member? </Text>
           <Link href="/(auth)/login" asChild>
@@ -539,6 +551,10 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.6 },
   primaryBtnText: { color: "#fff", fontSize: K.font.lg, fontWeight: "700", letterSpacing: 0.3 },
+
+  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 20 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
+  dividerText: { marginHorizontal: 16, color: K.colors.textLightMuted, fontSize: K.font.sm },
 
   loginRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 24 },
   loginText: { color: K.colors.textLightMuted, fontSize: K.font.sm },

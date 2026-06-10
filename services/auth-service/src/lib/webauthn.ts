@@ -1,4 +1,4 @@
-import {
+﻿import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
   generateAuthenticationOptions,
@@ -9,9 +9,9 @@ import {
 import { isoBase64URL, isoUint8Array } from "@simplewebauthn/server/helpers";
 import { getAndDeleteChallenge, setChallenge } from "./redis";
 
-const RP_ID = process.env["WEBAUTHN_RP_ID"] ?? "admin.zikabooking.com";
-const RP_NAME = process.env["WEBAUTHN_RP_NAME"] ?? "ZikaBooking Admin";
-const ORIGIN = process.env["WEBAUTHN_ORIGIN"] ?? "https://admin.zikabooking.com";
+const RP_ID = process.env["WEBAUTHN_RP_ID"] ?? "admin.Kainook.com";
+const RP_NAME = process.env["WEBAUTHN_RP_NAME"] ?? "Kainook Admin";
+const ORIGIN = process.env["WEBAUTHN_ORIGIN"] ?? "https://admin.Kainook.com";
 
 // ── Registration ──────────────────────────────────────────────────────────────
 

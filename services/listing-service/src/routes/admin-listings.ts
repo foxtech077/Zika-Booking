@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
+import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
   sendListingApprovedEmail,
   sendListingRejectedEmail,
@@ -26,10 +27,29 @@ const REJECTION_REASONS = new Set([
  * before an admin can approve a hotel listing.
  */
 const HOTEL_REQUIRED_DOC_GROUPS: Array<{ label: string; types: string[] }> = [
-  { label: "business licence",              types: ["business_licence"] },
-  { label: "hotel operating permit",        types: ["operating_permit", "hotel_operating_permit"] },
+  { label: "business licence", types: ["business_licence"] },
+  { label: "hotel operating permit", types: ["operating_permit", "hotel_operating_permit"] },
   { label: "tourism authority certificate", types: ["tourism_certificate", "tourism_authority_certificate"] },
 ];
+
+const VALID_ADMIN_ROLES = new Set(["super_admin", "admin", "country_manager", "sales", "support", "finance"]);
+const MODERATOR_ROLES = new Set(["super_admin", "admin", "country_manager"]);
+
+const VALID_LISTING_STATUSES = new Set(Object.values(ListingStatus));
+const VALID_LISTING_CATEGORIES = new Set(Object.values(ListingCategory));
+
+function checkAdminRole(req: FastifyRequest, reply: FastifyReply, requiredRoles?: Set<string>): boolean {
+  const admin = req as AdminRequest;
+  if (!VALID_ADMIN_ROLES.has(admin.adminRole)) {
+    sendError(reply, 403, "FORBIDDEN", "Invalid admin role.");
+    return false;
+  }
+  if (requiredRoles && !requiredRoles.has(admin.adminRole)) {
+    sendError(reply, 403, "FORBIDDEN", "You do not have permission to perform this action.");
+    return false;
+  }
+  return true;
+}
 
 // ── Shared schema building-blocks ─────────────────────────────────────────────
 
@@ -41,7 +61,7 @@ const ErrorResponse = {
       type: "object",
       required: ["code", "message"],
       properties: {
-        code:    { type: "string" },
+        code: { type: "string" },
         message: { type: "string" },
       },
     },
@@ -54,42 +74,67 @@ const ok = (dataSchema: object) => ({
   required: ["success", "data"],
   properties: {
     success: { type: "boolean" },
-    data:    dataSchema,
+    data: dataSchema,
   },
 });
 
 const PhotoSchema = {
   type: "object",
   properties: {
-    id:       { type: "string" },
-    cdnUrl:   { type: "string" },
+    id: { type: "string" },
+    cdnUrl: { type: "string" },
     position: { type: "integer" },
   },
 } as const;
 
 const PageQuery = {
-  page:  { type: "string", default: "1",  description: "1-based page number" },
+  page: { type: "string", default: "1", description: "1-based page number" },
   limit: { type: "string", default: "20", description: "Items per page (max 100)" },
 } as const;
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 
+async function verifyListingScope(
+  admin: AdminRequest,
+  listingId: string,
+) {
+  const listing = await prisma.listing.findUnique({
+    where: { id: listingId },
+    select: {
+      id: true,
+      country: true,
+    },
+  });
+
+  if (!listing) {
+    throw new Error("LISTING_NOT_FOUND");
+  }
+
+  if (admin.adminRole === "country_manager") {
+    if (!admin.adminCountry || listing.country !== admin.adminCountry) {
+      throw new Error("OUT_OF_SCOPE");
+    }
+  }
+
+  return listing;
+}
 export async function adminListingRoutes(app: FastifyInstance) {
 
   // ── GET /admin/listings/review-queue (UC-2.8) ─────────────────────────────
-  app.get("/admin/listings/review-queue", {
+ app.get("/admin/listings/review-queue", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Fetch the listing review queue",
       security: [{ bearerAuth: [] }],
       querystring: {
         type: "object",
         properties: {
-          country:    { type: "string", description: "Filter by country code (ISO 3166-1 alpha-2)" },
+          country: { type: "string", description: "Filter by country code (ISO 3166-1 alpha-2)" },
+          taskStatus: { type: "string", enum: ["open", "escalated"] },
           starRating: { type: "string", description: "Filter by claimed star rating (1–5)" },
-          slaStatus:  { type: "string", enum: ["breached", "approaching", "ok"], description: "SLA breach status" },
-          sortBy:     { type: "string", enum: ["sla_deadline", "submitted_at"], default: "sla_deadline" },
+          slaStatus: { type: "string", enum: ["breached", "approaching", "ok"], description: "SLA breach status" },
+          sortBy: { type: "string", enum: ["sla_deadline", "submitted_at"], default: "sla_deadline" },
           ...PageQuery,
         },
       },
@@ -102,30 +147,30 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  id:          { type: "string" },
-                  status:      { type: "string" },
+                  id: { type: "string" },
+                  status: { type: "string" },
                   slaDeadline: { type: "string", format: "date-time" },
-                  assignedTo:  { type: "string", nullable: true },
+                  assignedTo: { type: "string", nullable: true },
                   listing: {
                     type: "object",
                     properties: {
-                      id:                { type: "string" },
-                      name:              { type: "string", nullable: true },
-                      country:           { type: "string", nullable: true },
-                      town:              { type: "string", nullable: true },
+                      id: { type: "string" },
+                      name: { type: "string", nullable: true },
+                      country: { type: "string", nullable: true },
+                      town: { type: "string", nullable: true },
                       claimedStarRating: { type: "integer", nullable: true },
-                      submissionCount:   { type: "integer" },
-                      submittedAt:       { type: "string", format: "date-time", nullable: true },
-                      providerId:        { type: "string" },
-                      category:          { type: "string" },
-                      photos:            { type: "array", items: PhotoSchema },
+                      submissionCount: { type: "integer" },
+                      submittedAt: { type: "string", format: "date-time", nullable: true },
+                      providerId: { type: "string" },
+                      category: { type: "string" },
+                      photos: { type: "array", items: PhotoSchema },
                     },
                   },
                 },
               },
             },
             total: { type: "integer" },
-            page:  { type: "integer" },
+            page: { type: "integer" },
             limit: { type: "integer" },
           },
         }),
@@ -134,79 +179,123 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const admin = req as AdminRequest;
-    const { country, starRating, slaStatus, page = "1", limit = "20", sortBy = "sla_deadline" } = req.query as Record<string, string>;
+
+    const { country, starRating, taskStatus, slaStatus, page = "1", limit = "20", sortBy = "sla_deadline" } = req.query as Record<string, string>;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
 
     const now = new Date();
+
     const slaFilter =
-      slaStatus === "breached"    ? { slaDeadline: { lt: now } } :
-      slaStatus === "approaching" ? { slaDeadline: { gte: now, lt: new Date(now.getTime() + 4 * 60 * 60 * 1000) } } :
-      slaStatus === "ok"          ? { slaDeadline: { gte: new Date(now.getTime() + 4 * 60 * 60 * 1000) } } :
-      {};
-
+      slaStatus === "breached"
+        ? { slaDeadline: { lt: now } }
+        : slaStatus === "approaching"
+        ? {
+            slaDeadline: {
+              gte: now,
+              lt: new Date(now.getTime() + 4 * 60 * 60 * 1000),
+            },
+          }
+        : slaStatus === "ok"
+        ? {
+            slaDeadline: {
+              gte: new Date(now.getTime() + 4 * 60 * 60 * 1000),
+            },
+          }
+        : {};
     const isCountryManager = admin.adminRole === "country_manager";
-    const countryScope = isCountryManager && admin.adminCountry ? admin.adminCountry : null;
 
+    const listingFilter: any = {
+      status: "pending_review",
+    };
+
+    if (isCountryManager) {
+      listingFilter.country = admin.adminCountry ?? "UNDEFINED_COUNTRY";
+    } else if (country) {
+      listingFilter.country = country;
+    }
+
+    if (starRating) {
+      const parsedRating = parseInt(starRating, 10);
+      if (isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+        return sendError(reply, 400, "BAD_REQUEST", `Invalid star rating: ${starRating}`);
+      }
+      listingFilter.claimedStarRating = parsedRating;
+    }
     const tasks = await prisma.listingReviewTask.findMany({
       where: {
-        status: { in: ["open", "escalated"] },
-        ...slaFilter,
-        listing: {
-          status: "pending_review",
-          ...(countryScope ? { country: countryScope } : {}),
-          ...(country      ? { country }               : {}),
-          ...(starRating   ? { claimedStarRating: parseInt(starRating, 10) } : {}),
-        },
+        status: taskStatus
+          ? (taskStatus as ReviewTaskStatus)
+          : { in: ["open", "escalated"] },
+        AND: [
+          slaFilter,
+          {
+            listing: {
+              is: listingFilter,
+            },
+          },
+        ],
       },
+      skip,
+      take,
+      orderBy: sortBy === "submitted_at"
+        ? { listing: { submittedAt: "desc" } }
+        : { slaDeadline: "asc" },
       include: {
         listing: {
-          select: {
-            id: true,
-            name: true,
-            country: true,
-            town: true,
-            claimedStarRating: true,
-            submissionCount: true,
-            submittedAt: true,
-            providerId: true,
-            category: true,
+          include: {
             photos: {
               where: { deletedAt: null },
               orderBy: { position: "asc" },
-              select: { id: true, s3Key: true, cdnUrl: true, position: true },
             },
           },
         },
       },
-      orderBy: sortBy === "submitted_at" ? { listing: { submittedAt: "asc" } } : { slaDeadline: "asc" },
-      skip,
-      take,
     });
 
-    const total = await prisma.listingReviewTask.count({
-      where: {
-        status: { in: ["open", "escalated"] },
-        listing: { status: "pending_review" },
+ const total = await prisma.listingReviewTask.count({
+  where: {
+    status: taskStatus
+      ? (taskStatus as ReviewTaskStatus)
+      : { in: ["open", "escalated"] },
+    AND: [
+      slaFilter,
+      {
+        listing: {
+          is: listingFilter,
+        },
       },
-    });
+    ],
+  },
+});
 
     const signedTasks = await Promise.all(
       tasks.map(async (t) => ({
         ...t,
-        listing: { ...t.listing, photos: await withSignedPhotos(t.listing.photos) },
+        listing: {
+          ...t.listing,
+          photos: await withSignedPhotos(t.listing.photos),
+        },
       })),
     );
-    return sendSuccess(reply, 200, { tasks: signedTasks, total, page: parseInt(page, 10), limit: take });
+
+    return sendSuccess(reply, 200, {
+      tasks: signedTasks,
+      total,
+      page: parseInt(page, 10),
+      limit: take,
+    });
   });
+
 
   // ── GET /admin/listings/:id/review (UC-2.9) ───────────────────────────────
   app.get("/admin/listings/:id/review", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Full listing detail for admin review",
       security: [{ bearerAuth: [] }],
       params: {
@@ -221,26 +310,26 @@ export async function adminListingRoutes(app: FastifyInstance) {
           type: "object",
           description: "Full listing object with grouped amenities and document checklist",
           properties: {
-            id:                { type: "string" },
-            name:              { type: "string", nullable: true },
-            status:            { type: "string" },
-            category:          { type: "string" },
-            country:           { type: "string", nullable: true },
-            town:              { type: "string", nullable: true },
+            id: { type: "string" },
+            name: { type: "string", nullable: true },
+            status: { type: "string" },
+            category: { type: "string" },
+            country: { type: "string", nullable: true },
+            town: { type: "string", nullable: true },
             claimedStarRating: { type: "integer", nullable: true },
-            starRating:        { type: "integer", nullable: true },
-            submissionCount:   { type: "integer" },
-            photos:            { type: "array", items: PhotoSchema },
+            starRating: { type: "integer", nullable: true },
+            submissionCount: { type: "integer" },
+            photos: { type: "array", items: PhotoSchema },
             documents: {
               type: "array",
               items: {
                 type: "object",
                 properties: {
-                  id:           { type: "string" },
+                  id: { type: "string" },
                   documentType: { type: "string" },
-                  fileType:     { type: "string" },
-                  s3Key:        { type: "string" },
-                  createdAt:    { type: "string", format: "date-time" },
+                  fileType: { type: "string" },
+                  s3Key: { type: "string" },
+                  createdAt: { type: "string", format: "date-time" },
                 },
               },
             },
@@ -248,11 +337,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
               type: "object",
               description: "Amenities grouped by category",
               properties: {
-                Connectivity:   { type: "array", items: { type: "string" } },
+                Connectivity: { type: "array", items: { type: "string" } },
                 "Food & Drink": { type: "array", items: { type: "string" } },
-                Wellness:       { type: "array", items: { type: "string" } },
-                Comfort:        { type: "array", items: { type: "string" } },
-                Services:       { type: "array", items: { type: "string" } },
+                Wellness: { type: "array", items: { type: "string" } },
+                Comfort: { type: "array", items: { type: "string" } },
+                Services: { type: "array", items: { type: "string" } },
               },
             },
             docChecklist: {
@@ -260,8 +349,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  label:         { type: "string" },
-                  satisfied:     { type: "boolean" },
+                  label: { type: "string" },
+                  satisfied: { type: "boolean" },
                   uploadedTypes: { type: "array", items: { type: "string" } },
                 },
               },
@@ -275,16 +364,38 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
+try {
+  await verifyListingScope(admin, id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This listing is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+} 
     const listing = await prisma.listing.findUnique({
       where: { id },
       include: {
-        photos:          { where: { deletedAt: null }, orderBy: { position: "asc" } },
-        documents:       { where: { replacedAt: null } },
-        amenities:       true,
+        photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
+        documents: { where: { replacedAt: null } },
+        amenities: true,
         customAmenities: true,
-        reviewTasks:     { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
+        reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
       },
     });
 
@@ -316,15 +427,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     const presentDocTypes = listing.documents.map((d) => d.documentType as string);
     const docChecklist = HOTEL_REQUIRED_DOC_GROUPS.map((group) => ({
-      label:         group.label,
-      satisfied:     group.types.some((t) => presentDocTypes.includes(t)),
+      label: group.label,
+      satisfied: group.types.some((t) => presentDocTypes.includes(t)),
       uploadedTypes: group.types.filter((t) => presentDocTypes.includes(t)),
     }));
 
     return sendSuccess(reply, 200, {
       ...listing,
-      amenities:    groupedAmenities,
-      photos:       await withSignedPhotos(listing.photos),
+      amenities: groupedAmenities,
+      photos: await withSignedPhotos(listing.photos),
       docChecklist,
     });
   });
@@ -333,14 +444,14 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/listings/:id/documents/:docId", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Get presigned download URL for a listing document",
       security: [{ bearerAuth: [] }],
       params: {
         type: "object",
         required: ["id", "docId"],
         properties: {
-          id:    { type: "string", description: "Listing ID" },
+          id: { type: "string", description: "Listing ID" },
           docId: { type: "string", description: "Document ID" },
         },
       },
@@ -348,7 +459,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         200: ok({
           type: "object",
           properties: {
-            url:      { type: "string", format: "uri", description: "Presigned S3 URL (valid 15 min)" },
+            url: { type: "string", format: "uri", description: "Presigned S3 URL (valid 15 min)" },
             fileType: { type: "string" },
           },
         }),
@@ -358,7 +469,34 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
     const { id, docId } = req.params as { id: string; docId: string };
+try {
+    await verifyListingScope(admin, id);
+  } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "LISTING_NOT_FOUND") {
+        return sendError(
+          reply,
+          404,
+          "NOT_FOUND",
+          "Listing not found."
+        );
+      }
+
+      if (error.message === "OUT_OF_SCOPE") {
+        return sendError(
+          reply,
+          403,
+          "FORBIDDEN",
+          "This listing is outside your country scope."
+        );
+      }
+    }
+
+    throw error;
+  }
 
     const doc = await prisma.listingDocument.findFirst({ where: { id: docId, listingId: id } });
     if (!doc) return sendError(reply, 404, "NOT_FOUND", "Document not found.");
@@ -371,7 +509,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.patch("/admin/listings/review-tasks/:taskId/assign", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Self-assign a review task",
       security: [{ bearerAuth: [] }],
       params: {
@@ -390,11 +528,43 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId } });
+    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId },include: {
+    listing: {
+      select: {
+        id: true,
+      },
+    },
+  }, });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+    try {
+  await verifyListingScope(admin, task.listing.id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(
+        reply,
+        404,
+        "NOT_FOUND",
+        "Listing not found."
+      );
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This review task is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
     if (!["open", "escalated"].includes(task.status)) {
       return sendError(reply, 409, "TASK_RESOLVED", "Cannot assign a resolved task.");
     }
@@ -410,7 +580,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.patch("/admin/listings/review-tasks/:taskId/unassign", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Release a claimed review task",
       security: [{ bearerAuth: [] }],
       params: {
@@ -428,11 +598,42 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId } });
+    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId },include: {
+    listing: {
+      select: {
+        id: true,
+      },
+    },} });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+    try {
+  await verifyListingScope(admin, task.listing.id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(
+        reply,
+        404,
+        "NOT_FOUND",
+        "Listing not found."
+      );
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This review task is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
     if (!["open", "escalated"].includes(task.status)) {
       return sendError(reply, 409, "TASK_RESOLVED", "Cannot unassign a resolved task.");
     }
@@ -448,7 +649,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.patch("/admin/listings/review-tasks/:taskId/escalate", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Escalate a review task (breached SLA)",
       security: [{ bearerAuth: [] }],
       params: {
@@ -473,12 +674,44 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
     const { reason } = req.body as { reason?: string };
 
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId } });
+    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId },include: {
+    listing: {
+      select: {
+        id: true,
+      },
+    },
+  }, });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+    try {
+  await verifyListingScope(admin, task.listing.id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(
+        reply,
+        404,
+        "NOT_FOUND",
+        "Listing not found."
+      );
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This review task is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
     if (!["open", "awaiting_provider_response"].includes(task.status)) {
       return sendError(reply, 409, "INVALID_STATUS", "Only open or awaiting-provider-response tasks can be escalated.");
     }
@@ -488,10 +721,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
       prisma.listingModerationLog.create({
         data: {
           listingId: task.listingId,
-          action:    "escalated",
-          actorId:   admin.adminId,
+          action: "escalated",
+          actorId: admin.adminId,
           actorRole: admin.adminRole,
-          metadata:  { taskId, reason: reason ?? null, slaDeadline: task.slaDeadline.toISOString() },
+          metadata: { taskId, reason: reason ?? null, slaDeadline: task.slaDeadline.toISOString(), ipAddress: req.ip },
         },
       }),
     ]);
@@ -626,14 +859,35 @@ export async function adminListingRoutes(app: FastifyInstance) {
         required: ["starRating"],
         properties: {
           starRating: { type: "integer", minimum: 1, maximum: 5, description: "Verified star rating assigned by admin (1–5)" },
-          adminNote:  { type: "string", description: "Optional internal note for the review log" },
+          adminNote: { type: "string", description: "Optional internal note for the review log" },
         },
       },
     },
     preHandler: [requireAdmin],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
+    try {
+  await verifyListingScope(admin, id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This listing is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
     const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
 
     if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
@@ -644,7 +898,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       where: { id },
       include: {
         reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
-        documents:   { where: { replacedAt: null } },
+        documents: { where: { replacedAt: null } },
       },
     });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
@@ -677,22 +931,23 @@ export async function adminListingRoutes(app: FastifyInstance) {
       if (task) {
         await tx.listingReviewTask.update({
           where: { id: task.id },
-          data:  { status: "resolved", outcome: "approved", adminNote: adminNote ?? null, resolvedAt: new Date() },
+          data: { status: "resolved", outcome: "approved", adminNote: adminNote ?? null, resolvedAt: new Date() },
         });
       }
 
       await tx.listingModerationLog.create({
         data: {
           listingId: id,
-          action:    "approved",
-          actorId:   admin.adminId,
+          action: "approved",
+          actorId: admin.adminId,
           actorRole: admin.adminRole,
           metadata: {
             starRating,
             claimedStarRating: listing.claimedStarRating,
-            adminNote:         adminNote ?? null,
-            taskId:            task?.id ?? null,
-            submissionNumber:  task?.submissionNumber ?? listing.submissionCount,
+            adminNote: adminNote ?? null,
+            taskId: task?.id ?? null,
+            submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+            ipAddress: req.ip,
           },
         },
       });
@@ -713,7 +968,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.post("/admin/listings/:id/reject", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Reject a hotel listing with reasons",
       security: [{ bearerAuth: [] }],
       params: {
@@ -763,8 +1018,30 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
+
+try {
+  await verifyListingScope(admin, id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This listing is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
     const { reasons, providerNote, adminNote } = req.body as {
       reasons: string[];
       providerNote?: string;
@@ -797,11 +1074,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
       const updated = await tx.listing.updateMany({
         where: { id, status: "pending_review" },
         data: {
-          status:           "rejected",
-          rejectedAt:       new Date(),
-          rejectedBy:       admin.adminId,
+          status: "rejected",
+          rejectedAt: new Date(),
+          rejectedBy: admin.adminId,
           rejectionReasons: reasons,
-          rejectionNote:    providerNote ?? null,
+          rejectionNote: providerNote ?? null,
         },
       });
 
@@ -810,22 +1087,23 @@ export async function adminListingRoutes(app: FastifyInstance) {
       if (task) {
         await tx.listingReviewTask.update({
           where: { id: task.id },
-          data:  { status: "resolved", outcome: "rejected", adminNote: adminNote ?? null, resolvedAt: new Date() },
+          data: { status: "resolved", outcome: "rejected", adminNote: adminNote ?? null, resolvedAt: new Date() },
         });
       }
 
       await tx.listingModerationLog.create({
         data: {
           listingId: id,
-          action:    "rejected",
-          actorId:   admin.adminId,
+          action: "rejected",
+          actorId: admin.adminId,
           actorRole: admin.adminRole,
           metadata: {
             reasons,
-            providerNote:     providerNote ?? null,
-            adminNote:        adminNote ?? null,
-            taskId:           task?.id ?? null,
+            providerNote: providerNote ?? null,
+            adminNote: adminNote ?? null,
+            taskId: task?.id ?? null,
             submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+            ipAddress: req.ip,
           },
         },
       });
@@ -846,7 +1124,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.patch("/admin/listings/:id/star-rating", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Update the verified star rating on an approved listing",
       security: [{ bearerAuth: [] }],
       params: {
@@ -883,8 +1161,30 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
+
+try {
+  await verifyListingScope(admin, id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This listing is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
     const { starRating, reason } = req.body as { starRating: number; reason: string };
 
     if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
@@ -903,10 +1203,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
       prisma.listingModerationLog.create({
         data: {
           listingId: id,
-          action:    "star_rating_updated",
-          actorId:   admin.adminId,
+          action: "star_rating_updated",
+          actorId: admin.adminId,
           actorRole: admin.adminRole,
-          metadata:  { oldRating, newRating: starRating, reason },
+          metadata: { oldRating, newRating: starRating, reason, ipAddress: req.ip },
         },
       }),
     ]);
@@ -919,7 +1219,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.post("/admin/listings/:id/suspend", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Suspend a live listing",
       security: [{ bearerAuth: [] }],
       params: {
@@ -955,8 +1255,30 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
+
+try {
+  await verifyListingScope(admin, id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This listing is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
     const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };
 
     if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Suspension reason is required.");
@@ -975,10 +1297,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
       prisma.listingModerationLog.create({
         data: {
           listingId: id,
-          action:    "suspended",
-          actorId:   admin.adminId,
+          action: "suspended",
+          actorId: admin.adminId,
           actorRole: admin.adminRole,
-          metadata:  { reason, previousStatus: listing.status, notifyProvider },
+          metadata: { reason, previousStatus: listing.status, notifyProvider, ipAddress: req.ip },
         },
       }),
     ]);
@@ -994,7 +1316,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.post("/admin/listings/:id/reinstate", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Reinstate a suspended listing",
       security: [{ bearerAuth: [] }],
       params: {
@@ -1022,8 +1344,30 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
+
+try {
+  await verifyListingScope(admin, id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This listing is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
     const { reason } = req.body as { reason?: string };
 
     const listing = await prisma.listing.findUnique({ where: { id } });
@@ -1037,15 +1381,16 @@ export async function adminListingRoutes(app: FastifyInstance) {
       prisma.listingModerationLog.create({
         data: {
           listingId: id,
-          action:    "reinstated",
-          actorId:   admin.adminId,
+          action: "reinstated",
+          actorId: admin.adminId,
           actorRole: admin.adminRole,
           metadata: {
-            restoredStatus:   restoreStatus,
-            reason:           reason ?? null,
-            suspendedAt:      listing.suspendedAt?.toISOString() ?? null,
-            suspendedBy:      listing.suspendedBy ?? null,
+            restoredStatus: restoreStatus,
+            reason: reason ?? null,
+            suspendedAt: listing.suspendedAt?.toISOString() ?? null,
+            suspendedBy: listing.suspendedBy ?? null,
             suspensionReason: listing.suspensionReason ?? null,
+            ipAddress: req.ip,
           },
         },
       }),
@@ -1059,7 +1404,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/listings/:id/review-tasks", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Full review-task submission history for a listing",
       security: [{ bearerAuth: [] }],
       params: {
@@ -1076,10 +1421,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
             listing: {
               type: "object",
               properties: {
-                id:              { type: "string" },
-                name:            { type: "string", nullable: true },
-                status:          { type: "string" },
-                category:        { type: "string" },
+                id: { type: "string" },
+                name: { type: "string", nullable: true },
+                status: { type: "string" },
+                category: { type: "string" },
                 submissionCount: { type: "integer" },
               },
             },
@@ -1088,15 +1433,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  id:               { type: "string" },
+                  id: { type: "string" },
                   submissionNumber: { type: "integer" },
-                  assignedTo:       { type: "string", nullable: true },
-                  status:           { type: "string" },
-                  outcome:          { type: "string", nullable: true },
-                  adminNote:        { type: "string", nullable: true },
-                  slaDeadline:      { type: "string", format: "date-time" },
-                  createdAt:        { type: "string", format: "date-time" },
-                  resolvedAt:       { type: "string", format: "date-time", nullable: true },
+                  assignedTo: { type: "string", nullable: true },
+                  status: { type: "string" },
+                  outcome: { type: "string", nullable: true },
+                  adminNote: { type: "string", nullable: true },
+                  slaDeadline: { type: "string", format: "date-time" },
+                  createdAt: { type: "string", format: "date-time" },
+                  resolvedAt: { type: "string", format: "date-time", nullable: true },
                 },
               },
             },
@@ -1109,7 +1454,30 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
+
+try {
+  await verifyListingScope(admin, id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This listing is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
 
     const listing = await prisma.listing.findUnique({
       where: { id },
@@ -1118,18 +1486,18 @@ export async function adminListingRoutes(app: FastifyInstance) {
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
     const tasks = await prisma.listingReviewTask.findMany({
-      where:   { listingId: id },
+      where: { listingId: id },
       orderBy: { createdAt: "desc" },
       select: {
-        id:               true,
+        id: true,
         submissionNumber: true,
-        assignedTo:       true,
-        status:           true,
-        outcome:          true,
-        adminNote:        true,
-        slaDeadline:      true,
-        createdAt:        true,
-        resolvedAt:       true,
+        assignedTo: true,
+        status: true,
+        outcome: true,
+        adminNote: true,
+        slaDeadline: true,
+        createdAt: true,
+        resolvedAt: true,
       },
     });
 
@@ -1140,7 +1508,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/listings/:id/moderation-history", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Full moderation audit trail for a listing",
       security: [{ bearerAuth: [] }],
       params: {
@@ -1157,22 +1525,22 @@ export async function adminListingRoutes(app: FastifyInstance) {
             listing: {
               type: "object",
               properties: {
-                id:                { type: "string" },
-                name:              { type: "string", nullable: true },
-                status:            { type: "string" },
-                category:          { type: "string" },
-                starRating:        { type: "integer", nullable: true },
+                id: { type: "string" },
+                name: { type: "string", nullable: true },
+                status: { type: "string" },
+                category: { type: "string" },
+                starRating: { type: "integer", nullable: true },
                 claimedStarRating: { type: "integer", nullable: true },
-                submissionCount:   { type: "integer" },
-                approvedAt:        { type: "string", format: "date-time", nullable: true },
-                approvedBy:        { type: "string", nullable: true },
-                rejectedAt:        { type: "string", format: "date-time", nullable: true },
-                rejectedBy:        { type: "string", nullable: true },
-                rejectionReasons:  { type: "array", items: { type: "string" }, nullable: true },
-                rejectionNote:     { type: "string", nullable: true },
-                suspendedAt:       { type: "string", format: "date-time", nullable: true },
-                suspendedBy:       { type: "string", nullable: true },
-                suspensionReason:  { type: "string", nullable: true },
+                submissionCount: { type: "integer" },
+                approvedAt: { type: "string", format: "date-time", nullable: true },
+                approvedBy: { type: "string", nullable: true },
+                rejectedAt: { type: "string", format: "date-time", nullable: true },
+                rejectedBy: { type: "string", nullable: true },
+                rejectionReasons: { type: "array", items: { type: "string" }, nullable: true },
+                rejectionNote: { type: "string", nullable: true },
+                suspendedAt: { type: "string", format: "date-time", nullable: true },
+                suspendedBy: { type: "string", nullable: true },
+                suspensionReason: { type: "string", nullable: true },
               },
             },
             history: {
@@ -1180,11 +1548,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  id:        { type: "string" },
-                  action:    { type: "string" },
-                  actorId:   { type: "string" },
+                  id: { type: "string" },
+                  action: { type: "string" },
                   actorRole: { type: "string" },
-                  metadata:  { type: "object" },
+                  metadata: { type: "object" },
                   createdAt: { type: "string", format: "date-time" },
                 },
               },
@@ -1198,7 +1565,30 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
+
+try {
+  await verifyListingScope(admin, id);
+} catch (error) {
+  if (error instanceof Error) {
+    if (error.message === "LISTING_NOT_FOUND") {
+      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    }
+
+    if (error.message === "OUT_OF_SCOPE") {
+      return sendError(
+        reply,
+        403,
+        "FORBIDDEN",
+        "This listing is outside your country scope."
+      );
+    }
+  }
+
+  throw error;
+}
 
     const listing = await prisma.listing.findUnique({
       where: { id },
@@ -1213,8 +1603,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
     const history = await prisma.listingModerationLog.findMany({
-      where:   { listingId: id },
+      where: { listingId: id },
       orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        action: true,
+        actorRole: true,
+        metadata: true,
+        createdAt: true,
+      },
     });
 
     return sendSuccess(reply, 200, { listing, history, total: history.length });
@@ -1224,16 +1621,16 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/listings", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Listings"],
+      tags: ["Admin Listings"],
       summary: "Search all listings (admin)",
       security: [{ bearerAuth: [] }],
       querystring: {
         type: "object",
         properties: {
-          q:        { type: "string", default: "", description: "Search by name or town" },
-          status:   { type: "string", description: "Filter by listing status" },
+          q: { type: "string", default: "", description: "Search by name or town" },
+          status: { type: "string", description: "Filter by listing status" },
           category: { type: "string", description: "Filter by category (hotel, apartment, car)" },
-          country:  { type: "string", description: "Filter by country code" },
+          country: { type: "string", description: "Filter by country code" },
           ...PageQuery,
         },
       },
@@ -1246,24 +1643,24 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  id:              { type: "string" },
-                  name:            { type: "string", nullable: true },
-                  category:        { type: "string" },
-                  status:          { type: "string" },
-                  starRating:      { type: "integer", nullable: true },
-                  country:         { type: "string", nullable: true },
-                  town:            { type: "string", nullable: true },
-                  pricePerNight:   { type: "number", nullable: true },
-                  currency:        { type: "string", nullable: true },
+                  id: { type: "string" },
+                  name: { type: "string", nullable: true },
+                  category: { type: "string" },
+                  status: { type: "string" },
+                  starRating: { type: "integer", nullable: true },
+                  country: { type: "string", nullable: true },
+                  town: { type: "string", nullable: true },
+                  pricePerNight: { type: "number", nullable: true },
+                  currency: { type: "string", nullable: true },
                   submissionCount: { type: "integer" },
-                  providerId:      { type: "string" },
-                  approvedAt:      { type: "string", format: "date-time", nullable: true },
-                  photos:          { type: "array", items: PhotoSchema },
+                  providerId: { type: "string" },
+                  approvedAt: { type: "string", format: "date-time", nullable: true },
+                  photos: { type: "array", items: PhotoSchema },
                 },
               },
             },
             total: { type: "integer" },
-            page:  { type: "integer" },
+            page: { type: "integer" },
             limit: { type: "integer" },
           },
         }),
@@ -1272,17 +1669,28 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { q = "", status, category, country, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
+    const admin = req as AdminRequest;
+
+    if (status && !VALID_LISTING_STATUSES.has(status as any)) {
+      return sendError(reply, 400, "BAD_REQUEST", `Invalid status filter: ${status}`);
+    }
+    if (category && !VALID_LISTING_CATEGORIES.has(category as any)) {
+      return sendError(reply, 400, "BAD_REQUEST", `Invalid category filter: ${category}`);
+    }
+
+    const isCountryManager = admin.adminRole === "country_manager";
 
     const where = {
       deletedAt: null,
       AND: [
         q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { town: { contains: q, mode: "insensitive" as const } }] } : {},
-        status   ? { status:   status   as "draft" } : {},
-        category ? { category: category as "hotel" } : {},
-        country  ? { country }                       : {},
+        status ? { status: status as any } : {},
+        category ? { category: category as any } : {},
+        isCountryManager ? { country: admin.adminCountry ?? "UNDEFINED_COUNTRY" } : (country ? { country } : {}),
       ],
     };
 
@@ -1291,22 +1699,22 @@ export async function adminListingRoutes(app: FastifyInstance) {
       prisma.listing.findMany({
         where, skip, take,
         select: {
-          id:              true,
-          name:            true,
-          category:        true,
-          status:          true,
-          starRating:      true,
-          country:         true,
-          town:            true,
-          pricePerNight:   true,
-          currency:        true,
+          id: true,
+          name: true,
+          category: true,
+          status: true,
+          starRating: true,
+          country: true,
+          town: true,
+          pricePerNight: true,
+          currency: true,
           submissionCount: true,
-          providerId:      true,
-          approvedAt:      true,
+          providerId: true,
+          approvedAt: true,
           photos: {
-            where:   { deletedAt: null },
+            where: { deletedAt: null },
             orderBy: { position: "asc" },
-            select:  { id: true, s3Key: true, cdnUrl: true, position: true },
+            select: { id: true, s3Key: true, cdnUrl: true, position: true },
           },
         },
         orderBy: { updatedAt: "desc" },
@@ -1323,16 +1731,16 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/bookings", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Bookings"],
+      tags: ["Admin Bookings"],
       summary: "List all bookings with filters (admin)",
       security: [{ bearerAuth: [] }],
       querystring: {
         type: "object",
         properties: {
-          q:           { type: "string", default: "", description: "Search by reference, email, or guest name" },
-          status:      { type: "string", description: "Filter by booking status" },
+          q: { type: "string", default: "", description: "Search by reference, email, or guest name" },
+          status: { type: "string", description: "Filter by booking status" },
           listingType: { type: "string", description: "Filter by listing type (hotel, apartment, car)" },
-          country:     { type: "string", description: "Filter by listing country code" },
+          country: { type: "string", description: "Filter by listing country code" },
           ...PageQuery,
         },
       },
@@ -1345,29 +1753,29 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  id:               { type: "string" },
-                  reference:        { type: "string" },
-                  listingId:        { type: "string" },
-                  guestId:          { type: "string" },
-                  providerId:       { type: "string" },
-                  listingType:      { type: "string" },
-                  status:           { type: "string" },
-                  checkIn:          { type: "string", format: "date-time", nullable: true },
-                  checkOut:         { type: "string", format: "date-time", nullable: true },
-                  pickupDatetime:   { type: "string", format: "date-time", nullable: true },
-                  returnDatetime:   { type: "string", format: "date-time", nullable: true },
-                  nightsOrDays:     { type: "integer", nullable: true },
-                  guestFirstName:   { type: "string" },
-                  guestLastName:    { type: "string" },
-                  guestEmail:       { type: "string" },
-                  totalAmount:      { type: "number" },
-                  currency:         { type: "string" },
+                  id: { type: "string" },
+                  reference: { type: "string" },
+                  listingId: { type: "string" },
+                  guestId: { type: "string" },
+                  providerId: { type: "string" },
+                  listingType: { type: "string" },
+                  status: { type: "string" },
+                  checkIn: { type: "string", format: "date-time", nullable: true },
+                  checkOut: { type: "string", format: "date-time", nullable: true },
+                  pickupDatetime: { type: "string", format: "date-time", nullable: true },
+                  returnDatetime: { type: "string", format: "date-time", nullable: true },
+                  nightsOrDays: { type: "integer", nullable: true },
+                  guestFirstName: { type: "string" },
+                  guestLastName: { type: "string" },
+                  guestEmail: { type: "string" },
+                  totalAmount: { type: "number" },
+                  currency: { type: "string" },
                   commissionAmount: { type: "number" },
-                  providerPayout:   { type: "number" },
-                  voucherDiscount:  { type: "number", nullable: true },
-                  cancelledAt:      { type: "string", format: "date-time", nullable: true },
-                  confirmedAt:      { type: "string", format: "date-time", nullable: true },
-                  createdAt:        { type: "string", format: "date-time" },
+                  providerPayout: { type: "number" },
+                  voucherDiscount: { type: "number", nullable: true },
+                  cancelledAt: { type: "string", format: "date-time", nullable: true },
+                  confirmedAt: { type: "string", format: "date-time", nullable: true },
+                  createdAt: { type: "string", format: "date-time" },
                   listing: {
                     type: "object",
                     properties: { name: { type: "string", nullable: true } },
@@ -1376,7 +1784,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
               },
             },
             total: { type: "integer" },
-            page:  { type: "integer" },
+            page: { type: "integer" },
             limit: { type: "integer" },
           },
         }),
@@ -1393,15 +1801,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
       AND: [
         q ? {
           OR: [
-            { reference:      { contains: q, mode: "insensitive" } },
-            { guestEmail:     { contains: q, mode: "insensitive" } },
+            { reference: { contains: q, mode: "insensitive" } },
+            { guestEmail: { contains: q, mode: "insensitive" } },
             { guestFirstName: { contains: q, mode: "insensitive" } },
-            { guestLastName:  { contains: q, mode: "insensitive" } },
+            { guestLastName: { contains: q, mode: "insensitive" } },
           ],
         } : {},
-        status      ? { status }               : {},
-        listingType ? { listingType }          : {},
-        country     ? { listing: { country } } : {},
+        status ? { status } : {},
+        listingType ? { listingType } : {},
+        country ? { listing: { country } } : {},
       ],
     };
 
@@ -1430,7 +1838,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/bookings/:id", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Bookings"],
+      tags: ["Admin Bookings"],
       summary: "Full booking detail with status log (admin)",
       security: [{ bearerAuth: [] }],
       params: {
@@ -1479,7 +1887,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       where: { id },
       include: {
         statusLog: { orderBy: { createdAt: "asc" } },
-        listing:   { select: { name: true, country: true, category: true } },
+        listing: { select: { name: true, country: true, category: true } },
       },
     });
     if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
@@ -1491,7 +1899,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.post("/admin/bookings/:id/cancel", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Bookings"],
+      tags: ["Admin Bookings"],
       summary: "Admin-forced booking cancellation",
       security: [{ bearerAuth: [] }],
       params: {
@@ -1541,17 +1949,17 @@ export async function adminListingRoutes(app: FastifyInstance) {
         cancelledAt:        new Date(),
         cancelledBy:        "admin",
         cancellationReason: reason,
-        refundAmount:       booking.status === "confirmed" ? booking.totalAmount : 0,
+        refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
       },
     });
 
     await prisma.bookingStatusLog.create({
       data: {
-        bookingId:  id,
+        bookingId: id,
         fromStatus: booking.status,
-        toStatus:   "cancelled_by_system",
-        actorType:  "admin",
-        changedBy:  admin.adminId,
+        toStatus: "cancelled_by_system",
+        actorType: "admin",
+        changedBy: admin.adminId,
         reason,
       },
     });
@@ -1563,13 +1971,13 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/conversations", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Conversations"],
+      tags: ["Admin Conversations"],
       summary: "List all conversations (admin)",
       security: [{ bearerAuth: [] }],
       querystring: {
         type: "object",
         properties: {
-          q:      { type: "string", default: "", description: "Search by guestId or bookingId" },
+          q: { type: "string", default: "", description: "Search by guestId or bookingId" },
           status: { type: "string", description: "Filter by conversation status" },
           ...PageQuery,
         },
@@ -1583,21 +1991,21 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  id:         { type: "string" },
-                  listingId:  { type: "string", nullable: true },
-                  bookingId:  { type: "string", nullable: true },
-                  guestId:    { type: "string" },
+                  id: { type: "string" },
+                  listingId: { type: "string", nullable: true },
+                  bookingId: { type: "string", nullable: true },
+                  guestId: { type: "string" },
                   providerId: { type: "string" },
-                  status:     { type: "string" },
+                  status: { type: "string" },
                   lastMessage: {
                     nullable: true,
                     type: "object",
                     properties: {
-                      body:       { type: "string" },
-                      senderId:   { type: "string" },
+                      body: { type: "string" },
+                      senderId: { type: "string" },
                       senderType: { type: "string" },
                       isFiltered: { type: "boolean" },
-                      createdAt:  { type: "string", format: "date-time" },
+                      createdAt: { type: "string", format: "date-time" },
                     },
                   },
                   updatedAt: { type: "string", format: "date-time" },
@@ -1606,7 +2014,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
               },
             },
             total: { type: "integer" },
-            page:  { type: "integer" },
+            page: { type: "integer" },
             limit: { type: "integer" },
           },
         }),
@@ -1637,20 +2045,20 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     return sendSuccess(reply, 200, {
       conversations: conversations.map((c) => ({
-        id:         c.id,
-        listingId:  c.listingId,
-        bookingId:  c.bookingId,
-        guestId:    c.guestId,
+        id: c.id,
+        listingId: c.listingId,
+        bookingId: c.bookingId,
+        guestId: c.guestId,
         providerId: c.providerId,
-        status:     c.status,
+        status: c.status,
         lastMessage: c.messages[0]
           ? {
-              body:       c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
-              senderId:   c.messages[0].senderId,
-              senderType: c.messages[0].senderType,
-              isFiltered: c.messages[0].isFiltered,
-              createdAt:  c.messages[0].createdAt.toISOString(),
-            }
+            body: c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
+            senderId: c.messages[0].senderId,
+            senderType: c.messages[0].senderType,
+            isFiltered: c.messages[0].isFiltered,
+            createdAt: c.messages[0].createdAt.toISOString(),
+          }
           : null,
         updatedAt: c.updatedAt.toISOString(),
         createdAt: c.createdAt.toISOString(),
@@ -1665,7 +2073,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/conversations/:id/messages", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Conversations"],
+      tags: ["Admin Conversations"],
       summary: "Admin message viewer for a conversation",
       security: [{ bearerAuth: [] }],
       params: {
@@ -1682,12 +2090,12 @@ export async function adminListingRoutes(app: FastifyInstance) {
             conversation: {
               type: "object",
               properties: {
-                id:         { type: "string" },
-                listingId:  { type: "string", nullable: true },
-                bookingId:  { type: "string", nullable: true },
-                guestId:    { type: "string" },
+                id: { type: "string" },
+                listingId: { type: "string", nullable: true },
+                bookingId: { type: "string", nullable: true },
+                guestId: { type: "string" },
                 providerId: { type: "string" },
-                status:     { type: "string" },
+                status: { type: "string" },
               },
             },
             messages: {
@@ -1695,13 +2103,13 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  id:         { type: "string" },
-                  senderId:   { type: "string" },
+                  id: { type: "string" },
+                  senderId: { type: "string" },
                   senderType: { type: "string" },
-                  body:       { type: "string" },
+                  body: { type: "string" },
                   isFiltered: { type: "boolean" },
-                  readAt:     { type: "string", format: "date-time", nullable: true },
-                  createdAt:  { type: "string", format: "date-time" },
+                  readAt: { type: "string", format: "date-time", nullable: true },
+                  createdAt: { type: "string", format: "date-time" },
                 },
               },
             },
@@ -1719,27 +2127,27 @@ export async function adminListingRoutes(app: FastifyInstance) {
     if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
 
     const messages = await prisma.message.findMany({
-      where:   { conversationId: id },
+      where: { conversationId: id },
       orderBy: { createdAt: "asc" },
     });
 
     return sendSuccess(reply, 200, {
       conversation: {
-        id:         convo.id,
-        listingId:  convo.listingId,
-        bookingId:  convo.bookingId,
-        guestId:    convo.guestId,
+        id: convo.id,
+        listingId: convo.listingId,
+        bookingId: convo.bookingId,
+        guestId: convo.guestId,
         providerId: convo.providerId,
-        status:     convo.status,
+        status: convo.status,
       },
       messages: messages.map((m) => ({
-        id:         m.id,
-        senderId:   m.senderId,
+        id: m.id,
+        senderId: m.senderId,
         senderType: m.senderType,
-        body:       m.body,
+        body: m.body,
         isFiltered: m.isFiltered,
-        readAt:     m.readAt?.toISOString() ?? null,
-        createdAt:  m.createdAt.toISOString(),
+        readAt: m.readAt?.toISOString() ?? null,
+        createdAt: m.createdAt.toISOString(),
       })),
     });
   });
@@ -1748,7 +2156,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/ical-feeds", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin iCal"],
+      tags: ["Admin iCal"],
       summary: "List all iCal feeds across all listings",
       security: [{ bearerAuth: [] }],
       querystring: {
@@ -1767,23 +2175,23 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  id:              { type: "string" },
-                  listingId:       { type: "string" },
-                  listingName:     { type: "string", nullable: true },
+                  id: { type: "string" },
+                  listingId: { type: "string" },
+                  listingName: { type: "string", nullable: true },
                   listingCategory: { type: "string" },
-                  listingCountry:  { type: "string", nullable: true },
-                  platform:        { type: "string" },
-                  feedUrl:         { type: "string", format: "uri" },
-                  isActive:        { type: "boolean" },
-                  lastSyncedAt:    { type: "string", format: "date-time", nullable: true },
-                  lastError:       { type: "string", nullable: true },
-                  createdAt:       { type: "string", format: "date-time" },
-                  updatedAt:       { type: "string", format: "date-time" },
+                  listingCountry: { type: "string", nullable: true },
+                  platform: { type: "string" },
+                  feedUrl: { type: "string", format: "uri" },
+                  isActive: { type: "boolean" },
+                  lastSyncedAt: { type: "string", format: "date-time", nullable: true },
+                  lastError: { type: "string", nullable: true },
+                  createdAt: { type: "string", format: "date-time" },
+                  updatedAt: { type: "string", format: "date-time" },
                 },
               },
             },
             total: { type: "integer" },
-            page:  { type: "integer" },
+            page: { type: "integer" },
             limit: { type: "integer" },
           },
         }),
@@ -1811,18 +2219,18 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     return sendSuccess(reply, 200, {
       feeds: feeds.map((f) => ({
-        id:              f.id,
-        listingId:       f.listingId,
-        listingName:     f.listing.name,
+        id: f.id,
+        listingId: f.listingId,
+        listingName: f.listing.name,
         listingCategory: f.listing.category,
-        listingCountry:  f.listing.country,
-        platform:        f.platform,
-        feedUrl:         f.feedUrl,
-        isActive:        f.isActive,
-        lastSyncedAt:    f.lastSyncedAt?.toISOString() ?? null,
-        lastError:       f.lastError,
-        createdAt:       f.createdAt.toISOString(),
-        updatedAt:       f.updatedAt.toISOString(),
+        listingCountry: f.listing.country,
+        platform: f.platform,
+        feedUrl: f.feedUrl,
+        isActive: f.isActive,
+        lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
+        lastError: f.lastError,
+        createdAt: f.createdAt.toISOString(),
+        updatedAt: f.updatedAt.toISOString(),
       })),
       total,
       page: parseInt(page, 10),
@@ -1834,7 +2242,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.post("/admin/ical-feeds/:id/sync", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin iCal"],
+      tags: ["Admin iCal"],
       summary: "Manually trigger an iCal feed resync",
       security: [{ bearerAuth: [] }],
       params: {
@@ -1848,8 +2256,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
         200: ok({
           type: "object",
           properties: {
-            synced:  { type: "integer" },
-            error:   { type: "string", nullable: true },
+            synced: { type: "integer" },
+            error: { type: "string", nullable: true },
             message: { type: "string" },
           },
         }),
@@ -1877,15 +2285,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
   app.get("/admin/reviews", {
     preHandler: [requireAdmin],
     schema: {
-      tags:    ["Admin Reviews"],
+      tags: ["Admin Reviews"],
       summary: "List all reviews with filters (admin)",
       security: [{ bearerAuth: [] }],
       querystring: {
         type: "object",
         properties: {
-          q:         { type: "string", default: "", description: "Search by title, body, or guestId" },
-          isHidden:  { type: "string", enum: ["true", "false"], description: "Filter by hidden status" },
-          rating:    { type: "string", description: "Filter by rating (1–5)" },
+          q: { type: "string", default: "", description: "Search by title, body, or guestId" },
+          isHidden: { type: "string", enum: ["true", "false"], description: "Filter by hidden status" },
+          rating: { type: "string", description: "Filter by rating (1–5)" },
           listingId: { type: "string", description: "Filter by listing ID" },
           ...PageQuery,
         },
@@ -1899,25 +2307,25 @@ export async function adminListingRoutes(app: FastifyInstance) {
               items: {
                 type: "object",
                 properties: {
-                  id:            { type: "string" },
-                  bookingId:     { type: "string" },
-                  listingId:     { type: "string" },
-                  listingName:   { type: "string", nullable: true },
-                  guestId:       { type: "string" },
-                  rating:        { type: "integer" },
-                  title:         { type: "string", nullable: true },
-                  body:          { type: "string", nullable: true },
+                  id: { type: "string" },
+                  bookingId: { type: "string" },
+                  listingId: { type: "string" },
+                  listingName: { type: "string", nullable: true },
+                  guestId: { type: "string" },
+                  rating: { type: "integer" },
+                  title: { type: "string", nullable: true },
+                  body: { type: "string", nullable: true },
                   providerReply: { type: "string", nullable: true },
-                  isHidden:      { type: "boolean" },
-                  hiddenBy:      { type: "string", nullable: true },
-                  hiddenAt:      { type: "string", format: "date-time", nullable: true },
-                  hiddenReason:  { type: "string", nullable: true },
-                  createdAt:     { type: "string", format: "date-time" },
+                  isHidden: { type: "boolean" },
+                  hiddenBy: { type: "string", nullable: true },
+                  hiddenAt: { type: "string", format: "date-time", nullable: true },
+                  hiddenReason: { type: "string", nullable: true },
+                  createdAt: { type: "string", format: "date-time" },
                 },
               },
             },
             total: { type: "integer" },
-            page:  { type: "integer" },
+            page: { type: "integer" },
             limit: { type: "integer" },
           },
         }),
@@ -1933,12 +2341,12 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const where: any = {
       AND: [
         isHidden !== undefined ? { isHidden: isHidden === "true" } : {},
-        rating    ? { rating: parseInt(rating, 10) } : {},
-        listingId ? { listingId }                    : {},
+        rating ? { rating: parseInt(rating, 10) } : {},
+        listingId ? { listingId } : {},
         q ? {
           OR: [
-            { title:   { contains: q, mode: "insensitive" } },
-            { body:    { contains: q, mode: "insensitive" } },
+            { title: { contains: q, mode: "insensitive" } },
+            { body: { contains: q, mode: "insensitive" } },
             { guestId: { contains: q } },
           ],
         } : {},
@@ -1956,20 +2364,20 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
     return sendSuccess(reply, 200, {
       reviews: reviews.map((r) => ({
-        id:            r.id,
-        bookingId:     r.bookingId,
-        listingId:     r.listingId,
-        listingName:   r.listing.name,
-        guestId:       r.guestId,
-        rating:        r.rating,
-        title:         r.title,
-        body:          r.body,
+        id: r.id,
+        bookingId: r.bookingId,
+        listingId: r.listingId,
+        listingName: r.listing.name,
+        guestId: r.guestId,
+        rating: r.rating,
+        title: r.title,
+        body: r.body,
         providerReply: r.providerReply,
-        isHidden:      r.isHidden,
-        hiddenBy:      r.hiddenBy,
-        hiddenAt:      r.hiddenAt?.toISOString() ?? null,
-        hiddenReason:  r.hiddenReason,
-        createdAt:     r.createdAt.toISOString(),
+        isHidden: r.isHidden,
+        hiddenBy: r.hiddenBy,
+        hiddenAt: r.hiddenAt?.toISOString() ?? null,
+        hiddenReason: r.hiddenReason,
+        createdAt: r.createdAt.toISOString(),
       })),
       total,
       page: parseInt(page, 10),
