@@ -1,4 +1,4 @@
-const GOOGLE_MAPS_API_KEY = process.env["GOOGLE_MAPS_API_KEY"] ?? "";
+﻿const GOOGLE_MAPS_API_KEY = process.env["GOOGLE_MAPS_API_KEY"] ?? "";
 const GOOGLE_CONFIGURED = GOOGLE_MAPS_API_KEY && GOOGLE_MAPS_API_KEY !== "placeholder";
 
 export interface GeocodingResult {
@@ -34,7 +34,7 @@ async function geocodeViaNominatim(query: string): Promise<GeocodingResult | nul
   url.searchParams.set("addressdetails", "1");
 
   const res = await fetch(url.toString(), {
-    headers: { "User-Agent": "ZikaBooking/1.0 (dev)" },
+    headers: { "User-Agent": "Kainook/1.0 (dev)" },
     signal: AbortSignal.timeout(8_000),
   });
   if (!res.ok) return null;

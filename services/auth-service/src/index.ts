@@ -1,4 +1,4 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
@@ -23,8 +23,8 @@ async function build() {
   await app.register(swagger, {
     openapi: {
       info: {
-        title: "Zika Booking Auth Service API",
-        description: "API documentation for Zika Booking Auth Service",
+        title: "Kainook Auth Service API",
+        description: "API documentation for Kainook Auth Service",
         version: "0.0.1",
       },
       servers: [
