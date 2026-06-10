@@ -20,7 +20,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import Modal from "@/components/ui/Modal";
+import Modal from "./ui/Modal";
 import { listingsService } from "@/services/listings";
 import { uploadToS3 } from "@/lib/listing-api";
 import { useAuthStore } from "@/stores/auth";
