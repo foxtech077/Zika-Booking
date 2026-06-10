@@ -556,8 +556,24 @@ console.log("admin.fido2Credential =", admin.fido2Credential);
 export async function adminUserRoutes(app: FastifyInstance) {
 
   // ── GET /admin/audit-logs ──────────────────────────────────────────────────
-  app.get("/admin/audit-logs", { schema: { tags: ["Admin Users"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // Accessible by: super_admin, admin, finance (enforced in RBAC/frontend).
+  // Backend additionally enforces that only authenticated admins reach this route.
+  app.get("/admin/audit-logs", {
+    schema: {
+      tags: ["Admin Users"],
+      summary: "List audit log entries with pagination",
+      querystring: {
+        type: "object",
+        properties: {
+          page:  { type: "string", default: "1" },
+          limit: { type: "string", default: "20" },
+        },
+      },
+    },
+    preHandler: [requireAdminSession],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { page = "1", limit = "20" } = req.query as Record<string, string>;
+
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
 
@@ -567,10 +583,99 @@ export async function adminUserRoutes(app: FastifyInstance) {
         skip,
         take,
         orderBy: { timestamp: "desc" },
+        include: {
+          admin: { select: { name: true, email: true } },
+        },
       }),
     ]);
 
-    return sendSuccess(reply, 200, { logs, total, page: parseInt(page, 10), limit: take });
+    // Flatten admin name into response
+    const enriched = logs.map(({ admin, ...l }) => ({
+      ...l,
+      adminName:  admin.name,
+      adminEmail: admin.email,
+    }));
+
+    return sendSuccess(reply, 200, { logs: enriched, total, page: parseInt(page, 10), limit: take });
+  });
+
+  // ── GET /admin/audit-logs/export — CSV export (Super Admin only) ───────────
+  // PRD §8.4: "Export to CSV for Super Admin only."
+  app.get("/admin/audit-logs/export", {
+    schema: {
+      tags: ["Admin Users"],
+      summary: "Export all audit log entries as CSV (Super Admin only)",
+    },
+    preHandler: [requireAdminSession],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    // Only super_admin may export
+    const callerRole = (req as FastifyRequest & { adminRole: string }).adminRole;
+    if (callerRole !== "super_admin") {
+      return sendError(reply, 403, "FORBIDDEN", "Only Super Admins can export audit logs.");
+    }
+
+    // Fetch all rows — full export, no filters, no pagination
+    const logs = await prisma.auditLog.findMany({
+      orderBy: { timestamp: "desc" },
+      include: {
+        admin: { select: { name: true, email: true } },
+      },
+    });
+
+    // Build CSV
+    const CSV_HEADERS = [
+      "id",
+      "timestamp",
+      "admin_id",
+      "admin_name",
+      "admin_email",
+      "role",
+      "action",
+      "target_type",
+      "target_id",
+      "old_value",
+      "new_value",
+      "ip_address",
+    ];
+
+    function escapeCsv(val: string | null | undefined): string {
+      if (val === null || val === undefined) return "";
+      const str = String(val);
+      // Wrap in quotes if the value contains a comma, quote, or newline
+      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    }
+
+    const rows = logs.map(({ admin, ...l }) =>
+      [
+        l.id,
+        l.timestamp.toISOString(),
+        l.adminId,
+        admin.name,
+        admin.email,
+        l.role,
+        l.action,
+        l.targetType ?? "",
+        l.targetId   ?? "",
+        l.oldValue   ?? "",
+        l.newValue   ?? "",
+        l.ipAddress,
+      ]
+        .map(escapeCsv)
+        .join(",")
+    );
+
+    const csv = [CSV_HEADERS.join(","), ...rows].join("\n");
+
+    const filename = `audit-log-export-${new Date().toISOString().slice(0, 10)}.csv`;
+
+    reply
+      .header("Content-Type", "text/csv; charset=utf-8")
+      .header("Content-Disposition", `attachment; filename="${filename}"`)
+      .header("Cache-Control", "no-store")
+      .send(csv);
   });
 
   // ── GET /admin/users ──────────────────────────────────────────────────────

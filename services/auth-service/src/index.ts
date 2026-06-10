@@ -11,6 +11,7 @@ import { authRoutes } from "./routes/auth";
 import { adminAuthRoutes, adminUserRoutes, adminOperatorRoutes } from "./routes/admin-auth";
 import { adminDashboardRoutes } from "./routes/admin-dashboard.js";
 import { startTokenPurger } from "./lib/tokenPurger.js";
+import { startAuditLogPurger } from "./lib/auditLogPurger.js";
 
 const PORT = Number(process.env["AUTH_SERVICE_PORT"] ?? 3001);
 const HOST = process.env["AUTH_SERVICE_HOST"] ?? "0.0.0.0";
@@ -128,6 +129,7 @@ async function main() {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Auth Service] listening on ${HOST}:${PORT}`);
     startTokenPurger();
+    startAuditLogPurger();
   } catch (err) {
     app.log.error(err);
     process.exit(1);
