@@ -45,6 +45,11 @@
               "scheme": "https",
               "host": "zikabooking.com",
               "pathPrefix": "/reset-password"
+            },
+            {
+              "scheme": "https",
+              "host": "kainook.com",
+              "pathPrefix": "/auth/verify"
             }
           ],
           "category": [
@@ -63,7 +68,7 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "iosUrlScheme": "com.googleusercontent.apps.YOUR_IOS_CLIENT_ID"
+          "iosUrlScheme": "com.googleusercontent.apps.397191986681-40j0eqotdon89ogv4cgvfsfpb48ehc7h"
         }
       ],
       "expo-font",
