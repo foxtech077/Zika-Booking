@@ -274,19 +274,19 @@ export default function BookingFlowScreen() {
       const res = await listingApi.post<{ data: { lockToken: string; expiresAt: string; pricingPreview: any } }>(
         "/bookings/initiate", body,
       );
-      const raw = res.data.data.pricingPreview;
+      const raw = res.data.data.pricingPreview ?? {};
       const isCarRebook = !!raw.days;
       const mapped: PricingPreview = {
-        ratePerUnit: isCarRebook ? raw.dailyRate : raw.nightlyRate,
-        units: isCarRebook ? raw.days : raw.nights,
+        ratePerUnit: isCarRebook ? (raw.dailyRate ?? 0) : (raw.nightlyRate ?? 0),
+        units: isCarRebook ? (raw.days ?? 0) : (raw.nights ?? 0),
         unitLabel: isCarRebook ? "days" : "nights",
-        subtotal: raw.subtotal,
+        subtotal: raw.subtotal ?? 0,
         discountAmount: raw.discountAmount ?? undefined,
         serviceFee: raw.serviceFee ?? undefined,
         taxAmount: raw.taxAmount ?? undefined,
         deliveryFee: raw.deliveryFee ?? undefined,
-        total: raw.totalAmount,
-        currency: raw.currency,
+        total: raw.totalAmount ?? 0,
+        currency: raw.currency ?? "",
       };
 
       const lockStateObj = {
@@ -421,19 +421,19 @@ export default function BookingFlowScreen() {
         );
 
         // Map backend field names → component's PricingPreview shape
-        const raw = res.data.data.pricingPreview;
+        const raw = res.data.data.pricingPreview ?? {};
         const isCar = !!raw.days;
         const mapped: PricingPreview = {
-          ratePerUnit: isCar ? raw.dailyRate : raw.nightlyRate,
-          units: isCar ? raw.days : raw.nights,
+          ratePerUnit: isCar ? (raw.dailyRate ?? 0) : (raw.nightlyRate ?? 0),
+          units: isCar ? (raw.days ?? 0) : (raw.nights ?? 0),
           unitLabel: isCar ? "days" : "nights",
-          subtotal: raw.subtotal,
+          subtotal: raw.subtotal ?? 0,
           discountAmount: raw.discountAmount ?? undefined,
           serviceFee: raw.serviceFee ?? undefined,
           taxAmount: raw.taxAmount ?? undefined,
           deliveryFee: raw.deliveryFee ?? undefined,
-          total: raw.totalAmount,
-          currency: raw.currency,
+          total: raw.totalAmount ?? 0,
+          currency: raw.currency ?? "",
         };
 
         const lockStateObj = {
@@ -1084,7 +1084,7 @@ export default function BookingFlowScreen() {
 
                 <View style={styles.priceRow}>
                   <Text style={styles.priceLabel}>
-                    Rate: {pricing.currency} {pricing.ratePerUnit.toLocaleString()} × {pricing.units}{" "}
+                    Rate: {pricing.currency} {(pricing.ratePerUnit ?? 0).toLocaleString()} × {pricing.units ?? 0}{" "}
                     {pricing.unitLabel}
                   </Text>
                   <Text style={styles.priceValue}>

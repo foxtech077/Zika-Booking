@@ -328,7 +328,7 @@ export default function PaymentScreen() {
 
       // Navigate back to booking flow
       router.replace({
-        pathname: `/book/${booking.listingId}`,
+        pathname: `/book/[listingId]` as any,
         params: {
           listingId: booking.listingId,
           ...(booking.checkIn ? { checkIn: booking.checkIn.slice(0, 10) } : {}),
@@ -376,7 +376,7 @@ export default function PaymentScreen() {
       elapsed += INTERVAL;
       try {
         // Poll payment status
-        const statusRes = await paymentApi.get<PaymentStatusResponse>(`/payments/${paymentId}/status`);
+        const statusRes = await paymentApi.get<PaymentStatusResponse>(`/${paymentId}/status`);
         const status = statusRes.data.data.status;
 
         if (status === "captured") {
@@ -419,7 +419,7 @@ export default function PaymentScreen() {
     taraPollingRef.current = setInterval(async () => {
       elapsed += INTERVAL;
       try {
-        const statusRes = await paymentApi.get<PaymentStatusResponse>(`/payments/${paymentId}/status`);
+        const statusRes = await paymentApi.get<PaymentStatusResponse>(`/${paymentId}/status`);
         const status = statusRes.data.data.status;
 
         if (status === "captured") {
@@ -655,7 +655,7 @@ export default function PaymentScreen() {
       };
       console.log("[PAY] Initiating Tara payment — request body:", JSON.stringify(taraPayload, null, 2));
 
-      const res = await paymentApi.post<InitiateResponse>("/payments/initiate", taraPayload);
+      const res = await paymentApi.post<InitiateResponse>("/initiate", taraPayload);
       console.log("[PAY] Tara initiate SUCCESS — status:", res.status);
       console.log("[PAY] Tara initiate response:", JSON.stringify(res.data, null, 2));
 
