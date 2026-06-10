@@ -9,7 +9,7 @@ export const AMENITY_OPTIONS = [
   { value: "minibar",            label: "Minibar" },
   { value: "kitchen",            label: "Kitchen / Kitchenette" },
   { value: "pool",               label: "Swimming Pool" },
-  { value: "gym",                label: "Fitness Centre" },
+  // { value: "gym",                label: "Fitness Centre" },
   { value: "spa",                label: "Spa" },
   { value: "sauna",              label: "Sauna" },
   { value: "hot_tub",            label: "Hot Tub" },

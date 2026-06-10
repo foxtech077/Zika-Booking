@@ -177,7 +177,7 @@ function buildPayload(s: ApartmentState): Record<string, unknown> {
 
 // ── Step validation ──────────────────────────────────────────────────────────
 
-type Step = "property" | "pricing" | "details" | "media";
+type Step = "property" | "pricing" | "details" | "amenities" | "media";
 
 function validateStep(step: Step, s: ApartmentState): string[] {
   switch (step) {
@@ -200,8 +200,8 @@ function validateStep(step: Step, s: ApartmentState): string[] {
         !(Number(s.maxGuests) >= 1) && "Maximum guests must be at least 1.",
         s.bedrooms  !== "" && Number(s.bedrooms)  < 0 && "Bedrooms cannot be negative.",
         s.bathrooms !== "" && Number(s.bathrooms) < 0 && "Bathrooms cannot be negative.",
-        s.longStayEnabled && !(Number(s.longStayMinNights) >= 1)       && "Long-stay minimum nights must be ≥ 1.",
-        s.longStayEnabled && !(Number(s.longStayDiscountValue) > 0)    && "Long-stay discount value must be > 0.",
+        s.longStayEnabled && s.longStayMinNights !== "" && !(Number(s.longStayMinNights) >= 1) && "Long-stay minimum nights must be \u2265 1.",
+        s.longStayEnabled && s.longStayDiscountValue !== "" && !(Number(s.longStayDiscountValue) > 0) && "Long-stay discount value must be > 0.",
       ].filter(Boolean) as string[];
     default:
       return [];
@@ -212,6 +212,7 @@ const STEPS: FormStep[] = [
   { id: "property", label: "Property Info",      sublabel: "Name, type & location" },
   { id: "pricing",  label: "Pricing & Policies", sublabel: "Rates, times & cancellation" },
   { id: "details",  label: "Property Details",   sublabel: "Specs, guests & amenities" },
+  { id: "amenities", label: "Amenities", sublabel: "Services & amenities" },
   { id: "media",    label: "Media",              sublabel: "Photos (min 3 required)" },
 ];
 
@@ -472,53 +473,54 @@ export function ApartmentForm({ listingId, listing }: Props) {
                     </div>
                   )}
                 </div>
-
-                {/* Amenities */}
-                <div className="border-t border-border pt-4">
-                  <p className="text-sm font-medium text-slate-700 mb-2">Amenities</p>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {AMENITY_OPTIONS.map((opt) => {
-                      const active = s.selectedAmenities.includes(opt.value);
-                      return (
-                        <button type="button" key={opt.value}
-                          onClick={() => set("selectedAmenities", active
-                            ? s.selectedAmenities.filter((k) => k !== opt.value)
-                            : [...s.selectedAmenities, opt.value])}
-                          className={cn("flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
-                            active ? "border-primary bg-primary-50 text-primary-700 font-semibold" : "border-border bg-white text-slate-600 hover:border-slate-300")}
-                        >
-                          <div className={cn("w-4 h-4 rounded flex items-center justify-center border text-xs",
-                            active ? "bg-primary border-primary text-white" : "border-slate-300")}>
-                            {active ? "✓" : ""}
-                          </div>
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <Input
-                      value={s.customInput}
-                      onChange={(e) => set("customInput", e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
-                      placeholder="Custom amenity"
-                    />
-                    <Button type="button" onClick={addCustom}>Add</Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {s.customAmenities.map((tag) => (
-                      <span key={tag} className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-200">
-                        {tag}
-                        <button type="button" className="text-slate-400 hover:text-slate-600"
-                          onClick={() => set("customAmenities", s.customAmenities.filter((t) => t !== tag))}>×</button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
 
-            {/* ── Media step ── */}
+            {/* ── Amenities step ── */}
+{step === "amenities" && (
+  <div className="space-y-5 animate-fade-in">
+    <h3 className="text-lg font-bold text-slate-900">Amenities</h3>
+    <div className="grid grid-cols-2 gap-2.5">
+      {AMENITY_OPTIONS.map((opt) => {
+        const active = s.selectedAmenities.includes(opt.value);
+        return (
+          <button type="button" key={opt.value}
+            onClick={() => set("selectedAmenities", active
+              ? s.selectedAmenities.filter((k) => k !== opt.value)
+              : [...s.selectedAmenities, opt.value])}
+            className={cn("flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
+              active ? "border-primary bg-primary-50 text-primary-700 font-semibold" : "border-border bg-white text-slate-600 hover:border-slate-300")}
+          >
+            <div className={cn("w-4 h-4 rounded flex items-center justify-center border text-xs",
+              active ? "bg-primary border-primary text-white" : "border-slate-300")}>
+              {active ? "✓" : ""}
+            </div>
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+    <div className="mt-3 flex gap-2">
+      <Input
+        value={s.customInput}
+        onChange={(e) => set("customInput", e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
+        placeholder="Custom amenity"
+      />
+      <Button type="button" onClick={addCustom}>Add</Button>
+    </div>
+    <div className="flex flex-wrap gap-2 mt-2">
+      {s.customAmenities.map((tag) => (
+        <span key={tag} className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-200">
+          {tag}
+          <button type="button" className="text-slate-400 hover:text-slate-600"
+            onClick={() => set("customAmenities", s.customAmenities.filter((t) => t !== tag))}>×</button>
+        </span>
+      ))}
+    </div>
+  </div>
+)}
+{/* ── Media step ── */}
             {step === "media" && (
               <div className="space-y-5 animate-fade-in">
                 <div>

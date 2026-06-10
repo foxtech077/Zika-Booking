@@ -136,7 +136,6 @@ function buildPayload(s: HotelState): Record<string, unknown> {
   p.name = s.name.trim();
   p.description = trimOrNull(s.description);
   p.address = trimOrNull(s.address);
-  p.lat = toNullableNumber(s.lat);
   p.lng = toNullableNumber(s.lng);
   p.town = trimOrNull(s.town);
   p.country = countryOrNull(s.country);
