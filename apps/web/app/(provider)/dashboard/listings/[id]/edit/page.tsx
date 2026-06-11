@@ -4,9 +4,9 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { listingApi } from "@/lib/listing-api";
 import type { Listing } from "@/types/provider";
-import { HotelForm }     from "./_forms/HotelForm";
+import { HotelForm } from "./_forms/HotelForm";
 import { ApartmentForm } from "./_forms/ApartmentForm";
-import { CarForm }       from "./_forms/CarForm";
+import { CarForm } from "./_forms/CarForm";
 
 export default function EditListingPage() {
   const { id } = useParams();
@@ -14,7 +14,7 @@ export default function EditListingPage() {
 
   const { data: listing, isLoading, isError } = useQuery<Listing>({
     queryKey: ["listing-edit", listingId],
-    queryFn:  () => listingApi.get(`/listings/${listingId}`).then((r) => r.data.data ?? r.data),
+    queryFn: () => listingApi.get(`/listings/${listingId}`).then((r) => r.data.data ?? r.data),
     staleTime: 30_000,
     retry: 1,
   });
@@ -40,7 +40,11 @@ export default function EditListingPage() {
 
   const props = { listingId, listing };
 
-  if (listing.category === "hotel")     return <HotelForm     {...props} />;
-  if (listing.category === "apartment") return <ApartmentForm {...props} />;
-  return <CarForm {...props} />;
+  return (
+    <>
+      {listing.category === "hotel" && <HotelForm {...props} />}
+      {listing.category === "apartment" && <ApartmentForm {...props} />}
+      {listing.category === "car" && <CarForm {...props} />}
+    </>
+  );
 }

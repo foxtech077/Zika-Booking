@@ -32,18 +32,18 @@ export function FormShell({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
       {/* Sidebar */}
-      <div className="lg:col-span-1 space-y-4">
-        <Card padding="md" className="bg-gradient-to-br from-slate-900 to-indigo-950 text-white shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 rounded-full blur-3xl" />
+      <div className="lg:col-span-1 space-y-4 sticky top-24 h-fit">
+        <Card padding="md" className="bg-white border border-emerald-200 text-emerald-900 shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-100/20 rounded-full blur-3xl" />
           <div className="relative z-10">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-indigo-300">Progress</span>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600">Progress</span>
             <div className="flex items-baseline justify-between mt-1">
-              <span className="text-2xl font-black">{pct}%</span>
-              <span className="text-xs text-indigo-200 font-medium">{done} / {steps.length}</span>
+              <span className="text-2xl font-black text-emerald-900">{pct}%</span>
+              <span className="text-xs text-emerald-700 font-medium">{done} / {steps.length}</span>
             </div>
-            <div className="w-full bg-slate-800/80 rounded-full h-2 mt-2.5 overflow-hidden">
+            <div className="w-full bg-emerald-100/80 rounded-full h-2 mt-2.5 overflow-hidden">
               <div
-                className="bg-gradient-to-r from-cyan-400 to-indigo-500 h-full rounded-full transition-all duration-500"
+                className="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full rounded-full transition-all duration-500"
                 style={{ width: `${pct}%` }}
               />
             </div>
@@ -67,14 +67,14 @@ export function FormShell({
                 onClick={() => !locked && onStepClick(step.id)}
                 className={cn(
                   "w-full text-left flex items-start gap-3.5 px-4 py-3.5 border-l-2 transition-all duration-200 group relative",
-                  active  ? "border-primary bg-primary-50" : "border-transparent",
+                  active  ? "border-emerald-600 bg-emerald-50" : "border-transparent",
                   !locked && !active ? "hover:bg-slate-50 cursor-pointer" : "",
-                  locked  ? "opacity-50 cursor-not-allowed bg-slate-50/50" : "",
+                  locked  ? "opacity-50 cursor-not-allowed bg-emerald-50/30" : "",
                 )}
               >
                 <div className={cn(
                   "w-7 h-7 rounded-xl flex items-center justify-center shrink-0 border-2 transition-all",
-                  active    ? "border-primary bg-primary text-white shadow-glow-primary scale-105"
+                  active    ? "border-emerald-600 bg-emerald-600 text-white shadow-glow-primary scale-105"
                   : complete ? "border-emerald-500 bg-emerald-50 text-emerald-600"
                   : !locked  ? "border-slate-300 bg-white text-slate-500 group-hover:border-slate-400"
                   :            "border-slate-200 bg-slate-100 text-slate-400",
