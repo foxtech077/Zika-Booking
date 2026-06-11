@@ -39,7 +39,7 @@ async function fetchBooking(bookingId: string, authHeader: string) {
 
 export async function paymentRoutes(app: FastifyInstance) {
 
-  app.post("/create-intent", { preHandler: [requireUser],schema: {
+  app.post("/payments/create-intent", { preHandler: [requireUser],schema: {
     
     tags: ["Payments"],
     summary: "Create Stripe PaymentIntent (New Card Flow)",
