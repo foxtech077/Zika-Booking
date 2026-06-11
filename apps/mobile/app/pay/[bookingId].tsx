@@ -162,7 +162,7 @@ function getPaymentErrorMessage(err: unknown): string {
 
 export default function PaymentScreen() {
   const router = useRouter();
-  const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
+  const { bookingId, lockExpiresAt } = useLocalSearchParams<{ bookingId: string; lockExpiresAt?: string }>();
   const navigation = useNavigation();
 
   // ── Stripe Payment Sheet ──────────────────────────────────────────────────
@@ -175,6 +175,7 @@ export default function PaymentScreen() {
   const [attemptCount, setAttemptCount] = useState(0);
   const [failureReason, setFailureReason] = useState<string>("");
   const [isInitiating, setIsInitiating] = useState(false);
+  const isInitiatingRef = useRef(false); // synchronous guard against double-tap
   const queryClient = useQueryClient();
 
   // ── Expiry modal & rebooking state ────────────────────────────────────────
@@ -193,9 +194,11 @@ export default function PaymentScreen() {
   const taraDeadlineRef = useRef<number>(0);
 
   // ── Polling refs ──────────────────────────────────────────────────────────
-  const stripePollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const taraPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const stripePollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const taraPollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stripeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stripePollingActiveRef = useRef(false);
+  const taraPollingActiveRef = useRef(false);
   const stripeSessionRef = useRef<StripePaymentSession | null>(null);
 
   // ── Fetch booking detail ──────────────────────────────────────────────────
@@ -228,6 +231,7 @@ export default function PaymentScreen() {
       return res.data.data;
     },
     retry: 1,
+    enabled: false,
   });
 
   // ── Reset cached Stripe session when booking changes ──────────────────────
@@ -235,20 +239,38 @@ export default function PaymentScreen() {
     stripeSessionRef.current = null;
   }, [bookingId]);
 
+  // ── Guard: redirect away if booking is already confirmed or cancelled ──────
+  useEffect(() => {
+    if (!bookingLoading && booking) {
+      const nonPayableStatuses = ["confirmed", "cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system", "refunded", "completed", "active"];
+      if (nonPayableStatuses.includes(booking.status)) {
+        router.replace({
+          pathname: "/booking/[id]" as any,
+          params: { id: bookingId },
+        });
+      }
+    }
+  }, [booking?.status, bookingLoading]);
+
   // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      if (stripePollingRef.current) clearInterval(stripePollingRef.current);
-      if (taraPollingRef.current) clearInterval(taraPollingRef.current);
-      if (stripeTimeoutRef.current) clearTimeout(stripeTimeoutRef.current);
-      if (taraIntervalRef.current) clearInterval(taraIntervalRef.current);
+      stripePollingActiveRef.current = false;
+      taraPollingActiveRef.current = false;
+      if (stripePollingRef.current) { clearTimeout(stripePollingRef.current); stripePollingRef.current = null; }
+      if (taraPollingRef.current) { clearTimeout(taraPollingRef.current); taraPollingRef.current = null; }
+      if (stripeTimeoutRef.current) { clearTimeout(stripeTimeoutRef.current); stripeTimeoutRef.current = null; }
+      if (taraIntervalRef.current) { clearInterval(taraIntervalRef.current); taraIntervalRef.current = null; }
     };
   }, []);
 
   // ── Countdown & Expiry logic ──────────────────────────────────────────────
-  const expiresAtIso = booking
-    ? new Date(new Date(booking.createdAt).getTime() + 300_000).toISOString()
-    : null;
+  // Prefer the lock expiry passed as a nav param; fall back to createdAt + 5min.
+  const expiresAtIso = (lockExpiresAt && lockExpiresAt.length > 0)
+    ? lockExpiresAt
+    : booking
+      ? new Date(new Date(booking.createdAt).getTime() + 300_000).toISOString()
+      : null;
   const msLeft = useCountdown(expiresAtIso);
   const isExpired = booking !== null && msLeft === 0;
   const isProcessing = isInitiating || view === "stripe_polling" || view === "tara_waiting";
@@ -368,15 +390,16 @@ export default function PaymentScreen() {
 
   // ── Stripe polling ────────────────────────────────────────────────────────
   function startStripePolling(paymentId: string) {
-    let elapsed = 0;
+    stripePollingActiveRef.current = true;
     const MAX_DURATION = 60_000;
     const INTERVAL = 3_000;
+    const startTime = Date.now();
 
-    stripePollingRef.current = setInterval(async () => {
-      elapsed += INTERVAL;
+    async function poll() {
+      if (!stripePollingActiveRef.current) return;
       try {
-        // Poll payment status
-        const statusRes = await paymentApi.get<PaymentStatusResponse>(`/${paymentId}/status`);
+        const statusRes = await paymentApi.get<PaymentStatusResponse>(`/payments/${paymentId}/status`);
+        if (!stripePollingActiveRef.current) return;
         const status = statusRes.data.data.status;
 
         if (status === "captured") {
@@ -391,35 +414,65 @@ export default function PaymentScreen() {
           return;
         }
 
-        // Also check booking status
         const bookingRes = await listingApi.get<{ data: { status: string } }>(`/guests/me/bookings/${bookingId}`);
+        if (!stripePollingActiveRef.current) return;
         if (bookingRes.data.data.status === "confirmed") {
           clearPolling();
           navigateToSuccess();
           return;
         }
-      } catch {
-        // Silently ignore transient errors during polling
+      } catch (pollErr: any) {
+        if (!stripePollingActiveRef.current) return;
+        const httpStatus = pollErr?.response?.status;
+        if (httpStatus === 404 || httpStatus === 401 || httpStatus === 403) {
+          clearPolling();
+          setFailureReason("Payment session not found. Please try again.");
+          setView("failure");
+          return;
+        }
+        // 5xx / network errors: schedule next poll
       }
 
-      if (elapsed >= MAX_DURATION) {
+      if (!stripePollingActiveRef.current) return;
+      if (Date.now() - startTime >= MAX_DURATION) {
         clearPolling();
         setFailureReason("Payment confirmation timed out after 60 seconds. Please try again.");
         setView("failure");
+        return;
       }
-    }, INTERVAL);
+
+      stripePollingRef.current = setTimeout(() => {
+        poll().catch(() => {
+          if (stripePollingActiveRef.current) {
+            clearPolling();
+            setFailureReason("Payment confirmation failed. Please try again.");
+            setView("failure");
+          }
+        });
+      }, INTERVAL);
+    }
+
+    poll().catch(() => {
+      if (stripePollingActiveRef.current) {
+        clearPolling();
+        setFailureReason("Payment confirmation failed. Please try again.");
+        setView("failure");
+      }
+    });
   }
 
   // ── Tara polling ──────────────────────────────────────────────────────────
   function startTaraPolling(paymentId: string) {
+    taraPollingActiveRef.current = true;
     const INTERVAL = 5_000;
-    const MAX_DURATION = 90_000; // matches the 90s user-facing countdown
-    let elapsed = 0;
+    const MAX_DURATION = 90_000;
+    const startTime = Date.now();
 
-    taraPollingRef.current = setInterval(async () => {
-      elapsed += INTERVAL;
+    async function poll() {
+      if (!taraPollingActiveRef.current) return;
       try {
-        const statusRes = await paymentApi.get<PaymentStatusResponse>(`/${paymentId}/status`);
+        const statusRes = await paymentApi.get<PaymentStatusResponse>(`/payments/${paymentId}/status`);
+        if (!taraPollingActiveRef.current) return;
         const status = statusRes.data.data.status;
 
         if (status === "captured") {
@@ -429,7 +482,6 @@ export default function PaymentScreen() {
         }
         if (status === "failed" || status === "timed_out") {
           clearPolling();
-          if (taraIntervalRef.current) clearInterval(taraIntervalRef.current);
           setFailureReason(
             status === "timed_out"
               ? "Mobile money request timed out. The number did not confirm in time."
@@ -438,17 +490,44 @@ export default function PaymentScreen() {
           setView("failure");
           return;
         }
-      } catch {
-        // Silently ignore transient errors during polling
+      } catch (pollErr: any) {
+        if (!taraPollingActiveRef.current) return;
+        const httpStatus = pollErr?.response?.status;
+        if (httpStatus === 404 || httpStatus === 401 || httpStatus === 403) {
+          clearPolling();
+          setFailureReason("Payment session not found. Please try again.");
+          setView("failure");
+          return;
+        }
+        // 5xx / network errors: schedule next poll
       }
 
-      if (elapsed >= MAX_DURATION) {
+      if (!taraPollingActiveRef.current) return;
+      if (Date.now() - startTime >= MAX_DURATION) {
         clearPolling();
-        if (taraIntervalRef.current) clearInterval(taraIntervalRef.current);
         setFailureReason("Mobile money confirmation timed out. Please try again.");
         setView("failure");
+        return;
       }
-    }, INTERVAL);
+
+      taraPollingRef.current = setTimeout(() => {
+        poll().catch(() => {
+          if (taraPollingActiveRef.current) {
+            clearPolling();
+            setFailureReason("Mobile money confirmation failed. Please try again.");
+            setView("failure");
+          }
+        });
+      }, INTERVAL);
+    }
+
+    poll().catch(() => {
+      if (taraPollingActiveRef.current) {
+        clearPolling();
+        setFailureReason("Mobile money confirmation failed. Please try again.");
+        setView("failure");
+      }
+    });
   }
 
   // ── Tara countdown ────────────────────────────────────────────────────────
@@ -469,10 +548,12 @@ export default function PaymentScreen() {
 
   // ── Clear polling ─────────────────────────────────────────────────────────
   function clearPolling() {
-    if (stripePollingRef.current) clearInterval(stripePollingRef.current);
-    if (taraPollingRef.current) clearInterval(taraPollingRef.current);
-    if (stripeTimeoutRef.current) clearTimeout(stripeTimeoutRef.current);
-    if (taraIntervalRef.current) clearInterval(taraIntervalRef.current);
+    stripePollingActiveRef.current = false;
+    taraPollingActiveRef.current = false;
+    if (stripePollingRef.current) { clearTimeout(stripePollingRef.current); stripePollingRef.current = null; }
+    if (taraPollingRef.current) { clearTimeout(taraPollingRef.current); taraPollingRef.current = null; }
+    if (stripeTimeoutRef.current) { clearTimeout(stripeTimeoutRef.current); stripeTimeoutRef.current = null; }
+    if (taraIntervalRef.current) { clearInterval(taraIntervalRef.current); taraIntervalRef.current = null; }
   }
 
   // ── Navigate to success ───────────────────────────────────────────────────
@@ -481,17 +562,22 @@ export default function PaymentScreen() {
     setView("success");
     void queryClient.invalidateQueries({ queryKey: ["booking", bookingId] });
     void queryClient.invalidateQueries({ queryKey: ["myBookings"] });
-    router.replace("/booking/submitted");
+    router.replace({
+      pathname: "/booking/[id]" as any,
+      params: { id: bookingId, fromPayment: "true" },
+    });
   }
 
   // ── Pay button handler ────────────────────────────────────────────────────
   async function handlePay() {
+    if (isInitiatingRef.current) return;
     if (msLeft === 0) {
       setExpiredModal(true);
       return;
     }
     // ── Stripe Payment Sheet flow ─────────────────────────────────────────
     if (provider === "stripe") {
+      isInitiatingRef.current = true;
       setIsInitiating(true);
       try {
         let session = stripeSessionRef.current;
@@ -602,8 +688,9 @@ export default function PaymentScreen() {
         }
 
         stripeSessionRef.current = null;
-        setView("stripe_polling");
-        startStripePolling(paymentId);
+        // presentPaymentSheet() success is Stripe's own confirmation the card was charged.
+        // The backend status update requires a webhook; don't make the user wait for it.
+        navigateToSuccess();
       } catch (err: any) {
         console.log("[PAY] Stripe outer catch triggered");
         console.log("[PAY] HTTP status:", err?.response?.status);
@@ -630,6 +717,7 @@ export default function PaymentScreen() {
         }
       } finally {
         setIsInitiating(false);
+        isInitiatingRef.current = false;
       }
       return;
     }
@@ -643,6 +731,7 @@ export default function PaymentScreen() {
       }
     }
 
+    isInitiatingRef.current = true;
     setIsInitiating(true);
 
     try {
@@ -655,7 +744,7 @@ export default function PaymentScreen() {
       };
       console.log("[PAY] Initiating Tara payment — request body:", JSON.stringify(taraPayload, null, 2));
 
-      const res = await paymentApi.post<InitiateResponse>("/initiate", taraPayload);
+      const res = await paymentApi.post<InitiateResponse>("/payments/initiate", taraPayload);
       console.log("[PAY] Tara initiate SUCCESS — status:", res.status);
       console.log("[PAY] Tara initiate response:", JSON.stringify(res.data, null, 2));
 
@@ -686,6 +775,7 @@ export default function PaymentScreen() {
       }
     } finally {
       setIsInitiating(false);
+      isInitiatingRef.current = false;
     }
   }
 

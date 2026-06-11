@@ -352,7 +352,12 @@ export default function BookingDetailScreen() {
     );
   }
 
-  const { label: statusLabel, bg: statusBg, textColor: statusTextColor } = statusInfo(booking.status);
+  const { label: rawStatusLabel, bg: statusBg, textColor: statusTextColor } = statusInfo(booking.status);
+  // When navigating from a successful payment, the webhook may not have fired yet.
+  // Show "Confirming..." instead of the contradictory "Pending Payment" label.
+  const statusLabel = (fromPayment === "true" && booking.status === "pending_payment")
+    ? "Confirming..."
+    : rawStatusLabel;
   const isCar = booking.listingType === "car";
   const cancelled = isCancelled(booking.status);
   const justPaid = fromPayment === "true";

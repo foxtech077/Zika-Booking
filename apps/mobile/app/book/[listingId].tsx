@@ -565,7 +565,13 @@ export default function BookingFlowScreen() {
     },
     onSuccess: (data) => {
       SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => {});
-      router.push({ pathname: "/pay/[bookingId]", params: { bookingId: data.bookingId } });
+      router.push({
+        pathname: "/pay/[bookingId]",
+        params: {
+          bookingId: data.bookingId,
+          lockExpiresAt: lockState?.expiresAt ?? "",
+        },
+      });
     },
     onError: (err: any) => {
       const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
