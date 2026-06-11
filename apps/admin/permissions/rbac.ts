@@ -77,11 +77,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
   ],
   sales: [
     "view_dashboard",
-    "view_listings",
     "view_bookings",
-    "view_vouchers", "manage_vouchers",
-    "view_commission",
-    "view_reports",
   ],
   support: [
     "view_dashboard",

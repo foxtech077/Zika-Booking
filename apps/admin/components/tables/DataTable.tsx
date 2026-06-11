@@ -258,7 +258,7 @@ export function FilterBar({
           className="py-1.5 pl-3 pr-7 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary appearance-none transition-colors"
           aria-label={f.label}
         >
-          <option value="">{f.label}</option>
+          {f.label && <option value="">{f.label}</option>}
           {f.options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}

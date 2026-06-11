@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuthStore } from "@/stores/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle, Eye } from "lucide-react";
+import { CalendarDays, XCircle } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -29,8 +30,59 @@ export default function BookingsPage() {
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const role = useAuthStore(state => state.user?.role);
 
-  const params = { q, status, listingType, page: String(page), limit: "20" };
+  // Set default status for Sales role (Request-to-Book workflow)
+  useEffect(() => {
+    if (role === "sales" && status === "") {
+      setStatus("pending_payment");
+    }
+  }, [role, status]);
+
+  const filterItems = [
+    {
+      key: "status",
+      label: "All Statuses",
+      value: status,
+      onChange: (v: string) => { setStatus(v); setPage(1); },
+      options: [
+                { value: "pending_payment", label: "Pending Payment" },
+        { value: "pending_request", label: "Pending Request" },
+        { value: "confirmed", label: "Confirmed" },
+        { value: "completed", label: "Completed" },
+        { value: "cancelled_by_guest", label: "Cancelled by Guest" },
+        { value: "cancelled_by_provider", label: "Cancelled by Provider" },
+        { value: "cancelled_by_system", label: "Cancelled by System" },
+      ],
+    },
+    {
+      key: "listingType",
+      label: "All Types",
+      value: listingType,
+      onChange: (v: string) => { setListingType(v); setPage(1); },
+      options: [
+        { value: "hotel", label: "Hotel" },
+        { value: "apartment", label: "Apartment" },
+        { value: "car", label: "Car" },
+      ],
+    },
+    {
+      key: "rowsPerPage",
+      label: "",
+      value: String(rowsPerPage),
+      onChange: (v: string) => { setRowsPerPage(Number(v)); setPage(1); },
+      options: [
+        { value: "5", label: "5" },
+        { value: "10", label: "10" },
+        { value: "20", label: "20" },
+        { value: "50", label: "50" },
+      ],
+    },
+  ];
+
+
+  const params = { q, status, listingType, page: String(page), limit: String(rowsPerPage) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-bookings", params],
     queryFn: () => fetchBookings(params),
@@ -153,34 +205,9 @@ export default function BookingsPage() {
           search={q}
           onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
-          filters={[
-            {
-              key: "status",
-              label: "All Statuses",
-              value: status,
-              onChange: (v) => { setStatus(v); setPage(1); },
-              options: [
-                { value: "pending_payment", label: "Pending Payment" },
-                { value: "confirmed", label: "Confirmed" },
-                { value: "completed", label: "Completed" },
-                { value: "cancelled_by_guest", label: "Cancelled by Guest" },
-                { value: "cancelled_by_provider", label: "Cancelled by Provider" },
-                { value: "cancelled_by_system", label: "Cancelled by System" },
-              ],
-            },
-            {
-              key: "listingType",
-              label: "All Types",
-              value: listingType,
-              onChange: (v) => { setListingType(v); setPage(1); },
-              options: [
-                { value: "hotel", label: "Hotel" },
-                { value: "apartment", label: "Apartment" },
-                { value: "car", label: "Car" },
-              ],
-            },
-          ]}
+          filters={filterItems}
         />
+
         <DataTable
           columns={columns}
           data={bookings}
@@ -190,7 +217,7 @@ export default function BookingsPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<CalendarDays className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={rowsPerPage} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Detail drawer */}
@@ -201,16 +228,35 @@ export default function BookingsPage() {
         description={`${selected?.guestFirstName} ${selected?.guestLastName} · ${selected?.guestEmail}`}
         width="md"
         footer={
-          selected && ["pending_payment", "confirmed"].includes(selected.status) ? (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => { setCancelModal(selected); setSelected(null); }}
-              leftIcon={<XCircle className="h-4 w-4" />}
-            >
-              Cancel Booking
-            </Button>
-          ) : undefined
+          // Sales role: request-to-book actions
+          role === "sales" && selected?.status === "pending_payment" ? (
+            <>
+              <Button variant="primary" size="sm" onClick={() => console.log("Approve", selected?.id)}>
+                Approve
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => console.log("Decline", selected?.id)}>
+                Decline
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => console.log("Request More Info", selected?.id)}>
+                Request More Info
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => console.log("Escalate", selected?.id)}>
+                Escalate to Host
+              </Button>
+            </>
+          ) : (
+            // Non-sales or other statuses: show Cancel if applicable
+            selected && ["pending_payment", "confirmed"].includes(selected?.status) ? (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => { setCancelModal(selected); setSelected(null); }}
+                leftIcon={<XCircle className="h-4 w-4" />}
+              >
+                Cancel Booking
+              </Button>
+            ) : undefined
+          )
         }
       >
         {loadingDetail ? (
