@@ -146,63 +146,88 @@ interface PaginationProps {
   limit: number;
   total: number;
   onPageChange: (page: number) => void;
+  /** When provided, renders a page-size dropdown (10 / 20 / 30 / 40) */
+  onLimitChange?: (limit: number) => void;
 }
 
-export function Pagination({ page, limit, total, onPageChange }: PaginationProps) {
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40];
+
+export function Pagination({ page, limit, total, onPageChange, onLimitChange }: PaginationProps) {
   const totalPages = Math.ceil(total / limit);
-  const from = (page - 1) * limit + 1;
+  const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 
-  if (totalPages <= 1) return null;
+  if (totalPages <= 1 && !onLimitChange) return null;
 
   return (
     <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-      <p className="text-xs text-slate-500">
-        Showing <span className="font-medium">{from}–{to}</span> of{" "}
-        <span className="font-medium">{total.toLocaleString()}</span> results
-      </p>
-      <div className="flex gap-1">
-        <button
-          onClick={() => onPageChange(page - 1)}
-          disabled={page <= 1}
-          className="h-8 w-8 flex items-center justify-center rounded-lg text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          ‹
-        </button>
-        {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-          let p: number;
-          if (totalPages <= 7) {
-            p = i + 1;
-          } else if (page <= 4) {
-            p = i + 1;
-          } else if (page >= totalPages - 3) {
-            p = totalPages - 6 + i;
-          } else {
-            p = page - 3 + i;
-          }
-          return (
-            <button
-              key={p}
-              onClick={() => onPageChange(p)}
-              className={cn(
-                "h-8 w-8 flex items-center justify-center rounded-lg text-sm font-medium transition-colors",
-                p === page
-                  ? "bg-primary text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              )}
+      <div className="flex items-center gap-3">
+        <p className="text-xs text-slate-500">
+          Showing <span className="font-medium">{from}–{to}</span> of{" "}
+          <span className="font-medium">{total.toLocaleString()}</span> results
+        </p>
+        {onLimitChange && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-400">·</span>
+            <select
+              value={limit}
+              onChange={(e) => onLimitChange(Number(e.target.value))}
+              className="py-1 pl-2 pr-6 text-xs bg-white border border-border rounded-lg text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary appearance-none cursor-pointer transition-colors"
+              aria-label="Rows per page"
             >
-              {p}
-            </button>
-          );
-        })}
-        <button
-          onClick={() => onPageChange(page + 1)}
-          disabled={page >= totalPages}
-          className="h-8 w-8 flex items-center justify-center rounded-lg text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          ›
-        </button>
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size} / page
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
+      {totalPages > 1 && (
+        <div className="flex gap-1">
+          <button
+            onClick={() => onPageChange(page - 1)}
+            disabled={page <= 1}
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            ‹
+          </button>
+          {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+            let p: number;
+            if (totalPages <= 7) {
+              p = i + 1;
+            } else if (page <= 4) {
+              p = i + 1;
+            } else if (page >= totalPages - 3) {
+              p = totalPages - 6 + i;
+            } else {
+              p = page - 3 + i;
+            }
+            return (
+              <button
+                key={p}
+                onClick={() => onPageChange(p)}
+                className={cn(
+                  "h-8 w-8 flex items-center justify-center rounded-lg text-sm font-medium transition-colors",
+                  p === page
+                    ? "bg-primary text-white"
+                    : "text-slate-600 hover:bg-slate-100"
+                )}
+              >
+                {p}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => onPageChange(page + 1)}
+            disabled={page >= totalPages}
+            className="h-8 w-8 flex items-center justify-center rounded-lg text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            ›
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -226,10 +251,11 @@ interface FilterBarProps {
     options: FilterOption[];
   }[];
   actions?: ReactNode;
+  children?: ReactNode;
 }
 
 export function FilterBar({
-  search, onSearchChange, searchPlaceholder = "Search…", filters, actions
+  search, onSearchChange, searchPlaceholder = "Search…", filters, actions, children
 }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">
@@ -258,12 +284,13 @@ export function FilterBar({
           className="py-1.5 pl-3 pr-7 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary appearance-none transition-colors"
           aria-label={f.label}
         >
-          <option value="">{f.label}</option>
+          {f.label && <option value="">{f.label}</option>}
           {f.options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
       ))}
+      {children}
       {actions && <div className="ml-auto flex gap-2">{actions}</div>}
     </div>
   );

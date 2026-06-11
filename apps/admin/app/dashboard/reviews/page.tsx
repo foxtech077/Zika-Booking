@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Star, EyeOff, Eye } from "lucide-react";
-import { listingApi } from "@/lib/listing-api";
+import { listingApi, getAdminJwtSecret } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -48,8 +48,8 @@ export default function ReviewsPage() {
   const total: number = data?.total ?? 0;
 
   const hideMut = useMutation({
-    mutationFn: ({ id, hide, reason }: { id: string; hide: boolean; reason?: string }) =>
-      listingApi.patch(`/reviews/${id}/hide`, { hide, reason }),
+    mutationFn: ({ id, hidden, reason }: { id: string; hidden: boolean; reason?: string }) =>
+      listingApi.patch(`/reviews/${id}/hide`, { hidden, reason }, { headers: { "x-admin-key": getAdminJwtSecret() } }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-reviews"] });
       setHideModal(null);
@@ -120,7 +120,7 @@ export default function ReviewsPage() {
         <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
           {r.isHidden ? (
             <button
-              onClick={() => hideMut.mutate({ id: r.id, hide: false })}
+              onClick={() => hideMut.mutate({ id: r.id, hidden: false })}
               className="p-1.5 rounded-lg text-slate-400 hover:text-success hover:bg-success/5 transition-colors"
               title="Unhide"
             >
@@ -196,7 +196,7 @@ export default function ReviewsPage() {
               variant="danger"
               size="sm"
               loading={hideMut.isPending}
-              onClick={() => hideModal && hideMut.mutate({ id: hideModal.id, hide: true, reason: hideReason })}
+              onClick={() => hideModal && hideMut.mutate({ id: hideModal.id, hidden: true, reason: hideReason })}
               leftIcon={<EyeOff className="h-4 w-4" />}
             >
               Hide Review
