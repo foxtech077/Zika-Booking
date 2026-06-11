@@ -185,7 +185,7 @@ async function shareVoucher(booking: BookingDetail) {
     `TOTAL: ${formatCurrency(booking.totalAmount, booking.currency)}`,
     "",
     "═══════════════════════════",
-    "Powered by ZikaBooking",
+    "Powered by Kainook",
   ].filter(Boolean).join("\n");
 
   try {

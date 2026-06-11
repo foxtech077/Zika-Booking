@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -486,7 +486,7 @@ export default function SettingsPage() {
           )}
 
           {tab === "notifications" && (
-            <SettingsCard title="Notification Settings" subtitle="Choose how and when ZikaBooking contacts you." icon={<Bell />} feedback={sectionFeedback.notifications} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Notification")} onReset={resetSection} />}>
+            <SettingsCard title="Notification Settings" subtitle="Choose how and when Kainook contacts you." icon={<Bell />} feedback={sectionFeedback.notifications} footer={<SectionActions loading={fakeSaveMutation.isPending} onSave={() => fakeSaveMutation.mutate("Notification")} onReset={resetSection} />}>
               <div className="grid gap-3 md:grid-cols-2">
                 {notificationItems.map(({ key, label, hint }) => (
                   <Toggle key={key} checked={notifications[key]} onChange={(value) => setNotifications((f) => ({ ...f, [key]: value }))} label={label} hint={hint} />

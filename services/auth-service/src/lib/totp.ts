@@ -1,4 +1,4 @@
-import { authenticator } from "otplib";
+﻿import { authenticator } from "otplib";
 import { encryptAes256, decryptAes256, hashToken, generateCode } from "./crypto";
 import QRCode from "qrcode";
 
@@ -28,7 +28,7 @@ export function decryptTotpSecret(encrypted: string): string {
 
 /** Generate the otpauth URI for QR code rendering. */
 export function buildOtpAuthUri(email: string, secret: string): string {
-  return authenticator.keyuri(email, "ZikaBooking", secret);
+  return authenticator.keyuri(email, "Kainook", secret);
 }
 
 /** Render the otpauth URI as a base64-encoded PNG QR code. */

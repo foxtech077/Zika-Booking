@@ -1248,7 +1248,7 @@ export default function BookingFlowScreen() {
                 {termsChecked && <Ionicons name="checkmark" size={14} color="#fff" />}
               </View>
               <Text style={styles.termsText}>
-                I agree to ZikaBooking's Terms of Service and the cancellation policy above.
+                I agree to Kainook's Terms of Service and the cancellation policy above.
               </Text>
             </TouchableOpacity>
 
