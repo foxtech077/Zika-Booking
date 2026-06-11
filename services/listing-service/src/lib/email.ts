@@ -1,6 +1,6 @@
-import sgMail from "@sendgrid/mail";
+﻿import sgMail from "@sendgrid/mail";
 
-const rawEmail = process.env["SENDGRID_FROM_EMAIL"] ?? "noreply@zikabooking.com";
+const rawEmail = process.env["SENDGRID_FROM_EMAIL"] ?? "noreply@Kainook.com";
 const FROM = rawEmail.replace(/^["']|["']$/g, "");
 const WEB_BASE = process.env["WEB_BASE_URL"] ?? "http://localhost:3000";
 
@@ -29,8 +29,8 @@ export async function sendListingActivatedEmail(
   await sendWithRetry({
     to,
     from: FROM,
-    subject: `Your ${label} "${listingName}" is now live on ZikaBooking!`,
-    html: `<p>Your ${label} listing <strong>${listingName}</strong> is now live on ZikaBooking. Guests can find and book it right away.</p><p><a href="${WEB_BASE}/listings">View your listings</a></p>`,
+    subject: `Your ${label} "${listingName}" is now live on Kainook!`,
+    html: `<p>Your ${label} listing <strong>${listingName}</strong> is now live on Kainook. Guests can find and book it right away.</p><p><a href="${WEB_BASE}/listings">View your listings</a></p>`,
   });
 }
 
@@ -57,7 +57,7 @@ export async function sendListingApprovedEmail(
     to,
     from: FROM,
     subject: `Your listing "${listingName}" has been approved!`,
-    html: `<p>Great news! Your listing <strong>${listingName}</strong> has been approved and is now live on ZikaBooking with a verified rating of ${starRating}★.</p>${ratingNote}<p><a href="${WEB_BASE}/listings">View your listings</a></p>`,
+    html: `<p>Great news! Your listing <strong>${listingName}</strong> has been approved and is now live on Kainook with a verified rating of ${starRating}★.</p>${ratingNote}<p><a href="${WEB_BASE}/listings">View your listings</a></p>`,
   });
 }
 
@@ -91,7 +91,7 @@ export async function sendListingReinstatedEmail(to: string, listingName: string
     to,
     from: FROM,
     subject: `Your listing "${listingName}" has been reinstated`,
-    html: `<p>Good news! Your listing <strong>${listingName}</strong> has been reinstated and is now live on ZikaBooking again.</p><p><a href="${WEB_BASE}/listings">View your listings</a></p>`,
+    html: `<p>Good news! Your listing <strong>${listingName}</strong> has been reinstated and is now live on Kainook again.</p><p><a href="${WEB_BASE}/listings">View your listings</a></p>`,
   });
 }
 
@@ -146,8 +146,8 @@ export async function sendBookingConfirmationEmail(
           <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Dates</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${dateLabel}</td></tr>
           <tr><td style="padding:8px;color:#6b7280">Total Paid</td><td style="padding:8px;font-weight:bold">${opts.currency} ${opts.totalAmount.toLocaleString()}</td></tr>
         </table>
-        <p>You can view your booking details at any time in the ZikaBooking app.</p>
-        <p>Enjoy your stay!<br>The ZikaBooking Team</p>
+        <p>You can view your booking details at any time in the Kainook app.</p>
+        <p>Enjoy your stay!<br>The Kainook Team</p>
       </div>
     `,
   });
@@ -173,7 +173,7 @@ export async function sendBookingCancellationEmail(
         <p>Hi ${guestName},</p>
         <p>Your booking <strong style="font-family:monospace">${opts.reference}</strong> at <strong>${opts.listingName}</strong> has been cancelled.</p>
         ${opts.refundAmount > 0 ? `<p>A refund of <strong>${opts.currency} ${opts.refundAmount.toLocaleString()}</strong> will be processed within 5–10 business days.</p>` : "<p>No refund applies based on the cancellation policy.</p>"}
-        <p>The ZikaBooking Team</p>
+        <p>The Kainook Team</p>
       </div>
     `,
   });

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -124,7 +124,7 @@ export default function RegisterPage() {
               <Zap className="w-5 h-5 text-white" />
             </div>
             <div className="text-left">
-              <p className="text-white font-bold text-lg leading-none">ZikaBooking</p>
+              <p className="text-white font-bold text-lg leading-none">Kainook</p>
               <p className="text-slate-400 text-xs">Partner Portal</p>
             </div>
           </div>

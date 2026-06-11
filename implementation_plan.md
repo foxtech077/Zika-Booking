@@ -1,7 +1,7 @@
 # Implementation Plan - ZikaBooking Premium Traveler Guest Portal
 
 ## Goal Description
-Integrate the Zika-Booking frontend traveler module (`/traveller` route) with the backend `listing-service` and `auth-service` APIs without modifying the backend. We will implement a high-fidelity, visually stunning single-page application (SPA) layout that matches the uploaded image precisely. 
+Integrate the kainook frontend traveler module (`/traveller` route) with the backend `listing-service` and `auth-service` APIs without modifying the backend. We will implement a high-fidelity, visually stunning single-page application (SPA) layout that matches the uploaded image precisely. 
 
 The application will support:
 1. **Dynamic Authentication & Profiles**: Displays the guest name, loyalty tier (Bronze, Silver, Gold, Diamond), and points.

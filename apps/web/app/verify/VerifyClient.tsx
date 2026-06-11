@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -47,7 +47,7 @@ export function VerifyClient() {
     },
     success: {
       icon: "🎉", title: "Email verified!",
-      body: <p className="text-gray-500">Welcome to ZikaBooking! Redirecting you now…</p>,
+      body: <p className="text-gray-500">Welcome to Kainook! Redirecting you now…</p>,
     },
     already_verified: {
       icon: "✅", title: "Already verified",

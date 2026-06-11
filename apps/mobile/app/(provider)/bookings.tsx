@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import {
   View,
   Text,
@@ -176,7 +176,7 @@ export default function ProviderBookingsScreen() {
         <View style={s.commissionBanner}>
           <Feather name="info" size={12} color={K.colors.accent} />
           <Text style={s.commissionBannerText}>
-            Amounts shown are your net earnings after ZikaBooking's 5% service fee.
+            Amounts shown are your net earnings after Kainook's 5% service fee.
           </Text>
         </View>
 

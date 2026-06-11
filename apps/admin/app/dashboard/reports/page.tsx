@@ -100,7 +100,7 @@ export default function ReportsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "zika-platform-report.csv";
+    a.download = "kainook-platform-report.csv";
     a.click();
     URL.revokeObjectURL(url);
   };

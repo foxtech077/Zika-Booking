@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { prisma } from "../lib/prisma.js";
@@ -24,7 +24,7 @@ function buildVoucherPdf(booking: any, listingName: string): Promise<Buffer> {
     const W = 495; // usable width
 
     // ── Header ────────────────────────────────────────────────────────────────
-    doc.fontSize(22).font("Helvetica-Bold").fillColor("#1a73e8").text("ZIKA BOOKING", 50, 50);
+    doc.fontSize(22).font("Helvetica-Bold").fillColor("#1a73e8").text("Kainook", 50, 50);
     doc.fontSize(11).font("Helvetica").fillColor("#666666").text("Booking Voucher", 50, 78);
     doc.moveTo(50, 95).lineTo(545, 95).lineWidth(0.5).stroke("#cccccc");
 
@@ -128,7 +128,7 @@ function buildVoucherPdf(booking: any, listingName: string): Promise<Buffer> {
     doc.fontSize(9).font("Helvetica").fillColor("#999999")
        .text(`Confirmed: ${confirmedStr}`, 50, y);
     y += 14;
-    doc.text("Thank you for booking with Zika Booking!", 50, y);
+    doc.text("Thank you for booking with Kainook!", 50, y);
 
     doc.end();
   });
