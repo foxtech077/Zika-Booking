@@ -31,7 +31,7 @@ async function build() {
           description: "Local development server",
         },
         {
-          url: "https://api.kainook.com/payments",
+          url: "https://api.kainook.com",
           description: "Production server",
         },
       ],
