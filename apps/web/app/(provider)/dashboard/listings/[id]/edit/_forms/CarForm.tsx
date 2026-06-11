@@ -471,35 +471,41 @@ export function CarForm({ listingId, listing }: Props) {
   const title = current?.name ?? listing.name ?? "Untitled Vehicle";
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5 animate-fade-in pb-16">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push("/dashboard/listings")}
-          className="w-9 h-9 rounded-xl border border-border bg-white flex items-center justify-center text-slate-600 hover:bg-surface-muted transition-all"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Car Rental Listing</p>
-          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+    <div className="min-h-screen bg-[#EEF2E6] flex flex-col">
+      {/* ── Sticky Header ── */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-[#4c6a48]/15 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+          <button
+            onClick={() => router.push("/dashboard/listings")}
+            className="w-9 h-9 rounded-xl border border-[#556B2F]/30 bg-white flex items-center justify-center text-[#556B2F] hover:bg-[#e6ebe4] transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-[#556B2F] uppercase tracking-widest">Car Rental Listing</p>
+            <h1 className="text-lg font-bold text-slate-900 truncate leading-tight"></h1>
+          </div>
+          <div className="ml-auto shrink-0"><Badge label={status} status={status} /></div>
         </div>
-        <div className="ml-auto"><Badge label={status} status={status} /></div>
       </div>
 
-      {ok && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
-      {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark" ><AlertCircle className="w-4 h-4 text-danger shrink-0" />{err}</div>}
+      {/* ── Main scroll area ── */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4 pb-28 animate-fade-in">
 
-      <FormShell
-        steps={STEPS}
-        activeStep={step}
-        status={status}
-        onStepClick={(id) => { setTried(false); setStep(id as Step); }}
-        isComplete={isComplete}
-        isLocked={isLocked}
-      >
-        <form onSubmit={handleNext} className="space-y-5">
-          <Card className="min-h-[420px]">
+          {ok  && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
+          {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark"><AlertCircle className="w-4 h-4 text-danger shrink-0" />{err}</div>}
+
+          <FormShell
+            steps={STEPS}
+            activeStep={step}
+            status={status}
+            onStepClick={(id) => { setTried(false); setStep(id as Step); }}
+            isComplete={isComplete}
+            isLocked={isLocked}
+          >
+            <form id="car-edit-form" onSubmit={handleNext} className="space-y-5">
+              <Card className="min-h-[420px]">
 
             {/* ── Vehicle step ── */}
             {step === "vehicle" && (
@@ -829,44 +835,83 @@ export function CarForm({ listingId, listing }: Props) {
                 </div>
               </div>
             )}
-          </Card>
+              </Card>
+            </form>
+          </FormShell>
+        </div>
+      </div>
 
-          {/* Footer */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-border">
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => router.push("/dashboard/listings")}>Exit</Button>
-              {step !== "vehicle" && (
-                <Button type="button" variant="secondary" onClick={() => {
+      {/* ── Sticky Footer ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#EEF2E6]/95 backdrop-blur-sm border-t border-[#3E4E22]/15 shadow-[0_-4px_20px_rgba(62,78,34,0.08)]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/listings")}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#556B2F]/30 text-sm font-semibold text-[#556B2F] bg-white hover:bg-[#e6ebe4] transition-all"
+            >
+              Exit
+            </button>
+            {step !== "vehicle" && (
+              <button
+                type="button"
+                onClick={() => {
                   const idx = STEPS.findIndex((t) => t.id === step);
                   const prev = STEPS[idx - 1];
                   if (prev) { setTried(false); setStep(prev.id as Step); }
-                }}>← Back</Button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" loading={saveMut.isPending} onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }} icon={<Save />}>
-                Save Draft
-              </Button>
-              {step !== "media" ? (
-                <Button type="submit" variant="primary" loading={saveMut.isPending}>Save & Continue →</Button>
-              ) : (
-                <>
-                  {["draft", "deactivated"].includes(status) && (
-                    <Button type="button" variant="success" loading={activateMut.isPending || saveMut.isPending} onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }} icon={<CheckCircle />}>
-                      {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
-                    </Button>
-                  )}
-                  {status === "active" && (
-                    <Button type="button" variant="danger" loading={deactivateMut.isPending} onClick={() => deactivateMut.mutate()}>
-                      Deactivate
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-all"
+              >
+                ← Back
+              </button>
+            )}
           </div>
-        </form>
-      </FormShell>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={saveMut.isPending}
+              onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#556B2F]/40 text-sm font-semibold text-[#556B2F] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
+            >
+              <Save className="w-3.5 h-3.5" /> Save Draft
+            </button>
+            {step !== "media" ? (
+              <button
+                type="submit"
+                form="car-edit-form"
+                disabled={saveMut.isPending}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#556B2F] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+              >
+                Save &amp; Continue →
+              </button>
+            ) : (
+              <>
+                {["draft", "deactivated"].includes(status) && (
+                  <button
+                    type="button"
+                    disabled={activateMut.isPending || saveMut.isPending}
+                    onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#556B2F] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
+                  </button>
+                )}
+                {status === "active" && (
+                  <button
+                    type="button"
+                    disabled={deactivateMut.isPending}
+                    onClick={() => deactivateMut.mutate()}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm"
+                  >
+                    Deactivate
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

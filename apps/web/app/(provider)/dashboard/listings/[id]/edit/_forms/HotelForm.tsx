@@ -320,54 +320,59 @@ export function HotelForm({ listingId, listing }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5 animate-fade-in pb-16">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push("/dashboard/listings")}
-          className="w-9 h-9 rounded-xl border border-border bg-white flex items-center justify-center text-slate-600 hover:bg-surface-muted transition-all"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Hotel Listing</p>
-          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+    <div className="min-h-screen bg-[#f8f9f6] flex flex-col">
+      {/* ── Sticky Header ── */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-[#4c6a48]/15 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+          <button
+            onClick={() => router.push("/dashboard/listings")}
+            className="w-9 h-9 rounded-xl border border-[#4c6a48]/30 bg-white flex items-center justify-center text-[#4c6a48] hover:bg-[#e6ebe4] transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-[#4c6a48] uppercase tracking-widest">Hotel Listing</p>
+            <h1 className="text-lg font-bold text-slate-900 truncate leading-tight">{title}</h1>
+          </div>
+          <div className="ml-auto shrink-0"><Badge label={status} status={status} /></div>
         </div>
-        <div className="ml-auto"><Badge label={status} status={status} /></div>
       </div>
 
-      {/* Rejection banner */}
-      {(current?.rejectionReasons?.length ?? 0) > 0 && (
-        <div className="bg-danger-50 border border-danger/20 rounded-2xl p-4 flex gap-3">
-          <ShieldAlert className="w-5 h-5 text-danger shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-danger-dark">Listing Rejected</p>
-            <p className="text-xs text-danger-dark/80 mt-0.5">
-              {current?.rejectionNote ?? "Please address the following and re-submit."}
-            </p>
-            <ul className="list-disc pl-4 mt-1 space-y-0.5">
-              {(current?.rejectionReasons ?? []).map((r: string, i: number) => (
-                <li key={i} className="text-xs text-danger-dark">{r}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
+      {/* ── Main scroll area ── */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4 pb-28 animate-fade-in">
 
-      {/* Toasts */}
-      {ok  && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
-      {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark" ><AlertCircle className="w-4 h-4 text-danger shrink-0"  />{err}</div>}
+          {/* Rejection banner */}
+          {(current?.rejectionReasons?.length ?? 0) > 0 && (
+            <div className="bg-danger-50 border border-danger/20 rounded-2xl p-4 flex gap-3">
+              <ShieldAlert className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-danger-dark">Listing Rejected</p>
+                <p className="text-xs text-danger-dark/80 mt-0.5">
+                  {current?.rejectionNote ?? "Please address the following and re-submit."}
+                </p>
+                <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                  {(current?.rejectionReasons ?? []).map((r: string, i: number) => (
+                    <li key={i} className="text-xs text-danger-dark">{r}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
 
-      <FormShell
-        steps={STEPS}
-        activeStep={step}
-        status={status}
-        onStepClick={(id) => { setTried(false); setStep(id as Step); }}
-        isComplete={isComplete}
-        isLocked={isLocked}
-      >
-        <form onSubmit={handleNext} className="space-y-5">
-          <Card className="min-h-[420px]">
+          {ok  && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
+          {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark"><AlertCircle className="w-4 h-4 text-danger shrink-0" />{err}</div>}
+
+          <FormShell
+            steps={STEPS}
+            activeStep={step}
+            status={status}
+            onStepClick={(id) => { setTried(false); setStep(id as Step); }}
+            isComplete={isComplete}
+            isLocked={isLocked}
+          >
+            <form id="hotel-edit-form" onSubmit={handleNext} className="space-y-5">
+              <Card className="min-h-[420px]">
 
             {/* ── Property step ── */}
             {step === "property" && (
@@ -613,84 +618,92 @@ export function HotelForm({ listingId, listing }: Props) {
                 </div>
               </div>
             )}
-          </Card>
+              </Card>
+            </form>
+          </FormShell>
+        </div>
+      </div>
 
-          {/* Footer */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-border">
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => router.push("/dashboard/listings")}>
-                Exit
-              </Button>
-              {step !== "property" && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    const idx  = STEPS.findIndex((t) => t.id === step);
-                    const prev = STEPS[idx - 1];
-                    if (prev) { setTried(false); setStep(prev.id as Step); }
-                  }}
-                >
-                  ← Back
-                </Button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
+      {/* ── Sticky Footer ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-[#4c6a48]/15 shadow-[0_-4px_20px_rgba(76,106,72,0.08)]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/listings")}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/30 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] transition-all"
+            >
+              Exit
+            </button>
+            {step !== "property" && (
+              <button
                 type="button"
-                variant="outline"
-                loading={saveMut.isPending}
-                onClick={handleSaveDraft}
-                icon={<Save />}
+                onClick={() => {
+                  const idx  = STEPS.findIndex((t) => t.id === step);
+                  const prev = STEPS[idx - 1];
+                  if (prev) { setTried(false); setStep(prev.id as Step); }
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-all"
               >
-                Save Draft
-              </Button>
-
-              {step !== "media" ? (
-                <Button type="submit" variant="primary" loading={saveMut.isPending}>
-                  Save & Continue →
-                </Button>
-              ) : (
-                <>
-                  {["draft", "rejected"].includes(status) && (
-                    <Button
-                      type="button"
-                      variant="success"
-                      loading={submitMut.isPending || saveMut.isPending}
-                      onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => submitMut.mutate() }); }}
-                      icon={<Award />}
-                    >
-                      Submit for Review
-                    </Button>
-                  )}
-                  {status === "deactivated" && (
-                    <Button
-                      type="button"
-                      variant="success"
-                      loading={reactivateMut.isPending || saveMut.isPending}
-                      onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => reactivateMut.mutate() }); }}
-                      icon={<CheckCircle />}
-                    >
-                      Reactivate
-                    </Button>
-                  )}
-                  {["active", "approved"].includes(status) && (
-                    <Button
-                      type="button"
-                      variant="danger"
-                      loading={deactivateMut.isPending}
-                      onClick={() => deactivateMut.mutate()}
-                    >
-                      Deactivate
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
+                ← Back
+              </button>
+            )}
           </div>
-        </form>
-      </FormShell>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={saveMut.isPending}
+              onClick={handleSaveDraft}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/40 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
+            >
+              <Save className="w-3.5 h-3.5" /> Save Draft
+            </button>
+            {step !== "media" ? (
+              <button
+                type="submit"
+                form="hotel-edit-form"
+                disabled={saveMut.isPending}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+              >
+                Save &amp; Continue →
+              </button>
+            ) : (
+              <>
+                {["draft", "rejected"].includes(status) && (
+                  <button
+                    type="button"
+                    disabled={submitMut.isPending || saveMut.isPending}
+                    onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => submitMut.mutate() }); }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                  >
+                    <Award className="w-3.5 h-3.5" /> Submit for Review
+                  </button>
+                )}
+                {status === "deactivated" && (
+                  <button
+                    type="button"
+                    disabled={reactivateMut.isPending || saveMut.isPending}
+                    onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => reactivateMut.mutate() }); }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" /> Reactivate
+                  </button>
+                )}
+                {["active", "approved"].includes(status) && (
+                  <button
+                    type="button"
+                    disabled={deactivateMut.isPending}
+                    onClick={() => deactivateMut.mutate()}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm"
+                  >
+                    Deactivate
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

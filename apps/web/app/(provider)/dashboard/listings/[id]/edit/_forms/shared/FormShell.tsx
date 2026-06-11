@@ -30,27 +30,27 @@ export function FormShell({
   const pct = Math.round((done / steps.length) * 100);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-2 items-start">
       {/* Sidebar */}
-      <div className="lg:col-span-1 space-y-4 sticky top-24 h-fit">
-        <Card padding="md" className="bg-white border border-emerald-200 text-emerald-900 shadow-xl relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-100/20 rounded-full blur-3xl" />
+      <div className="lg:col-span-1 space-y-4 sticky top-[72px] h-fit shadow-md">
+        <Card padding="md" className="bg-[#F8F8F5] border border-[#556B2F]/20 text-[#3E4E22] shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-[#EEF2E6]/30 rounded-full blur-3xl" />
           <div className="relative z-10">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600">Progress</span>
+            <span className="text-[10px] uppercase font-bold tracking-wider text-[#556B2F]">Progress</span>
             <div className="flex items-baseline justify-between mt-1">
-              <span className="text-2xl font-black text-emerald-900">{pct}%</span>
-              <span className="text-xs text-emerald-700 font-medium">{done} / {steps.length}</span>
+              <span className="text-2xl font-black text-[#3E4E22]">{pct}%</span>
+              <span className="text-xs text-[#556B2F] font-medium">{done} / {steps.length}</span>
             </div>
-            <div className="w-full bg-emerald-100/80 rounded-full h-2 mt-2.5 overflow-hidden">
+            <div className="w-full bg-[#EEF2E6] rounded-full h-2 mt-2.5 overflow-hidden">
               <div
-                className="bg-gradient-to-r from-emerald-400 to-emerald-600 h-full rounded-full transition-all duration-500"
+                className="bg-gradient-to-r from-[#556B2F] to-[#3E4E22] h-full rounded-full transition-all duration-500"
                 style={{ width: `${pct}%` }}
               />
             </div>
           </div>
         </Card>
 
-        <Card padding="none" className="py-2 border border-border shadow-sm">
+        <Card padding="none" className="py-2 border border-border shadow-sm bg-[#F8F8F5]">
           {steps.map((step, idx) => {
             const locked   = isLocked(step.id);
             // A step shows ✓ ONLY if it's strictly BEHIND the active step AND passes validation.
@@ -67,17 +67,17 @@ export function FormShell({
                 onClick={() => !locked && onStepClick(step.id)}
                 className={cn(
                   "w-full text-left flex items-start gap-3.5 px-4 py-3.5 border-l-2 transition-all duration-200 group relative",
-                  active  ? "border-emerald-600 bg-emerald-50" : "border-transparent",
-                  !locked && !active ? "hover:bg-slate-50 cursor-pointer" : "",
-                  locked  ? "opacity-50 cursor-not-allowed bg-emerald-50/30" : "",
+                  active  ? "border-[#556B2F] bg-[#EEF2E6]/40" : "border-transparent",
+                  !locked && !active ? "hover:bg-slate-50/80 cursor-pointer" : "",
+                  locked  ? "opacity-50 cursor-not-allowed bg-slate-50/10" : "",
                 )}
               >
                 <div className={cn(
                   "w-7 h-7 rounded-xl flex items-center justify-center shrink-0 border-2 transition-all",
-                  active    ? "border-emerald-600 bg-emerald-600 text-white shadow-glow-primary scale-105"
-                  : complete ? "border-emerald-500 bg-emerald-50 text-emerald-600"
-                  : !locked  ? "border-slate-300 bg-white text-slate-500 group-hover:border-slate-400"
-                  :            "border-slate-200 bg-slate-100 text-slate-400",
+                  active    ? "border-[#556B2F] bg-[#556B2F] text-white shadow-[0_0_12px_rgba(76,106,72,0.2)] scale-105"
+                    : complete ? "border-[#556B2F] bg-[#EEF2E6] text-[#556B2F]"
+                    : !locked  ? "border-slate-300 bg-white text-slate-500 group-hover:border-slate-400"
+                    :            "border-slate-200 bg-slate-100 text-slate-400",
                 )}>
                   {/* Always show the number when active or ahead; show ✓ only for past+complete steps */}
                   {complete && !active
@@ -87,8 +87,8 @@ export function FormShell({
                 <div className="min-w-0">
                   <p className={cn(
                     "text-xs font-bold",
-                    active    ? "text-primary-800"
-                    : complete ? "text-emerald-800"
+                    active    ? "text-[#3E4E22]"
+                    : complete ? "text-[#556B2F]"
                     :            "text-slate-700",
                   )}>
                     {step.label}
@@ -105,7 +105,7 @@ export function FormShell({
       </div>
 
       {/* Content */}
-      <div className="lg:col-span-3">
+              <div className="lg:col-span-4">
         {children}
       </div>
     </div>
