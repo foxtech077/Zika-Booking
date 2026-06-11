@@ -195,6 +195,7 @@ model Listing {
   cancellationPolicy    CancellationPolicy? @map("cancellation_policy")
   smokingAllowed        Boolean             @default(false) @map("smoking_allowed")
   petsAllowed           Boolean             @default(false) @map("pets_allowed")
+  allowPreBooking       Boolean             @default(false) @map("allow_pre_booking")
   address               String?             @db.Text
   lat                   Decimal?            @db.Decimal(9, 6)
   lng                   Decimal?            @db.Decimal(9, 6)
@@ -669,19 +670,22 @@ model ListingModerationLog {
 enum ConversationStatus {
   open
   closed
+  archived
+  flagged
 
   @@schema("listing")
 }
 
 model Conversation {
-  id         String             @id @default(uuid())
-  bookingId  String?            @unique @map("booking_id")
-  listingId  String             @map("listing_id")
-  guestId    String             @map("guest_id")
-  providerId String             @map("provider_id")
-  status     ConversationStatus @default(open)
-  createdAt  DateTime           @default(now()) @map("created_at")
-  updatedAt  DateTime           @updatedAt @map("updated_at")
+  id            String             @id @default(uuid())
+  bookingId     String?            @unique @map("booking_id")
+  listingId     String             @map("listing_id")
+  guestId       String             @map("guest_id")
+  providerId    String             @map("provider_id")
+  status        ConversationStatus @default(open)
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+  lastMessageAt DateTime?          @map("last_message_at")
 
   messages Message[]
 
@@ -694,14 +698,30 @@ model Message {
   conversationId String    @map("conversation_id")
   senderId       String    @map("sender_id")
   senderType     String    @map("sender_type") @db.VarChar(20)
-  body           String    @db.Text
+  type           String    @default("text") @db.VarChar(20)
+  body           String?   @db.Text
+  imageUrl       String?   @map("image_url") @db.Text
+  metadata       Json?
   isFiltered     Boolean   @default(false) @map("is_filtered")
   readAt         DateTime? @map("read_at")
+  deletedAt      DateTime? @map("deleted_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@map("messages")
+  @@schema("listing")
+}
+
+model MessageFilterLog {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  body      String   @db.Text
+  matchedOn String   @map("matched_on")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, createdAt])
+  @@map("message_filter_logs")
   @@schema("listing")
 }
 

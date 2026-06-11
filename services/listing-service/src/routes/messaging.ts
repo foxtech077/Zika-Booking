@@ -14,12 +14,13 @@ const CONTACT_PATTERNS = [
   /@\w{3,}/,                               // social handles
 ];
 
-function filterMessage(body: string): { filtered: boolean; text: string } {
-  const matched = CONTACT_PATTERNS.some((re) => re.test(body));
-  if (!matched) return { filtered: false, text: body };
+function filterMessage(body: string): { filtered: boolean; text: string; matchedOn?: string } {
+  const match = CONTACT_PATTERNS.find((re) => re.test(body));
+  if (!match) return { filtered: false, text: body };
   return {
     filtered: true,
-    text: "This message was hidden because it contained contact information. Please complete bookings through ZikaBooking.",
+    text: body,
+    matchedOn: match.toString(),
   };
 }
 
@@ -56,10 +57,14 @@ app.post(
     }
 
     const listing = await prisma.listing.findFirst({
-      where: { id: body.listingId, deletedAt: null },
-      select: { id: true, providerId: true },
+      where: { id: body.listingId },
+      select: { id: true, providerId: true, allowPreBooking: true },
     });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+    if (!body.bookingId && !listing.allowPreBooking) {
+      return sendError(reply, 403, "FORBIDDEN", "This listing does not allow pre-booking enquiries.");
+    }
 
     const guestId = user.providerId;
     const providerId = listing.providerId;
@@ -255,22 +260,50 @@ app.post(
 
     const senderType = convo.guestId === userId ? "guest" : "provider";
 
-    const { filtered, text } = filterMessage(body.body.trim());
+    const { filtered, text, matchedOn } = filterMessage(body.body.trim());
+
+    if (filtered) {
+      await prisma.messageFilterLog.create({
+        data: {
+          userId,
+          body: text,
+          matchedOn: matchedOn || "unknown",
+        }
+      });
+      
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const violations = await prisma.messageFilterLog.count({
+        where: { userId, createdAt: { gte: twentyFourHoursAgo } }
+      });
+
+      if (violations >= 5) {
+        await prisma.$executeRaw`UPDATE auth."User" SET "messagingSuspendedUntil" = NOW() + INTERVAL '48 hours' WHERE id = ${userId}`;
+        return sendError(reply, 403, "SUSPENDED", "Your account has been suspended from messaging for 48 hours due to repeated policy violations.");
+      } else if (violations >= 3) {
+        await prisma.conversation.update({
+          where: { id },
+          data: { status: "flagged" }
+        });
+      }
+
+      return sendError(reply, 400, "POLICY_VIOLATION", "Your message contains contact information. ZikaBooking requires all communication to stay in-app to protect both parties.");
+    }
 
     const message = await prisma.message.create({
       data: {
         conversationId: id,
         senderId: userId,
         senderType,
-        body: filtered ? text : body.body.trim(),
-        isFiltered: filtered
+        body: text,
+        isFiltered: false
       }
     });
 
     await prisma.conversation.update({
       where: { id },
       data: {
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        lastMessageAt: new Date()
       }
     });
 
@@ -284,6 +317,26 @@ app.post(
     });
   }
 );
+
+  // ── PATCH /conversations/:id/archive ──────────────────────────────────
+  app.patch("/conversations/:id/archive", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { id } = req.params as { id: string };
+    const userId = (req as ProviderRequest).providerId;
+
+    const convo = await prisma.conversation.findUnique({ where: { id } });
+    if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
+
+    if (convo.guestId !== userId && convo.providerId !== userId) {
+      return sendError(reply, 403, "FORBIDDEN", "You are not part of this conversation.");
+    }
+
+    await prisma.conversation.update({
+      where: { id },
+      data: { status: "archived" }
+    });
+
+    return sendSuccess(reply, 200, { success: true });
+  });
 
   // ── GET /conversations/unread-count — unread message count ────────────
   app.get("/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {

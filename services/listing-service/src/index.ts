@@ -16,6 +16,8 @@ import { voucherRoutes } from "./routes/vouchers.js";
 import { providerRoutes } from "./routes/provider.js";
 import { icalRoutes, startIcalPoller } from "./routes/ical.js";
 import { messagingRoutes } from "./routes/messaging.js";
+import { adminMessagingRoutes } from "./routes/admin-messaging.js";
+import { startRetentionJob } from "./lib/retention-job.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
@@ -133,6 +135,7 @@ async function build() {
   await app.register(providerRoutes);
   await app.register(icalRoutes);
   await app.register(messagingRoutes);
+  await app.register(adminMessagingRoutes);
 
   app.setErrorHandler((error: { statusCode?: number; message: string }, _req, reply) => {
     app.log.error(error);
@@ -155,6 +158,7 @@ async function main() {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Listing Service] listening on ${HOST}:${PORT}`);
     startIcalPoller();
+    startRetentionJob();
   } catch (err) {
     app.log.error(err);
     process.exit(1);
