@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const listingApi = axios.create({
-  baseURL: "/admin/listing-api",
+  baseURL: "/listing-api",
   withCredentials: true,
   timeout: 15_000,
 });

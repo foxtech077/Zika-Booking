@@ -25,8 +25,8 @@ const fetchBookings = () =>
 const fetchListings = () =>
   listingApi.get("/admin/listings?limit=1").then((r) => r.data.data ?? r.data);
 
-const fetchReviewQueue = () =>
-  listingApi.get("/admin/listings/review-queue?limit=1").then((r) => r.data.data ?? r.data);
+const fetchReviewQueue = (params: Record<string, string>) =>
+  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 const fetchAuditLogs = () =>
   api.get("/admin/audit-logs?limit=8").then((r) => r.data.data ?? r.data);
@@ -83,11 +83,21 @@ function buildStatusDonut(bookings: any[]) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { user } = useAuthStore();
+  const isCountryManager = user?.role === "country_manager";
+  const userCountryScope = user?.countryScope ?? [];
+  const defaultCountry = isCountryManager && userCountryScope.length > 0 ? userCountryScope[0] : "";
+
+  const queueParams = { limit: "100", ...(defaultCountry ? { country: defaultCountry } : {}) };
+
   const { data: usersData, isLoading: loadingUsers } = useQuery({ queryKey: ["admin-users-count"], queryFn: fetchUsers });
   const { data: bookingsData, isLoading: loadingBookings } = useQuery({ queryKey: ["admin-bookings-dash"], queryFn: fetchBookings });
   const { data: listingsData, isLoading: loadingListings } = useQuery({ queryKey: ["admin-listings-dash"], queryFn: fetchListings });
-  const { data: queueData, isLoading: loadingQueue } = useQuery({ queryKey: ["admin-queue-dash"], queryFn: fetchReviewQueue });
   const role = useAuthStore(state => state.user?.role);
+  const { data: queueData, isLoading: loadingQueue } = useQuery({
+    queryKey: ["admin-queue-dash", queueParams],
+    queryFn: () => fetchReviewQueue(queueParams),
+  });
   const { data: auditData, isLoading: loadingAudit } = useQuery({ queryKey: ["admin-audit-dash"], queryFn: fetchAuditLogs });
   const bookings: any[] = bookingsData?.bookings ?? [];
   const confirmedBookings = bookings.filter((b) => ["confirmed", "completed"].includes(b.status));
@@ -95,6 +105,10 @@ export default function DashboardPage() {
   const totalCommission = confirmedBookings.reduce((s, b) => s + Number(b.commissionAmount ?? 0), 0);
   const revenueChart = buildRevenueChart(bookings);
   const statusDonut = buildStatusDonut(bookings);
+
+  const displayQueueCount = queueData
+    ? (queueData.tasks?.length === 0 ? 0 : (queueData.tasks?.length < 100 ? queueData.tasks.length : queueData.total))
+    : 0;
 
   return (
     <div className="space-y-6 max-w-screen-2xl">
@@ -164,6 +178,47 @@ export default function DashboardPage() {
             loading={loadingQueue}
           />
         )}
+        <StatCard
+          title="Total Revenue"
+          value={totalRevenue}
+          currency="USD"
+          change={7.2}
+          icon={<DollarSign className="h-4 w-4 text-success" />}
+          iconBg="bg-success/10"
+          loading={loadingBookings}
+        />
+        <StatCard
+          title="Platform Commission"
+          value={totalCommission}
+          currency="USD"
+          change={5.1}
+          icon={<TrendingUp className="h-4 w-4 text-info" />}
+          iconBg="bg-info/10"
+          loading={loadingBookings}
+        />
+        <StatCard
+          title="Total Users"
+          value={usersData?.total ?? 0}
+          change={12.8}
+          icon={<Users className="h-4 w-4 text-purple-600" />}
+          iconBg="bg-purple-100"
+          loading={loadingUsers}
+        />
+        <StatCard
+          title="Total Listings"
+          value={listingsData?.total ?? 0}
+          change={2.1}
+          icon={<Building2 className="h-4 w-4 text-teal-600" />}
+          iconBg="bg-teal-100"
+          loading={loadingListings}
+        />
+        <StatCard
+          title="Pending Accreditation"
+          value={displayQueueCount}
+          icon={<BadgeCheck className="h-4 w-4 text-warning" />}
+          iconBg="bg-warning/10"
+          loading={loadingQueue}
+        />
         <StatCard
           title="Confirmed Bookings"
           value={confirmedBookings.length}
