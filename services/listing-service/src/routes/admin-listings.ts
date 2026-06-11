@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
+
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
   sendListingApprovedEmail,
@@ -111,7 +112,7 @@ async function verifyListingScope(
   }
 
   if (admin.adminRole === "country_manager") {
-    if (!admin.adminCountry || listing.country !== admin.adminCountry) {
+    if (!listing.country || !admin.countryScope.includes(listing.country)) {
       throw new Error("OUT_OF_SCOPE");
     }
   }
@@ -121,7 +122,7 @@ async function verifyListingScope(
 export async function adminListingRoutes(app: FastifyInstance) {
 
   // ── GET /admin/listings/review-queue (UC-2.8) ─────────────────────────────
- app.get("/admin/listings/review-queue", {
+  app.get("/admin/listings/review-queue", {
     preHandler: [requireAdmin],
     schema: {
       tags: ["Admin Listings"],
@@ -193,19 +194,19 @@ export async function adminListingRoutes(app: FastifyInstance) {
       slaStatus === "breached"
         ? { slaDeadline: { lt: now } }
         : slaStatus === "approaching"
-        ? {
+          ? {
             slaDeadline: {
               gte: now,
               lt: new Date(now.getTime() + 4 * 60 * 60 * 1000),
             },
           }
-        : slaStatus === "ok"
-        ? {
-            slaDeadline: {
-              gte: new Date(now.getTime() + 4 * 60 * 60 * 1000),
-            },
-          }
-        : {};
+          : slaStatus === "ok"
+            ? {
+              slaDeadline: {
+                gte: new Date(now.getTime() + 4 * 60 * 60 * 1000),
+              },
+            }
+            : {};
     const isCountryManager = admin.adminRole === "country_manager";
 
     const listingFilter: any = {
@@ -213,7 +214,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
     };
 
     if (isCountryManager) {
-      listingFilter.country = admin.adminCountry ?? "UNDEFINED_COUNTRY";
+      if (country) {
+        if (admin.countryScope.includes(country)) {
+          listingFilter.country = country;
+        } else {
+          listingFilter.country = { in: [] };
+        }
+      } else {
+        listingFilter.country = { in: admin.countryScope };
+      }
     } else if (country) {
       listingFilter.country = country;
     }
@@ -256,21 +265,21 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     });
 
- const total = await prisma.listingReviewTask.count({
-  where: {
-    status: taskStatus
-      ? (taskStatus as ReviewTaskStatus)
-      : { in: ["open", "escalated"] },
-    AND: [
-      slaFilter,
-      {
-        listing: {
-          is: listingFilter,
-        },
+    const total = await prisma.listingReviewTask.count({
+      where: {
+        status: taskStatus
+          ? (taskStatus as ReviewTaskStatus)
+          : { in: ["open", "escalated"] },
+        AND: [
+          slaFilter,
+          {
+            listing: {
+              is: listingFilter,
+            },
+          },
+        ],
       },
-    ],
-  },
-});
+    });
 
     const signedTasks = await Promise.all(
       tasks.map(async (t) => ({
@@ -368,26 +377,26 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-} 
+      throw error;
+    }
     const listing = await prisma.listing.findUnique({
       where: { id },
       include: {
@@ -472,31 +481,31 @@ try {
     if (!checkAdminRole(req, reply)) return;
     const admin = req as AdminRequest;
     const { id, docId } = req.params as { id: string; docId: string };
-try {
-    await verifyListingScope(admin, id);
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "LISTING_NOT_FOUND") {
-        return sendError(
-          reply,
-          404,
-          "NOT_FOUND",
-          "Listing not found."
-        );
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(
+            reply,
+            404,
+            "NOT_FOUND",
+            "Listing not found."
+          );
+        }
+
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
       }
 
-      if (error.message === "OUT_OF_SCOPE") {
-        return sendError(
-          reply,
-          403,
-          "FORBIDDEN",
-          "This listing is outside your country scope."
-        );
-      }
+      throw error;
     }
-
-    throw error;
-  }
 
     const doc = await prisma.listingDocument.findFirst({ where: { id: docId, listingId: id } });
     if (!doc) return sendError(reply, 404, "NOT_FOUND", "Document not found.");
@@ -532,39 +541,41 @@ try {
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId },include: {
-    listing: {
-      select: {
-        id: true,
+    const task = await prisma.listingReviewTask.findUnique({
+      where: { id: taskId }, include: {
+        listing: {
+          select: {
+            id: true,
+          },
+        },
       },
-    },
-  }, });
+    });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
     try {
-  await verifyListingScope(admin, task.listing.id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(
-        reply,
-        404,
-        "NOT_FOUND",
-        "Listing not found."
-      );
-    }
+      await verifyListingScope(admin, task.listing.id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(
+            reply,
+            404,
+            "NOT_FOUND",
+            "Listing not found."
+          );
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This review task is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This review task is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     if (!["open", "escalated"].includes(task.status)) {
       return sendError(reply, 409, "TASK_RESOLVED", "Cannot assign a resolved task.");
     }
@@ -602,38 +613,41 @@ try {
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId },include: {
-    listing: {
-      select: {
-        id: true,
-      },
-    },} });
+    const task = await prisma.listingReviewTask.findUnique({
+      where: { id: taskId }, include: {
+        listing: {
+          select: {
+            id: true,
+          },
+        },
+      }
+    });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
     try {
-  await verifyListingScope(admin, task.listing.id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(
-        reply,
-        404,
-        "NOT_FOUND",
-        "Listing not found."
-      );
-    }
+      await verifyListingScope(admin, task.listing.id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(
+            reply,
+            404,
+            "NOT_FOUND",
+            "Listing not found."
+          );
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This review task is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This review task is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     if (!["open", "escalated"].includes(task.status)) {
       return sendError(reply, 409, "TASK_RESOLVED", "Cannot unassign a resolved task.");
     }
@@ -679,39 +693,41 @@ try {
     const { taskId } = req.params as { taskId: string };
     const { reason } = req.body as { reason?: string };
 
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId },include: {
-    listing: {
-      select: {
-        id: true,
+    const task = await prisma.listingReviewTask.findUnique({
+      where: { id: taskId }, include: {
+        listing: {
+          select: {
+            id: true,
+          },
+        },
       },
-    },
-  }, });
+    });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
     try {
-  await verifyListingScope(admin, task.listing.id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(
-        reply,
-        404,
-        "NOT_FOUND",
-        "Listing not found."
-      );
-    }
+      await verifyListingScope(admin, task.listing.id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(
+            reply,
+            404,
+            "NOT_FOUND",
+            "Listing not found."
+          );
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This review task is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This review task is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     if (!["open", "awaiting_provider_response"].includes(task.status)) {
       return sendError(reply, 409, "INVALID_STATUS", "Only open or awaiting-provider-response tasks can be escalated.");
     }
@@ -748,9 +764,9 @@ try {
         type: "object",
         required: ["decision"],
         properties: {
-          decision: { 
-            type: "string", 
-            enum: ["unblock_warning", "unblock_no_warning", "keep_suspended", "ban"] 
+          decision: {
+            type: "string",
+            enum: ["unblock_warning", "unblock_no_warning", "keep_suspended", "ban"]
           },
           adminNote: { type: "string", minLength: 1 },
         },
@@ -865,29 +881,37 @@ try {
     },
     preHandler: [requireAdmin],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
+   
     const admin = req as AdminRequest;
+    if (!["admin", "super_admin"].includes(admin.adminRole)) {
+  return sendError(
+    reply,
+    403,
+    "FORBIDDEN",
+    "Only Admin or Super Admin can modify star ratings."
+  );
+}
     const { id } = req.params as { id: string };
     try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
 
     if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
@@ -936,29 +960,46 @@ try {
       }
 
       await tx.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action: "approved",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: {
-            starRating,
-            claimedStarRating: listing.claimedStarRating,
-            adminNote: adminNote ?? null,
-            taskId: task?.id ?? null,
-            submissionNumber: task?.submissionNumber ?? listing.submissionCount,
-            ipAddress: req.ip,
-          },
-        },
-      });
+  data: {
+    listingId: id,
+    action: "approved",
+    actorId: admin.adminId,
+    actorRole: admin.adminRole,
+    metadata: {
+      starRating,
+      claimedStarRating: listing.claimedStarRating,
+      adminNote: adminNote ?? null,
+      taskId: task?.id ?? null,
+      submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+      ipAddress: req.ip,
+    },
+  },
+});
 
-      return { actioned: true };
-    });
-
+return { actioned: true };
+});
     if (!result.actioned) {
       return sendError(reply, 409, "INVALID_STATUS",
         "Listing is not pending review — it may have already been actioned by another admin.");
     }
+//     await authPrisma.auditLog.create({
+//   data: {
+//     adminId: admin.adminId,
+//     role: admin.adminRole,
+//     action: "listing_approved",
+//     targetType: "listing",
+//     targetId: id,
+//     oldValue: JSON.stringify({
+//       status: listing.status,
+//       claimedStarRating: listing.claimedStarRating,
+//     }),
+//     newValue: JSON.stringify({
+//       status: "approved",
+//       starRating,
+//     }),
+//     ipAddress: req.ip,
+//   },
+// }).catch(() => null);
 
     sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
     return sendSuccess(reply, 200, { message: "Listing approved and published." });
@@ -1022,26 +1063,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     const { reasons, providerNote, adminNote } = req.body as {
       reasons: string[];
       providerNote?: string;
@@ -1107,7 +1148,23 @@ try {
           },
         },
       });
-
+// await tx.auditLog.create({
+//   data: {
+//     adminId: admin.adminId,
+//     role: admin.adminRole,
+//     action: "listing_rejected",
+//     targetType: "listing",
+//     targetId: id,
+//     oldValue: JSON.stringify({
+//       status: listing.status,
+//     }),
+//     newValue: JSON.stringify({
+//       status: "rejected",
+//       reasons,
+//     }),
+//     ipAddress: req.ip,
+//   },
+// });
       return { actioned: true };
     });
 
@@ -1165,26 +1222,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     const { starRating, reason } = req.body as { starRating: number; reason: string };
 
     if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
@@ -1199,17 +1256,39 @@ try {
     const oldRating = listing.starRating ?? 0;
 
     await prisma.$transaction([
-      prisma.listing.update({ where: { id }, data: { starRating } }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action: "star_rating_updated",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: { oldRating, newRating: starRating, reason, ipAddress: req.ip },
-        },
-      }),
-    ]);
+  prisma.listing.update({
+    where: { id },
+    data: { starRating },
+  }),
+
+  prisma.listingModerationLog.create({
+    data: {
+      listingId: id,
+      action: "star_rating_updated",
+      actorId: admin.adminId,
+      actorRole: admin.adminRole,
+      metadata: {
+        oldRating,
+        newRating: starRating,
+        reason,
+        ipAddress: req.ip,
+      },
+    },
+  }),
+
+  // prisma.auditLog.create({
+  //   data: {
+  //     adminId: admin.adminId,
+  //     role: admin.adminRole,
+  //     action: "star_rating_updated",
+  //     targetType: "listing",
+  //     targetId: id,
+  //     oldValue: String(oldRating),
+  //     newValue: String(starRating),
+  //     ipAddress: req.ip,
+  //   },
+  // }),
+]);
 
     sendStarRatingUpdatedEmail(listing.providerId, listing.name ?? id, oldRating, starRating, reason).catch(() => null);
     return sendSuccess(reply, 200, { message: "Star rating updated." });
@@ -1259,26 +1338,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };
 
     if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Suspension reason is required.");
@@ -1290,20 +1369,44 @@ try {
     }
 
     await prisma.$transaction([
-      prisma.listing.update({
-        where: { id },
-        data: { status: "suspended", suspendedAt: new Date(), suspendedBy: admin.adminId, suspensionReason: reason },
-      }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action: "suspended",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: { reason, previousStatus: listing.status, notifyProvider, ipAddress: req.ip },
-        },
-      }),
-    ]);
+  prisma.listing.update({
+    where: { id },
+    data: {
+      status: "suspended",
+      suspendedAt: new Date(),
+      suspendedBy: admin.adminId,
+      suspensionReason: reason,
+    },
+  }),
+
+  prisma.listingModerationLog.create({
+    data: {
+      listingId: id,
+      action: "suspended",
+      actorId: admin.adminId,
+      actorRole: admin.adminRole,
+      metadata: {
+        reason,
+        previousStatus: listing.status,
+        notifyProvider,
+        ipAddress: req.ip,
+      },
+    },
+  }),
+
+  // prisma.auditLog.create({
+  //   data: {
+  //     adminId: admin.adminId,
+  //     role: admin.adminRole,
+  //     action: "listing_suspended",
+  //     targetType: "listing",
+  //     targetId: id,
+  //     oldValue: listing.status,
+  //     newValue: "suspended",
+  //     ipAddress: req.ip,
+  //   },
+  // }),
+]);
 
     if (notifyProvider) {
       sendListingSuspendedEmail(listing.providerId, listing.name ?? id).catch(() => null);
@@ -1348,26 +1451,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     const { reason } = req.body as { reason?: string };
 
     const listing = await prisma.listing.findUnique({ where: { id } });
@@ -1458,26 +1561,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
 
     const listing = await prisma.listing.findUnique({
       where: { id },
@@ -1569,26 +1672,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
 
     const listing = await prisma.listing.findUnique({
       where: { id },
@@ -1690,7 +1793,13 @@ try {
         q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { town: { contains: q, mode: "insensitive" as const } }] } : {},
         status ? { status: status as any } : {},
         category ? { category: category as any } : {},
-        isCountryManager ? { country: admin.adminCountry ?? "UNDEFINED_COUNTRY" } : (country ? { country } : {}),
+        isCountryManager
+          ? (country
+              ? (admin.countryScope.includes(country)
+                  ? { country }
+                  : { country: { in: [] } })
+              : { country: { in: admin.countryScope } })
+          : (country ? { country } : {}),
       ],
     };
 
@@ -1849,36 +1958,36 @@ try {
         },
       },
       response: {
-  200: ok({
-    type: "object",
-    properties: {
-      id: { type: "string" },
-      status: { type: "string" },
-      checkIn: { type: "string" },
-      checkOut: { type: "string" },
-      totalAmount: { type: "number" },
+        200: ok({
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            status: { type: "string" },
+            checkIn: { type: "string" },
+            checkOut: { type: "string" },
+            totalAmount: { type: "number" },
 
-      listing: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-          country: { type: "string" },
-          category: { type: "string" }
-        }
+            listing: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                country: { type: "string" },
+                category: { type: "string" }
+              }
+            },
+
+            statusLog: {
+              type: "array",
+              items: {
+                type: "object"
+              }
+            }
+          }
+        }),
+        404: ErrorResponse,
+        401: ErrorResponse,
+        403: ErrorResponse,
       },
-
-      statusLog: {
-        type: "array",
-        items: {
-          type: "object"
-        }
-      }
-    }
-  }),
-  404: ErrorResponse,
-  401: ErrorResponse,
-  403: ErrorResponse,
-},
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
