@@ -24,15 +24,14 @@ listingApi.interceptors.request.use((config) => {
   return config;
 });
 
-const _listingErrorLogger = (error: any) => {
+function _listingErrorLogger(error: any): void {
   const config = error.config ?? {};
   const fullUrl = `${config.baseURL ?? LISTING_BASE_URL}${config.url ?? ""}`;
   console.log(`[LISTING-API] ❌ ERROR on ${(config.method ?? "GET").toUpperCase()} ${fullUrl}`);
   console.log("[LISTING-API] HTTP status:", error?.response?.status);
   console.log("[LISTING-API] Response body:", JSON.stringify(error?.response?.data, null, 2));
   console.log("[LISTING-API] Error message:", error?.message);
-  return Promise.reject(error);
-};
+}
 
 const getAuthBaseUrl = () => {
   const envUrl = process.env["EXPO_PUBLIC_API_URL"];
@@ -85,9 +84,8 @@ listingApi.interceptors.response.use(
       }
       await refreshing;
       const newToken = useAuthStore.getState().accessToken;
-      if (newToken) {
-        original.headers.Authorization = `Bearer ${newToken}`;
-      }
+      if (!newToken) return Promise.reject(error);
+      original.headers.Authorization = `Bearer ${newToken}`;
       return listingApi(original);
     }
     return Promise.reject(error);
