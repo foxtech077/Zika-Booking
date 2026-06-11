@@ -97,10 +97,10 @@ async function build() {
   app.get("/health", async () => ({ status: "ok", service: "payment-service", timestamp: new Date().toISOString() }));
 
   // ── Route plugins ─────────────────────────────────────────────────────────
-  await app.register(paymentRoutes);
-  await app.register(webhookRoutes);
-  await app.register(paymentMethodRoutes);
-  await app.register(adminPaymentRoutes);
+  await app.register(paymentRoutes,);
+  await app.register(webhookRoutes,);
+  await app.register(paymentMethodRoutes,);
+  await app.register(adminPaymentRoutes,);
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler((error: any, _req, reply) => {

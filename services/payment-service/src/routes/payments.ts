@@ -126,7 +126,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     });
   });
   // ── POST /payments/initiate ───────────────────────────────────────────────
-  app.post("/payments/initiate", { preHandler: [requireUser],schema: {
+  app.post("/initiate", { preHandler: [requireUser],schema: {
     tags: ["Payments"],
     summary: "Pay using saved card or Tara",
     body: {
@@ -306,7 +306,7 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   // ── GET /payments/:id/status ──────────────────────────────────────────────
-  app.get("/payments/:id/status", { preHandler: [requireUser],schema: {
+  app.get("/:id/status", { preHandler: [requireUser],schema: {
     tags: ["Payments"],
     params: {
       type: "object",
@@ -348,7 +348,7 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   // ── POST /payments/refunds (internal) ─────────────────────────────────────
-  app.post("/payments/refunds",{schema: {
+  app.post("/refunds",{schema: {
     tags: ["Payments"],
     body: {
       type: "object",
