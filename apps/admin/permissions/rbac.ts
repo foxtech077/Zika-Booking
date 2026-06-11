@@ -165,8 +165,13 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     group: "Finance",
     items: [
-      { label: "Finance", href: "/dashboard/finance", icon: "DollarSign", permission: "view_finance" },
-      { label: "Commission", href: "/dashboard/commission", icon: "Percent", permission: "view_commission" },
+      { label: "Payment Dashboard", href: "/dashboard/finance", icon: "LayoutDashboard", permission: "view_finance" },
+      { label: "Booking Payments", href: "/dashboard/finance/payments", icon: "CreditCard", permission: "view_finance" },
+      { label: "Payout Management", href: "/dashboard/finance/payouts", icon: "Coins", permission: "view_finance" },
+      { label: "Refund Management", href: "/dashboard/finance/refunds", icon: "RotateCcw", permission: "view_finance" },
+      { label: "Commission Settings", href: "/dashboard/commission", icon: "Percent", permission: "view_commission" },
+      { label: "Commission History", href: "/dashboard/commission/history", icon: "History", permission: "view_commission" },
+      { label: "Financial Reports", href: "/dashboard/finance/reports", icon: "BarChart3", permission: "view_finance" },
       { label: "Vouchers", href: "/dashboard/vouchers", icon: "Ticket", permission: "view_vouchers" },
     ],
   },

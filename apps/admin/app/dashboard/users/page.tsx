@@ -23,9 +23,12 @@ export default function UsersPage() {
   const qc = useQueryClient();
 
   // If this admin has a country scope, restrict the user list to those countries
-  const scopedCountries: string[] = user?.role === "admin" ? (user?.countryScope ?? []) : [];
+  const scopedCountries: string[] = (user?.role === "admin" || user?.role === "country_manager")
+    ? (user?.countryScope ?? [])
+    : [];
 
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [userType, setUserType] = useState("");
@@ -40,7 +43,7 @@ export default function UsersPage() {
     // Inject country filter when admin is country-scoped
     ...(scopedCountries.length > 0 ? { country: scopedCountries.join(",") } : {}),
     page: String(page),
-    limit: "20",
+    limit: String(limit),
   };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-users", params],
@@ -212,7 +215,7 @@ export default function UsersPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<Users className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} onLimitChange={(newL) => { setLimit(newL); setPage(1); }} />
       </Card>
 
       {/* User detail drawer */}
