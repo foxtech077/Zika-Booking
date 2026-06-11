@@ -47,7 +47,7 @@ export default function ListingsPage() {
   // Sync country selection after auth store hydration
   useEffect(() => {
     if (scopedCountries.length > 0 && !country) {
-      setCountry(scopedCountries[0]);
+      setCountry(scopedCountries[0]?? "");
     }
   }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Listing | null>(null);
