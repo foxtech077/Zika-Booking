@@ -3,6 +3,8 @@ import { createHmac } from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError } from "../lib/errors.js";
+import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
+import Stripe from "stripe";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 const STRIPE_WEBHOOK_SECRET = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
@@ -39,7 +41,7 @@ async function failBooking(bookingId: string) {
 export async function webhookRoutes(app: FastifyInstance) {
 
   // ── POST /payments/stripe/webhook ─────────────────────────────────────────
-  app.post("/payments/stripe/webhook",{schema: {
+  app.post("/stripe/webhook",{schema: {
     tags: ["Webhooks"],
     summary: "Stripe webhook endpoint",
     description:
@@ -65,7 +67,9 @@ export async function webhookRoutes(app: FastifyInstance) {
     app.log.info(`[stripe-webhook] Received event: ${event.type}`);
 
     if (event.type === "payment_intent.succeeded") {
-      const intent = event.data.object as { id: string; charges?: { data?: Array<{ payment_method_details?: { card?: { brand?: string; last4?: string }; type?: string } }> } };
+      const intent = event.data.object as Stripe.PaymentIntent;
+      
+     
 
       const payment = await prisma.payment.findFirst({
         where: { providerPaymentId: intent.id },
@@ -81,11 +85,21 @@ export async function webhookRoutes(app: FastifyInstance) {
         return reply.status(200).send({ received: true });
       }
 
-      // Extract card details from charge if available
-      const charge = intent.charges?.data?.[0];
-      const cardDetails = charge?.payment_method_details?.card;
-      const pmType = charge?.payment_method_details?.type ?? null;
+      await bookingConfirmedHandler(intent);
+      
+      // Extract charge ID
+    const chargeId = intent.latest_charge as string | null;
 
+     // If you need full charge details
+         let cardDetails = null;
+     let pmType = null;
+
+     if (chargeId) {
+      const charge = await stripe.charges.retrieve(chargeId);
+
+      cardDetails = charge.payment_method_details?.card ?? null;
+      pmType = charge.payment_method_details?.type ?? null;
+}
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
@@ -211,7 +225,7 @@ export async function webhookRoutes(app: FastifyInstance) {
   });
 
   // ── POST /payments/tara/webhook ───────────────────────────────────────────
-  app.post("/payments/tara/webhook",{schema: {
+  app.post("/tara/webhook",{schema: {
     tags: ["Webhooks"],
     summary: "Tara webhook endpoint",
     description:
