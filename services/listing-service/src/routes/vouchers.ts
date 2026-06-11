@@ -580,6 +580,67 @@ export async function voucherRoutes(app: FastifyInstance) {
     },
   );
 
+  // ── PATCH /admin/vouchers/:id — toggle active status ─────────────────
+  app.patch(
+    "/admin/vouchers/:id",
+    {
+      schema: {
+        tags: ["Admin Vouchers"],
+        summary: "Toggle voucher active status",
+        security: [{ bearerAuth: [] }],
+        params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+        body: {
+          type: "object",
+          required: ["isActive"],
+          properties: { isActive: { type: "boolean" } },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: { success: { type: "boolean" }, data: voucherItemSchema },
+            required: ["success", "data"],
+          },
+          404: errSchema,
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const { id } = req.params as { id: string };
+      const { isActive } = req.body as { isActive: boolean };
+
+      const existing = await prisma.voucher.findUnique({ where: { id } });
+      if (!existing) return sendError(reply, 404, "NOT_FOUND", "Voucher not found.");
+
+      const voucher = await (prisma.voucher.update as any)({
+        where: { id },
+        data: {
+          isActive,
+          status: isActive ? "active" : "paused",
+        },
+      });
+
+      return sendSuccess(reply, 200, {
+        id:            voucher.id,
+        code:          voucher.code,
+        title:         voucher.title,
+        activityScope: voucher.activityScope,
+        discountType:  voucher.discountType,
+        discountValue: Number(voucher.discountValue),
+        minOrderValue: voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
+        maxDiscount:   voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
+        usageLimit:    voucher.usageLimit,
+        usageCount:    voucher.usageCount,
+        status:        voucher.status,
+        isActive:      voucher.isActive,
+        validFrom:     voucher.validFrom.toISOString(),
+        validUntil:    voucher.validUntil.toISOString(),
+        createdBy:     voucher.createdBy,
+        createdAt:     voucher.createdAt.toISOString(),
+      });
+    },
+  );
+
   // ── GET /admin/vouchers — list all vouchers ───────────────────────────
   app.get("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] }, preHandler: [requireAdmin] }, async (_req: FastifyRequest, reply: FastifyReply) => {
     const vouchers = await prisma.voucher.findMany({
