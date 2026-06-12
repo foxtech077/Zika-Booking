@@ -1,4 +1,4 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
@@ -6,6 +6,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import { paymentRoutes } from "./routes/payments.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { paymentMethodRoutes } from "./routes/payment-methods.js";
+import { adminPaymentRoutes } from "./routes/admin-payments.js";
 
 const PORT = Number(process.env["PORT"] ?? 3004);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
@@ -20,8 +21,8 @@ async function build() {
   await app.register(swagger, {
     openapi: {
       info: {
-        title: "Zika Booking Payment Service API",
-        description: "API documentation for Zika Booking Payment Service",
+        title: "Kainook Payment Service API",
+        description: "API documentation for Kainook Payment Service",
         version: "0.0.1",
       },
       servers: [
@@ -30,7 +31,7 @@ async function build() {
           description: "Local development server",
         },
         {
-          url: "https://api.kainook.com/payments",
+          url: "https://api.kainook.com",
           description: "Production server",
         },
       ],
@@ -99,6 +100,7 @@ async function build() {
   await app.register(paymentRoutes);
   await app.register(webhookRoutes);
   await app.register(paymentMethodRoutes);
+  await app.register(adminPaymentRoutes);
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler((error: any, _req, reply) => {

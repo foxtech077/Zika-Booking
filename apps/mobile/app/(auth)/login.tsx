@@ -219,7 +219,7 @@ function configureGoogleSignIn() {
   });
 }
 
-function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
+export function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
   const setAuth = useAuthStore((s) => s.setAuth);
 
   const mutation = useMutation({

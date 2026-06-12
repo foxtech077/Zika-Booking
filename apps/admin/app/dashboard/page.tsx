@@ -10,9 +10,9 @@ import { listingApi } from "@/lib/listing-api";
 import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Charts";
 import { Card, CardHeader, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { Avatar } from "@/components/ui/Avatar";
-import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
+import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
+import { Avatar } from "@/components/ui/Avatar";
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
@@ -93,19 +93,18 @@ export default function DashboardPage() {
   const { data: usersData, isLoading: loadingUsers } = useQuery({ queryKey: ["admin-users-count"], queryFn: fetchUsers });
   const { data: bookingsData, isLoading: loadingBookings } = useQuery({ queryKey: ["admin-bookings-dash"], queryFn: fetchBookings });
   const { data: listingsData, isLoading: loadingListings } = useQuery({ queryKey: ["admin-listings-dash"], queryFn: fetchListings });
+  const role = useAuthStore(state => state.user?.role);
   const { data: queueData, isLoading: loadingQueue } = useQuery({
     queryKey: ["admin-queue-dash", queueParams],
     queryFn: () => fetchReviewQueue(queueParams),
   });
   const { data: auditData, isLoading: loadingAudit } = useQuery({ queryKey: ["admin-audit-dash"], queryFn: fetchAuditLogs });
-
   const bookings: any[] = bookingsData?.bookings ?? [];
   const confirmedBookings = bookings.filter((b) => ["confirmed", "completed"].includes(b.status));
   const totalRevenue = confirmedBookings.reduce((s, b) => s + Number(b.totalAmount ?? 0), 0);
   const totalCommission = confirmedBookings.reduce((s, b) => s + Number(b.commissionAmount ?? 0), 0);
   const revenueChart = buildRevenueChart(bookings);
   const statusDonut = buildStatusDonut(bookings);
-  const auditLogs: any[] = auditData?.logs ?? [];
 
   const displayQueueCount = queueData
     ? (queueData.tasks?.length === 0 ? 0 : (queueData.tasks?.length < 100 ? queueData.tasks.length : queueData.total))
@@ -128,6 +127,57 @@ export default function DashboardPage() {
           iconBg="bg-primary/10"
           loading={loadingBookings}
         />
+        {role !== "sales" && (
+          <StatCard
+            title="Total Revenue"
+            value={totalRevenue}
+            currency="USD"
+            change={7.2}
+            icon={<DollarSign className="h-4 w-4 text-success" />}
+            iconBg="bg-success/10"
+            loading={loadingBookings}
+          />
+        )}
+        {role !== "sales" && (
+          <StatCard
+            title="Platform Commission"
+            value={totalCommission}
+            currency="USD"
+            change={5.1}
+            icon={<TrendingUp className="h-4 w-4 text-info" />}
+            iconBg="bg-info/10"
+            loading={loadingBookings}
+          />
+        )}
+        {role !== "sales" && (
+          <StatCard
+            title="Total Users"
+            value={usersData?.total ?? 0}
+            change={12.8}
+            icon={<Users className="h-4 w-4 text-purple-600" />}
+            iconBg="bg-purple-100"
+            loading={loadingUsers}
+          />
+        )}
+        {role !== "sales" && (
+          <StatCard
+            title="Total Listings"
+            value={listingsData?.total ?? 0}
+            change={2.1}
+            icon={<Building2 className="h-4 w-4 text-teal-600" />}
+            iconBg="bg-teal-100"
+            loading={loadingListings}
+          />
+        )}
+        {role !== "sales" && (
+          <StatCard
+            title="Pending Accreditation"
+            value={queueData?.total ?? 0}
+            icon={<BadgeCheck className="h-4 w-4 text-warning" />}
+            iconBg="bg-warning/10"
+            loading={loadingQueue}
+          />
+        )}
         <StatCard
           title="Total Revenue"
           value={totalRevenue}
@@ -189,18 +239,20 @@ export default function DashboardPage() {
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2" padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Monthly Revenue" description="Last 6 months — confirmed + completed bookings" />
-          </div>
-          <div className="p-5">
-            {loadingBookings ? (
-              <div className="h-[220px] bg-slate-100 rounded-lg animate-shimmer" />
-            ) : (
-              <RevenueBarChart data={revenueChart} />
-            )}
-          </div>
-        </Card>
+        {role !== "sales" && (
+          <Card className="lg:col-span-2" padding="none">
+            <div className="p-5 border-b border-border">
+              <CardHeader title="Monthly Revenue" description="Last 6 months — confirmed + completed bookings" />
+            </div>
+            <div className="p-5">
+              {loadingBookings ? (
+                <div className="h-[220px] bg-slate-100 rounded-lg animate-shimmer" />
+              ) : (
+                <RevenueBarChart data={revenueChart} />
+              )}
+            </div>
+          </Card>
+        )}
 
         <Card padding="none">
           <div className="p-5 border-b border-border">
@@ -264,50 +316,29 @@ export default function DashboardPage() {
                 </div>
               ))
             )}
-          </div>
-        </Card>
-
-        {/* Audit activity feed */}
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Audit Activity" description="Recent admin actions" />
-          </div>
-          <div className="divide-y divide-border">
-            {loadingAudit ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex gap-3 p-4">
-                  <div className="h-2 w-2 bg-slate-200 rounded-full mt-2 animate-shimmer flex-shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3 bg-slate-200 rounded w-full animate-shimmer" />
-                    <div className="h-3 bg-slate-200 rounded w-2/3 animate-shimmer" />
-                  </div>
-                </div>
-              ))
-            ) : auditLogs.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">No audit entries</div>
-            ) : (
-              auditLogs.map((log: any) => (
-                <div key={log.id} className="flex gap-3 px-5 py-3">
-                  <div className="mt-1.5 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-900">
-                      <span className="font-medium">{slugToLabel(log.action)}</span>
-                      {log.targetType && (
-                        <span className="text-slate-500"> on {slugToLabel(log.targetType)}</span>
-                      )}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Badge label={log.role} status={log.role} size="sm" />
-                      <span className="text-xs text-slate-400">
-                        {formatRelativeTime(log.timestamp)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
+          </div></Card>
+        {role !== "sales" && (
+  <Card padding="none">
+    <div className="p-5 border-b border-border">
+      <CardHeader title="Audit Activity" description="Recent actions" />
+    </div>
+    <div className="p-5">
+      {loadingAudit ? (
+        <div className="h-[220px] bg-slate-100 rounded-lg animate-shimmer" />
+      ) : auditData && auditData.logs && auditData.logs.length > 0 ? (
+        <ul className="space-y-2">
+          {auditData.logs.slice(0, 5).map((log: any) => (
+            <li key={log.id} className="text-sm text-slate-700">
+              {log.message}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="text-slate-400 text-sm">No audit activity</div>
+      )}
+    </div>
+  </Card>
+)}
       </div>
     </div>
   );
