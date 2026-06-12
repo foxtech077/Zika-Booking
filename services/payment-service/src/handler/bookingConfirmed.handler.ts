@@ -19,29 +19,43 @@ async function confirmBooking(bookingId: string, paymentId: string, paymentProvi
 }
 
 export async function bookingConfirmedHandler(payment: any) {
-    const bookingId = payment.metadata.bookingId;
+    const bookingId = payment?.metadata?.bookingId;
+  
+    if (!bookingId) {
+      throw new Error("Missing bookingId in payment metadata");
+    }
   
     // 1. GET BOOKING
-    const booking = await fetch(
+    const res = await fetch(
       `${BOOKING_SERVICE_URL}/bookings/${bookingId}`
-    ).then(res => res.json());
+    );
   
-    if (!booking) throw new Error("Booking not found");
+    if (!res.ok) {
+      throw new Error(`Booking service failed: ${res.status}`);
+    }
   
-    // 2. CONFIRM BOOKING (ONLY THIS)
-    await confirmBooking(bookingId, payment.id, "stripe");
-
+    const json = await res.json();
+    const booking = json.data;
   
-    //  invoice
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+  
+    // 2. INVOICE
     const invoice = buildInvoice(booking);
   
-    //  pdf
+    // 3. PDF
     const voucher = await generateVoucherPDF(booking, invoice);
-
+  
+    // 4. EMAILS
     await sendGuestEmail(
       booking,
       invoice,
-      voucher.filePath
+      voucher
     );
+  
     await sendHostEmail(booking);
+  
+    // 5. CONFIRM BOOKING LAST (SAFE)
+    await confirmBooking(bookingId, payment.id, "stripe");
   }

@@ -78,9 +78,8 @@ async function build() {
     "application/json",
     { parseAs: "buffer" },
     (req, body, done) => {
-      // For the Stripe webhook route, we need the raw Buffer.
-      // For all other routes, parse as JSON.
-      if (req.routeOptions?.url === "/payments/stripe/webhook") {
+      if (req.routeOptions?.url === "/stripe/webhook") {
+        (req as any).rawBody = body;  //  save raw buffer here
         done(null, body);
         return;
       }
