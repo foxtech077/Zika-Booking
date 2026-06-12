@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+if [ "$branch" = "main" ]; then
+  echo "Direct push to main is not allowed. Create a PR instead."
+  exit 1
+fi
+
+if [ "$branch" = "dev" ]; then
+  echo "Direct push to dev is not allowed. Create a PR instead."
+  exit 1
+fi
+
+exit 0
