@@ -34,9 +34,9 @@ function _listingErrorLogger(error: any): void {
 }
 
 const getAuthBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_API_URL"];
+  const envUrl = process.env["EXPO_PUBLIC_AUTH_API_URL"];
   if (envUrl) return envUrl;
-  return "https://api.kainook.com";
+  return "https://api.kainook.com/auth";
 };
 
 const AUTH_BASE_URL = getAuthBaseUrl();

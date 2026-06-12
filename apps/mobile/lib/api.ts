@@ -2,9 +2,9 @@ import axios from "axios";
 import { useAuthStore } from "../store/auth";
 
 const getBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_API_URL"];
+  const envUrl = process.env["EXPO_PUBLIC_AUTH_API_URL"];
   if (envUrl) return envUrl;
-  return "https://api.kainook.com";
+  return "https://api.kainook.com/auth";
 };
 
 const BASE_URL = getBaseUrl();
