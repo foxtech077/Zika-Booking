@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -280,15 +280,39 @@ export default function BookingDetailScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const [imgError, setImgError] = useState(false);
+  // Stable flag: true only for the lifetime of this screen instance when arriving from payment
+  const [justPaid] = useState(() => fromPayment === "true");
+  // Auto-refresh until backend confirms the booking (webhook delay). Stops after 3 minutes.
+  const [autoRefresh, setAutoRefresh] = useState(() => fromPayment === "true");
+  const [pollingTimedOut, setPollingTimedOut] = useState(false);
 
-  const { data: booking, isLoading, isError } = useQuery<BookingDetail>({
+  const { data: booking, isLoading, isError, refetch } = useQuery<BookingDetail>({
     queryKey: ["booking", id],
     queryFn: async () => {
       const res = await listingApi.get<{ data: BookingDetail }>(`/guests/me/bookings/${id}`);
       return res.data.data;
     },
     enabled: !!id,
+    refetchInterval: autoRefresh ? 5_000 : false,
+    refetchIntervalInBackground: false,
   });
+
+  // Stop auto-refresh once the status moves away from pending_payment
+  useEffect(() => {
+    if (autoRefresh && booking?.status && booking.status !== "pending_payment") {
+      setAutoRefresh(false);
+    }
+  }, [booking?.status, autoRefresh]);
+
+  // Hard timeout: stop polling after 3 minutes and show contact-support message
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = setTimeout(() => {
+      setAutoRefresh(false);
+      setPollingTimedOut(true);
+    }, 3 * 60 * 1_000);
+    return () => clearTimeout(timer);
+  }, [autoRefresh]);
 
   const cancelMutation = useMutation({
     mutationFn: async () => {
@@ -354,13 +378,12 @@ export default function BookingDetailScreen() {
 
   const { label: rawStatusLabel, bg: statusBg, textColor: statusTextColor } = statusInfo(booking.status);
   // When navigating from a successful payment, the webhook may not have fired yet.
-  // Show "Confirming..." instead of the contradictory "Pending Payment" label.
-  const statusLabel = (fromPayment === "true" && booking.status === "pending_payment")
+  // Show "Confirming..." while webhook hasn't fired yet after a successful payment.
+  const statusLabel = (justPaid && booking.status === "pending_payment")
     ? "Confirming..."
     : rawStatusLabel;
   const isCar = booking.listingType === "car";
   const cancelled = isCancelled(booking.status);
-  const justPaid = fromPayment === "true";
 
   function stayDetails(): string {
     if (!booking) return "";
@@ -541,8 +564,39 @@ export default function BookingDetailScreen() {
 
           {/* Actions */}
           <View style={styles.actionsSection}>
-            {/* Complete Payment — for pending_payment status */}
-            {booking.status === "pending_payment" && (
+            {/* Awaiting confirmation — shown immediately after payment while webhook is pending */}
+            {justPaid && booking.status === "pending_payment" && !pollingTimedOut && (
+              <View style={styles.awaitingBox}>
+                <ActivityIndicator size="small" color="#1d4ed8" style={{ marginRight: 8 }} />
+                <Text style={styles.awaitingText}>
+                  Payment submitted — awaiting confirmation from our system.
+                </Text>
+              </View>
+            )}
+
+            {/* Timeout fallback — webhook is slow, advise user to wait or contact support */}
+            {justPaid && booking.status === "pending_payment" && pollingTimedOut && (
+              <View style={styles.timeoutBox}>
+                <Ionicons name="time-outline" size={20} color="#92400e" style={{ marginRight: 8 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.timeoutTitle}>Payment is being processed</Text>
+                  <Text style={styles.timeoutBody}>
+                    Your payment was submitted successfully. Confirmation may take a few minutes.
+                    If your booking is not confirmed within 1 hour, please contact support.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.refreshBtn}
+                    onPress={() => void refetch()}
+                  >
+                    <Ionicons name="refresh-outline" size={14} color="#1d4ed8" />
+                    <Text style={styles.refreshBtnText}>Check status now</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Complete Payment — for pending_payment status, but NOT immediately after paying */}
+            {booking.status === "pending_payment" && !justPaid && (
               <TouchableOpacity
                 style={styles.payBtn}
                 onPress={() =>
@@ -554,8 +608,8 @@ export default function BookingDetailScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Cancel — only when canCancel (or pending_payment) and not already cancelled */}
-            {(booking.canCancel || booking.status === "pending_payment") && !cancelled && (
+            {/* Cancel — hidden when justPaid (user just paid, don't let them discard accidentally) */}
+            {(booking.canCancel || booking.status === "pending_payment") && !cancelled && !justPaid && (
               <TouchableOpacity
                 style={styles.cancelBtn}
                 onPress={handleCancelPress}
@@ -651,6 +705,36 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   successBannerText: { fontSize: 14, fontWeight: "600", color: "#15803d", flex: 1 },
+  awaitingBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#eff6ff",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    marginBottom: 12,
+  },
+  awaitingText: { fontSize: 13, color: "#1d4ed8", flex: 1, lineHeight: 18 },
+  timeoutBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#fffbeb",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    marginBottom: 12,
+  },
+  timeoutTitle: { fontSize: 13, fontWeight: "700", color: "#92400e", marginBottom: 4 },
+  timeoutBody: { fontSize: 12, color: "#92400e", lineHeight: 17, marginBottom: 8 },
+  refreshBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+  },
+  refreshBtnText: { fontSize: 13, color: "#1d4ed8", fontWeight: "600" },
   activeBanner: {
     flexDirection: "row",
     alignItems: "center",

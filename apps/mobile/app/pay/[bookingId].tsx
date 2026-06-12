@@ -10,6 +10,8 @@ import {
   Alert,
   Modal,
   AppState,
+  Share,
+  Clipboard,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter, Stack, useNavigation } from "expo-router";
@@ -20,6 +22,7 @@ import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { paymentApi } from "../../lib/payment-api";
 import { initializeStripe, resolveStripePublishableKey } from "../../lib/stripe-config";
+import { clearPaymentLogs, formatLogsForSharing, payLog } from "../../lib/payment-logger";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -67,9 +70,31 @@ interface PaymentStatusResponse {
   };
 }
 
-// ── Country prefixes for Tara mobile money ────────────────────────────────────
+// ── Country options for mobile money ─────────────────────────────────────────
 
-const COUNTRY_PREFIXES = ["+254", "+234", "+233", "+27", "+256", "+255"];
+interface CountryOption {
+  prefix: string;
+  name: string;
+  currency: string;
+  flag: string;
+}
+
+const COUNTRY_OPTIONS: CountryOption[] = [
+  { prefix: "+254", name: "Kenya",        currency: "KES", flag: "🇰🇪" },
+  { prefix: "+256", name: "Uganda",       currency: "UGX", flag: "🇺🇬" },
+  { prefix: "+255", name: "Tanzania",     currency: "TZS", flag: "🇹🇿" },
+  { prefix: "+234", name: "Nigeria",      currency: "NGN", flag: "🇳🇬" },
+  { prefix: "+233", name: "Ghana",        currency: "GHS", flag: "🇬🇭" },
+  { prefix: "+27",  name: "South Africa", currency: "ZAR", flag: "🇿🇦" },
+  { prefix: "+91",  name: "India",        currency: "INR", flag: "🇮🇳" },
+  { prefix: "+1",   name: "USA / Canada", currency: "USD", flag: "🇺🇸" },
+  { prefix: "+44",  name: "UK",           currency: "GBP", flag: "🇬🇧" },
+  { prefix: "+971", name: "UAE",          currency: "AED", flag: "🇦🇪" },
+  { prefix: "+966", name: "Saudi Arabia", currency: "SAR", flag: "🇸🇦" },
+  { prefix: "+20",  name: "Egypt",        currency: "EGP", flag: "🇪🇬" },
+];
+
+const COUNTRY_PREFIXES = COUNTRY_OPTIONS.map((c) => c.prefix);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -200,22 +225,37 @@ export default function PaymentScreen() {
   const stripePollingActiveRef = useRef(false);
   const taraPollingActiveRef = useRef(false);
   const stripeSessionRef = useRef<StripePaymentSession | null>(null);
+  // ── Diagnostic log capture ────────────────────────────────────────────────
+  const capturedPaymentIdRef = useRef<string | undefined>(undefined);
+  const [showDiagModal, setShowDiagModal] = useState(false);
+  const [diagReport, setDiagReport] = useState("");
 
   // ── Fetch booking detail ──────────────────────────────────────────────────
   const { data: booking, isLoading: bookingLoading, error: bookingError } = useQuery<BookingDetail>({
     queryKey: ["booking-for-payment", bookingId],
     queryFn: async () => {
       console.log("[PAY] Fetching booking detail for bookingId:", bookingId);
+      payLog("info", "PAY-SCREEN", `Fetching booking: ${bookingId}`);
       try {
         const res = await listingApi.get<{ data: BookingDetail }>(`/guests/me/bookings/${bookingId}`);
         console.log("[PAY] Booking fetch SUCCESS — status:", res.status);
         console.log("[PAY] Booking data:", JSON.stringify(res.data.data, null, 2));
+        payLog("success", "PAY-SCREEN", `Booking fetched — status: ${res.data.data.status}`, {
+          bookingStatus: res.data.data.status,
+          totalAmount: res.data.data.totalAmount,
+          currency: res.data.data.currency,
+        });
         return res.data.data;
       } catch (err: any) {
         console.log("[PAY] Booking fetch FAILED");
         console.log("[PAY] HTTP status:", err?.response?.status);
         console.log("[PAY] Response body:", JSON.stringify(err?.response?.data, null, 2));
         console.log("[PAY] Raw error message:", err?.message);
+        payLog("error", "PAY-SCREEN", "Booking fetch FAILED", {
+          httpStatus: err?.response?.status,
+          responseBody: err?.response?.data,
+          errorMessage: err?.message,
+        });
         throw err;
       }
     },
@@ -233,6 +273,12 @@ export default function PaymentScreen() {
     retry: 1,
     enabled: false,
   });
+
+  // ── Clear diagnostic log on mount (fresh session) ────────────────────────
+  useEffect(() => {
+    clearPaymentLogs();
+    payLog("info", "PAY-SCREEN", `Screen mounted — bookingId: ${bookingId}`);
+  }, []);
 
   // ── Reset cached Stripe session when booking changes ──────────────────────
   useEffect(() => {
@@ -401,13 +447,16 @@ export default function PaymentScreen() {
         const statusRes = await paymentApi.get<PaymentStatusResponse>(`/payments/${paymentId}/status`);
         if (!stripePollingActiveRef.current) return;
         const status = statusRes.data.data.status;
+        payLog("info", "STRIPE-POLL", `status: ${status}`, { paymentId });
 
         if (status === "captured") {
+          payLog("success", "STRIPE-POLL", "Status CAPTURED — navigating to success");
           clearPolling();
           navigateToSuccess();
           return;
         }
         if (status === "failed" || status === "timed_out") {
+          payLog("error", "STRIPE-POLL", `Status ${status} — payment failed`);
           clearPolling();
           setFailureReason("Payment failed. Please try again.");
           setView("failure");
@@ -417,6 +466,7 @@ export default function PaymentScreen() {
         const bookingRes = await listingApi.get<{ data: { status: string } }>(`/guests/me/bookings/${bookingId}`);
         if (!stripePollingActiveRef.current) return;
         if (bookingRes.data.data.status === "confirmed") {
+          payLog("success", "STRIPE-POLL", "Booking confirmed — navigating to success");
           clearPolling();
           navigateToSuccess();
           return;
@@ -424,6 +474,7 @@ export default function PaymentScreen() {
       } catch (pollErr: any) {
         if (!stripePollingActiveRef.current) return;
         const httpStatus = pollErr?.response?.status;
+        payLog("error", "STRIPE-POLL", `Poll error HTTP ${httpStatus ?? "network"}`, { httpStatus });
         if (httpStatus === 404 || httpStatus === 401 || httpStatus === 403) {
           clearPolling();
           setFailureReason("Payment session not found. Please try again.");
@@ -435,6 +486,7 @@ export default function PaymentScreen() {
 
       if (!stripePollingActiveRef.current) return;
       if (Date.now() - startTime >= MAX_DURATION) {
+        payLog("warn", "STRIPE-POLL", "60 s timeout — showing failure");
         clearPolling();
         setFailureReason("Payment confirmation timed out after 60 seconds. Please try again.");
         setView("failure");
@@ -474,13 +526,16 @@ export default function PaymentScreen() {
         const statusRes = await paymentApi.get<PaymentStatusResponse>(`/payments/${paymentId}/status`);
         if (!taraPollingActiveRef.current) return;
         const status = statusRes.data.data.status;
+        payLog("info", "TARA-POLL", `status: ${status}`, { paymentId });
 
         if (status === "captured") {
+          payLog("success", "TARA-POLL", "Status CAPTURED — navigating to success");
           clearPolling();
           navigateToSuccess();
           return;
         }
         if (status === "failed" || status === "timed_out") {
+          payLog("error", "TARA-POLL", `Status ${status} — payment failed`);
           clearPolling();
           setFailureReason(
             status === "timed_out"
@@ -493,6 +548,7 @@ export default function PaymentScreen() {
       } catch (pollErr: any) {
         if (!taraPollingActiveRef.current) return;
         const httpStatus = pollErr?.response?.status;
+        payLog("error", "TARA-POLL", `Poll error HTTP ${httpStatus ?? "network"}`, { httpStatus });
         if (httpStatus === 404 || httpStatus === 401 || httpStatus === 403) {
           clearPolling();
           setFailureReason("Payment session not found. Please try again.");
@@ -504,6 +560,7 @@ export default function PaymentScreen() {
 
       if (!taraPollingActiveRef.current) return;
       if (Date.now() - startTime >= MAX_DURATION) {
+        payLog("warn", "TARA-POLL", "90 s timeout — showing failure");
         clearPolling();
         setFailureReason("Mobile money confirmation timed out. Please try again.");
         setView("failure");
@@ -562,7 +619,10 @@ export default function PaymentScreen() {
     setView("success");
     void queryClient.invalidateQueries({ queryKey: ["booking", bookingId] });
     void queryClient.invalidateQueries({ queryKey: ["myBookings"] });
-    router.replace({
+    // Use push (not replace) so the booking screen is always a FRESH mount.
+    // replace() can return to an already-mounted booking screen whose justPaid=false state
+    // was captured before the user navigated to pay, causing "Discard Booking" to appear.
+    router.push({
       pathname: "/booking/[id]" as any,
       params: { id: bookingId, fromPayment: "true" },
     });
@@ -577,6 +637,7 @@ export default function PaymentScreen() {
     }
     // ── Stripe Payment Sheet flow ─────────────────────────────────────────
     if (provider === "stripe") {
+      payLog("info", "HANDLE-PAY", `Stripe — bookingId: ${bookingId}, savedMethod: ${selectedSavedMethodId ?? "none"}`);
       isInitiatingRef.current = true;
       setIsInitiating(true);
       try {
@@ -591,12 +652,15 @@ export default function PaymentScreen() {
               paymentMethodId: selectedSavedMethodId,
             };
             console.log("[PAY] Saved-card Stripe — POST /payments/initiate:", JSON.stringify(savedCardPayload, null, 2));
+            payLog("info", "HANDLE-PAY", "Saved-card Stripe — POST /payments/initiate", savedCardPayload);
             try {
               const res = await paymentApi.post<InitiateResponse>("/payments/initiate", savedCardPayload);
               console.log("[PAY] /payments/initiate SUCCESS — status:", res.status);
               console.log("[PAY] /payments/initiate response:", JSON.stringify(res.data, null, 2));
 
               const { paymentId, clientSecret, requiresAction } = res.data.data;
+              capturedPaymentIdRef.current = paymentId;
+              payLog("success", "HANDLE-PAY", `Saved-card initiate OK — paymentId: ${paymentId}, requiresAction: ${requiresAction ?? false}`);
               setAttemptCount((c) => c + 1);
 
               if (requiresAction && clientSecret) {
@@ -616,12 +680,18 @@ export default function PaymentScreen() {
               console.log("[PAY] HTTP status:", savedErr?.response?.status);
               console.log("[PAY] Response body:", JSON.stringify(savedErr?.response?.data, null, 2));
               console.log("[PAY] Raw error message:", savedErr?.message);
+              payLog("error", "HANDLE-PAY", "Saved-card initiate FAILED", {
+                httpStatus: savedErr?.response?.status,
+                responseBody: savedErr?.response?.data,
+                errorMessage: savedErr?.message,
+              });
               throw savedErr;
             }
           } else {
             // ── New card: POST /create-intent → clientSecret → Payment Sheet ──
             const newCardPayload = { bookingId };
             console.log("[PAY] New-card Stripe — POST /create-intent:", JSON.stringify(newCardPayload, null, 2));
+            payLog("info", "HANDLE-PAY", "New-card Stripe — POST /create-intent", newCardPayload);
             try {
               const res = await paymentApi.post<InitiateResponse>("/create-intent", newCardPayload);
               console.log("[PAY] /create-intent SUCCESS — status:", res.status);
@@ -630,10 +700,13 @@ export default function PaymentScreen() {
               const { paymentId, clientSecret, publishableKey } = res.data.data;
               if (!clientSecret) {
                 console.log("[PAY] ERROR: clientSecret missing in /create-intent response");
+                payLog("error", "HANDLE-PAY", "create-intent ERROR: clientSecret missing in response", res.data.data);
                 Alert.alert("Payment Error", "Could not initialise payment. Please try again.");
                 return;
               }
 
+              capturedPaymentIdRef.current = paymentId;
+              payLog("success", "HANDLE-PAY", `create-intent OK — paymentId: ${paymentId}`, { hasClientSecret: true, hasPublishableKey: !!publishableKey });
               session = { paymentId, clientSecret, publishableKey };
               stripeSessionRef.current = session;
               setAttemptCount((c) => c + 1);
@@ -642,6 +715,11 @@ export default function PaymentScreen() {
               console.log("[PAY] HTTP status:", intentErr?.response?.status);
               console.log("[PAY] Response body:", JSON.stringify(intentErr?.response?.data, null, 2));
               console.log("[PAY] Raw error message:", intentErr?.message);
+              payLog("error", "HANDLE-PAY", "create-intent FAILED", {
+                httpStatus: intentErr?.response?.status,
+                responseBody: intentErr?.response?.data,
+                errorMessage: intentErr?.message,
+              });
               throw intentErr;
             }
           }
@@ -657,6 +735,7 @@ export default function PaymentScreen() {
 
         const resolvedKey = resolveStripePublishableKey(publishableKey);
         const isTestKey = resolvedKey.startsWith("pk_test");
+        payLog("info", "HANDLE-PAY", `initPaymentSheet — paymentId: ${paymentId}, testMode: ${isTestKey}`);
         const { error: initError } = await initPaymentSheet({
           paymentIntentClientSecret: clientSecret,
           merchantDisplayName: "Kainook",
@@ -672,21 +751,28 @@ export default function PaymentScreen() {
         });
 
         if (initError) {
+          payLog("error", "HANDLE-PAY", `initPaymentSheet error: ${initError.message}`, { code: initError.code });
           Alert.alert("Payment Error", getPaymentErrorMessage({ message: initError.message }));
           return;
         }
 
+        payLog("success", "HANDLE-PAY", "initPaymentSheet OK — presenting sheet");
         setIsInitiating(false);
 
         const { error: presentError } = await presentPaymentSheet();
 
         if (presentError) {
-          if (presentError.code === "Canceled") return;
+          if (presentError.code === "Canceled") {
+            payLog("warn", "HANDLE-PAY", "presentPaymentSheet CANCELED by user");
+            return;
+          }
+          payLog("error", "HANDLE-PAY", `presentPaymentSheet error: ${presentError.message}`, { code: presentError.code });
           setFailureReason(presentError.message || "Card payment failed. Please try again.");
           setView("failure");
           return;
         }
 
+        payLog("success", "HANDLE-PAY", "presentPaymentSheet SUCCESS — card charged, navigating to success");
         stripeSessionRef.current = null;
         // presentPaymentSheet() success is Stripe's own confirmation the card was charged.
         // The backend status update requires a webhook; don't make the user wait for it.
@@ -696,6 +782,11 @@ export default function PaymentScreen() {
         console.log("[PAY] HTTP status:", err?.response?.status);
         console.log("[PAY] Response body:", JSON.stringify(err?.response?.data, null, 2));
         console.log("[PAY] Raw error message:", err?.message);
+        payLog("error", "HANDLE-PAY", "Stripe outer catch", {
+          httpStatus: err?.response?.status,
+          responseBody: err?.response?.data,
+          errorMessage: err?.message,
+        });
         const status = err?.response?.status;
         const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
         const rawMessage = err?.response?.data?.message ?? err?.message ?? "";
@@ -731,6 +822,7 @@ export default function PaymentScreen() {
       }
     }
 
+    payLog("info", "HANDLE-PAY", `Tara — bookingId: ${bookingId}, prefix: ${countryPrefix}`);
     isInitiatingRef.current = true;
     setIsInitiating(true);
 
@@ -743,12 +835,15 @@ export default function PaymentScreen() {
         ...(selectedSavedMethodId ? { savedPaymentMethodId: selectedSavedMethodId } : {}),
       };
       console.log("[PAY] Initiating Tara payment — request body:", JSON.stringify(taraPayload, null, 2));
+      payLog("info", "HANDLE-PAY", "Tara initiate — POST /payments/initiate", { bookingId, mobileNumber: `${countryPrefix}****${mobileNumber.slice(-4)}` });
 
       const res = await paymentApi.post<InitiateResponse>("/payments/initiate", taraPayload);
       console.log("[PAY] Tara initiate SUCCESS — status:", res.status);
       console.log("[PAY] Tara initiate response:", JSON.stringify(res.data, null, 2));
 
       const { paymentId } = res.data.data;
+      capturedPaymentIdRef.current = paymentId;
+      payLog("success", "HANDLE-PAY", `Tara initiate OK — paymentId: ${paymentId}`);
       setAttemptCount((c) => c + 1);
 
       setView("tara_waiting");
@@ -759,6 +854,11 @@ export default function PaymentScreen() {
       console.log("[PAY] HTTP status:", err?.response?.status);
       console.log("[PAY] Response body:", JSON.stringify(err?.response?.data, null, 2));
       console.log("[PAY] Raw error message:", err?.message);
+      payLog("error", "HANDLE-PAY", "Tara initiate FAILED", {
+        httpStatus: err?.response?.status,
+        responseBody: err?.response?.data,
+        errorMessage: err?.message,
+      });
       const status = err?.response?.status;
       const code = err?.response?.data?.error?.code ?? err?.response?.data?.code;
 
@@ -903,8 +1003,56 @@ export default function PaymentScreen() {
                 </TouchableOpacity>
               </View>
             )}
+
+            <TouchableOpacity
+              style={styles.diagBtn}
+              onPress={() => {
+                setDiagReport(formatLogsForSharing(bookingId, capturedPaymentIdRef.current));
+                setShowDiagModal(true);
+              }}
+            >
+              <Ionicons name="document-text-outline" size={15} color="#6b7280" style={{ marginRight: 6 }} />
+              <Text style={styles.diagBtnText}>Get Diagnostic Report</Text>
+            </TouchableOpacity>
+
           </View>
         </ScrollView>
+
+        {/* Diagnostic report modal */}
+        <Modal visible={showDiagModal} transparent animationType="slide">
+          <View style={styles.diagModalOverlay}>
+            <View style={styles.diagModalCard}>
+              <View style={styles.diagModalHeader}>
+                <Text style={styles.diagModalTitle}>Payment Diagnostic</Text>
+                <TouchableOpacity onPress={() => setShowDiagModal(false)}>
+                  <Ionicons name="close" size={22} color="#374151" />
+                </TouchableOpacity>
+              </View>
+              <ScrollView style={styles.diagModalScroll} contentContainerStyle={{ padding: 12 }}>
+                <Text style={styles.diagReportText} selectable>{diagReport}</Text>
+              </ScrollView>
+              <View style={styles.diagActionRow}>
+                <TouchableOpacity
+                  style={[styles.diagActionBtn, { marginRight: 8 }]}
+                  onPress={() => {
+                    Clipboard.setString(diagReport);
+                    Alert.alert("Copied", "Diagnostic report copied to clipboard.");
+                  }}
+                >
+                  <Ionicons name="copy-outline" size={16} color="#fff" />
+                  <Text style={styles.diagActionBtnText}>Copy</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.diagActionBtn, { backgroundColor: "#059669" }]}
+                  onPress={() => void Share.share({ message: diagReport, title: "Payment Diagnostic Report" })}
+                >
+                  <Ionicons name="share-outline" size={16} color="#fff" />
+                  <Text style={styles.diagActionBtnText}>Share</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -1081,6 +1229,7 @@ export default function PaymentScreen() {
                 setSaveMobileNumber={setSaveMobileNumber}
                 showPrefixPicker={showPrefixPicker}
                 setShowPrefixPicker={setShowPrefixPicker}
+                bookingCurrency={booking.currency}
               />
             )}
           </View>
@@ -1120,6 +1269,7 @@ interface TaraFormProps {
   setSaveMobileNumber: (v: boolean) => void;
   showPrefixPicker: boolean;
   setShowPrefixPicker: (v: boolean) => void;
+  bookingCurrency: string;
 }
 
 function TaraForm({
@@ -1131,19 +1281,24 @@ function TaraForm({
   setSaveMobileNumber,
   showPrefixPicker,
   setShowPrefixPicker,
+  bookingCurrency,
 }: TaraFormProps) {
+  const selected = COUNTRY_OPTIONS.find((c) => c.prefix === countryPrefix) ?? COUNTRY_OPTIONS[0];
+  const currencyMismatch = selected.currency !== bookingCurrency;
+
   return (
     <View>
       <Text style={styles.inputSectionTitle}>Mobile Number</Text>
 
       <View style={styles.fieldGroup}>
-        <Text style={styles.fieldLabel}>Phone Number (E.164 format)</Text>
+        <Text style={styles.fieldLabel}>Country &amp; Phone Number</Text>
         <View style={styles.phoneRow}>
           <TouchableOpacity
             style={styles.prefixButton}
             onPress={() => setShowPrefixPicker(!showPrefixPicker)}
             activeOpacity={0.8}
           >
+            <Text style={styles.prefixFlagText}>{selected.flag}</Text>
             <Text style={styles.prefixButtonText}>{countryPrefix}</Text>
             <Ionicons name="chevron-down" size={14} color="#374151" />
           </TouchableOpacity>
@@ -1156,33 +1311,58 @@ function TaraForm({
           />
         </View>
 
+        {/* Country name + currency row */}
+        <View style={styles.countryInfoRow}>
+          <Text style={styles.countryInfoText}>
+            {selected.name} · Currency: <Text style={styles.countryInfoCurrency}>{selected.currency}</Text>
+          </Text>
+        </View>
+
         {showPrefixPicker && (
           <View style={styles.prefixDropdown}>
-            {COUNTRY_PREFIXES.map((prefix) => (
+            {COUNTRY_OPTIONS.map((opt) => (
               <TouchableOpacity
-                key={prefix}
+                key={opt.prefix}
                 style={[
                   styles.prefixDropdownItem,
-                  prefix === countryPrefix && styles.prefixDropdownItemSelected,
+                  opt.prefix === countryPrefix && styles.prefixDropdownItemSelected,
                 ]}
                 onPress={() => {
-                  setCountryPrefix(prefix);
+                  setCountryPrefix(opt.prefix);
                   setShowPrefixPicker(false);
                 }}
               >
-                <Text
-                  style={[
-                    styles.prefixDropdownText,
-                    prefix === countryPrefix && styles.prefixDropdownTextSelected,
-                  ]}
-                >
-                  {prefix}
-                </Text>
+                <Text style={styles.prefixFlagText}>{opt.flag}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={[
+                      styles.prefixDropdownText,
+                      opt.prefix === countryPrefix && styles.prefixDropdownTextSelected,
+                    ]}
+                  >
+                    {opt.name}
+                  </Text>
+                  <Text style={styles.prefixDropdownSub}>{opt.prefix} · {opt.currency}</Text>
+                </View>
+                {opt.prefix === countryPrefix && (
+                  <Ionicons name="checkmark" size={16} color="#1a73e8" />
+                )}
               </TouchableOpacity>
             ))}
           </View>
         )}
       </View>
+
+      {/* Currency note when booking currency differs from country currency */}
+      {currencyMismatch && (
+        <View style={styles.currencyNoteBox}>
+          <Ionicons name="information-circle-outline" size={14} color="#92400e" />
+          <Text style={styles.currencyNoteText}>
+            This booking is charged in <Text style={{ fontWeight: "700" }}>{bookingCurrency}</Text>.
+            Your mobile money provider will apply the exchange rate to {selected.currency}.
+          </Text>
+        </View>
+      )}
 
       <View style={styles.taraNote}>
         <Ionicons name="information-circle-outline" size={14} color="#6b7280" />
@@ -1343,13 +1523,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#d1d5db",
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 11,
     backgroundColor: "#fff",
     gap: 4,
   },
-  prefixButtonText: { fontSize: 14, color: "#374151", fontWeight: "600" },
+  prefixFlagText: { fontSize: 18 },
+  prefixButtonText: { fontSize: 13, color: "#374151", fontWeight: "600" },
   phoneInput: { flex: 1 },
+  countryInfoRow: { marginTop: 6, paddingHorizontal: 2 },
+  countryInfoText: { fontSize: 12, color: "#6b7280" },
+  countryInfoCurrency: { fontWeight: "700", color: "#374151" },
   prefixDropdown: {
     marginTop: 4,
     backgroundColor: "#fff",
@@ -1357,16 +1541,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#e5e7eb",
     overflow: "hidden",
+    maxHeight: 320,
   },
   prefixDropdownItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
+    gap: 10,
   },
   prefixDropdownItemSelected: { backgroundColor: "#eff6ff" },
-  prefixDropdownText: { fontSize: 14, color: "#374151" },
-  prefixDropdownTextSelected: { color: "#1a73e8", fontWeight: "600" },
+  prefixDropdownText: { fontSize: 14, color: "#374151", fontWeight: "500" },
+  prefixDropdownTextSelected: { color: "#1a73e8", fontWeight: "700" },
+  prefixDropdownSub: { fontSize: 11, color: "#9ca3af", marginTop: 1 },
+  currencyNoteBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#fffbeb",
+    borderRadius: 8,
+    padding: 10,
+    gap: 6,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+  },
+  currencyNoteText: { fontSize: 12, color: "#92400e", flex: 1, lineHeight: 16 },
 
   // Tara note
   taraNote: {
@@ -1533,4 +1734,54 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
+
+  // Diagnostic report
+  diagBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    marginTop: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#f9fafb",
+  },
+  diagBtnText: { fontSize: 13, color: "#6b7280", fontWeight: "500" },
+  diagModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "flex-end",
+  },
+  diagModalCard: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "80%",
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  diagModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  diagModalTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
+  diagModalScroll: { flexGrow: 0, maxHeight: 360, backgroundColor: "#111827", borderRadius: 10 },
+  diagReportText: { fontSize: 11, color: "#d1fae5", lineHeight: 17 },
+  diagActionRow: { flexDirection: "row", marginTop: 16 },
+  diagActionBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1a73e8",
+    borderRadius: 10,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  diagActionBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 });
