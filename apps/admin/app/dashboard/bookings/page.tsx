@@ -16,7 +16,7 @@ import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/l
 import type { Booking } from "@/types/admin";
 
 const fetchBookings = (params: Record<string, string>) =>
-  listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  listingApi.get("/admin/bookings", { params }).then((r) => r.data.data ?? r.data);
 
 const fetchBookingDetail = (id: string) =>
   listingApi.get(`/admin/bookings/${id}`).then((r) => r.data.data ?? r.data);
@@ -40,6 +40,11 @@ const isCountryManager = user?.role === "country_manager";
 const scopedCountries = useMemo(() => {
   return isCountryManager ? (user?.countryScope ?? []) : [];
 }, [isCountryManager, user?.countryScope]);
+
+const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+const countryOptions = [
+  "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
+].map((c) => ({ value: c, label: c }));
 
 useEffect(() => {
   if (!_hasHydrated) return;
@@ -95,6 +100,17 @@ useEffect(() => {
         { value: "car", label: "Car" },
       ],
     },
+    ...(canShowCountryFilter
+      ? [
+          {
+            key: "country",
+            label: "All Countries",
+            value: country,
+            onChange: (v: string) => { setCountry(v); setPage(1); },
+            options: countryOptions,
+          },
+        ]
+      : []),
     {
       key: "rowsPerPage",
       label: "",
@@ -109,11 +125,22 @@ useEffect(() => {
     },
   ];
 
-  const params = { q, status, listingType, page: String(page), limit: String(rowsPerPage) };
+  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
+  const params = Object.fromEntries(
+    Object.entries({
+      q,
+      status,
+      listingType,
+      country: effectiveCountry,
+      page: String(page),
+      limit: String(rowsPerPage),
+    }).filter(([, v]) => v !== "")
+  );
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-bookings", params],
+    queryKey: ["admin-bookings", page, rowsPerPage, q, status, listingType, effectiveCountry],
     queryFn: () => fetchBookings(params),
+    enabled: _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
   });
 
   const bookings: Booking[] = data?.bookings ?? [];

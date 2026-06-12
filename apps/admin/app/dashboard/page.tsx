@@ -13,20 +13,21 @@ import { Badge } from "@/components/ui/Badge";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
+import { canAccess } from "@/permissions/rbac";
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
-const fetchUsers = () =>
-  api.get("/admin/users?limit=1").then((r) => r.data.data ?? r.data);
+const fetchUsers = (params: Record<string, string>) =>
+  api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
 
-const fetchBookings = () =>
-  listingApi.get("/admin/bookings?limit=100").then((r) => r.data.data ?? r.data);
+const fetchBookings = (params: Record<string, string>) =>
+  listingApi.get("/admin/bookings", { params }).then((r) => r.data.data ?? r.data);
 
-const fetchListings = () =>
-  listingApi.get("/admin/listings?limit=1").then((r) => r.data.data ?? r.data);
+const fetchListings = (params: Record<string, string>) =>
+  listingApi.get("/admin/listings", { params }).then((r) => r.data.data ?? r.data);
 
 const fetchReviewQueue = (params: Record<string, string>) =>
-  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  listingApi.get("/admin/listings/review-queue", { params }).then((r) => r.data.data ?? r.data);
 
 const fetchAuditLogs = () =>
   api.get("/admin/audit-logs?limit=8").then((r) => r.data.data ?? r.data);
@@ -83,22 +84,47 @@ function buildStatusDonut(bookings: any[]) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
   const isCountryManager = user?.role === "country_manager";
   const userCountryScope = user?.countryScope ?? [];
   const defaultCountry = isCountryManager && userCountryScope.length > 0 ? userCountryScope[0] : "";
+  const canViewUsers = canAccess(user?.role, "view_users");
+  const canViewAudit = canAccess(user?.role, "view_audit");
 
-  const queueParams = { limit: "100", ...(defaultCountry ? { country: defaultCountry } : {}) };
+  const scopedCountryParam: Record<string, string> = defaultCountry ? { country: defaultCountry } : {};
+  const queueParams = { limit: "100", ...scopedCountryParam };
+  const usersParams = { limit: isCountryManager ? "1000" : "1", ...scopedCountryParam };
+  const bookingsParams = { limit: "100", ...scopedCountryParam };
+  const listingsParams = { limit: "1", ...scopedCountryParam };
+  const scopedQueriesEnabled = _hasHydrated && (!isCountryManager || Boolean(defaultCountry));
 
-  const { data: usersData, isLoading: loadingUsers } = useQuery({ queryKey: ["admin-users-count"], queryFn: fetchUsers });
-  const { data: bookingsData, isLoading: loadingBookings } = useQuery({ queryKey: ["admin-bookings-dash"], queryFn: fetchBookings });
-  const { data: listingsData, isLoading: loadingListings } = useQuery({ queryKey: ["admin-listings-dash"], queryFn: fetchListings });
+  const { data: usersData, isLoading: loadingUsers } = useQuery({
+    queryKey: ["admin-users-count", defaultCountry],
+    queryFn: () => fetchUsers(usersParams),
+    enabled: scopedQueriesEnabled && canViewUsers,
+  });
+  const { data: bookingsData, isLoading: loadingBookings } = useQuery({
+    queryKey: ["admin-bookings-dash", defaultCountry],
+    queryFn: () => fetchBookings(bookingsParams),
+    enabled: scopedQueriesEnabled,
+  });
+  const { data: listingsData, isLoading: loadingListings } = useQuery({
+    queryKey: ["admin-listings-dash", defaultCountry],
+    queryFn: () => fetchListings(listingsParams),
+    enabled: scopedQueriesEnabled,
+  });
   const role = useAuthStore(state => state.user?.role);
   const { data: queueData, isLoading: loadingQueue } = useQuery({
     queryKey: ["admin-queue-dash", queueParams],
     queryFn: () => fetchReviewQueue(queueParams),
+    enabled: scopedQueriesEnabled,
   });
-  const { data: auditData, isLoading: loadingAudit } = useQuery({ queryKey: ["admin-audit-dash"], queryFn: fetchAuditLogs });
+  const { data: auditData, isLoading: loadingAudit } = useQuery({ queryKey: ["admin-audit-dash"], queryFn: fetchAuditLogs, enabled: scopedQueriesEnabled && canViewAudit });
+  const rawUsers: any[] = usersData?.users ?? [];
+  const scopedUsers = isCountryManager && defaultCountry
+    ? rawUsers.filter((u) => u.country?.toUpperCase() === defaultCountry.toUpperCase())
+    : rawUsers;
+  const usersTotal = isCountryManager ? scopedUsers.length : (usersData?.total ?? 0);
   const bookings: any[] = bookingsData?.bookings ?? [];
   const confirmedBookings = bookings.filter((b) => ["confirmed", "completed"].includes(b.status));
   const totalRevenue = confirmedBookings.reduce((s, b) => s + Number(b.totalAmount ?? 0), 0);
@@ -152,7 +178,7 @@ export default function DashboardPage() {
         {role !== "sales" && (
           <StatCard
             title="Total Users"
-            value={usersData?.total ?? 0}
+            value={usersTotal}
             change={12.8}
             icon={<Users className="h-4 w-4 text-purple-600" />}
             iconBg="bg-purple-100"
@@ -198,7 +224,7 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Total Users"
-          value={usersData?.total ?? 0}
+          value={usersTotal}
           change={12.8}
           icon={<Users className="h-4 w-4 text-purple-600" />}
           iconBg="bg-purple-100"
