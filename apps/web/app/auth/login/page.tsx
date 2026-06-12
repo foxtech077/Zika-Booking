@@ -10,6 +10,10 @@ import { useAuthStore } from "@/stores/auth";
 import { FormField } from "@/components/ui/FormField";
 import { Button } from "@/components/ui/Button";
 import type { ApiResponse, AuthResponse } from "@zika/types";
+// ── after the other imports ──
+
+import { processGoogleLogin } from "@/app/(provider)/components/GoogleLoginHandler"; // <-- new import
+
 
 // Declare global google object for TypeScript
 declare global {
@@ -86,36 +90,47 @@ export default function LoginPage() {
     };
   }, []);
 
-  const handleGoogleCredentialResponse = async (response: any) => {
-    setError(null);
+const handleGoogleCredentialResponse = async (response: any) => {
+  // 1️⃣  Get the raw Google idToken
+  const idToken = response.credential;
+
+  // 2️⃣  Call the pure helper (no hooks inside)
+  const result = await processGoogleLogin(idToken);
+
+  if (result.success) {
+    // ---- SUCCESS -------------------------------------------------
+    const data = result.data;
+    setSession(data.tokens.accessToken, data.user as any);
+    router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
+    return;
+  }
+
+  // ---- FAILURE -------------------------------------------------
+  const { code, message } = result;
+
+  // 2️⃣  Email not found → go to registration (keep token)
+  if (code === "EMAIL_NOT_FOUND" || message.toLowerCase().includes("no account")) {
+    router.push(`/auth/register?google_token=${encodeURIComponent(idToken)}`);
+    return;
+  }
+
+  // 3️⃣  Account already exists → go to normal login, pre‑fill email
+  if (code === "ACCOUNT_EXISTS" || message.toLowerCase().includes("exists")) {
+    // Decode JWT payload to extract the email (only if the token is a Google JWT)
+    let email = "";
     try {
-      const res = await api.post<ApiResponse<AuthResponse>>("/auth/oauth/google", {
-        idToken: response.credential,
-      });
-      if (!res.data.success) throw res.data;
-      const data = res.data.data;
-      const accessError = getAccountAccessError(data.user);
-      if (accessError) {
-        setError(accessError);
-        return;
-      }
-      setSession(data.tokens.accessToken, data.user as any);
-      // Explicitly navigate based on user type; treat missing or new users as traveller
-      const targetPath = data.user.userType === "provider" ? "/dashboard" : "/traveller";
-      router.replace(targetPath);
-    } catch (err: any) {
-      // If the backend indicates the email already exists (e.g., user already registered via Google),
-      // we treat this as a successful login and let the existing flow handle redirection.
-      const errorMessage = err.response?.data?.error?.message ?? "Sign in with Google failed. Please try again.";
-      if (errorMessage.toLowerCase().includes("email already exists")) {
-        // Do not display an error; the backend should have returned a valid user in this case.
-        // No action needed because the successful response would have been handled earlier.
-        setError(null);
-      } else {
-        setError(errorMessage);
-      }
+      const payload = JSON.parse(atob(idToken.split(".")[1]));
+      email = payload.email ?? "";
+    } catch {
+      // ignore malformed token – we’ll just send empty email
     }
-  };
+    router.push(`/auth/login?email=${encodeURIComponent(email)}`);
+    return;
+  }
+
+  // 4️⃣  Any other error → show it
+  setError(message);
+};
 
   const handleAppleSignInClick = () => {
     setError(null);
