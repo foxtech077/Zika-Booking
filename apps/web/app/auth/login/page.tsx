@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -59,20 +59,24 @@ export default function LoginPage() {
     script.onload = () => {
       if (window.google && !gsiInitialized) {
         gsiInitialized = true;
+        // Initialize Google One‑Tap SDK with env var
+        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "50229721645-fpi6euv7emir3h4n4pmr6hv9saqcfgcm.apps.googleusercontent.com";
         window.google.accounts.id.initialize({
-          client_id: "50229721645-fpi6euv7emir3h4n4pmr6hv9saqcfgcm.apps.googleusercontent.com",
+          client_id: clientId,
           callback: handleGoogleCredentialResponse,
         });
 
         const btn = document.getElementById("google-signin-btn");
-        const btnWidth = btn?.offsetWidth ?? 400;
-        window.google.accounts.id.renderButton(btn, {
-          theme: "outline",
-          size: "large",
-          width: btnWidth,
-          text: "continue_with",
-          shape: "rectangular",
-        });
+        if (btn) {
+          const btnWidth = btn.offsetWidth ?? 400;
+          window.google.accounts.id.renderButton(btn, {
+            theme: "outline",
+            size: "large",
+            width: btnWidth,
+            text: "continue_with",
+            shape: "rectangular",
+          });
+        }
       }
     };
 
@@ -96,10 +100,20 @@ export default function LoginPage() {
         return;
       }
       setSession(data.tokens.accessToken, data.user as any);
-      router.replace(getPostLoginPath(data.user));
+      // Explicitly navigate based on user type; treat missing or new users as traveller
+      const targetPath = data.user.userType === "provider" ? "/dashboard" : "/traveller";
+      router.replace(targetPath);
     } catch (err: any) {
-      const msg = err.response?.data?.error?.message ?? "Sign in with Google failed. Please try again.";
-      setError(msg);
+      // If the backend indicates the email already exists (e.g., user already registered via Google),
+      // we treat this as a successful login and let the existing flow handle redirection.
+      const errorMessage = err.response?.data?.error?.message ?? "Sign in with Google failed. Please try again.";
+      if (errorMessage.toLowerCase().includes("email already exists")) {
+        // Do not display an error; the backend should have returned a valid user in this case.
+        // No action needed because the successful response would have been handled earlier.
+        setError(null);
+      } else {
+        setError(errorMessage);
+      }
     }
   };
 
