@@ -52,10 +52,12 @@ export type BillingInput = {
   
     const baseAmount = units * input.rate;
   
-    const subtotal =
-    baseAmount -
-    input.promotionDiscount -
-    input.voucherAmount;
+    const subtotal = Math.max(
+      0,
+      baseAmount -
+        input.promotionDiscount -
+        input.voucherAmount
+    );
   
   const serviceFee =
     Math.ceil(subtotal * 0.05 * 100) / 100;
@@ -63,14 +65,16 @@ export type BillingInput = {
   const taxAmount =
     subtotal * input.taxRate;
   
-    const totalAmount =
-    Number(
-      (
-        subtotal +
-        serviceFee +
-        taxAmount +
-        input.deliveryFee
-      ).toFixed(2)
+    const totalAmount = Math.max(
+      0,
+      Number(
+        (
+          subtotal +
+          serviceFee +
+          taxAmount +
+          input.deliveryFee
+        ).toFixed(2)
+      )
     );
   
   const commissionAmount =

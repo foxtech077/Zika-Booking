@@ -151,6 +151,13 @@ export async function requireAdminSession(req: FastifyRequest, reply: FastifyRep
 async function issueAdminSession(adminId: string, role: string): Promise<string> {
   const expiresAt = new Date(Date.now() + SESSION_TTL_DAYS * 24 * 60 * 60 * 1000);
 
+  // Fetch adminUser's countryScope
+  const admin = await prisma.adminUser.findUnique({
+    where: { id: adminId },
+    select: { countryScope: true },
+  });
+  const countryScope = admin?.countryScope ?? [];
+
   // Create a placeholder session to get a sessionId, then sign the JWT with it
   const tempSession = await prisma.adminSession.create({
     data: {
@@ -161,7 +168,12 @@ async function issueAdminSession(adminId: string, role: string): Promise<string>
   });
 
   // Sign the JWT — this IS the session token returned to the client
-  const jwt = await signAdminSessionToken({ sub: adminId, role, sessionId: tempSession.id });
+  const jwt = await signAdminSessionToken({
+    sub: adminId,
+    role,
+    sessionId: tempSession.id,
+    countryScope,
+  });
 
   // Hash the JWT for DB revocation lookups (client sends JWT, we hash it to find the session)
   const tokenHash = hashToken(jwt);
@@ -412,7 +424,6 @@ console.log("admin.fido2Credential =", admin.fido2Credential);
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
 
 
-
     let result: Awaited<ReturnType<typeof waFinishRegistration>>;
     try {
       result = await waFinishRegistration(adminId, req.body);
@@ -572,6 +583,18 @@ export async function adminUserRoutes(app: FastifyInstance) {
     },
     preHandler: [requireAdminSession],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const callerRole = (req as FastifyRequest & {
+    adminRole: string;
+  }).adminRole;
+
+  if (!["admin", "super_admin"].includes(callerRole)) {
+    return sendError(
+      reply,
+      403,
+      "FORBIDDEN",
+      "Only Admin and Super Admin can access audit logs."
+    );
+  }
     const { page = "1", limit = "20" } = req.query as Record<string, string>;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
