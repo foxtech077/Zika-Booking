@@ -164,7 +164,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     });
   });
   // ── POST /payments/initiate ───────────────────────────────────────────────
-  app.post("/initiate", { preHandler: [requireUser], schema: {
+  app.post("/payments/initiate", { preHandler: [requireUser], schema: {
     tags: ["Payments"],
     summary: "Initiate payment — saved Stripe card or Tara mobile money",
     description:
@@ -385,7 +385,7 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   // ── GET /payments/:id/status ──────────────────────────────────────────────
-  app.get("/:id/status", { preHandler: [requireUser],schema: {
+  app.get("/payments/:id/status", { preHandler: [requireUser],schema: {
     tags: ["Payments"],
     params: {
       type: "object",
@@ -427,7 +427,7 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   // ── POST /payments/refunds (internal) ─────────────────────────────────────
-  app.post("/refunds",{schema: {
+  app.post("/payments/refunds",{schema: {
     tags: ["Payments"],
     body: {
       type: "object",
