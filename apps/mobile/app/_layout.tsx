@@ -5,7 +5,9 @@ import { AppState, type AppStateStatus } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { StripeProvider } from "@stripe/stripe-react-native";
 import axios from "axios";
+import { getEnvStripePublishableKey } from "../lib/stripe-config";
 import { useAuthStore } from "../store/auth";
 
 const queryClient = new QueryClient({
@@ -21,6 +23,7 @@ const screenOptionsByName: Record<string, object> = {
   "listings/new":              { headerShown: false },
   "listings/[id]/index":       { headerShown: false },
   "booking/[id]":              { headerShown: false },
+  "booking/submitted":         { headerShown: false },
   "provider/booking/[id]":     { headerShown: false },
   search:                      { headerShown: true, title: "Search Results", headerBackTitle: "Back" },
   "book/[listingId]":          { headerShown: true, headerBackTitle: "Back" },
@@ -126,14 +129,19 @@ export default function RootLayout() {
   if (!isHydrated) return null;
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <StatusBar style="auto" />
-      <Stack
-        screenOptions={({ route }) => ({
-          headerShown: false,
-          ...(screenOptionsByName[route.name] ?? {}),
-        })}
-      />
-    </QueryClientProvider>
+    <StripeProvider
+      publishableKey={getEnvStripePublishableKey()}
+      merchantIdentifier="merchant.com.kainook.app"
+    >
+      <QueryClientProvider client={queryClient}>
+        <StatusBar style="auto" />
+        <Stack
+          screenOptions={({ route }) => ({
+            headerShown: false,
+            ...(screenOptionsByName[route.name] ?? {}),
+          })}
+        />
+      </QueryClientProvider>
+    </StripeProvider>
   );
 }

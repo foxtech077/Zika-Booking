@@ -53,13 +53,14 @@ export default function ReviewScreen() {
   const [submitted, setSubmitted] = useState(false);
 
   // Fetch booking meta for listing name + reference
-  const { data: bookingMeta } = useQuery<BookingMeta>({
+  const { data: bookingMeta, isLoading: metaLoading, isError: metaError } = useQuery<BookingMeta>({
     queryKey: ["bookingMeta", bookingId],
     queryFn: async () => {
       const res = await listingApi.get<{ data: BookingMeta }>(`/guests/me/bookings/${bookingId}`);
       return res.data.data;
     },
     enabled: !!bookingId,
+    retry: 1,
   });
 
   const submitMutation = useMutation({
@@ -87,6 +88,31 @@ export default function ReviewScreen() {
       return;
     }
     submitMutation.mutate();
+  }
+
+  // ── Loading / error states ────────────────────────────────────────────────
+  if (metaLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#1a73e8" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (metaError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centered}>
+          <Ionicons name="alert-circle-outline" size={56} color="#dc2626" />
+          <Text style={styles.errorTitle}>Could not load booking</Text>
+          <TouchableOpacity style={styles.primaryBtn} onPress={() => router.back()}>
+            <Text style={styles.primaryBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   // ── Success state ──────────────────────────────────────────────────────────
@@ -190,6 +216,8 @@ export default function ReviewScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f9fafb" },
   scroll: { padding: 20, paddingBottom: 40 },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 16 },
+  errorTitle: { fontSize: 18, fontWeight: "700", color: "#111827", textAlign: "center" },
 
   // Meta card
   metaCard: {

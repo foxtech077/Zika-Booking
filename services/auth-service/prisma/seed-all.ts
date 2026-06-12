@@ -119,14 +119,14 @@ async function main() {
     update: {
       firstName: "Test", lastName: "Provider", email: "testprovider99@zika.com",
       passwordHash: userPasswordHash, status: "active", userType: "provider",
-      businessName: "Zika Rentals Ltd", country: "KE",
+      businessName: "Kainook Rentals Ltd", country: "KE",
       emailVerified: true, currentTier: "bronze", loyaltyPoints: 0,
     },
     create: {
       id: "cmos7y8zp0009j9kc5o4ed3c0",
       firstName: "Test", lastName: "Provider", email: "testprovider99@zika.com",
       passwordHash: userPasswordHash, status: "active", userType: "provider",
-      businessName: "Zika Rentals Ltd", country: "KE",
+      businessName: "Kainook Rentals Ltd", country: "KE",
       emailVerified: true, currentTier: "bronze", loyaltyPoints: 0,
     },
   });

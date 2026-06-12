@@ -1,4 +1,4 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
@@ -21,8 +21,8 @@ async function build() {
   await app.register(swagger, {
     openapi: {
       info: {
-        title: "Zika Booking Payment Service API",
-        description: "API documentation for Zika Booking Payment Service",
+        title: "Kainook Payment Service API",
+        description: "API documentation for Kainook Payment Service",
         version: "0.0.1",
       },
       servers: [
@@ -31,7 +31,7 @@ async function build() {
           description: "Local development server",
         },
         {
-          url: "https://api.kainook.com/payments",
+          url: "https://api.kainook.com",
           description: "Production server",
         },
       ],

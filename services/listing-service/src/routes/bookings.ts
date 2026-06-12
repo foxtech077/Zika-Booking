@@ -6,8 +6,11 @@ import { getRedis } from "../lib/redis.js";
 import { randomUUID } from "crypto";
 import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../lib/email.js";
 import { ipDetect } from "../middleware/ipDetect.js";
-import { getPricing } from "../routes/pricing.routes.js";
-import { getPaymentProvider } from "../routes/paymentrouting.js";
+import { getPricing } from "../services/pricing.services.js";
+import { getPaymentProvider } from "../services/payment.services.js";
+import { calculateBilling } from "../services/billing.service.js";
+import { getTaxRate } from "../services/getTaxRate.services.js";
+import { VoucherDiscountType } from "../generated/index.js";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 const DEFAULT_COMMISSION_RATE = 0.05;
@@ -76,57 +79,57 @@ async function checkAvailability(
 
 // ── Pricing calculators ───────────────────────────────────────────────────────
 
-function calcHotelApartmentPricing(
-  listing: any,
-  checkIn: string,
-  checkOut: string,
-  commissionRate = DEFAULT_COMMISSION_RATE,
-) {
-  const nights = Math.round(
-    (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86_400_000,
-  );
-  const rate = Number(listing.pricePerNight ?? 0);
-  const subtotal = rate * nights;
+// function calcHotelApartmentPricing(
+//   listing: any,
+//   checkIn: string,
+//   checkOut: string,
+//   commissionRate = DEFAULT_COMMISSION_RATE,
+// ) {
+//   const nights = Math.round(
+//     (new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86_400_000,
+//   );
+//   const rate = Number(listing.pricePerNight ?? 0);
+//   const subtotal = rate * nights;
 
-  let discountAmount = 0;
-  if (
-    listing.category === "apartment" &&
-    listing.longStayEnabled &&
-    listing.longStayMinNights &&
-    nights >= listing.longStayMinNights
-  ) {
-    if (listing.longStayDiscountType === "percentage") {
-      discountAmount = subtotal * (Number(listing.longStayDiscountValue ?? 0) / 100);
-    } else {
-      discountAmount = Number(listing.longStayDiscountValue ?? 0) * nights;
-    }
-  }
+//   let discountAmount = 0;
+//   if (
+//     listing.category === "apartment" &&
+//     listing.longStayEnabled &&
+//     listing.longStayMinNights &&
+//     nights >= listing.longStayMinNights
+//   ) {
+//     if (listing.longStayDiscountType === "percentage") {
+//       discountAmount = subtotal * (Number(listing.longStayDiscountValue ?? 0) / 100);
+//     } else {
+//       discountAmount = Number(listing.longStayDiscountValue ?? 0) * nights;
+//     }
+//   }
 
-  const totalAmount = subtotal - discountAmount;
-  const commissionAmount = totalAmount * commissionRate;
-  const providerPayout = totalAmount - commissionAmount;
+//   const totalAmount = subtotal - discountAmount;
+//   const commissionAmount = totalAmount * commissionRate;
+//   const providerPayout = totalAmount - commissionAmount;
 
-  return { nights, rate, subtotal, discountAmount, totalAmount, commissionAmount, providerPayout };
-}
+//   return { nights, rate, subtotal, discountAmount, totalAmount, commissionAmount, providerPayout };
+// }
 
-function calcCarPricing(
-  listing: any,
-  pickupDatetime: string,
-  returnDatetime: string,
-  deliveryRequested: boolean,
-  commissionRate = DEFAULT_COMMISSION_RATE,
-) {
-  const rentalMs = new Date(returnDatetime).getTime() - new Date(pickupDatetime).getTime();
-  const days = Math.ceil(rentalMs / 86_400_000);
-  const rate = Number(listing.pricePerDay ?? 0);
-  const subtotal = rate * days;
-  const deliveryFee = deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0;
-  const totalAmount = subtotal + deliveryFee;
-  const commissionAmount = totalAmount * commissionRate;
-  const providerPayout = totalAmount - commissionAmount;
+// function calcCarPricing(
+//   listing: any,
+//   pickupDatetime: string,
+//   returnDatetime: string,
+//   deliveryRequested: boolean,
+//   commissionRate = DEFAULT_COMMISSION_RATE,
+// ) {
+//   const rentalMs = new Date(returnDatetime).getTime() - new Date(pickupDatetime).getTime();
+//   const days = Math.ceil(rentalMs / 86_400_000);
+//   const rate = Number(listing.pricePerDay ?? 0);
+//   const subtotal = rate * days;
+//   const deliveryFee = deliveryRequested ? Number(listing.deliveryFee ?? 0) : 0;
+//   const totalAmount = subtotal + deliveryFee;
+//   const commissionAmount = totalAmount * commissionRate;
+//   const providerPayout = totalAmount - commissionAmount;
 
-  return { days, rate, subtotal, deliveryFee, totalAmount, commissionAmount, providerPayout };
-}
+//   return { days, rate, subtotal, deliveryFee, totalAmount, commissionAmount, providerPayout };
+// }
 
 // ── Refund calculator ─────────────────────────────────────────────────────────
 
@@ -220,13 +223,13 @@ export async function bookingRoutes(app: FastifyInstance) {
           type: "object",
           required: ["listingId"],
           properties: {
-            listingId:        { type: "string" },
-            checkIn:          { type: "string", format: "date" },
-            checkOut:         { type: "string", format: "date" },
-            pickupDatetime:   { type: "string", format: "date-time" },
-            returnDatetime:   { type: "string", format: "date-time" },
+            listingId: { type: "string" },
+            checkIn: { type: "string", format: "date" },
+            checkOut: { type: "string", format: "date" },
+            pickupDatetime: { type: "string", format: "date-time" },
+            returnDatetime: { type: "string", format: "date-time" },
             deliveryRequested: { type: "boolean", default: false },
-            guests:           { type: "integer", minimum: 1 },
+            guests: { type: "integer", minimum: 1 },
           },
         },
         response: {
@@ -237,9 +240,9 @@ export async function bookingRoutes(app: FastifyInstance) {
               data: {
                 type: "object",
                 properties: {
-                  lockToken:     { type: "string" },
-                  expiresAt:     { type: "string" },
-                  resumed:       { type: "boolean" },
+                  lockToken: { type: "string" },
+                  expiresAt: { type: "string" },
+                  resumed: { type: "boolean" },
                   pricingPreview: { type: "object", additionalProperties: true },
                 },
                 required: ["lockToken", "expiresAt"],
@@ -247,7 +250,6 @@ export async function bookingRoutes(app: FastifyInstance) {
             },
           },
           409: errSchema,
-          410: errSchema,
           429: errSchema,
         },
       },
@@ -255,6 +257,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const guestId = (req as ProviderRequest).providerId;
+  
       const body = req.body as {
         listingId: string;
         checkIn?: string;
@@ -264,30 +267,56 @@ export async function bookingRoutes(app: FastifyInstance) {
         deliveryRequested?: boolean;
         guests?: number;
       };
-
+  
+      // ── 1. LISTING ─────────────────────────────
       const listing = await prisma.listing.findUnique({
         where: { id: body.listingId, deletedAt: null },
       });
-      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (!listing) {
+        return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      }
+      // STEP 1: base rate
+const baseRate = Number(
+  listing.pricePerNight ?? listing.pricePerDay ?? 0
+);
 
-      const validStatuses = listing.category === "hotel" ? ["approved"] : ["active"];
+// STEP 2: promotion logic (HERE, NOT in billing service)
+const promotionRate = 0;
+
+// STEP 3: compute base amount
+const units = 1; // optional preview logic (or skip here)
+const baseAmount = baseRate * units;
+
+const promotionDiscount = baseAmount * promotionRate;
+  
+     
+  
+      // ── 2. STATUS CHECK ─────────────────────────
+      const validStatuses =
+        listing.category === "hotel" ? ["approved"] : ["active"];
+  
       if (!validStatuses.includes(listing.status)) {
         return reply.status(410).send({
           success: false,
-          error: { code: "LISTING_INACTIVE", message: "This listing is no longer available." },
+          error: {
+            code: "LISTING_INACTIVE",
+            message: "This listing is no longer available.",
+          },
         });
       }
-
-      // Provider cannot book their own listing
+  
+      // ── 3. SELF BOOKING CHECK ───────────────────
       if (listing.providerId === guestId) {
         return sendError(reply, 403, "FORBIDDEN", "You cannot book your own listing.");
       }
-
-      // Guest count validation
+  
+      // ── 4. GUEST LIMIT ──────────────────────────
       if (body.guests && listing.maxGuests && body.guests > listing.maxGuests) {
         return sendError(
-          reply, 400, "EXCEEDS_CAPACITY",
-          `This listing accommodates a maximum of ${listing.maxGuests} guests.`,
+          reply,
+          400,
+          "EXCEEDS_CAPACITY",
+          `Max guests allowed: ${listing.maxGuests}`
         );
       }
 
@@ -296,83 +325,78 @@ export async function bookingRoutes(app: FastifyInstance) {
       const pendingCount = await prisma.booking.count({
         where: { guestId, status: "pending_payment", createdAt: { gt: pendingExpiry } },
       });
+  
       if (pendingCount >= 5) {
         return reply.status(429).send({
           success: false,
           error: {
             code: "TOO_MANY_PENDING",
-            message: "You have too many pending reservations. Please complete or cancel an existing booking first.",
+            message: "Complete or cancel existing bookings first.",
           },
         });
       }
-
-      // Availability check before acquiring lock
+  
+      // ── 6. AVAILABILITY CHECK ───────────────────
       if (listing.category !== "car" && body.checkIn && body.checkOut) {
         const avail = await checkAvailability(
           listing.id,
           listing.unitCount ?? 1,
           new Date(body.checkIn),
-          new Date(body.checkOut),
+          new Date(body.checkOut)
         );
+  
         if (!avail.available) {
           return reply.status(409).send({
             success: false,
-            error: { code: "LISTING_UNAVAILABLE", message: avail.reason ?? "No availability for selected dates." },
+            error: {
+              code: "LISTING_UNAVAILABLE",
+              message: avail.reason ?? "Not available.",
+            },
           });
         }
-      } else if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
+      }
+  
+      if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
         const avail = await checkAvailability(
           listing.id,
           listing.unitCount ?? 1,
           new Date(body.pickupDatetime),
-          new Date(body.returnDatetime),
+          new Date(body.returnDatetime)
         );
+  
         if (!avail.available) {
           return reply.status(409).send({
             success: false,
-            error: { code: "LISTING_UNAVAILABLE", message: avail.reason ?? "No availability for selected dates." },
+            error: {
+              code: "LISTING_UNAVAILABLE",
+              message: avail.reason ?? "Not available.",
+            },
           });
         }
       }
-
-      // Build lock key
+  
+      // ── 7. LOCK KEY ─────────────────────────────
       const lockKey =
         listing.category === "car"
           ? `rlk:${listing.id}:${body.pickupDatetime?.slice(0, 10)}:${body.returnDatetime?.slice(0, 10)}`
           : `rlk:${listing.id}:${body.checkIn}:${body.checkOut}`;
-
+  
       const lockToken = randomUUID();
       const ctxKey = `rlk:ctx:${lockToken}`;
-
-      // Try to acquire lock (SETNX)
+  
       const acquired = await redis.set(lockKey, lockToken, "PX", LOCK_TTL_MS, "NX");
+  
       if (!acquired) {
-        // Check if this guest already holds it (idempotent resume)
-        const existing = await redis.get(lockKey);
-        if (existing) {
-          const ctxRaw = await redis.get(`rlk:ctx:${existing}`);
-          if (ctxRaw) {
-            const ctx = JSON.parse(ctxRaw);
-            if (ctx.guestId === guestId) {
-              const ttl = await redis.pttl(lockKey);
-              return sendSuccess(reply, 200, {
-                lockToken: existing,
-                expiresAt: new Date(Date.now() + ttl).toISOString(),
-                resumed: true,
-              });
-            }
-          }
-        }
         return reply.status(409).send({
           success: false,
           error: {
             code: "LISTING_UNAVAILABLE",
-            message: "This listing is being reserved by another guest. Please try again in a few minutes.",
+            message: "Already locked by another user.",
           },
         });
       }
-
-      // Store lock context
+  
+      // ── 8. STORE CONTEXT ─────────────────────────
       const ctx = {
         guestId,
         listingId: listing.id,
@@ -383,43 +407,52 @@ export async function bookingRoutes(app: FastifyInstance) {
         deliveryRequested: body.deliveryRequested ?? false,
         renewed: false,
       };
+  
       await redis.set(ctxKey, JSON.stringify(ctx), "PX", LOCK_TTL_MS);
-
-      // Pricing preview
-      let pricingPreview: any = {};
-      if (listing.category !== "car" && body.checkIn && body.checkOut) {
-        const p = calcHotelApartmentPricing(listing, body.checkIn, body.checkOut);
-        pricingPreview = {
-          nights: p.nights,
-          nightlyRate: p.rate,
-          subtotal: p.subtotal,
-          discountAmount: p.discountAmount,
-          totalAmount: p.totalAmount,
-          currency: listing.currency,
-        };
-      } else if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
-        const p = calcCarPricing(
-          listing,
-          body.pickupDatetime,
-          body.returnDatetime,
-          body.deliveryRequested ?? false,
-        );
-        pricingPreview = {
-          days: p.days,
-          dailyRate: p.rate,
-          subtotal: p.subtotal,
-          deliveryFee: p.deliveryFee,
-          totalAmount: p.totalAmount,
-          currency: listing.currency,
-        };
-      }
-
+  
+      // ── 9. BILLING (FIXED TYPES) ─────────────────
+      const commissionRate = await getCommissionRate(listing.country ?? null);
+  
+      const billing = calculateBilling({
+        listingCategory: listing.category,
+      
+        checkIn: body.checkIn,
+        checkOut: body.checkOut,
+        pickupDatetime: body.pickupDatetime,
+        returnDatetime: body.returnDatetime,
+      
+        rate: baseRate,
+      
+        deliveryFee: Number(listing.deliveryFee ?? 0),
+      
+        promotionDiscount, 
+        voucherAmount: 0,
+      
+        taxRate: getTaxRate(listing.country),
+      
+        commissionRate,
+      });
+  
+      // ── 10. FIXED RESPONSE ───────────────────────
+      const pricingPreview = {
+        units: billing.units,
+        baseAmount: billing.baseAmount,
+        promotionDiscount: billing.promotionDiscount,
+        voucherDiscount: billing.voucherDiscount,
+         serviceFee: billing.serviceFee,
+        taxAmount: billing.taxAmount,
+        deliveryFee: billing.deliveryFee,
+        totalAmount: billing.totalAmount,
+        currency: listing.currency,
+      };
+  
       return sendSuccess(reply, 200, {
         lockToken,
         expiresAt: new Date(Date.now() + LOCK_TTL_MS).toISOString(),
+        resumed: false,
         pricingPreview,
       });
-    },
+    }
   );
 
   // ── POST /bookings/lock/renew — one-time lock extension ────────────────────
@@ -645,67 +678,106 @@ export async function bookingRoutes(app: FastifyInstance) {
             `Driver must be at least ${listing.minimumDriverAge} years old.`,
           );
       }
-
       const commissionRate = await getCommissionRate(listing.country ?? null);
 
-      // Server-side pricing (never trust client)
-      let nights = 0, days = 0, rate = 0, subtotal = 0, discountAmount = 0;
-      let deliveryFee = 0, totalAmount = 0, commissionAmount = 0, providerPayout = 0;
+      const rate =
+        listing.category === "car"
+          ? Number(listing.pricePerDay ?? 0)
+          : Number(listing.pricePerNight ?? 0);
+    
+      // 1. BASE BILLING (NO VOUCHER)
 
-      if (listing.category !== "car" && body.checkIn && body.checkOut) {
-        const p = calcHotelApartmentPricing(listing, body.checkIn, body.checkOut, commissionRate);
-        nights = p.nights; rate = p.rate; subtotal = p.subtotal;
-        discountAmount = p.discountAmount; totalAmount = p.totalAmount;
-        commissionAmount = p.commissionAmount; providerPayout = p.providerPayout;
-      } else if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
-        const p = calcCarPricing(
-          listing, body.pickupDatetime, body.returnDatetime,
-          body.deliveryRequested ?? false, commissionRate,
-        );
-        days = p.days; rate = p.rate; subtotal = p.subtotal;
-        deliveryFee = p.deliveryFee; totalAmount = p.totalAmount;
-        commissionAmount = p.commissionAmount; providerPayout = p.providerPayout;
-      }
-
-      // Voucher handling
-      let appliedVoucher: { id: string; code: string } | null = null;
+      const baseBilling = calculateBilling({
+        listingCategory: listing.category,
+        checkIn: body.checkIn,
+        checkOut: body.checkOut,
+        pickupDatetime: body.pickupDatetime,
+        returnDatetime: body.returnDatetime,
+        rate,
+        deliveryFee: Number(listing.deliveryFee ?? 0),
+        promotionDiscount: 0,
+        voucherAmount: 0,
+        taxRate: getTaxRate(listing.country),
+        commissionRate,
+      });
+      
       let voucherDiscount = 0;
-
+      let appliedVoucher: { id: string; code: string } | null = null;
+      
+ 
+      // 2. VOUCHER LOGIC
+      
       if (body.voucherCode) {
-        const now = new Date();
-        const voucher = await prisma.voucher.findUnique({ where: { code: body.voucherCode } });
-
-        if (!voucher)
-          return sendError(reply, 400, "INVALID_VOUCHER", "Voucher code not found.");
-        if (!voucher.isActive)
+        const voucher = await prisma.voucher.findUnique({
+          where: { code: body.voucherCode },
+        });
+      
+        if (!voucher) {
+          return sendError(reply, 400, "INVALID_VOUCHER", "Voucher not found");
+        }
+      
+        if (!voucher.isActive) {
           return sendError(reply, 400, "INVALID_VOUCHER", "Voucher is not active.");
-        if (now < voucher.validFrom || now > voucher.validUntil)
-          return sendError(reply, 400, "INVALID_VOUCHER", "Voucher has expired or is not yet valid.");
-        if (voucher.usageLimit !== null && voucher.usageCount >= voucher.usageLimit)
-          return sendError(reply, 400, "INVALID_VOUCHER", "Voucher usage limit has been reached.");
-        if (voucher.minOrderValue !== null && totalAmount < Number(voucher.minOrderValue))
-          return sendError(reply, 400, "INVALID_VOUCHER", `Minimum order value of ${Number(voucher.minOrderValue)} required.`);
-
+        }
+      
+        const now = new Date();
+      
+        if (now < voucher.validFrom || now > voucher.validUntil) {
+          return sendError(
+            reply,
+            400,
+            "INVALID_VOUCHER",
+            "Voucher is expired or not valid yet."
+          );
+        }
+      
+        //  your requested logic kept exactly here
         if (voucher.discountType === "percentage") {
-          voucherDiscount = totalAmount * (Number(voucher.discountValue) / 100);
+          voucherDiscount =
+            baseBilling.subtotal *
+            (Number(voucher.discountValue) / 100);
         } else {
           voucherDiscount = Number(voucher.discountValue);
         }
-        if (voucher.maxDiscount !== null && voucherDiscount > Number(voucher.maxDiscount)) {
-          voucherDiscount = Number(voucher.maxDiscount);
-        }
-        voucherDiscount = Math.min(voucherDiscount, totalAmount);
-        totalAmount -= voucherDiscount;
-
-        // Recalculate commission/payout on the discounted total
-        commissionAmount = totalAmount * commissionRate;
-        providerPayout = totalAmount - commissionAmount;
-
-        appliedVoucher = { id: voucher.id, code: voucher.code };
+      
+        appliedVoucher = {
+          id: voucher.id,
+          code: voucher.code,
+        };
       }
+      
 
+      // 3. FINAL RECALCULATION
+      
+      const finalBilling = calculateBilling({
+        listingCategory: listing.category,
+        checkIn: body.checkIn,
+        checkOut: body.checkOut,
+        pickupDatetime: body.pickupDatetime,
+        returnDatetime: body.returnDatetime,
+        rate,
+        deliveryFee: Number(listing.deliveryFee ?? 0),
+        promotionDiscount: 0,
+        voucherAmount: voucherDiscount,
+        taxRate: getTaxRate(listing.country),
+        commissionRate,
+      });
+      
+    
+      // 4. FINAL VALUES (USE THIS ONLY)
+      
+      const subtotal = finalBilling.subtotal;
+      const totalAmount = finalBilling.totalAmount;
+      const commissionAmount = finalBilling.commissionAmount;
+      const providerPayout = finalBilling.providerPayout;
+      const deliveryFee = finalBilling.deliveryFee;
+      const discountAmount = finalBilling.promotionDiscount + voucherDiscount;
+      
+   
+      // 5. BOOKING
+    
       const reference = await generateReference(listing.country ?? "XX");
-
+      
       const booking = await prisma.booking.create({
         data: {
           reference,
@@ -714,35 +786,51 @@ export async function bookingRoutes(app: FastifyInstance) {
           providerId: listing.providerId,
           listingType: listing.category,
           status: "pending_payment",
-          checkIn:        body.checkIn        ? new Date(body.checkIn)        : undefined,
-          checkOut:       body.checkOut       ? new Date(body.checkOut)       : undefined,
-          pickupDatetime: body.pickupDatetime ? new Date(body.pickupDatetime) : undefined,
-          returnDatetime: body.returnDatetime ? new Date(body.returnDatetime) : undefined,
-          nightsOrDays: nights || days,
+      
+          checkIn: body.checkIn ? new Date(body.checkIn) : undefined,
+          checkOut: body.checkOut ? new Date(body.checkOut) : undefined,
+          pickupDatetime: body.pickupDatetime
+            ? new Date(body.pickupDatetime)
+            : undefined,
+          returnDatetime: body.returnDatetime
+            ? new Date(body.returnDatetime)
+            : undefined,
+      
+          nightsOrDays: finalBilling.units,
+      
           guestFirstName: body.guestFirstName,
-          guestLastName:  body.guestLastName,
-          guestEmail:     body.guestEmail,
-          guestPhone:     body.guestPhone,
-          adults:         body.adults,
-          children:       body.children ?? 0,
+          guestLastName: body.guestLastName,
+          guestEmail: body.guestEmail,
+          guestPhone: body.guestPhone,
+      
+          adults: body.adults,
+          children: body.children ?? 0,
           specialRequests: body.specialRequests,
+      
           driverFirstName: body.driverFirstName,
-          driverLastName:  body.driverLastName,
-          driverAge:       body.driverAge,
+          driverLastName: body.driverLastName,
+          driverAge: body.driverAge,
+      
           deliveryRequested: body.deliveryRequested ?? false,
-          deliveryAddress:   body.deliveryAddress,
+          deliveryAddress: body.deliveryAddress,
+      
           nightlyRate: listing.category !== "car" ? rate : undefined,
-          dailyRate:   listing.category === "car" ? rate : undefined,
+          dailyRate: listing.category === "car" ? rate : undefined,
+      
           subtotal,
+          totalAmount,
           discountAmount,
           deliveryFee,
-          totalAmount,
+      
           currency: listing.currency ?? "USD",
+      
           commissionRate,
           commissionAmount,
           providerPayout,
+      
           cancellationPolicy: listing.cancellationPolicy ?? "moderate",
-          voucherCode:     appliedVoucher?.code,
+      
+          voucherCode: appliedVoucher?.code,
           voucherDiscount,
         },
       });

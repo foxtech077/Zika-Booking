@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -176,7 +176,7 @@ export default function CalendarSyncScreen() {
     if (!outboundUrl) return;
     try {
       await Share.share({
-        message: `ZikaBooking Outbound Calendar Feed URL for ${activeListing?.name ?? "Listing"}: ${outboundUrl}`,
+        message: `Kainook Outbound Calendar Feed URL for ${activeListing?.name ?? "Listing"}: ${outboundUrl}`,
         url: outboundUrl,
       });
     } catch (e) {
@@ -290,10 +290,10 @@ export default function CalendarSyncScreen() {
                 <View style={st.card}>
                   <View style={st.cardHead}>
                     <Ionicons name="calendar-outline" size={20} color={K.colors.accent} />
-                    <Text style={st.cardTitle}>My Zika Calendar Feed</Text>
+                    <Text style={st.cardTitle}>My Kainook Calendar Feed</Text>
                   </View>
                   <Text style={st.cardDesc}>
-                    Use this URL in external platforms (Airbnb, Booking.com, Google) to sync confirmed Zika bookings into their calendars.
+                    Use this URL in external platforms (Airbnb, Booking.com, Google) to sync confirmed Kainook bookings into their calendars.
                   </Text>
                   <View style={st.urlInputWrap}>
                     <Text style={st.urlText} numberOfLines={1} ellipsizeMode="middle">
