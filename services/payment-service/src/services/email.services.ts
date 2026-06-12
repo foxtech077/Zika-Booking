@@ -5,11 +5,14 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
 export async function sendGuestEmail(
   booking: any,
   invoice: any,
-  pdf: { fileName: string; pdfUrl: string; pdfBuffer: Buffer } //  updated type
+  pdf: { fileName: string; pdfUrl: string; pdfBuffer: Buffer }
 ) {
   await sgMail.send({
-    to: booking.user.email,
-    from: "bookings@zika.com",
+    to: booking.user.email ?? "ajinfg03@gmail.com", // ✅ fixed
+    from: {
+      email: process.env.SENDGRID_FROM_EMAIL!,
+      name: process.env.SENDGRID_FROM_NAME ?? "ZikaBooking",
+    },
     subject: `Your booking is confirmed — ${booking.code}`,
     html: `
       <h2>Booking Confirmed</h2>
@@ -52,11 +55,24 @@ export async function sendGuestEmail(
     `,
     attachments: [
       {
-        content: pdf.pdfBuffer.toString("base64"), //  use buffer directly
+        content: pdf.pdfBuffer.toString("base64"),
         filename: `ZikaBooking-${booking.code}.pdf`,
         type: "application/pdf",
         disposition: "attachment",
       },
     ],
+  });
+}
+
+//  ADD THIS — required by bookingConfirmedHandler.ts retry logic
+export async function sendAdminAlert(context: string, error: any) {
+  await sgMail.send({
+    to: process.env.ADMIN_ALERT_EMAIL!,
+    from: {
+      email: process.env.SENDGRID_FROM_EMAIL!,
+      name: "ZikaBooking Alerts",
+    },
+    subject: `🚨 Email failure: ${context}`,
+    html: `<p>Failed after 3 attempts:</p><pre>${error.message}</pre>`,
   });
 }

@@ -4,7 +4,6 @@ import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type GuestRequest } from "../middleware/auth.js";
-import { tr } from "zod/v4/locales";
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -51,7 +50,7 @@ function formatMethod(m: {
 export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── GET /guests/me/payment-methods ───────────────────────────────────────
-  app.get("/guests/me/payment-methods", { preHandler: [requireUser],schema: {
+  app.get("/guests/me/payment-methods", { preHandler: [requireUser], schema: {
     tags: ["Payment Methods"],
     summary: "List saved payment methods",
   }, }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -75,111 +74,105 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
     return sendSuccess(reply, 200, { paymentMethods: methods.map(formatMethod) });
   });
-  
-  
-    // ── POST /guests/me/payment-methods/stripe/setup ─────────────────────────
-    app.post(
-      "/guests/me/payment-methods/stripe/setup",{ preHandler: [requireUser],schema: {
-        tags: ["Payment Methods"],
-        summary: "Create Stripe SetupIntent",
-      }, },async (req: FastifyRequest, reply: FastifyReply) => {
-        // requireUser sets userId but we don't need it for setup intent creation
-        // void (req as GuestRequest).userId;
 
-        //Create Stripe Customer
-        const { userId } = req as GuestRequest;
 
-        let stripeCustomerId: string;
+  // ── POST /guests/me/payment-methods/stripe/setup ─────────────────────────
+  app.post(
+    "/guests/me/payment-methods/stripe/setup", { preHandler: [requireUser], schema: {
+      tags: ["Payment Methods"],
+      summary: "Create Stripe SetupIntent",
+    }, }, async (req: FastifyRequest, reply: FastifyReply) => {
+      const { userId } = req as GuestRequest;
 
-        try {
-          // 1. Get or create Stripe customer
-          let customerAccount = await prisma.customerAccount.findUnique({
-            where: {
-              userId_paymentProvider: {
-                userId,
-                paymentProvider: "stripe",
-              },
+      try {
+        // 1. Get or create Stripe customer
+        let customerAccount = await prisma.customerAccount.findUnique({
+          where: {
+            userId_paymentProvider: {
+              userId,
+              paymentProvider: "stripe",
+            },
+          },
+        });
+
+        let stripeCustomerId: string; //  declared only once now
+
+        if (!customerAccount) {
+          const customer = await stripe.customers.create({
+            metadata: { userId },
+          });
+
+          customerAccount = await prisma.customerAccount.create({
+            data: {
+              userId,
+              paymentProvider: "stripe",
+              providerCustomerId: customer.id,
             },
           });
-    
-          let stripeCustomerId: string;
-    
-          if (!customerAccount) {
-            const customer = await stripe.customers.create({
-              metadata: { userId },
-            });
-    
-            customerAccount = await prisma.customerAccount.create({
-              data: {
-                userId,
-                paymentProvider: "stripe",
-                providerCustomerId: customer.id,
-              },
-            });
-    
-            stripeCustomerId = customer.id;
-          } else {
-            stripeCustomerId = customerAccount.providerCustomerId;
-          }
-    
-          // 2. Create SetupIntent (PRODUCTION SAFE)
-          const setupIntent = await stripe.setupIntents.create({
+
+          stripeCustomerId = customer.id;
+        } else {
+          stripeCustomerId = customerAccount.providerCustomerId;
+        }
+
+        // 2. Create SetupIntent (PRODUCTION SAFE)
+        const setupIntent = await stripe.setupIntents.create(
+          {
             customer: stripeCustomerId,
             payment_method_types: ["card"],
             automatic_payment_methods: { enabled: false },
             usage: "off_session",
           },
           {
-            idempotencyKey: `setup_${userId}`
+            idempotencyKey: `setup_${userId}_${Date.now()}`, //  unique per request
           }
-          );
-    
-          // 3. Return response
-          return reply.code(200).send({
-            success: true,
-            data: {
-              setupIntentId: setupIntent.id,
-              clientSecret: setupIntent.client_secret,
-            },
-          });
-        } catch (err) {
-          return sendError(
-            reply,
-            500,
-            "SETUP_INTENT_FAILED",
-            (err as Error).message
-          );
-        }
-      }
-    );
-    // ── POST /guests/me/payment-methods/stripe/confirm ───────────────────────
-    app.post("/guests/me/payment-methods/stripe/confirm",{ preHandler: [requireUser],schema: {
-      tags: ["Payment Methods"],
-      summary: "Save Stripe payment method",
-      body: {
-        type: "object",
-        required: ["paymentMethodId"],
-        properties: {
-          paymentMethodId: {
-            type: "string",
+        );
+
+        // 3. Return response
+        return reply.code(200).send({
+          success: true,
+          data: {
+            setupIntentId: setupIntent.id,
+            clientSecret: setupIntent.client_secret,
           },
+        });
+      } catch (err) {
+        return sendError(
+          reply,
+          500,
+          "SETUP_INTENT_FAILED",
+          (err as Error).message
+        );
+      }
+    }
+  );
+
+  // ── POST /guests/me/payment-methods/stripe/confirm ───────────────────────
+  app.post("/guests/me/payment-methods/stripe/confirm", { preHandler: [requireUser], schema: {
+    tags: ["Payment Methods"],
+    summary: "Save Stripe payment method",
+    body: {
+      type: "object",
+      required: ["paymentMethodId"],
+      properties: {
+        paymentMethodId: {
+          type: "string",
         },
       },
-    }, },async (req: FastifyRequest, reply: FastifyReply) => {
-        const { userId } = req as GuestRequest;
-        
+    },
+  }, }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { userId } = req as GuestRequest;
 
-        const parsed = confirmStripeSchema.safeParse(req.body);
-        if (!parsed.success) {
-          const fields: Record<string, string> = {};
-          for (const e of parsed.error.issues) fields[e.path.join(".")] = e.message;
-          return sendError(reply, 422, "VALIDATION_ERROR", "Invalid request body.", fields);
-        }
-  //Attach Paymentmethod  to Customer
-        const { paymentMethodId } = parsed.data;
-        
-        const customerAccount =
-    await prisma.customerAccount.findUnique({
+    const parsed = confirmStripeSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const fields: Record<string, string> = {};
+      for (const e of parsed.error.issues) fields[e.path.join(".")] = e.message;
+      return sendError(reply, 422, "VALIDATION_ERROR", "Invalid request body.", fields);
+    }
+
+    const { paymentMethodId } = parsed.data;
+
+    const customerAccount = await prisma.customerAccount.findUnique({
       where: {
         userId_paymentProvider: {
           userId,
@@ -188,117 +181,109 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
       },
     });
 
-  if (!customerAccount) {
-    return sendError(
-      reply,
-      404,
-      "CUSTOMER_NOT_FOUND",
-      "Stripe customer account not found."
-    );
-  }
-  try{
-    await stripe.paymentMethods.attach(
-      paymentMethodId,
-      {
-        customer:
-          customerAccount.providerCustomerId,
-      }
-    );
-  }catch (err: any) {
-    if (
-      err.code !==
-      "payment_method_unexpected_state"
-    ) {
-      throw err;
+    if (!customerAccount) {
+      return sendError(
+        reply,
+        404,
+        "CUSTOMER_NOT_FOUND",
+        "Stripe customer account not found."
+      );
     }
-  }
 
-
-        // Retrieve the Stripe PM to get card details
-        let pm: Awaited<ReturnType<typeof stripe.paymentMethods.retrieve>>;
-        try {
-          pm = await stripe.paymentMethods.retrieve(paymentMethodId);
-        } catch (err) {
-          return sendError(reply, 422, "INVALID_PAYMENT_METHOD", `Could not retrieve payment method: ${(err as Error).message}`);
+    try {
+      await stripe.paymentMethods.attach(
+        paymentMethodId,
+        {
+          customer: customerAccount.providerCustomerId,
         }
+      );
+    } catch (err: any) {
+      if (err.code !== "payment_method_unexpected_state") {
+        throw err;
+      }
+    }
 
-        const card = pm.card;
-        if (!card) {
-          return sendError(reply, 422, "UNSUPPORTED_PM_TYPE", "Only card payment methods are supported via this endpoint.");
+    // Retrieve the Stripe PM to get card details
+    let pm: Awaited<ReturnType<typeof stripe.paymentMethods.retrieve>>;
+    try {
+      pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+    } catch (err) {
+      return sendError(reply, 422, "INVALID_PAYMENT_METHOD", `Could not retrieve payment method: ${(err as Error).message}`);
+    }
+
+    const card = pm.card;
+    if (!card) {
+      return sendError(reply, 422, "UNSUPPORTED_PM_TYPE", "Only card payment methods are supported via this endpoint.");
+    }
+
+    // Check if this is the user's first saved method (to set as default)
+    const existingCount = await prisma.paymentMethod.count({
+      where: { userId, isDeleted: false },
+    });
+
+    const isDefault = existingCount === 0;
+
+    if (isDefault) {
+      await stripe.customers.update(
+        customerAccount.providerCustomerId,
+        {
+          invoice_settings: {
+            default_payment_method: paymentMethodId,
+          },
         }
+      );
+    }
 
-        // Check if this is the user's first saved method (to set as default)
-        const existingCount = await prisma.paymentMethod.count({
-          where: { userId, isDeleted: false },
-        });
+    // Upsert by providerPmId — if the same card was added before, update it
+    const existing = await prisma.paymentMethod.findFirst({
+      where: { userId, providerPmId: paymentMethodId, isDeleted: false },
+    });
 
-          //Set Default Payment Method in Stripe
-        const isDefault = existingCount === 0;
-        
-        if (isDefault) {
-          await stripe.customers.update(
-            customerAccount.providerCustomerId,
-            {
-              invoice_settings: {
-                default_payment_method:
-                  paymentMethodId,
-              },
-            }
-          );
-        }
+    let method;
+    if (existing) {
+      method = await prisma.paymentMethod.update({
+        where: { id: existing.id },
+        data: {
+          cardBrand: card.brand,
+          cardLast4: card.last4,
+          cardExpMonth: card.exp_month,
+          cardExpYear: card.exp_year,
+        },
+      });
+    } else {
+      method = await prisma.paymentMethod.create({
+        data: {
+          userId,
+          paymentProvider: "stripe",
+          type: "card",
+          providerPmId: paymentMethodId,
+          cardBrand: card.brand,
+          cardLast4: card.last4,
+          cardExpMonth: card.exp_month,
+          cardExpYear: card.exp_year,
+          isDefault,
+        },
+      });
+    }
 
-        // Upsert by providerPmId — if the same card was added before, update it
-        const existing = await prisma.paymentMethod.findFirst({
-          where: { userId, providerPmId: paymentMethodId, isDeleted: false },
-        });
-
-        
-
-        let method;
-        if (existing) {
-          method = await prisma.paymentMethod.update({
-            where: { id: existing.id },
-            data: {
-              cardBrand: card.brand,
-              cardLast4: card.last4,
-              cardExpMonth: card.exp_month,
-              cardExpYear: card.exp_year,
-            },
-          });
-        } else {
-          method = await prisma.paymentMethod.create({
-            data: {
-              userId,
-              paymentProvider: "stripe",
-              type: "card",
-              providerPmId: paymentMethodId,
-              cardBrand: card.brand,
-              cardLast4: card.last4,
-              cardExpMonth: card.exp_month,
-              cardExpYear: card.exp_year,
-              isDefault,
-            },
-          });
-        }
-
-        return sendSuccess(reply, 201, formatMethod(method));
-      },
-    );
+    return sendSuccess(reply, 201, formatMethod(method));
+  },
+  );
 
   // ── POST /guests/me/payment-methods/tara ─────────────────────────────────
-  app.post("/guests/me/payment-methods/tara",{ preHandler: [requireUser],schema: {
-      tags: ["Payment Methods"],
-      summary: "Add Tara mobile money account",
-      body: {
-        type: "object",
-        required: ["mobileNumber"],
-        properties: {
-          mobileNumber: {
-            type: "string"
-          },
+  app.post("/guests/me/payment-methods/tara", { preHandler: [requireUser], schema: {
+    tags: ["Payment Methods"],
+    summary: "Add Tara mobile money account",
+    body: {
+      type: "object",
+      required: ["mobileNumber"],
+      properties: {
+        mobileNumber: {
+          type: "string"
         },
       },
-    }, },
+    },
+  }, },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { userId } = req as GuestRequest;
 
@@ -335,7 +320,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   // ── PATCH /guests/me/payment-methods/:id ─────────────────────────────────
   app.patch(
     "/guests/me/payment-methods/:id",
-    { preHandler: [requireUser],schema: {
+    { preHandler: [requireUser], schema: {
       tags: ["Payment Methods"],
       summary: "Update payment method",
 
@@ -400,19 +385,19 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── DELETE /guests/me/payment-methods/:id ────────────────────────────────
-  app.delete("/guests/me/payment-methods/:id",{ preHandler: [requireUser],schema: {
-      tags: ["Payment Methods"],
-      summary: "Delete payment method",
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: {
-            type: "string",
-          },
+  app.delete("/guests/me/payment-methods/:id", { preHandler: [requireUser], schema: {
+    tags: ["Payment Methods"],
+    summary: "Delete payment method",
+    params: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: {
+          type: "string",
         },
       },
-    }, },
+    },
+  }, },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { userId } = req as GuestRequest;
       const { id } = req.params as { id: string };

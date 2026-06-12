@@ -1,8 +1,7 @@
-import { buildInvoice } from "../services/invoice.service";
-import { generateVoucherPDF } from "../services/pdf.services";
-import { sendGuestEmail } from "../services/email.services";
-import { sendHostEmail } from "../services/hostemail.service";
-
+import { buildInvoice } from "../services/invoice.service.js";
+import { generateVoucherPDF } from "../services/pdf.services.js";
+import { sendGuestEmail, sendAdminAlert } from "../services/email.services.js";
+import { sendHostEmail } from "../services/hostemail.service.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 
@@ -18,44 +17,66 @@ async function confirmBooking(bookingId: string, paymentId: string, paymentProvi
   }
 }
 
-export async function bookingConfirmedHandler(payment: any) {
-    const bookingId = payment?.metadata?.bookingId;
-  
-    if (!bookingId) {
-      throw new Error("Missing bookingId in payment metadata");
+// ── RETRY HELPER ──────────────────────────────────────────────────────────
+async function sendEmailWithRetry(
+  sendFn: () => Promise<void>,
+  context: string,
+  attempt = 1
+): Promise<void> {
+  try {
+    await sendFn();
+    console.log(`[email] ${context} sent successfully`);
+  } catch (err) {
+    console.error(`[email] ${context} failed (attempt ${attempt}):`, err);
+
+    if (attempt === 1) {
+      setTimeout(() => sendEmailWithRetry(sendFn, context, 2), 5 * 60 * 1000); // 5 min
+    } else if (attempt === 2) {
+      setTimeout(() => sendEmailWithRetry(sendFn, context, 3), 30 * 60 * 1000); // 30 min
+    } else {
+      await sendAdminAlert(context, err);
     }
-  
-    // 1. GET BOOKING
-    const res = await fetch(
-      `${BOOKING_SERVICE_URL}/bookings/${bookingId}`
-    );
-  
-    if (!res.ok) {
-      throw new Error(`Booking service failed: ${res.status}`);
-    }
-  
-    const json = await res.json();
-    const booking = json.data;
-  
-    if (!booking) {
-      throw new Error("Booking not found");
-    }
-  
-    // 2. INVOICE
-    const invoice = buildInvoice(booking);
-  
-    // 3. PDF
-    const voucher = await generateVoucherPDF(booking, invoice);
-  
-    // 4. EMAILS
-    await sendGuestEmail(
-      booking,
-      invoice,
-      voucher
-    );
-  
-    await sendHostEmail(booking);
-  
-    // 5. CONFIRM BOOKING LAST (SAFE)
-    await confirmBooking(bookingId, payment.id, "stripe");
   }
+}
+
+export async function bookingConfirmedHandler(payment: any) {
+  const bookingId = payment?.metadata?.bookingId;
+
+  if (!bookingId) {
+    throw new Error("Missing bookingId in payment metadata");
+  }
+
+  // 1. GET BOOKING
+  const res = await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}`);
+
+  if (!res.ok) {
+    throw new Error(`Booking service failed: ${res.status}`);
+  }
+
+  const json = await res.json();
+  const booking = json.data;
+
+  if (!booking) {
+    throw new Error("Booking not found");
+  }
+
+  // 2. INVOICE
+  const invoice = buildInvoice(booking);
+
+  // 3. PDF
+  const voucher = await generateVoucherPDF(booking, invoice);
+
+  // 4. EMAILS (with retry)
+  await sendEmailWithRetry(
+    async () => { await sendGuestEmail(booking, invoice, voucher); },
+    `Guest email for ${booking.code}`
+  );
+  
+  await sendEmailWithRetry(
+    async () => { await sendHostEmail(booking); },
+    `Host email for ${booking.code}`
+  );
+
+  // 5. CONFIRM BOOKING LAST (SAFE)
+  await confirmBooking(bookingId, payment.id, "stripe");
+}
