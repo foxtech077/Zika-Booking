@@ -143,7 +143,13 @@ useEffect(() => {
     enabled: _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
   });
 
-  const bookings: Booking[] = data?.bookings ?? [];
+  const rawBookings: Booking[] = data?.bookings ?? [];
+  const bookings = isCountryManager && scopedCountries.length > 0
+    ? rawBookings.filter((b) => {
+        const listingCountry = b.listing?.country?.toUpperCase();
+        return listingCountry ? scopedCountries.some((sc) => sc.toUpperCase() === listingCountry) : false;
+      })
+    : rawBookings;
   const total: number = data?.total ?? 0;
 
   const { data: detailData, isLoading: loadingDetail } = useQuery({

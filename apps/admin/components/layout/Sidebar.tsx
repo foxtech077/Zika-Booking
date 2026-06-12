@@ -15,6 +15,7 @@ import { useAuthStore } from "@/stores/auth";
 import { canAccess, NAV_GROUPS, type Permission } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
 import { Avatar } from "@/components/ui/Avatar";
+import { api } from "@/lib/api";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, Users, BadgeCheck, Building2, CalendarDays,
@@ -41,8 +42,14 @@ export function Sidebar() {
   const role = user?.role as AdminRole | undefined;
 
   const handleLogout = async () => {
-    clearSession();
-    router.push("/login");
+    try {
+      await api.post("/admin/auth/logout");
+    } catch (err) {
+      console.error("Logout API failed:", err);
+    } finally {
+      clearSession();
+      router.push("/login");
+    }
   };
 
   return (

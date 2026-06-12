@@ -1,12 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Settings, CheckCircle, AlertCircle, Server } from "lucide-react";
+import { Settings, CheckCircle, AlertCircle, Server, Key } from "lucide-react";
+import { startRegistration } from "@simplewebauthn/browser";
 import { api } from "@/lib/api";
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
 import { formatRelativeTime } from "@/lib/utils";
@@ -18,6 +21,26 @@ export default function SettingsPage() {
   const { user } = useAuthStore();
   // Global platform sections are super_admin only
   const isGlobalAdmin = canAccess(user?.role, "manage_settings");
+  const [registeringKey, setRegisteringKey] = useState(false);
+
+  const handleRegisterPasskey = async () => {
+    try {
+      setRegisteringKey(true);
+      const { data: optionsRes } = await api.post("/admin/auth/webauthn/register");
+      const options = optionsRes.data ?? optionsRes;
+
+      const attResp = await startRegistration(options);
+
+      await api.post("/admin/auth/webauthn/register/complete", attResp);
+
+      alert("Passkey registered successfully!");
+    } catch (err: any) {
+      console.error(err);
+      alert(err?.response?.data?.error?.message || "Failed to register passkey");
+    } finally {
+      setRegisteringKey(false);
+    }
+  };
 
   const { data: authHealth } = useQuery({
     queryKey: ["health-auth"],
@@ -118,6 +141,27 @@ export default function SettingsPage() {
               </div>
             </div>
           ))}
+        </div>
+      </Card>
+
+      {/* Security */}
+      <Card padding="none">
+        <div className="p-5 border-b border-border">
+          <CardHeader title="Security" description="Manage your authentication methods" />
+        </div>
+        <div className="p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <Key className="h-4 w-4 text-primary" />
+              Hardware Security Keys & Passkeys
+            </p>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm">
+              Register a hardware key or device passkey for secure and fast login.
+            </p>
+          </div>
+          <Button onClick={handleRegisterPasskey} loading={registeringKey} variant="secondary">
+            Register Passkey
+          </Button>
         </div>
       </Card>
 

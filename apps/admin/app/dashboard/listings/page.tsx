@@ -77,7 +77,13 @@ export default function ListingsPage() {
     enabled: !!token && _hasHydrated,
   });
 
-  const listings: Listing[] = data?.listings ?? [];
+  const rawListings: Listing[] = data?.listings ?? [];
+  const listings = isCountryManager && scopedCountries.length > 0
+    ? rawListings.filter((l) => {
+        const listingCountry = l.country?.toUpperCase();
+        return listingCountry ? scopedCountries.some((sc) => sc.toUpperCase() === listingCountry) : false;
+      })
+    : rawListings;
   const total: number = data?.total ?? 0;
 
   const suspendMut = useMutation({
