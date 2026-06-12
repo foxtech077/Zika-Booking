@@ -244,6 +244,7 @@ export default function ProviderHomeScreen() {
       const res = await listingApi.get<{ data: DashboardData }>("/provider/dashboard");
       return res.data.data;
     },
+    enabled: !!user,
   });
 
   const { data: reviewsData } = useQuery<ReviewsData>({
@@ -252,7 +253,7 @@ export default function ProviderHomeScreen() {
       const res = await listingApi.get<{ data: ReviewsData }>("/provider/reviews", { params: { limit: 2 } });
       return res.data.data;
     },
-    enabled: !isLoading,
+    enabled: !!user && !isLoading,
   });
 
   const { data: listingsData } = useQuery({
@@ -261,6 +262,7 @@ export default function ProviderHomeScreen() {
       const res = await listingApi.get<{ data: { listings: Array<{ id: string; name: string | null }> } }>("/listings", { params: { limit: "1" } });
       return asArray<{ id: string; name: string | null }>(res.data?.data, "listings");
     },
+    enabled: !!user,
   });
 
   const firstListingId = listingsData?.[0]?.id;

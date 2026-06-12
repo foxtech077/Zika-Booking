@@ -137,8 +137,8 @@ export default function SettingsPage() {
           {[
             ["Node Environment", "development"],
             ["Admin Port", "3002"],
-            ["Auth Service", "localhost:3001"],
-            ["Listing Service", "localhost:3003"],
+            ["Auth Service", "api.kainook.com/auth"],
+            ["Listing Service", "api.kainook.com/listings"],
             ["Next.js Version", "14.2.21"],
             ["React Version", "18.3.1"],
           ].map(([k, v]) => (
