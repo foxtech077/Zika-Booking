@@ -3,6 +3,11 @@ import { createHmac } from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError } from "../lib/errors.js";
+import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
+import { processBookingSuccess } from "../services/booking-success.service.js";
+import Stripe from "stripe";
+import rawBody from "fastify-raw-body";
+
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 const STRIPE_WEBHOOK_SECRET = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
@@ -38,54 +43,77 @@ async function failBooking(bookingId: string) {
 
 export async function webhookRoutes(app: FastifyInstance) {
 
-  // ── POST /payments/stripe/webhook ─────────────────────────────────────────
-  app.post("/payments/stripe/webhook",{schema: {
-    tags: ["Webhooks"],
-    summary: "Stripe webhook endpoint",
-    description:
-      "Receives Stripe events such as payment_intent.succeeded and payment_intent.payment_failed.",
-
-  },}, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/stripe/webhook", async (req, reply) => {
     const sig = req.headers["stripe-signature"];
+  
     if (!sig || typeof sig !== "string") {
-      return sendError(reply, 400, "MISSING_SIGNATURE", "Missing Stripe-Signature header.");
+      return reply.code(400).send({
+        error: "Missing Stripe signature",
+      });
     }
-
-    // req.body is a Buffer because of the raw content-type parser registered in index.ts
-    const rawBody = req.body as Buffer;
-
-    let event: ReturnType<typeof stripe.webhooks.constructEvent>;
+  
+    const rawBody = req.rawBody;
+  
+    if (!rawBody) {
+      return reply.code(400).send({
+        error: "Missing raw body",
+      });
+    }
+  
+    console.log("Webhook hit");
+    console.log("Is Buffer:", Buffer.isBuffer(rawBody));
+  
+    let event: Stripe.Event;
+  
     try {
-      event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
+      event = stripe.webhooks.constructEvent(
+        rawBody,
+        sig,
+        STRIPE_WEBHOOK_SECRET
+      );
     } catch (err) {
-      app.log.warn(`[stripe-webhook] Signature verification failed: ${(err as Error).message}`);
-      return sendError(reply, 400, "INVALID_SIGNATURE", "Stripe signature verification failed.");
+      console.error("Signature error:", err);
+      return reply.code(400).send({
+        error: "Invalid signature",
+      });
     }
-
-    app.log.info(`[stripe-webhook] Received event: ${event.type}`);
-
+  
+    console.log("Event:", event.type);
+  
+    // ========================
+    // PAYMENT SUCCESS
+    // ========================
     if (event.type === "payment_intent.succeeded") {
-      const intent = event.data.object as { id: string; charges?: { data?: Array<{ payment_method_details?: { card?: { brand?: string; last4?: string }; type?: string } }> } };
+      const intent = event.data.object as Stripe.PaymentIntent;
 
+    
+  
       const payment = await prisma.payment.findFirst({
         where: { providerPaymentId: intent.id },
       });
-
+  
       if (!payment) {
-        app.log.warn(`[stripe-webhook] Payment not found for intent ${intent.id}`);
-        return reply.status(200).send({ received: true });
+        console.log("Payment not found");
+        return reply.send({ received: true });
       }
-
-      // Idempotent: if already captured, do nothing
+  
       if (payment.status === "captured") {
-        return reply.status(200).send({ received: true });
+        return reply.send({ received: true });
       }
-
-      // Extract card details from charge if available
-      const charge = intent.charges?.data?.[0];
-      const cardDetails = charge?.payment_method_details?.card;
-      const pmType = charge?.payment_method_details?.type ?? null;
-
+  
+      await processBookingSuccess(intent.id);
+      
+      const chargeId = intent.latest_charge as string | null;
+  
+      let cardDetails = null;
+      let pmType = null;
+  
+      if (chargeId) {
+        const charge = await stripe.charges.retrieve(chargeId);
+        cardDetails = charge.payment_method_details?.card ?? null;
+        pmType = charge.payment_method_details?.type ?? null;
+      }
+  
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
@@ -96,24 +124,26 @@ export async function webhookRoutes(app: FastifyInstance) {
           cardLast4: cardDetails?.last4 ?? null,
         },
       });
-
+  
       await confirmBooking(payment.bookingId, payment.id, "stripe");
-
-    } else if (event.type === "payment_intent.payment_failed") {
-      const intent = event.data.object as {
-        id: string;
-        last_payment_error?: { code?: string; message?: string };
-      };
-
+  
+      return reply.send({ received: true });
+    }
+  
+    // ========================
+    // PAYMENT FAILED
+    // ========================
+    if (event.type === "payment_intent.payment_failed") {
+      const intent = event.data.object as any;
+  
       const payment = await prisma.payment.findFirst({
         where: { providerPaymentId: intent.id },
       });
-
+  
       if (!payment) {
-        app.log.warn(`[stripe-webhook] Payment not found for intent ${intent.id}`);
-        return reply.status(200).send({ received: true });
+        return reply.send({ received: true });
       }
-
+  
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
@@ -122,71 +152,70 @@ export async function webhookRoutes(app: FastifyInstance) {
           failureMessage: intent.last_payment_error?.message ?? null,
         },
       });
-
-      // If max attempts exceeded, fail the booking
+  
       if (payment.attemptNumber >= 3) {
         await failBooking(payment.bookingId);
       }
-
-    } else if (event.type === "charge.refunded") {
-      const charge = event.data.object as {
-        refunds?: { data?: Array<{ id: string }> };
-      };
-
-      const providerRefundId = charge.refunds?.data?.[0]?.id;
-      if (!providerRefundId) {
-        return reply.status(200).send({ received: true });
-      }
-
-      const refund = await prisma.refund.findFirst({
-        where: { providerRefundId },
-      });
-
-      if (refund && refund.status !== "succeeded") {
-        await prisma.refund.update({
-          where: { id: refund.id },
-          data: { status: "succeeded", refundedAt: new Date() },
-        });
-      }
+  
+      return reply.send({ received: true });
     }
-
-    //Setup intent code
-    else if (event.type === "setup_intent.succeeded") {
+  
+    // ========================
+    // REFUND
+    // ========================
+    if (event.type === "charge.refunded") {
+      const charge = event.data.object as any;
+  
+      const providerRefundId = charge.refunds?.data?.[0]?.id;
+  
+      if (providerRefundId) {
+        const refund = await prisma.refund.findFirst({
+          where: { providerRefundId },
+        });
+  
+        if (refund && refund.status !== "succeeded") {
+          await prisma.refund.update({
+            where: { id: refund.id },
+            data: {
+              status: "succeeded",
+              refundedAt: new Date(),
+            },
+          });
+        }
+      }
+  
+      return reply.send({ received: true });
+    }
+  
+    // ========================
+    // SETUP INTENT
+    // ========================
+    if (event.type === "setup_intent.succeeded") {
       const setupIntent = event.data.object as any;
-
+  
       const paymentMethodId = setupIntent.payment_method;
       const customerId = setupIntent.customer;
-
+  
       try {
-        // attach payment method
-        await stripe.paymentMethods
-          .attach(paymentMethodId, {
-            customer: customerId,
-          })
-          .catch(() => {}); // ignore already attached error
-
-        // set default payment method
+        await stripe.paymentMethods.attach(paymentMethodId, {
+          customer: customerId,
+        });
+  
         await stripe.customers.update(customerId, {
           invoice_settings: {
             default_payment_method: paymentMethodId,
           },
         });
-
-        // find customer in DB
+  
         const customerAccount = await prisma.customerAccount.findFirst({
-          where: {
-            providerCustomerId: customerId,
-            paymentProvider: "stripe",
-          },
+          where: { providerCustomerId: customerId },
         });
-
+  
         if (customerAccount) {
           const exists = await prisma.paymentMethod.findFirst({
-            where: {
-              providerPmId: paymentMethodId,
-            },
+            where: { providerPmId: paymentMethodId },
           });
-
+  
           if (!exists) {
             await prisma.paymentMethod.create({
               data: {
@@ -198,20 +227,21 @@ export async function webhookRoutes(app: FastifyInstance) {
             });
           }
         }
-
-        app.log.info(
-          `[stripe-webhook] Card saved for customer ${customerId}`
-        );
+  
+        console.log("Card saved:", customerId);
       } catch (err) {
-        app.log.error(`[stripe-webhook] SetupIntent error: ${err}`);
+        console.error("SetupIntent error:", err);
       }
+  
+      return reply.send({ received: true });
     }
-
-    return reply.status(200).send({ received: true });
+  
+    // default fallback
+    return reply.send({ received: true });
   });
-
+  
   // ── POST /payments/tara/webhook ───────────────────────────────────────────
-  app.post("/payments/tara/webhook",{schema: {
+ app.post("/tara/webhook",{schema: {
     tags: ["Webhooks"],
     summary: "Tara webhook endpoint",
     description:

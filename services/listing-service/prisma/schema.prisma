@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["listing"]
+  schemas  = ["listing", "auth"]
 }
 
 enum ListingCategory {
@@ -735,3 +735,20 @@ model Report {
   @@map("reports")
   @@schema("listing")
 }
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  adminId    String
+  role       String    @db.VarChar(50)
+  action     String    @db.VarChar(100)
+  targetType String?   @db.VarChar(50)
+  targetId   String?
+  oldValue   String?   @db.Text
+  newValue   String?   @db.Text
+  ipAddress  String    @db.VarChar(45)
+  timestamp  DateTime  @default(now())
+
+  @@map("AuditLog")
+  @@schema("auth")
+}
+

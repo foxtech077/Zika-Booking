@@ -31,7 +31,7 @@ async function build() {
           description: "Local development server",
         },
         {
-          url: "https://api.kainook.com/payments",
+          url: "https://api.kainook.com",
           description: "Production server",
         },
       ],
@@ -78,9 +78,8 @@ async function build() {
     "application/json",
     { parseAs: "buffer" },
     (req, body, done) => {
-      // For the Stripe webhook route, we need the raw Buffer.
-      // For all other routes, parse as JSON.
-      if (req.routeOptions?.url === "/payments/stripe/webhook") {
+      if (req.routeOptions?.url === "/stripe/webhook") {
+        (req as any).rawBody = body;  //  save raw buffer here
         done(null, body);
         return;
       }
@@ -97,10 +96,10 @@ async function build() {
   app.get("/health", async () => ({ status: "ok", service: "payment-service", timestamp: new Date().toISOString() }));
 
   // ── Route plugins ─────────────────────────────────────────────────────────
-  await app.register(paymentRoutes);
-  await app.register(webhookRoutes);
-  await app.register(paymentMethodRoutes);
-  await app.register(adminPaymentRoutes);
+  await app.register(paymentRoutes,);
+  await app.register(webhookRoutes,);
+  await app.register(paymentMethodRoutes,);
+  await app.register(adminPaymentRoutes,);
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler((error: any, _req, reply) => {
