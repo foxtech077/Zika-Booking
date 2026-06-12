@@ -177,7 +177,7 @@ function buildPayload(s: ApartmentState): Record<string, unknown> {
 
 // ── Step validation ──────────────────────────────────────────────────────────
 
-type Step = "property" | "pricing" | "details" | "media";
+type Step = "property" | "pricing" | "details" | "amenities" | "media";
 
 function validateStep(step: Step, s: ApartmentState): string[] {
   switch (step) {
@@ -200,8 +200,8 @@ function validateStep(step: Step, s: ApartmentState): string[] {
         !(Number(s.maxGuests) >= 1) && "Maximum guests must be at least 1.",
         s.bedrooms  !== "" && Number(s.bedrooms)  < 0 && "Bedrooms cannot be negative.",
         s.bathrooms !== "" && Number(s.bathrooms) < 0 && "Bathrooms cannot be negative.",
-        s.longStayEnabled && !(Number(s.longStayMinNights) >= 1)       && "Long-stay minimum nights must be ≥ 1.",
-        s.longStayEnabled && !(Number(s.longStayDiscountValue) > 0)    && "Long-stay discount value must be > 0.",
+        s.longStayEnabled && s.longStayMinNights !== "" && !(Number(s.longStayMinNights) >= 1) && "Long-stay minimum nights must be \u2265 1.",
+        s.longStayEnabled && s.longStayDiscountValue !== "" && !(Number(s.longStayDiscountValue) > 0) && "Long-stay discount value must be > 0.",
       ].filter(Boolean) as string[];
     default:
       return [];
@@ -212,6 +212,7 @@ const STEPS: FormStep[] = [
   { id: "property", label: "Property Info",      sublabel: "Name, type & location" },
   { id: "pricing",  label: "Pricing & Policies", sublabel: "Rates, times & cancellation" },
   { id: "details",  label: "Property Details",   sublabel: "Specs, guests & amenities" },
+  { id: "amenities", label: "Amenities", sublabel: "Services & amenities" },
   { id: "media",    label: "Media",              sublabel: "Photos (min 3 required)" },
 ];
 
@@ -311,35 +312,41 @@ export function ApartmentForm({ listingId, listing }: Props) {
   const title  = current?.name  ?? listing.name ?? "Untitled Apartment";
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5 animate-fade-in pb-16">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push("/dashboard/listings")}
-          className="w-9 h-9 rounded-xl border border-border bg-white flex items-center justify-center text-slate-600 hover:bg-surface-muted transition-all"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Apartment Listing</p>
-          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+    <div className="min-h-screen bg-[#f8f9f6] flex flex-col">
+      {/* ── Sticky Header ── */}
+      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-[#4c6a48]/15 shadow-sm">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+          <button
+            onClick={() => router.push("/dashboard/listings")}
+            className="w-9 h-9 rounded-xl border border-[#4c6a48]/30 bg-white flex items-center justify-center text-[#4c6a48] hover:bg-[#e6ebe4] transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold text-[#4c6a48] uppercase tracking-widest">Apartment Listing</p>
+            <h1 className="text-lg font-bold text-slate-900 truncate leading-tight">{title}</h1>
+          </div>
+          <div className="ml-auto shrink-0"><Badge label={status} status={status} /></div>
         </div>
-        <div className="ml-auto"><Badge label={status} status={status} /></div>
       </div>
 
-      {ok  && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
-      {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark" ><AlertCircle className="w-4 h-4 text-danger shrink-0"  />{err}</div>}
+      {/* ── Main scroll area ── */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4 pb-28 animate-fade-in">
 
-      <FormShell
-        steps={STEPS}
-        activeStep={step}
-        status={status}
-        onStepClick={(id) => { setTried(false); setStep(id as Step); }}
-        isComplete={isComplete}
-        isLocked={isLocked}
-      >
-        <form onSubmit={handleNext} className="space-y-5">
-          <Card className="min-h-[420px]">
+          {ok  && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
+          {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark"><AlertCircle className="w-4 h-4 text-danger shrink-0" />{err}</div>}
+
+          <FormShell
+            steps={STEPS}
+            activeStep={step}
+            status={status}
+            onStepClick={(id) => { setTried(false); setStep(id as Step); }}
+            isComplete={isComplete}
+            isLocked={isLocked}
+          >
+            <form id="apartment-edit-form" onSubmit={handleNext} className="space-y-5">
+              <Card className="min-h-[420px]">
 
             {/* ── Property step ── */}
             {step === "property" && (
@@ -472,53 +479,54 @@ export function ApartmentForm({ listingId, listing }: Props) {
                     </div>
                   )}
                 </div>
-
-                {/* Amenities */}
-                <div className="border-t border-border pt-4">
-                  <p className="text-sm font-medium text-slate-700 mb-2">Amenities</p>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {AMENITY_OPTIONS.map((opt) => {
-                      const active = s.selectedAmenities.includes(opt.value);
-                      return (
-                        <button type="button" key={opt.value}
-                          onClick={() => set("selectedAmenities", active
-                            ? s.selectedAmenities.filter((k) => k !== opt.value)
-                            : [...s.selectedAmenities, opt.value])}
-                          className={cn("flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
-                            active ? "border-primary bg-primary-50 text-primary-700 font-semibold" : "border-border bg-white text-slate-600 hover:border-slate-300")}
-                        >
-                          <div className={cn("w-4 h-4 rounded flex items-center justify-center border text-xs",
-                            active ? "bg-primary border-primary text-white" : "border-slate-300")}>
-                            {active ? "✓" : ""}
-                          </div>
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <Input
-                      value={s.customInput}
-                      onChange={(e) => set("customInput", e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
-                      placeholder="Custom amenity"
-                    />
-                    <Button type="button" onClick={addCustom}>Add</Button>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {s.customAmenities.map((tag) => (
-                      <span key={tag} className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-200">
-                        {tag}
-                        <button type="button" className="text-slate-400 hover:text-slate-600"
-                          onClick={() => set("customAmenities", s.customAmenities.filter((t) => t !== tag))}>×</button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
 
-            {/* ── Media step ── */}
+            {/* ── Amenities step ── */}
+{step === "amenities" && (
+  <div className="space-y-5 animate-fade-in">
+    <h3 className="text-lg font-bold text-slate-900">Amenities</h3>
+    <div className="grid grid-cols-2 gap-2.5">
+      {AMENITY_OPTIONS.map((opt) => {
+        const active = s.selectedAmenities.includes(opt.value);
+        return (
+          <button type="button" key={opt.value}
+            onClick={() => set("selectedAmenities", active
+              ? s.selectedAmenities.filter((k) => k !== opt.value)
+              : [...s.selectedAmenities, opt.value])}
+            className={cn("flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
+              active ? "border-primary bg-primary-50 text-primary-700 font-semibold" : "border-border bg-white text-slate-600 hover:border-slate-300")}
+          >
+            <div className={cn("w-4 h-4 rounded flex items-center justify-center border text-xs",
+              active ? "bg-primary border-primary text-white" : "border-slate-300")}>
+              {active ? "✓" : ""}
+            </div>
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+    <div className="mt-3 flex gap-2">
+      <Input
+        value={s.customInput}
+        onChange={(e) => set("customInput", e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } }}
+        placeholder="Custom amenity"
+      />
+      <Button type="button" onClick={addCustom}>Add</Button>
+    </div>
+    <div className="flex flex-wrap gap-2 mt-2">
+      {s.customAmenities.map((tag) => (
+        <span key={tag} className="inline-flex items-center gap-1.5 bg-slate-100 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-slate-200">
+          {tag}
+          <button type="button" className="text-slate-400 hover:text-slate-600"
+            onClick={() => set("customAmenities", s.customAmenities.filter((t) => t !== tag))}>×</button>
+        </span>
+      ))}
+    </div>
+  </div>
+)}
+{/* ── Media step ── */}
             {step === "media" && (
               <div className="space-y-5 animate-fade-in">
                 <div>
@@ -533,44 +541,83 @@ export function ApartmentForm({ listingId, listing }: Props) {
                 />
               </div>
             )}
-          </Card>
+              </Card>
+            </form>
+          </FormShell>
+        </div>
+      </div>
 
-          {/* Footer */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-border">
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => router.push("/dashboard/listings")}>Exit</Button>
-              {step !== "property" && (
-                <Button type="button" variant="secondary" onClick={() => {
+      {/* ── Sticky Footer ── */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-[#4c6a48]/15 shadow-[0_-4px_20px_rgba(76,106,72,0.08)]">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/listings")}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/30 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] transition-all"
+            >
+              Exit
+            </button>
+            {step !== "property" && (
+              <button
+                type="button"
+                onClick={() => {
                   const idx  = STEPS.findIndex((t) => t.id === step);
                   const prev = STEPS[idx - 1];
                   if (prev) { setTried(false); setStep(prev.id as Step); }
-                }}>← Back</Button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" loading={saveMut.isPending} onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }} icon={<Save />}>
-                Save Draft
-              </Button>
-              {step !== "media" ? (
-                <Button type="submit" variant="primary" loading={saveMut.isPending}>Save & Continue →</Button>
-              ) : (
-                <>
-                  {["draft", "deactivated"].includes(status) && (
-                    <Button type="button" variant="success" loading={activateMut.isPending || saveMut.isPending} onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }} icon={<CheckCircle />}>
-                      {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
-                    </Button>
-                  )}
-                  {status === "active" && (
-                    <Button type="button" variant="danger" loading={deactivateMut.isPending} onClick={() => deactivateMut.mutate()}>
-                      Deactivate
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
+                }}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-all"
+              >
+                ← Back
+              </button>
+            )}
           </div>
-        </form>
-      </FormShell>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={saveMut.isPending}
+              onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/40 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
+            >
+              <Save className="w-3.5 h-3.5" /> Save Draft
+            </button>
+            {step !== "media" ? (
+              <button
+                type="submit"
+                form="apartment-edit-form"
+                disabled={saveMut.isPending}
+                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+              >
+                Save &amp; Continue →
+              </button>
+            ) : (
+              <>
+                {["draft", "deactivated"].includes(status) && (
+                  <button
+                    type="button"
+                    disabled={activateMut.isPending || saveMut.isPending}
+                    onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
+                  </button>
+                )}
+                {status === "active" && (
+                  <button
+                    type="button"
+                    disabled={deactivateMut.isPending}
+                    onClick={() => deactivateMut.mutate()}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm"
+                  >
+                    Deactivate
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

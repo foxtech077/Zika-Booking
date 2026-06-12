@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -101,7 +101,7 @@ export default function LoginPage() {
               <Zap className="w-5 h-5 text-white" />
             </div>
             <div className="text-left">
-              <p className="text-white font-bold text-lg leading-none">ZikaBooking</p>
+              <p className="text-white font-bold text-lg leading-none">Kainook</p>
               <p className="text-slate-400 text-xs">Partner Portal</p>
             </div>
           </div>
@@ -176,7 +176,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-xs text-slate-500 mt-6">
-          By signing in, you agree to ZikaBooking&apos;s{" "}
+          By signing in, you agree to Kainook&apos;s{" "}
           <a href="#" className="underline">Terms of Service</a>
         </p>
       </div>
