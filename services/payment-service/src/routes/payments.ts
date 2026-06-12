@@ -39,7 +39,7 @@ async function fetchBooking(bookingId: string, authHeader: string) {
 
 export async function paymentRoutes(app: FastifyInstance) {
 
-  app.post("/create-intent", { preHandler: [requireUser], schema: {
+  app.post("/payments/create-intent", { preHandler: [requireUser], schema: {
     tags: ["Payments"],
     summary: "Create Stripe PaymentIntent (New Card Flow)",
     body: {
@@ -166,16 +166,57 @@ export async function paymentRoutes(app: FastifyInstance) {
   // ── POST /payments/initiate ───────────────────────────────────────────────
   app.post("/initiate", { preHandler: [requireUser], schema: {
     tags: ["Payments"],
-    summary: "Pay using saved card or Tara",
+    summary: "Initiate payment — saved Stripe card or Tara mobile money",
+    description:
+      "**Stripe (saved card):** pass `paymentProvider: \"stripe\"` and `paymentMethodId` (from GET /guests/me/payment-methods).\n\n" +
+      "**Tara (mobile money):** pass `paymentProvider: \"tara\"` and `mobileNumber` in E.164 format (e.g. `+254712345678`). " +
+      "An STK push is sent to the handset — the guest approves within 60 seconds and the booking is confirmed via webhook.",
+    security: [{ bearerAuth: [] }],
     body: {
       type: "object",
       required: ["bookingId", "paymentProvider"],
       properties: {
-        bookingId: { type: "string", format: "uuid" },
-        paymentProvider: { type: "string", enum: ["stripe", "tara"] },
-        paymentMethodId: { type: "string" },
-        mobileNumber: { type: "string" },
+        bookingId: {
+          type: "string",
+          format: "uuid",
+          description: "ID of the booking to pay for (must be in pending_payment status)",
+        },
+        paymentProvider: {
+          type: "string",
+          enum: ["stripe", "tara"],
+          description: "Use \"stripe\" for saved card, \"tara\" for mobile money (Africa)",
+        },
+        paymentMethodId: {
+          type: "string",
+          description: "Required when paymentProvider is \"stripe\" — ID from GET /guests/me/payment-methods",
+        },
+        mobileNumber: {
+          type: "string",
+          description: "Required when paymentProvider is \"tara\" — E.164 format e.g. +254712345678",
+        },
       },
+    },
+    response: {
+      201: {
+        description: "Payment initiated",
+        type: "object",
+        properties: {
+          success: { type: "boolean" },
+          data: {
+            type: "object",
+            properties: {
+              paymentId:     { type: "string", description: "Internal payment record ID" },
+              taraReference: { type: "string", description: "Tara transaction reference (Tara flow only)" },
+              message:       { type: "string", description: "STK push status message (Tara flow only)" },
+              requiresAction: { type: "boolean", description: "true when Stripe 3DS is required (Stripe flow only)" },
+              clientSecret:  { type: "string", description: "Stripe client secret for 3DS re-auth (Stripe flow only)" },
+            },
+          },
+        },
+      },
+      404: { description: "Booking not found",    type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
+      409: { description: "Duplicate payment",    type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
+      422: { description: "Validation error",     type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
     },
   }}, async (req, reply) => {
     const { userId } = req as GuestRequest;
@@ -310,25 +351,35 @@ export async function paymentRoutes(app: FastifyInstance) {
   
     // ── 7. Tara flow ──────────────────────────────────────────────────────
     if (paymentProvider === "tara") {
+      if (!mobileNumber) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "mobileNumber is required for Tara payments.");
+      }
+
+      const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
+
       const taraResult = await initiateTaraPayment({
-        amount: Number(amount),
+        amount:        Number(amount),
         currency,
-        mobileNumber: mobileNumber!,
-        reference: idempotencyKey,
-        description: `Booking ${bookingId}`,
+        mobileNumber,
+        reference:     bookingReference,   // booking ref, e.g. ZIKA-001234-KE
+        description:   `Booking ${bookingReference}`,
+        attemptNumber,                     // idempotency key = reference + attemptNumber
       });
-  
+
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
           providerPaymentId: taraResult.taraReference,
-          status: "pending",
+          status:            "pending",
+          attemptNumber,
+          idempotencyKey:    `${bookingReference}-${attemptNumber}`,
         },
       });
-  
+
       return sendSuccess(reply, 201, {
-        paymentId: payment.id,
+        paymentId:     payment.id,
         taraReference: taraResult.taraReference,
+        message:       "STK push sent. Please approve on your handset within 60 seconds.",
       });
     }
   });
