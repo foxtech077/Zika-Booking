@@ -13,8 +13,8 @@ export interface ProviderRequest extends FastifyRequest {
 export interface AdminRequest extends FastifyRequest {
   adminId: string;
   adminRole: string;
-  /** ISO-3166-1 alpha-2 country code for country_manager scope, null for super_admin/admin */
-  adminCountry: string | null;
+  /** ISO-3166-1 alpha-2 country codes for country_manager scope */
+  countryScope: string[];
 }
 
 // Verify provider access token (issued by auth-service, HS256, JWT_SECRET)
@@ -51,7 +51,7 @@ export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
   if (process.env["DEV_BYPASS_AUTH"] === "true") {
     (req as AdminRequest).adminId = process.env["DEV_ADMIN_ID"] ?? "dev-admin-id";
     (req as AdminRequest).adminRole = "super_admin";
-    (req as AdminRequest).adminCountry = null;
+    (req as AdminRequest).countryScope = [];
     return;
   }
   const token = req.headers.authorization?.slice(7);
@@ -61,7 +61,7 @@ export async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
     if (!payload.sub) throw new Error("Missing sub");
     (req as AdminRequest).adminId = payload.sub;
     (req as AdminRequest).adminRole = (payload as { role?: string }).role ?? "";
-    (req as AdminRequest).adminCountry = (payload as { country?: string }).country ?? null;
+    (req as AdminRequest).countryScope = (payload as { countryScope?: string[] }).countryScope ?? [];
   } catch {
     return sendError(reply, 401, "INVALID_TOKEN", "Admin token invalid or expired.");
   }
@@ -85,8 +85,8 @@ export async function optionalGuest(req: FastifyRequest, _reply: FastifyReply) {
 }
 
 // Country-scoped access for Country Manager role
-export function canReviewCountry(adminRole: string, adminScope: string[], country: string | null): boolean {
+export function canReviewCountry(adminRole: string, countryScope: string[], country: string | null): boolean {
   if (adminRole === "super_admin" || adminRole === "admin") return true;
-  if (adminRole === "country_manager") return !country || adminScope.includes(country);
+  if (adminRole === "country_manager") return !country || countryScope.includes(country);
   return false;
 }
