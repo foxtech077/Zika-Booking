@@ -4,7 +4,6 @@ import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError } from "../lib/errors.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
-import { processBookingSuccess } from "../services/booking-success.service.js";
 import Stripe from "stripe";
 import rawBody from "fastify-raw-body";
 
@@ -85,8 +84,6 @@ export async function webhookRoutes(app: FastifyInstance) {
     // ========================
     if (event.type === "payment_intent.succeeded") {
       const intent = event.data.object as Stripe.PaymentIntent;
-
-    
   
       const payment = await prisma.payment.findFirst({
         where: { providerPaymentId: intent.id },
@@ -97,12 +94,12 @@ export async function webhookRoutes(app: FastifyInstance) {
         return reply.send({ received: true });
       }
   
+      //  IDEMPOTENCY CHECK — must be FIRST, before any side effects
       if (payment.status === "captured") {
+        console.log("Already captured, skipping duplicate webhook");
         return reply.send({ received: true });
       }
   
-      await processBookingSuccess(intent.id);
-      
       const chargeId = intent.latest_charge as string | null;
   
       let cardDetails = null;
@@ -125,7 +122,11 @@ export async function webhookRoutes(app: FastifyInstance) {
         },
       });
   
-      await confirmBooking(payment.bookingId, payment.id, "stripe");
+      //  emails + PDF + confirm booking — runs only once
+      await bookingConfirmedHandler({
+        id: payment.id,
+        metadata: { bookingId: payment.bookingId },
+      });
   
       return reply.send({ received: true });
     }
@@ -239,7 +240,6 @@ export async function webhookRoutes(app: FastifyInstance) {
     // default fallback
     return reply.send({ received: true });
   });
-  
   // ── POST /payments/tara/webhook ───────────────────────────────────────────
  app.post("/tara/webhook",{schema: {
     tags: ["Webhooks"],
