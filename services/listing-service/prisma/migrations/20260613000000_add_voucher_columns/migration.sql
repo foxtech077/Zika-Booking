@@ -1,0 +1,10 @@
+-- AlterTable: add missing columns to vouchers
+ALTER TABLE "vouchers"
+  ADD COLUMN IF NOT EXISTS "title" VARCHAR(100) NOT NULL DEFAULT '',
+  ADD COLUMN IF NOT EXISTS "description" VARCHAR(120),
+  ADD COLUMN IF NOT EXISTS "activity_scope" VARCHAR(30) NOT NULL DEFAULT 'universal',
+  ADD COLUMN IF NOT EXISTS "usage_limit_per_guest" INTEGER NOT NULL DEFAULT 1,
+  ADD COLUMN IF NOT EXISTS "status" VARCHAR(20) NOT NULL DEFAULT 'active',
+  ADD COLUMN IF NOT EXISTS "applicable_tiers" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN IF NOT EXISTS "country_scope" CHAR(2),
+  ADD COLUMN IF NOT EXISTS "auto_assign" BOOLEAN NOT NULL DEFAULT false;
