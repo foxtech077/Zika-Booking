@@ -159,8 +159,10 @@ export async function processGoogleLogin(
     const message = backendError?.message ?? "Sign in with Google failed. Please try again.";
     const code = backendError?.code;
 
-    // Detect if account doesn't exist
-    if (code === "REGISTRATION_DENIED" || (message && message.toLowerCase().includes("not allowed to use google oauth"))) {
+    // Detect if account doesn't exist (new user)
+    // The backend returns REGISTRATION_DENIED when a new user tries to sign in
+    // and userType is set to "provider", preventing auto-creation.
+    if (code === "REGISTRATION_DENIED") {
       const shouldCreate = await showCreateAccountModal(idToken);
       if (shouldCreate) {
         return {
@@ -178,6 +180,11 @@ export async function processGoogleLogin(
         };
       }
     }
+
+    // Existing Traveller with no Google OAuth linked returns ACCOUNT_EXISTS
+    // Existing Provider with no Google OAuth linked gets auto-linked by backend
+    // If we want to prevent the modal for existing accounts, the above check
+    // strictly ensures it only appears for REGISTRATION_DENIED.
 
     // Detect if email is not verified
     if (code === "EMAIL_NOT_VERIFIED") {
