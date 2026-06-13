@@ -1,12 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import { createHmac } from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError } from "../lib/errors.js";
+import { verifyTaraWebhookSignature } from "../lib/tara.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
-import { processBookingSuccess } from "../services/booking-success.service.js";
 import Stripe from "stripe";
-import rawBody from "fastify-raw-body";
 
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
@@ -52,7 +50,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
     }
   
-    const rawBody = req.rawBody;
+    const rawBody = (req as any).rawBody as Buffer | undefined;
   
     if (!rawBody) {
       return reply.code(400).send({
@@ -85,8 +83,6 @@ export async function webhookRoutes(app: FastifyInstance) {
     // ========================
     if (event.type === "payment_intent.succeeded") {
       const intent = event.data.object as Stripe.PaymentIntent;
-
-    
   
       const payment = await prisma.payment.findFirst({
         where: { providerPaymentId: intent.id },
@@ -97,12 +93,12 @@ export async function webhookRoutes(app: FastifyInstance) {
         return reply.send({ received: true });
       }
   
+      //  IDEMPOTENCY CHECK — must be FIRST, before any side effects
       if (payment.status === "captured") {
+        console.log("Already captured, skipping duplicate webhook");
         return reply.send({ received: true });
       }
   
-      await processBookingSuccess(intent.id);
-      
       const chargeId = intent.latest_charge as string | null;
   
       let cardDetails = null;
@@ -125,7 +121,11 @@ export async function webhookRoutes(app: FastifyInstance) {
         },
       });
   
-      await confirmBooking(payment.bookingId, payment.id, "stripe");
+      //  emails + PDF + confirm booking — runs only once
+      await bookingConfirmedHandler({
+        id: payment.id,
+        metadata: { bookingId: payment.bookingId },
+      });
   
       return reply.send({ received: true });
     }
@@ -239,26 +239,76 @@ export async function webhookRoutes(app: FastifyInstance) {
     // default fallback
     return reply.send({ received: true });
   });
-  
   // ── POST /payments/tara/webhook ───────────────────────────────────────────
- app.post("/tara/webhook",{schema: {
-    tags: ["Webhooks"],
-    summary: "Tara webhook endpoint",
-    description:
-      "Receives Tara payment status updates.",
-  },}, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/tara/webhook", {
+    schema: {
+      tags: ["Webhooks"],
+      summary: "Tara webhook — receive payment status events",
+      description:
+        "Called by Tara when a mobile money payment succeeds or fails. " +
+        "Validates HMAC-SHA256 signature in the `X-Tara-Signature` header.\n\n" +
+        "**To simulate in Swagger (dev only):** generate the signature with:\n" +
+        "`echo -n '{\"event\":\"payment_successful\",\"taraReference\":\"TARA-xxx\"}' | openssl dgst -sha256 -hmac YOUR_TARA_WEBHOOK_SECRET`",
+      headers: {
+        type: "object",
+        required: ["x-tara-signature"],
+        properties: {
+          "x-tara-signature": {
+            type: "string",
+            description: "HMAC-SHA256 hex digest of the raw JSON body signed with TARA_WEBHOOK_SECRET",
+          },
+        },
+      },
+      body: {
+        type: "object",
+        required: ["event"],
+        properties: {
+          event: {
+            type: "string",
+            enum: ["payment_successful", "payment_failed"],
+            description: "Event type from Tara",
+          },
+          taraReference: {
+            type: "string",
+            description: "Tara's own transaction reference (returned from /payments/initiate)",
+          },
+          reference: {
+            type: "string",
+            description: "Your idempotency reference (booking reference + attempt number)",
+          },
+          failureCode: {
+            type: "string",
+            description: "Error code on payment_failed events",
+          },
+          failureMessage: {
+            type: "string",
+            description: "Human-readable failure reason",
+          },
+        },
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: { received: { type: "boolean" } },
+        },
+        400: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error:   { type: "object" },
+          },
+        },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const signature = req.headers["x-tara-signature"];
     if (!signature || typeof signature !== "string") {
       return sendError(reply, 400, "MISSING_SIGNATURE", "Missing X-Tara-Signature header.");
     }
 
-    // Verify HMAC-SHA256 of raw body
-    const rawBody = JSON.stringify(req.body);
-    const expectedSig = createHmac("sha256", TARA_WEBHOOK_SECRET)
-      .update(rawBody)
-      .digest("hex");
+    const rawBodyStr = JSON.stringify(req.body);
 
-    if (signature !== expectedSig) {
+    if (!verifyTaraWebhookSignature(rawBodyStr, signature, TARA_WEBHOOK_SECRET)) {
       app.log.warn("[tara-webhook] Signature verification failed");
       return sendError(reply, 400, "INVALID_SIGNATURE", "Tara signature verification failed.");
     }
