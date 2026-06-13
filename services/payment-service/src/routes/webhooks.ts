@@ -95,8 +95,18 @@ export async function webhookRoutes(app: FastifyInstance) {
       }
   
       //  IDEMPOTENCY CHECK — must be FIRST, before any side effects
-      if (payment.status === "captured") {
-        console.log("Already captured, skipping duplicate webhook");
+      const result = await prisma.payment.updateMany({
+        where: {
+          id: payment.id,
+          status: { not: "captured" }
+        },
+        data: {
+          status: "captured",
+          capturedAt: new Date(),
+        },
+      });
+      
+      if (result.count === 0) {
         return reply.send({ received: true });
       }
   
