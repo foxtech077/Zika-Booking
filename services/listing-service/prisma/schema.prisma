@@ -544,17 +544,6 @@ model ListingReview {
 
 // ── E11 — Commission Management ───────────────────────────────────────────────
 
-model CommissionRate {
-  id          String   @id @default(uuid())
-  country     String   @unique @db.Char(2)
-  rate        Decimal  @db.Decimal(6, 4)
-  setBy       String   @map("set_by")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  @@map("commission_rates")
-  @@schema("listing")
-}
 
 // ── E15 — Vouchers & Promotions ───────────────────────────────────────────────
 
@@ -751,4 +740,50 @@ model AuditLog {
   @@map("AuditLog")
   @@schema("auth")
 }
+
+// ── E15 — Commission Management ───────────────────────────────────────────────
+
+model PlatformSettings {
+  id                   Int      @id @default(1)
+  globalCommissionRate Decimal  @default(5.00) @map("global_commission_rate") @db.Decimal(5, 2)
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  updatedBy            String   @map("updated_by") @db.VarChar(50)
+
+  @@map("platform_settings")
+  @@schema("listing")
+}
+
+model CountryCommission {
+  id            String    @id @default(uuid())
+  country       String    @unique @db.Char(2)
+  currentRate   Decimal   @map("current_rate") @db.Decimal(5, 2)
+  pendingRate   Decimal?  @map("pending_rate") @db.Decimal(5, 2)
+  effectiveFrom DateTime? @map("effective_from")
+  lastReason    String?   @map("last_reason") @db.VarChar(500)
+  setBy         String    @map("set_by") @db.VarChar(50)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("country_commissions")
+  @@schema("listing")
+}
+
+model CommissionHistory {
+  id                String   @id @default(uuid())
+  scope             String   @db.VarChar(10) // "global" or "country"
+  countryCode       String?  @map("country_code") @db.Char(2)
+  oldRate           Decimal? @map("old_rate") @db.Decimal(5, 2)
+  newRate           Decimal  @map("new_rate") @db.Decimal(5, 2)
+  effectiveFrom     DateTime @map("effective_from")
+  changedBy         String   @map("changed_by") @db.VarChar(50)
+  changedByRole     String   @map("changed_by_role") @db.VarChar(50)
+  reason            String   @db.VarChar(500)
+  applyToAll        Boolean  @map("apply_to_all")
+  providersNotified Boolean  @map("providers_notified")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("commission_history")
+  @@schema("listing")
+}
+
 

@@ -6,7 +6,6 @@ import { sendError } from "../lib/errors.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
 import { processBookingSuccess } from "../services/booking-success.service.js";
 import Stripe from "stripe";
-import rawBody from "fastify-raw-body";
 
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
@@ -52,7 +51,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
     }
   
-    const rawBody = req.rawBody;
+    const rawBody = (req as any).rawBody;
   
     if (!rawBody) {
       return reply.code(400).send({

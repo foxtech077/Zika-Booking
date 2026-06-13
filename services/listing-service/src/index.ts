@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -151,12 +151,15 @@ async function build() {
   return app;
 }
 
+import { startNightlyJob } from "./services/cron.service.js";
+
 async function main() {
   const app = await build();
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Listing Service] listening on ${HOST}:${PORT}`);
     startIcalPoller();
+    startNightlyJob();
   } catch (err) {
     app.log.error(err);
     process.exit(1);

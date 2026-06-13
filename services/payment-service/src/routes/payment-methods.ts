@@ -5,6 +5,30 @@ import { stripe } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type GuestRequest } from "../middleware/auth.js";
 import { tr } from "zod/v4/locales";
+import { initiateTaraPayment } from "../lib/tara.js";
+
+const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
+
+async function fetchBooking(bookingId: string, authHeader: string) {
+  const res = await fetch(`${BOOKING_SERVICE_URL}/guests/me/bookings/${bookingId}`, {
+    headers: { Authorization: authHeader },
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { success: boolean; data?: Record<string, unknown> };
+  if (!json.success || !json.data) return null;
+  return json.data;
+}
+
+async function bindCommission(bookingId: string, authHeader: string) {
+  const res = await fetch(`${BOOKING_SERVICE_URL}/guests/me/bookings/${bookingId}/bind-commission`, {
+    method: "PATCH",
+    headers: { Authorization: authHeader },
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { success: boolean; data?: Record<string, unknown> };
+  if (!json.success || !json.data) return null;
+  return json.data;
+}
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -330,6 +354,63 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 201, formatMethod(method));
     },
+  );
+
+// ── POST /payments/tara ─────────────────────────────────
+  app.post(
+    "/payments/tara",
+    { preHandler: [requireUser] },
+    async (req, reply) => {
+      const { bookingId, mobileNumber } = req.body as {
+        bookingId: string;
+        mobileNumber: string;
+      };
+
+      const authHeader = req.headers.authorization ?? "";
+      const booking = (await bindCommission(bookingId, authHeader)) as any;
+
+      if (!booking) {
+        return sendError(
+          reply,
+          404,
+          "BOOKING_NOT_FOUND",
+          "Booking not found"
+        );
+      }
+
+      const currency = (booking.currency as string).toLowerCase();
+      const taraResult = await initiateTaraPayment({
+        amount: Number(booking.totalAmount),
+        currency,
+        mobileNumber,
+        reference: booking.reference ?? `tara-${bookingId}-${Date.now()}`,
+        description: `Booking ${bookingId}`,
+      });
+
+      const failedCount = await prisma.payment.count({
+        where: {
+          bookingId,
+          status: { in: ["failed", "timed_out"] },
+        },
+      });
+      const attemptNumber = failedCount + 1;
+      const idempotencyKey = `pay-${bookingId}-${attemptNumber}`;
+
+      await prisma.payment.create({
+        data: {
+          bookingId: booking.id,
+          status: "pending",
+          paymentProvider: "tara",
+          amount: Number(booking.totalAmount),
+          currency,
+          attemptNumber,
+          idempotencyKey,
+          providerPaymentId: taraResult.taraReference,
+        },
+      });
+
+      return sendSuccess(reply, 200, taraResult);
+    }
   );
 
   // ── PATCH /guests/me/payment-methods/:id ─────────────────────────────────
