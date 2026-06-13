@@ -1,4 +1,4 @@
-﻿import sgMail from "@sendgrid/mail";
+import sgMail from "@sendgrid/mail";
 
 const rawEmail = process.env["SENDGRID_FROM_EMAIL"] ?? "noreply@Kainook.com";
 const FROM = rawEmail.replace(/^["']|["']$/g, "");
@@ -161,6 +161,7 @@ export async function sendBookingCancellationEmail(
     listingName: string;
     refundAmount: number;
     currency: string;
+    reason?: string;
   },
 ): Promise<void> {
   await sendWithRetry({
@@ -172,6 +173,7 @@ export async function sendBookingCancellationEmail(
         <h2 style="color:#dc2626">Booking Cancelled</h2>
         <p>Hi ${guestName},</p>
         <p>Your booking <strong style="font-family:monospace">${opts.reference}</strong> at <strong>${opts.listingName}</strong> has been cancelled.</p>
+        ${opts.reason ? `<p><strong>Reason:</strong> ${opts.reason}</p>` : ""}
         ${opts.refundAmount > 0 ? `<p>A refund of <strong>${opts.currency} ${opts.refundAmount.toLocaleString()}</strong> will be processed within 5–10 business days.</p>` : "<p>No refund applies based on the cancellation policy.</p>"}
         <p>The Kainook Team</p>
       </div>

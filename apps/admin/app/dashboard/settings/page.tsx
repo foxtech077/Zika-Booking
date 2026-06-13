@@ -143,32 +143,25 @@ export default function SettingsPage() {
         </Card>
       )}
 
-      {/* Environment info — super_admin only */}
-      {isGlobalAdmin && (
-        <Card>
-          <CardHeader title="Environment" description="Runtime configuration" />
-          <div className="mt-4 space-y-2 text-sm">
-            {[
-              ["Node Environment", "development"],
-              ["Admin Port", "3002"],
-              ["Main Website", "https://kainook.com"],
-              ["Admin Portal", "https://admin.kainook.com"],
-              ["Provider Portal", "https://provider.kainook.com"],
-              ["API Gateway", "https://api.kainook.com"],
-              ["Auth Service", "https://api.kainook.com/auth"],
-              ["Listing Service", "https://api.kainook.com/listings"],
-              ["Payment Service", "https://api.kainook.com/payments"],
-              ["Next.js Version", "14.2.21"],
-              ["React Version", "18.3.1"],
-            ].map(([k, v]) => (
-              <div key={String(k)} className="flex justify-between py-1.5 border-b border-border last:border-0">
-                <span className="text-slate-500">{k}</span>
-                <span className="font-mono text-slate-800 text-xs bg-slate-100 px-2 py-0.5 rounded">{v}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {/* Environment info */}
+      <Card>
+        <CardHeader title="Environment" description="Runtime configuration" />
+        <div className="mt-4 space-y-2 text-sm">
+          {[
+            ["Node Environment", "development"],
+            ["Admin Port", "3002"],
+            ["Auth Service", "api.kainook.com/auth"],
+            ["Listing Service", "api.kainook.com/listings"],
+            ["Next.js Version", "14.2.21"],
+            ["React Version", "18.3.1"],
+          ].map(([k, v]) => (
+            <div key={String(k)} className="flex justify-between py-1.5 border-b border-border last:border-0">
+              <span className="text-slate-500">{k}</span>
+              <span className="font-mono text-slate-800 text-xs bg-slate-100 px-2 py-0.5 rounded">{v}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

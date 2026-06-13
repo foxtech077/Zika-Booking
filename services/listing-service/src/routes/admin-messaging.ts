@@ -1,7 +1,21 @@
+/**
+ * @deprecated — DO NOT REGISTER THIS FILE.
+ *
+ * All three routes originally defined here:
+ *   GET  /admin/conversations
+ *   GET  /admin/conversations/:id/messages
+ *   POST /admin/conversations/:id/messages
+ *
+ * …are now implemented in admin-listings.ts with full country-scope
+ * enforcement for the country_manager role.  This file is intentionally
+ * NOT imported or registered in index.ts and should be deleted in a
+ * future cleanup pass.
+ */
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireAdmin } from "../middleware/auth.js";
+
 
 export async function adminMessagingRoutes(app: FastifyInstance) {
   // ── GET /admin/conversations ──────────────────────────────────────────

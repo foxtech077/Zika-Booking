@@ -567,42 +567,86 @@ console.log("admin.fido2Credential =", admin.fido2Credential);
 export async function adminUserRoutes(app: FastifyInstance) {
 
   // ── GET /admin/audit-logs ──────────────────────────────────────────────────
-  // Accessible by: super_admin, admin, finance (enforced in RBAC/frontend).
-  // Backend additionally enforces that only authenticated admins reach this route.
+  // Accessible by: super_admin, admin (enforced below in RBAC check).
+  // Supports filtering by action, targetType, targetId, adminId, and date range.
   app.get("/admin/audit-logs", {
     schema: {
       tags: ["Admin Users"],
-      summary: "List audit log entries with pagination",
+      summary: "List audit log entries with pagination and search filters",
       querystring: {
         type: "object",
         properties: {
-          page:  { type: "string", default: "1" },
-          limit: { type: "string", default: "20" },
+          page:       { type: "string", default: "1" },
+          limit:      { type: "string", default: "20" },
+          action:     { type: "string", description: "Filter by action name (e.g. listing_approved)" },
+          targetType: { type: "string", description: "Filter by target type (e.g. listing, booking, user)" },
+          targetId:   { type: "string", description: "Filter by target entity ID" },
+          adminId:    { type: "string", description: "Filter by admin user ID" },
+          from:       { type: "string", format: "date-time", description: "Filter entries from this timestamp (ISO 8601)" },
+          to:         { type: "string", format: "date-time", description: "Filter entries up to this timestamp (ISO 8601)" },
         },
       },
     },
     preHandler: [requireAdminSession],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const callerRole = (req as FastifyRequest & {
-    adminRole: string;
-  }).adminRole;
+    const callerRole = (req as FastifyRequest & { adminRole: string }).adminRole;
+    const callerScope: string[] = (req as FastifyRequest & { countryScope: string[] }).countryScope ?? [];
 
-  if (!["admin", "super_admin"].includes(callerRole)) {
-    return sendError(
-      reply,
-      403,
-      "FORBIDDEN",
-      "Only Admin and Super Admin can access audit logs."
-    );
-  }
-    const { page = "1", limit = "20" } = req.query as Record<string, string>;
+    // super_admin and admin see all logs.
+    // country_manager gets read-only access scoped to their countries.
+    // All other roles are denied.
+    const ALLOWED_ROLES = ["super_admin", "admin", "country_manager"];
+    if (!ALLOWED_ROLES.includes(callerRole)) {
+      return sendError(reply, 403, "FORBIDDEN", "You do not have permission to access audit logs.");
+    }
+
+    const {
+      page = "1", limit = "20",
+      action, targetType, targetId, adminId, from, to,
+    } = req.query as Record<string, string>;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
 
+    // Build dynamic where clause from search filters
+    const where: any = {};
+    const and: any[] = [];
+    if (action)     and.push({ action:     { contains: action,     mode: "insensitive" } });
+    if (targetType) and.push({ targetType: { equals:   targetType, mode: "insensitive" } });
+    if (targetId)   and.push({ targetId });
+    if (adminId)    and.push({ adminId });
+    if (from || to) {
+      const tsFilter: any = {};
+      if (from) tsFilter.gte = new Date(from);
+      if (to)   tsFilter.lte = new Date(to);
+      and.push({ timestamp: tsFilter });
+    }
+
+    // country_manager scope: restrict to audit entries whose adminId performed
+    // an action in their countries. We scope by entries that this manager's own
+    // operators created — i.e. entries where role = 'country_manager' and the
+    // actor's countryScope overlaps. Since AuditLog doesn't store country directly,
+    // we restrict to the adminId of operators whose countryScope overlaps with the
+    // caller's scope, giving a useful scoped view without cross-country leakage.
+    if (callerRole === "country_manager" && callerScope.length > 0) {
+      // Find all admin operator IDs that have at least one overlapping country
+      const scopedAdmins = await prisma.adminUser.findMany({
+        where: { countryScope: { hasSome: callerScope } },
+        select: { id: true },
+      });
+      const scopedAdminIds = scopedAdmins.map((a) => a.id);
+      // Also include the caller's own logs
+      const callerAdminId = (req as FastifyRequest & { adminId: string }).adminId;
+      if (!scopedAdminIds.includes(callerAdminId)) scopedAdminIds.push(callerAdminId);
+      and.push({ adminId: { in: scopedAdminIds } });
+    }
+
+    if (and.length > 0) where.AND = and;
+
     const [total, logs] = await Promise.all([
-      prisma.auditLog.count(),
+      prisma.auditLog.count({ where }),
       prisma.auditLog.findMany({
+        where,
         skip,
         take,
         orderBy: { timestamp: "desc" },
@@ -703,6 +747,9 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   // ── GET /admin/users ──────────────────────────────────────────────────────
   app.get("/admin/users", { schema: { tags: ["Admin Users"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const callerRole = (req as FastifyRequest & { adminRole: string }).adminRole;
+    const callerScope: string[] = (req as FastifyRequest & { countryScope: string[] }).countryScope ?? [];
+
     const { q = "", status, userType, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -726,6 +773,12 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
     if (userType) {
       and.push({ userType: userType as "guest" | "provider" });
+    }
+
+    // country_manager: restrict results to users whose country falls within their assigned scope.
+    // Providers register with a country; guests may also have one.
+    if (callerRole === "country_manager" && callerScope.length > 0) {
+      and.push({ country: { in: callerScope } });
     }
 
     if (and.length > 0) {
@@ -890,6 +943,15 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
     }
   }
 
+  // Helper: guard super_admin or admin
+  async function requireSuperAdminOrAdmin(req: FastifyRequest, reply: FastifyReply) {
+    await requireAdminSession(req, reply);
+    const role = (req as FastifyRequest & { adminRole: string }).adminRole;
+    if (role !== "super_admin" && role !== "admin") {
+      return sendError(reply, 403, "FORBIDDEN", "Only Admins and Super Admins can manage operator accounts.");
+    }
+  }
+
   // ── GET /admin/operators — List all admin users ─────────────────────────────
   app.get("/admin/operators", { schema: { tags: ["Admin Operators"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { q = "", role, page = "1", limit = "20" } = req.query as Record<string, string>;
@@ -932,7 +994,7 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
   });
 
   // ── POST /admin/operators — Create a new admin user ─────────────────────────
-  app.post("/admin/operators", { schema: { tags: ["Admin Operators"], body: { type: "object", required: ["name", "email", "password", "role"], properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, role: { type: "string", enum: ["admin", "country_manager", "sales", "support", "finance"] }, countryScope: { type: "array", items: { type: "string" } } } } }, preHandler: [requireSuperAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.post("/admin/operators", { schema: { tags: ["Admin Operators"], body: { type: "object", required: ["name", "email", "password", "role"], properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 8 }, role: { type: "string", enum: ["admin", "country_manager", "sales", "support", "finance"] }, countryScope: { type: "array", items: { type: "string" } } } } }, preHandler: [requireSuperAdminOrAdmin] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { name, email, password, role, countryScope } = req.body as {
@@ -950,6 +1012,44 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
     const VALID_ROLES = ["admin", "country_manager", "sales", "support", "finance"];
     if (!VALID_ROLES.includes(role)) {
       return sendError(reply, 422, "VALIDATION_ERROR", `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}.`);
+    }
+
+    // Role-specific creation limits for Admins
+    if (adminRole === "admin") {
+      if (role !== "country_manager" && role !== "sales") {
+        return sendError(reply, 403, "FORBIDDEN", "Admins can only create Country Manager and Sales Agent accounts.");
+      }
+    }
+
+    // Country manager scoping checks
+    if (role === "country_manager") {
+      if (!countryScope || !Array.isArray(countryScope) || countryScope.length === 0) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "Country scope is required for Country Managers.");
+      }
+    }
+
+    // Creator scope visibility checks
+    if (adminRole === "admin") {
+      const creator = await prisma.adminUser.findUnique({
+        where: { id: adminId },
+        select: { countryScope: true },
+      });
+      const creatorScope = creator?.countryScope ?? [];
+
+      if (creatorScope.length > 0) {
+        if (!countryScope || countryScope.length === 0) {
+          return sendError(reply, 422, "VALIDATION_ERROR", "You must assign a country scope within your visibility scope.");
+        }
+        const outOfScopeCountries = countryScope.filter((c) => !creatorScope.includes(c));
+        if (outOfScopeCountries.length > 0) {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            `You cannot assign country scope outside your own visibility scope: ${outOfScopeCountries.join(", ")}`
+          );
+        }
+      }
     }
 
     const existing = await prisma.adminUser.findUnique({ where: { email } });
@@ -980,7 +1080,10 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
     await writeAudit(adminId, adminRole, "admin_operator_created", req, {
       targetType: "admin_user",
       targetId: newAdmin.id,
-      newValue: JSON.stringify({ email, role }),
+      newValue: JSON.stringify({
+        roleAssigned: role,
+        countryScope: countryScope ?? [],
+      }),
     });
 
     return sendSuccess(reply, 201, { operator: newAdmin, message: `Admin account created for ${email}.` });
