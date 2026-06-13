@@ -4,7 +4,7 @@ import { useAuthStore } from "../store/auth";
 const getBaseUrl = () => {
   const envUrl = process.env["EXPO_PUBLIC_AUTH_API_URL"];
   if (envUrl) return envUrl;
-  return "https://api.kainook.com/auth";
+  return "https://api.kainook.com";
 };
 
 const BASE_URL = getBaseUrl();

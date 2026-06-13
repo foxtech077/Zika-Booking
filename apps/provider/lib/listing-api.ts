@@ -2,7 +2,7 @@ import axios from "axios";
 
 // Proxied through Next.js rewrites → listing-service (port 3003)
 export const listingApi = axios.create({
-  baseURL: "/listing-api",
+  baseURL: process.env.NEXT_PUBLIC_LISTING_API_URL,
   withCredentials: true,
   timeout: 15_000,
 });
