@@ -1,10 +1,10 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: { default: "ZikaBooking Partner", template: "%s | ZikaBooking Partner" },
-  description: "Manage your listings, bookings, and earnings on ZikaBooking.",
+  title: { default: "Kainook Partner", template: "%s | Kainook Partner" },
+  description: "Manage your listings, bookings, and earnings on Kainook.",
   robots: { index: false, follow: false },
 };
 

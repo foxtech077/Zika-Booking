@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import type { ApiResponse, AuthResponse } from "@zika/types";
 
 function openDeepLink(token: string) {
   if (typeof window !== "undefined") {
-    (window as any).location.href = `zikabooking://reset-password?token=${encodeURIComponent(token)}`;
+    (window as any).location.href = `Kainook://reset-password?token=${encodeURIComponent(token)}`;
   }
 }
 
@@ -43,7 +43,7 @@ export default function ResetPasswordScreen() {
           {token ? (
             <>
               <ActivityIndicator size="large" color="#1a73e8" style={{ marginBottom: 24 }} />
-              <Text style={styles.title}>Opening ZikaBooking…</Text>
+              <Text style={styles.title}>Opening Kainook…</Text>
               <Text style={styles.sub}>
                 The app should open automatically.{"\n"}
                 If it doesn't, tap the button below.

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useQuery } from "@tanstack/react-query";
 import { DollarSign, TrendingUp, Percent, Calendar } from "lucide-react";
@@ -96,7 +96,7 @@ export default function EarningsPage() {
         <StatCard
           title="Platform Commission"
           value={formatCurrency(data?.allTime.commission ?? 0)}
-          subtitle="ZikaBooking fees deducted"
+          subtitle="Kainook fees deducted"
           icon={<Percent />}
           color="amber"
           loading={isLoading}

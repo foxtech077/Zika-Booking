@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
@@ -19,8 +19,7 @@ function filterMessage(body: string): { filtered: boolean; text: string; matched
   if (!match) return { filtered: false, text: body };
   return {
     filtered: true,
-    text: body,
-    matchedOn: match.toString(),
+    text: "This message was hidden because it contained contact information. Please complete bookings through Kainook.",
   };
 }
 

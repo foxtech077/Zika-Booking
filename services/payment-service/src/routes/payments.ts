@@ -39,7 +39,8 @@ async function fetchBooking(bookingId: string, authHeader: string) {
 
 export async function paymentRoutes(app: FastifyInstance) {
 
-  app.post("/create-intent", { preHandler: [requireUser],schema: {
+  app.post("/payments/create-intent", { preHandler: [requireUser],schema: {
+    
     tags: ["Payments"],
     summary: "Create Stripe PaymentIntent (New Card Flow)",
     body: {
@@ -49,7 +50,12 @@ export async function paymentRoutes(app: FastifyInstance) {
         bookingId: { type: "string", format: "uuid" },
       },
     },
-  }, }, async (req, reply) => {
+  }, },
+  
+  async (req, reply) => {
+    // console.log("PRISMA KEYS:", Object.keys(prisma));
+    // console.log("CUSTOMER ACCOUNT MODEL:", prisma.customerAccount);
+    // console.log("PRISMA CLIENT:", prisma);
     const { userId } = req as GuestRequest;
     const { bookingId } = req.body as { bookingId: string };
   

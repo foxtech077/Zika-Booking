@@ -260,7 +260,7 @@ model AdminRecoveryCode {
 // ─────────────────────────────────────────────────────────────────────────────
 
 model AuditLog {
-  id         String    @id @default(cuid())
+  id         String    @id @default(cuid())0
   adminId    String
   admin      AdminUser @relation(fields: [adminId], references: [id])
   role       String    @db.VarChar(50)
