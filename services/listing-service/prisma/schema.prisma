@@ -71,7 +71,7 @@ enum RoomType {
   suite
   junior_suite
   studio
-  family_roomgit 
+  family_room
   presidential_suite
 
   @@schema("listing")
