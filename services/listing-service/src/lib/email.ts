@@ -153,6 +153,41 @@ export async function sendBookingConfirmationEmail(
   });
 }
 
+export async function sendCommissionRateChangeEmail(
+  to: string,
+  opts: {
+    scope: string;
+    oldRate: number;
+    newRate: number;
+    effectiveDate: string;
+    reason: string;
+  },
+): Promise<void> {
+  const oldPct = (opts.oldRate * 100).toFixed(2);
+  const newPct = (opts.newRate * 100).toFixed(2);
+  await sendWithRetry({
+    to,
+    from: FROM,
+    subject: `Important: Kainook commission rate update for ${opts.scope}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+        <h2 style="color:#1a73e8">Commission Rate Update</h2>
+        <p>We are writing to inform you of an upcoming change to the Kainook platform commission rate.</p>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0">
+          <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Market</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${opts.scope}</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Current Rate</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${oldPct}%</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#1a73e8;font-weight:bold">New Rate</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:bold">${newPct}%</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Effective Date</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${opts.effectiveDate}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Reason</td><td style="padding:8px">${opts.reason}</td></tr>
+        </table>
+        <p><strong>Note:</strong> This change applies to new bookings confirmed on or after ${opts.effectiveDate}. Your existing confirmed bookings are not affected.</p>
+        <p><a href="${WEB_BASE}/dashboard/earnings" style="color:#1a73e8">View your earnings dashboard</a></p>
+        <p>The Kainook Team</p>
+      </div>
+    `,
+  });
+}
+
 export async function sendBookingCancellationEmail(
   to: string,
   guestName: string,
