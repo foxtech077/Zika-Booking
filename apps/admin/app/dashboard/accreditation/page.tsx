@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
-import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
+import { DataTable, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -12,8 +12,7 @@ import { Textarea, Select } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatRelativeTime } from "@/lib/utils";
-import { api } from "@/lib/api";
-import type { ListingReviewTask, PlatformUser } from "@/types/admin";
+import type { ListingReviewTask } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 
 // ── Spec-defined rejection reasons ────────────────────────────────────────────
@@ -74,9 +73,7 @@ function DocViewer({ url, fileType, label, onClose }: { url: string; fileType: s
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function AccreditationPage() {
-  const { token, user, _hasHydrated } = useAuthStore();
-  const isCountryManager = user?.role === "country_manager";
-  const userCountryScope = user?.countryScope ?? [];
+  const { token } = useAuthStore();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [selectedTask, setSelectedTask] = useState<ListingReviewTask | null>(null);
@@ -90,78 +87,16 @@ export default function AccreditationPage() {
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  // const params = { page: String(page), limit: "20" };
+  const params = { page: String(page), limit: "20" };
 
-  const [activeDocId, setActiveDocId] = useState<string | null>(null);
-  const [docUrl, setDocUrl] = useState<{ url: string; fileType: string } | null>(null);
-  const [docLoading, setDocLoading] = useState(false);
-  const [docError, setDocError] = useState<string | null>(null);
-
-  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
-  const countryOptions = userCountryScope.length > 0
-    ? userCountryScope.map((c) => ({ value: c, label: c }))
-    : [
-        "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
-      ].map((c) => ({ value: c, label: c }));
-
-  const [country, setCountry] = useState(() => userCountryScope[0] ?? "");
-
-  // Sync country selection after auth store hydration
-  useEffect(() => {
-    if (userCountryScope.length > 0 && !country) {
-      setCountry(userCountryScope[0] ?? "");
-    }
-  }, [userCountryScope, country]);
-
-  // For country managers, always send their first scoped country as the filter.
-  // Previously this was set to "" which caused the API to return all countries.
-  const effectiveCountry = isCountryManager ? (country || userCountryScope[0] || "") : country;
-  const params = Object.fromEntries(
-    Object.entries({
-      page: String(page),
-      limit: "20",
-      country: effectiveCountry,
-    }).filter(([, v]) => v !== "")
-  );
   const { data, isLoading } = useQuery({
     queryKey: ["accreditation-queue", params],
     queryFn: () => fetchQueue(params),
-    // Wait for auth store to rehydrate so userCountryScope/effectiveCountry are correct
-    enabled: !!token && _hasHydrated,
-  });
-
-  const { data: providersData } = useQuery({
-    queryKey: ["admin-providers-list"],
-    queryFn: () =>
-      api
-        .get("/admin/users", { params: { userType: "provider", limit: "1000" } })
-        .then((r) => r.data.data ?? r.data),
     enabled: !!token,
   });
 
-  const providers: PlatformUser[] = providersData?.users ?? [];
-  const providerMap = new Map<string, string>();
-  for (const p of providers) {
-    const name = p.businessName || `${p.firstName} ${p.lastName}`.trim() || p.email;
-    providerMap.set(p.id, name);
-  }
-
-  // Country managers: client-side filter as safety net (in case API doesn't filter)
-  const rawTasks: ListingReviewTask[] = data?.tasks ?? [];
-
-  const tasks = isCountryManager && userCountryScope.length > 0
-    ? rawTasks.filter((t) => {
-        const listingCountry = t.listing?.country?.toUpperCase();
-        const selectedCountry = country?.toUpperCase();
-        const inScope = listingCountry
-          ? userCountryScope.some((sc) => sc.toUpperCase() === listingCountry)
-          : false;
-
-        return inScope && (!selectedCountry || selectedCountry === listingCountry);
-      })
-    : rawTasks;
-  const total: number = isCountryManager ? tasks.length : (data?.total ?? 0);
+  const tasks: ListingReviewTask[] = data?.tasks ?? [];
+  const total: number = data?.total ?? 0;
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ["listing-review-detail", selectedTask?.listing?.id],
@@ -228,14 +163,9 @@ export default function AccreditationPage() {
     {
       key: "provider",
       label: "Provider",
-      render: (t) => {
-        const name = providerMap.get(t.listing.providerId);
-        return name ? (
-          <span className="text-xs text-slate-700 font-medium">{name}</span>
-        ) : (
-          <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
-        );
-      },
+      render: (t) => (
+        <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
+      ),
     },
     {
       key: "stars",
@@ -274,22 +204,6 @@ export default function AccreditationPage() {
       />
 
       <Card padding="none">
-      {canShowCountryFilter && (
-          <FilterBar
-            filters={[
-              {
-                key: "country",
-                label: "All Countries",
-                value: country,
-                onChange: (v: string) => {
-                  setCountry(v);
-                  setPage(1);
-                },
-                options: countryOptions,
-              },
-            ]}
-          />
-        )}
         <DataTable
           columns={columns}
           data={tasks}
@@ -332,7 +246,7 @@ export default function AccreditationPage() {
             {/* Submission summary */}
             <dl className="grid grid-cols-2 gap-3 text-sm">
               {[
-                ["Provider", selectedTask?.listing?.providerId ? (providerMap.get(selectedTask.listing.providerId) ?? selectedTask.listing.providerId) : "—"],
+                ["Provider", selectedTask?.listing?.providerId ?? "—"],
                 ["Submission Date", selectedTask?.listing?.submittedAt ? formatRelativeTime(selectedTask.listing.submittedAt) : "—"],
                 ["Claimed Stars", selectedTask?.listing?.claimedStarRating
                   ? `${"★".repeat(selectedTask.listing.claimedStarRating)} (${selectedTask.listing.claimedStarRating}★)`

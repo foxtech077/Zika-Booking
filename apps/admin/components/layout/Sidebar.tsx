@@ -8,7 +8,6 @@ import {
   Star, MessageSquare, Cable, DollarSign, Percent, Ticket,
   ShieldCheck, ClipboardList, BarChart3, Settings,
   ChevronLeft, ChevronRight, LogOut,
-  CreditCard, Coins, RotateCcw, History,
 } from "lucide-react";
 import { cn, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -20,16 +19,15 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, Users, BadgeCheck, Building2, CalendarDays,
   Star, MessageSquare, Cable, DollarSign, Percent, Ticket,
   ShieldCheck, ClipboardList, BarChart3, Settings,
-  CreditCard, Coins, RotateCcw, History,
 };
 
 const ROLE_BADGE_COLORS: Record<AdminRole, string> = {
-  super_admin: "bg-purple-100 text-purple-700",
-  admin: "bg-blue-100 text-blue-700",
+  super_admin:     "bg-purple-100 text-purple-700",
+  admin:           "bg-blue-100 text-blue-700",
   country_manager: "bg-teal-100 text-teal-700",
-  sales: "bg-green-100 text-green-700",
-  support: "bg-orange-100 text-orange-700",
-  finance: "bg-indigo-100 text-indigo-700",
+  sales:           "bg-green-100 text-green-700",
+  support:         "bg-orange-100 text-orange-700",
+  finance:         "bg-indigo-100 text-indigo-700",
 };
 
 export function Sidebar() {

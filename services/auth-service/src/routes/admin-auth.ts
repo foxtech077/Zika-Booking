@@ -590,14 +590,9 @@ export async function adminUserRoutes(app: FastifyInstance) {
     preHandler: [requireAdminSession],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const callerRole = (req as FastifyRequest & { adminRole: string }).adminRole;
-    const callerScope: string[] = (req as FastifyRequest & { countryScope: string[] }).countryScope ?? [];
 
-    // super_admin and admin see all logs.
-    // country_manager gets read-only access scoped to their countries.
-    // All other roles are denied.
-    const ALLOWED_ROLES = ["super_admin", "admin", "country_manager"];
-    if (!ALLOWED_ROLES.includes(callerRole)) {
-      return sendError(reply, 403, "FORBIDDEN", "You do not have permission to access audit logs.");
+    if (!["admin", "super_admin"].includes(callerRole)) {
+      return sendError(reply, 403, "FORBIDDEN", "Only Admin and Super Admin can access audit logs.");
     }
 
     const {
@@ -621,26 +616,6 @@ export async function adminUserRoutes(app: FastifyInstance) {
       if (to)   tsFilter.lte = new Date(to);
       and.push({ timestamp: tsFilter });
     }
-
-    // country_manager scope: restrict to audit entries whose adminId performed
-    // an action in their countries. We scope by entries that this manager's own
-    // operators created — i.e. entries where role = 'country_manager' and the
-    // actor's countryScope overlaps. Since AuditLog doesn't store country directly,
-    // we restrict to the adminId of operators whose countryScope overlaps with the
-    // caller's scope, giving a useful scoped view without cross-country leakage.
-    if (callerRole === "country_manager" && callerScope.length > 0) {
-      // Find all admin operator IDs that have at least one overlapping country
-      const scopedAdmins = await prisma.adminUser.findMany({
-        where: { countryScope: { hasSome: callerScope } },
-        select: { id: true },
-      });
-      const scopedAdminIds = scopedAdmins.map((a) => a.id);
-      // Also include the caller's own logs
-      const callerAdminId = (req as FastifyRequest & { adminId: string }).adminId;
-      if (!scopedAdminIds.includes(callerAdminId)) scopedAdminIds.push(callerAdminId);
-      and.push({ adminId: { in: scopedAdminIds } });
-    }
-
     if (and.length > 0) where.AND = and;
 
     const [total, logs] = await Promise.all([
@@ -747,9 +722,6 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
   // ── GET /admin/users ──────────────────────────────────────────────────────
   app.get("/admin/users", { schema: { tags: ["Admin Users"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const callerRole = (req as FastifyRequest & { adminRole: string }).adminRole;
-    const callerScope: string[] = (req as FastifyRequest & { countryScope: string[] }).countryScope ?? [];
-
     const { q = "", status, userType, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -773,12 +745,6 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
     if (userType) {
       and.push({ userType: userType as "guest" | "provider" });
-    }
-
-    // country_manager: restrict results to users whose country falls within their assigned scope.
-    // Providers register with a country; guests may also have one.
-    if (callerRole === "country_manager" && callerScope.length > 0) {
-      and.push({ country: { in: callerScope } });
     }
 
     if (and.length > 0) {

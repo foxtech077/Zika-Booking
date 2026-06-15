@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldCheck, UserPlus, Trash2, Pencil, Users2,
-  AlertCircle, CheckCircle, Clock, X
+  AlertCircle, CheckCircle, Clock
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
@@ -16,7 +16,7 @@ import { DataTable, FilterBar, Pagination, type Column } from "@/components/tabl
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
-import { canAccess, getAllowedRolesToCreate } from "@/permissions/rbac";
+import { canAccess } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -88,17 +88,6 @@ export default function RolesPage() {
   const qc = useQueryClient();
   const canManage = canAccess(user?.role, "manage_roles");
 
-  // Derive what this user is allowed to create
-  const allowedRoles = getAllowedRolesToCreate(user?.role);
-  const canCreate = allowedRoles.length > 0;
-  const allowedRoleOptions = ROLE_OPTIONS.filter((r) => allowedRoles.includes(r.value));
-  // Default create role to first allowed role
-  const defaultCreateRole = (allowedRoles[0] ?? "country_manager") as AdminRole;
-
-  // Admin's own country scope (for restricting country picker)
-  const adminCountries: string[] = user?.countryScope ?? [];
-  const isScopedAdmin = user?.role === "admin" && adminCountries.length > 0;
-
   // List state
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
@@ -109,16 +98,14 @@ export default function RolesPage() {
   const [editModal, setEditModal] = useState<Operator | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Operator | null>(null);
 
-  // Create form — selectedCountries is an array for multi-select
+  // Create form
   const [form, setForm] = useState({
-    name: "", email: "", password: "", role: defaultCreateRole, countryScope: ""
+    name: "", email: "", password: "", role: "admin" as AdminRole, countryScope: ""
   });
-  const [createCountries, setCreateCountries] = useState<string[]>([]);
 
   // Edit form
-  const [editRole, setEditRole] = useState<AdminRole>("country_manager");
+  const [editRole, setEditRole] = useState<AdminRole>("admin");
   const [editScope, setEditScope] = useState("");
-  const [editCountries, setEditCountries] = useState<string[]>([]);
 
   const params = { q, ...(roleFilter ? { role: roleFilter } : {}), page: String(page), limit: "20" };
 
@@ -130,21 +117,12 @@ export default function RolesPage() {
   const operators: Operator[] = data?.operators ?? [];
   const total: number = data?.total ?? 0;
 
-  // Admins only see country_manager / sales / support / finance rows
-  const HIDDEN_ROLES_FOR_ADMIN: AdminRole[] = ["super_admin", "admin"];
-  const visibleOperators =
-    user?.role === "super_admin"
-      ? operators
-      : operators.filter((op) => !HIDDEN_ROLES_FOR_ADMIN.includes(op.role));
-  const visibleTotal = visibleOperators.length;
-
   const createMut = useMutation({
     mutationFn: (body: any) => createOperator(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-operators"] });
       setCreateModal(false);
-      setForm({ name: "", email: "", password: "", role: defaultCreateRole, countryScope: "" });
-      setCreateCountries([]);
+      setForm({ name: "", email: "", password: "", role: "admin", countryScope: "" });
     },
   });
 
@@ -167,7 +145,6 @@ export default function RolesPage() {
   const openEdit = (op: Operator) => {
     setEditRole(op.role);
     setEditScope(op.countryScope?.join(", ") ?? "");
-    setEditCountries(op.countryScope ?? []);
     setEditModal(op);
   };
 
@@ -225,14 +202,10 @@ export default function RolesPage() {
       key: "actions",
       label: "",
       align: "right",
-      render: (op) => {
-        // Always hide actions for self, super_admin rows, or peer admin rows (when not super_admin)
-        const isProtected =
-          op.id === user?.id ||
-          op.role === "super_admin" ||
-          (op.role === "admin" && user?.role !== "super_admin");
-        if (isProtected) return <span className="text-xs text-slate-300 px-2">—</span>;
-        return (
+      render: (op) => (
+        op.id === user?.id || op.role === "super_admin" ? (
+          <span className="text-xs text-slate-300 px-2">—</span>
+        ) : (
           <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
             {canManage && (
               <>
@@ -253,8 +226,8 @@ export default function RolesPage() {
               </>
             )}
           </div>
-        );
-      },
+        )
+      ),
     },
   ];
 
@@ -262,27 +235,24 @@ export default function RolesPage() {
     <div className="space-y-6 max-w-screen-xl">
       <SectionHeader
         title="Roles & Admins"
-        description={`${visibleTotal} admin account${visibleTotal !== 1 ? "s" : ""}`}
+        description={`${total} admin account${total !== 1 ? "s" : ""}`}
         action={
-          canCreate && (
+          canManage && (
             <Button
               variant="primary"
               size="sm"
               onClick={() => setCreateModal(true)}
               leftIcon={<UserPlus className="h-4 w-4" />}
             >
-              {user?.role === "super_admin" ? "Create Admin" : "Create Account"}
+              Create Admin
             </Button>
           )
         }
       />
 
-      {/* Role overview cards — admins only see roles they manage */}
+      {/* Role overview cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        {(user?.role === "super_admin"
-          ? [{ value: "super_admin" as const, label: "Super Admin" }, ...ROLE_OPTIONS]
-          : ROLE_OPTIONS.filter((r) => allowedRoles.includes(r.value) || ["support", "finance"].includes(r.value))
-        ).map((r) => (
+        {[{ value: "super_admin" as const, label: "Super Admin" }, ...ROLE_OPTIONS].map((r) => (
           <Card key={r.value} hover className="space-y-2">
             <div className="flex items-start justify-between">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
@@ -296,7 +266,7 @@ export default function RolesPage() {
             </div>
             <div className="text-xs text-slate-400 flex items-center gap-1 pt-1">
               <Users2 className="h-3 w-3" />
-              {visibleOperators.filter((op) => op.role === r.value).length} member{visibleOperators.filter((op) => op.role === r.value).length !== 1 ? "s" : ""}
+              {operators.filter((op) => op.role === r.value).length} member{operators.filter((op) => op.role === r.value).length !== 1 ? "s" : ""}
             </div>
           </Card>
         ))}
@@ -311,7 +281,7 @@ export default function RolesPage() {
           search={q}
           onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search name or email…"
-          filters={user?.role === "super_admin" ? [
+          filters={[
             {
               key: "role",
               label: "All Roles",
@@ -322,17 +292,17 @@ export default function RolesPage() {
                 ...ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label })),
               ],
             },
-          ] : []}
+          ]}
         />
         <DataTable
           columns={columns}
-          data={visibleOperators}
+          data={operators}
           loading={isLoading}
           emptyTitle="No admin accounts found"
           emptyDescription="Create your first admin account using the button above."
           emptyIcon={<Users2 className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={visibleTotal} onPageChange={setPage} />
+        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Permission matrix */}
@@ -345,10 +315,7 @@ export default function RolesPage() {
             <thead>
               <tr className="border-b border-border bg-surface-subtle">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-40">Module</th>
-                {(user?.role === "super_admin"
-                  ? [{ value: "super_admin", label: "Super Admin" }, ...ROLE_OPTIONS]
-                  : ROLE_OPTIONS.filter((r) => !HIDDEN_ROLES_FOR_ADMIN.includes(r.value))
-                ).map((r) => (
+                {[{ value: "super_admin", label: "Super Admin" }, ...ROLE_OPTIONS].map((r) => (
                   <th key={r.value} className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     <Badge label={r.label} status={r.value} size="sm" />
                   </th>
@@ -359,10 +326,7 @@ export default function RolesPage() {
               {PERMISSION_MATRIX.map((row) => (
                 <tr key={row.module} className="hover:bg-slate-50/50">
                   <td className="px-4 py-3 text-sm font-medium text-slate-900">{row.module}</td>
-                  {(user?.role === "super_admin"
-                    ? ["super_admin", "admin", "country_manager", "sales", "support", "finance"] as const
-                    : ["country_manager", "sales", "support", "finance"] as const
-                  ).map((r) => {
+                  {(["super_admin", "admin", "country_manager", "sales", "support", "finance"] as const).map((r) => {
                     const perm = (row as any)[r];
                     return (
                       <td key={r} className="px-4 py-3 text-center">
@@ -385,8 +349,8 @@ export default function RolesPage() {
       {/* ── Create Admin Modal ── */}
       <ActionModal
         open={createModal}
-        onClose={() => { setCreateModal(false); createMut.reset(); setCreateCountries([]); }}
-        title={user?.role === "super_admin" ? "Create Admin Account" : "Create Account"}
+        onClose={() => { setCreateModal(false); createMut.reset(); }}
+        title="Create Admin Account"
         description="Set up a new admin user. They can log in immediately with these credentials."
         size="md"
         footer={
@@ -402,16 +366,13 @@ export default function RolesPage() {
                 email: form.email,
                 password: form.password,
                 role: form.role,
-                // Use pill-selected countries if scoped admin, otherwise parse free-text
-                countryScope: isScopedAdmin
-                  ? createCountries
-                  : form.countryScope
-                    ? form.countryScope.split(",").map((s) => s.trim()).filter(Boolean)
-                    : [],
+                countryScope: form.countryScope
+                  ? form.countryScope.split(",").map((s) => s.trim()).filter(Boolean)
+                  : [],
               })}
               disabled={!form.name || !form.email || !form.password || form.password.length < 8}
             >
-              {user?.role === "super_admin" ? "Create Admin" : "Create Account"}
+              Create Admin
             </Button>
           </>
         }
@@ -456,56 +417,19 @@ export default function RolesPage() {
               label="Role"
               value={form.role}
               onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as AdminRole }))}
-              options={allowedRoleOptions}
+              options={ROLE_OPTIONS}
             />
           </div>
 
           {form.role === "country_manager" && (
-            isScopedAdmin ? (
-              /* Scoped admin: can only assign countries from their own scope */
-              <div>
-                <p className="text-xs font-semibold text-slate-700 mb-2">
-                  Country Scope
-                  <span className="ml-1 font-normal text-slate-400">(select from your authorized countries)</span>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {adminCountries.map((c) => {
-                    const selected = createCountries.includes(c);
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() =>
-                          setCreateCountries((prev) =>
-                            selected ? prev.filter((x) => x !== c) : [...prev, c]
-                          )
-                        }
-                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                          selected
-                            ? "bg-primary text-white border-primary"
-                            : "bg-surface-subtle text-slate-600 border-border hover:border-primary/50"
-                        }`}
-                      >
-                        {selected && <span className="mr-1">✓</span>}{c}
-                      </button>
-                    );
-                  })}
-                </div>
-                {createCountries.length === 0 && (
-                  <p className="mt-1.5 text-xs text-slate-400">Select at least one country for this manager.</p>
-                )}
-              </div>
-            ) : (
-              /* Super admin: free-text input */
-              <Input
-                id="country-scope"
-                label="Country Scope (comma-separated)"
-                value={form.countryScope}
-                onChange={(e) => setForm((f) => ({ ...f, countryScope: e.target.value }))}
-                placeholder="MT, GB, DE"
-                hint="Countries this manager will have access to"
-              />
-            )
+            <Input
+              id="country-scope"
+              label="Country Scope (comma-separated)"
+              value={form.countryScope}
+              onChange={(e) => setForm((f) => ({ ...f, countryScope: e.target.value }))}
+              placeholder="MT, GB, DE"
+              hint="Countries this manager will have access to"
+            />
           )}
 
           <div className="bg-surface-subtle border border-border rounded-lg p-3 text-xs text-slate-600">
@@ -518,7 +442,7 @@ export default function RolesPage() {
       {/* ── Edit Role Modal ── */}
       <ActionModal
         open={!!editModal}
-        onClose={() => { setEditModal(null); editMut.reset(); setEditCountries([]); }}
+        onClose={() => { setEditModal(null); editMut.reset(); }}
         title="Change Role"
         description={`Update the role for ${editModal?.name} (${editModal?.email})`}
         size="sm"
@@ -532,9 +456,7 @@ export default function RolesPage() {
               onClick={() => editModal && editMut.mutate({
                 id: editModal.id,
                 role: editRole,
-                countryScope: isScopedAdmin
-                  ? editCountries
-                  : editScope ? editScope.split(",").map((s) => s.trim()).filter(Boolean) : [],
+                countryScope: editScope ? editScope.split(",").map((s) => s.trim()).filter(Boolean) : [],
               })}
             >
               Save Changes
@@ -548,49 +470,16 @@ export default function RolesPage() {
             label="New Role"
             value={editRole}
             onChange={(e) => setEditRole(e.target.value as AdminRole)}
-            options={allowedRoleOptions}
+            options={ROLE_OPTIONS}
           />
           {editRole === "country_manager" && (
-            isScopedAdmin ? (
-              /* Scoped admin: restrict country scope to their own countries */
-              <div>
-                <p className="text-xs font-semibold text-slate-700 mb-2">
-                  Country Scope
-                  <span className="ml-1 font-normal text-slate-400">(your authorized countries only)</span>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {adminCountries.map((c) => {
-                    const selected = editCountries.includes(c);
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() =>
-                          setEditCountries((prev) =>
-                            selected ? prev.filter((x) => x !== c) : [...prev, c]
-                          )
-                        }
-                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                          selected
-                            ? "bg-primary text-white border-primary"
-                            : "bg-surface-subtle text-slate-600 border-border hover:border-primary/50"
-                        }`}
-                      >
-                        {selected && <span className="mr-1">✓</span>}{c}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <Input
-                id="edit-scope"
-                label="Country Scope"
-                value={editScope}
-                onChange={(e) => setEditScope(e.target.value)}
-                placeholder="MT, GB, DE"
-              />
-            )
+            <Input
+              id="edit-scope"
+              label="Country Scope"
+              value={editScope}
+              onChange={(e) => setEditScope(e.target.value)}
+              placeholder="MT, GB, DE"
+            />
           )}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
             ⚠️ Their current session will be revoked and they must sign in again with the new role.
