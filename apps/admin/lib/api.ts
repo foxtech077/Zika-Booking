@@ -68,7 +68,7 @@ api.interceptors.response.use(
 
     const isAuthFailure =
       status === 401 ||
-      (status === 403 && ["ACCOUNT_BANNED", "ACCOUNT_SUSPENDED", "ACCOUNT_INACTIVE", "FORBIDDEN"].includes(code));
+      (status === 403 && ["ACCOUNT_BANNED", "ACCOUNT_SUSPENDED", "ACCOUNT_INACTIVE"].includes(code));
 
     const isLoginPage = typeof window !== "undefined" && window.location.pathname.includes("/login");
 

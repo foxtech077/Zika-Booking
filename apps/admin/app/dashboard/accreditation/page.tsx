@@ -26,7 +26,7 @@ const REJECTION_REASONS = [
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 const fetchQueue = (params: Record<string, string>) =>
-  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  listingApi.get("/admin/listings/review-queue", { params }).then((r) => r.data.data ?? r.data);
 
 const fetchDetail = (id: string) =>
   listingApi.get(`/admin/listings/${id}/review`).then((r) => r.data.data ?? r.data);
@@ -126,7 +126,7 @@ export default function AccreditationPage() {
     }).filter(([, v]) => v !== "")
   );
   const { data, isLoading } = useQuery({
-    queryKey: ["accreditation-queue", params],
+    queryKey: ["accreditation-queue", page, effectiveCountry],
     queryFn: () => fetchQueue(params),
     // Wait for auth store to rehydrate so userCountryScope/effectiveCountry are correct
     enabled: !!token && _hasHydrated,
@@ -138,7 +138,7 @@ export default function AccreditationPage() {
       api
         .get("/admin/users", { params: { userType: "provider", limit: "1000" } })
         .then((r) => r.data.data ?? r.data),
-    enabled: !!token,
+    enabled: !!token && _hasHydrated,
   });
 
   const providers: PlatformUser[] = providersData?.users ?? [];
@@ -162,7 +162,7 @@ export default function AccreditationPage() {
         return inScope && (!selectedCountry || selectedCountry === listingCountry);
       })
     : rawTasks;
-  const total: number = isCountryManager ? tasks.length : (data?.total ?? 0);
+  const total: number = data?.total ?? tasks.length;
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ["listing-review-detail", selectedTask?.listing?.id],

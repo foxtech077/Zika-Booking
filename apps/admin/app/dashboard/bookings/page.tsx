@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle } from "lucide-react";
+import { CalendarDays, XCircle, Plus } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -11,12 +11,14 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
-import { ActionModal } from "@/components/modals/Modals";
+import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
-import type { Booking } from "@/types/admin";
+import { canAccess } from "@/permissions/rbac";
+import type { AdminRole, Booking } from "@/types/admin";
+import Link from "next/link";
 
 const fetchBookings = (params: Record<string, string>) =>
-  listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  listingApi.get("/admin/bookings", { params }).then((r) => r.data.data ?? r.data);
 
 const fetchBookingDetail = (id: string) =>
   listingApi.get(`/admin/bookings/${id}`).then((r) => r.data.data ?? r.data);
@@ -28,12 +30,36 @@ export default function BookingsPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [listingType, setListingType] = useState("");
+  const [country, setCountry] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const { user, _hasHydrated } = useAuthStore();
+
+  const isCountryManager = user?.role === "country_manager";
+
+  const scopedCountries = useMemo(() => {
+    return isCountryManager ? (user?.countryScope ?? []) : [];
+  }, [isCountryManager, user?.countryScope]);
+
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+  const countryOptions = [
+    "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
+  ].map((c) => ({ value: c, label: c }));
+
+  useEffect(() => {
+    if (!_hasHydrated) return;
+    if (scopedCountries.length > 0 && !country) {
+      setCountry(scopedCountries[0] ?? "");
+    }
+  }, [_hasHydrated, scopedCountries, country]);
+
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  const role = useAuthStore(state => state.user?.role);
+  const role = useAuthStore((state) => state.user?.role);
 
   // Set default status for Sales role
   useEffect(() => {
@@ -42,7 +68,9 @@ export default function BookingsPage() {
     }
   }, [role, status]);
 
-  // ✅ FIXED: no duplicate arrays, no any[]
+  const canCreateManualBooking = canAccess(role as AdminRole, "manage_manual_booking");
+
+  // ✅ no duplicate arrays, no any[]
   const statusOptions =
     role === "sales"
       ? [{ value: "pending_payment", label: "Pending Requests" }]
@@ -74,16 +102,59 @@ export default function BookingsPage() {
         { value: "car", label: "Car" },
       ],
     },
+<<<<<<< HEAD
+=======
+    ...(canShowCountryFilter
+      ? [
+          {
+            key: "country",
+            label: "All Countries",
+            value: country,
+            onChange: (v: string) => { setCountry(v); setPage(1); },
+            options: countryOptions,
+          },
+        ]
+      : []),
+    {
+      key: "rowsPerPage",
+      label: "",
+      value: String(rowsPerPage),
+      onChange: (v: string) => { setRowsPerPage(Number(v)); setPage(1); },
+      options: [
+        { value: "5", label: "5" },
+        { value: "10", label: "10" },
+        { value: "20", label: "20" },
+        { value: "50", label: "50" },
+      ],
+    },
+>>>>>>> 22d26c040c1bd8996858b660e93028e3db9a63e8
   ];
 
-  const params = { q, status, listingType, page: String(page), limit: String(rowsPerPage) };
+  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
+  const params = Object.fromEntries(
+    Object.entries({
+      q,
+      status,
+      listingType,
+      country: effectiveCountry,
+      page: String(page),
+      limit: String(rowsPerPage),
+    }).filter(([, v]) => v !== "")
+  );
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-bookings", params],
+    queryKey: ["admin-bookings", page, rowsPerPage, q, status, listingType, effectiveCountry],
     queryFn: () => fetchBookings(params),
+    enabled: _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
   });
 
-  const bookings: Booking[] = data?.bookings ?? [];
+  const rawBookings: Booking[] = data?.bookings ?? [];
+  const bookings = isCountryManager && scopedCountries.length > 0
+    ? rawBookings.filter((b) => {
+        const listingCountry = b.listing?.country?.toUpperCase();
+        return listingCountry ? scopedCountries.some((sc) => sc.toUpperCase() === listingCountry) : false;
+      })
+    : rawBookings;
   const total: number = data?.total ?? 0;
 
   const { data: detailData, isLoading: loadingDetail } = useQuery({
@@ -174,7 +245,7 @@ export default function BookingsPage() {
       width: "80px",
       render: (b) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          {['pending_payment', 'confirmed'].includes(b.status) && role !== 'sales' && (
+          {["pending_payment", "confirmed"].includes(b.status) && role !== "sales" && (
             <button
               onClick={() => setCancelModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
@@ -193,6 +264,15 @@ export default function BookingsPage() {
       <SectionHeader
         title="Bookings"
         description={`${total.toLocaleString()} total bookings`}
+        action={
+          canCreateManualBooking ? (
+            <Link href="/dashboard/bookings/new">
+              <Button leftIcon={<Plus className="h-4 w-4" />}>
+                Create Booking
+              </Button>
+            </Link>
+          ) : undefined
+        }
       />
 
       <Card padding="none">
@@ -218,7 +298,116 @@ export default function BookingsPage() {
         <Pagination page={page} limit={rowsPerPage} total={total} onPageChange={setPage} />
       </Card>
 
-      {/* rest of your code unchanged */}
+      {/* Booking detail drawer */}
+      {selected && (
+        <SlideDrawer
+          open={!!selected}
+          onClose={() => setSelected(null)}
+          title={`Booking ${selected.reference}`}
+        >
+          {loadingDetail ? (
+            <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading…</div>
+          ) : detailData ? (
+            <div className="space-y-4 p-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Guest</p>
+                  <p className="text-sm font-semibold text-slate-900">{detailData.guestFirstName} {detailData.guestLastName}</p>
+                  <p className="text-xs text-slate-500">{detailData.guestEmail}</p>
+                  {detailData.guestPhone && <p className="text-xs text-slate-500">{detailData.guestPhone}</p>}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Status</p>
+                  <Badge label={detailData.status} status={detailData.status} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Listing</p>
+                  <p className="text-sm text-slate-800">{detailData.listing?.name ?? detailData.listingId}</p>
+                  <p className="text-xs text-slate-500 capitalize">{detailData.listingType}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Dates</p>
+                  {detailData.checkIn ? (
+                    <p className="text-sm text-slate-800">
+                      {formatDate(detailData.checkIn, "MMM d, yyyy")} → {formatDate(detailData.checkOut, "MMM d, yyyy")}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-slate-800">
+                      {formatDate(detailData.pickupDatetime, "MMM d HH:mm")}
+                    </p>
+                  )}
+                  <p className="text-xs text-slate-500">{detailData.nightsOrDays} {detailData.listingType === "car" ? "day(s)" : "night(s)"}</p>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Financials</p>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-600">Subtotal</span>
+                    <span>{formatCurrency(Number(detailData.subtotal), detailData.currency)}</span>
+                  </div>
+                  {Number(detailData.discountAmount) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Discount</span>
+                      <span className="text-green-600">−{formatCurrency(Number(detailData.discountAmount), detailData.currency)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-sm font-semibold border-t border-border pt-1 mt-1">
+                    <span>Total</span>
+                    <span>{formatCurrency(Number(detailData.totalAmount), detailData.currency)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Commission</span>
+                    <span>{formatCurrency(Number(detailData.commissionAmount), detailData.currency)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Provider Payout</span>
+                    <span>{formatCurrency(Number(detailData.providerPayout), detailData.currency)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {["pending_payment", "confirmed"].includes(detailData.status) && role !== "sales" && (
+                <div className="border-t border-border pt-4">
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => { setCancelModal(selected); setSelected(null); }}
+                  >
+                    Cancel Booking
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </SlideDrawer>
+      )}
+
+      {/* Cancel confirmation modal */}
+      {cancelModal && (
+        <ConfirmModal
+          open={!!cancelModal}
+          onClose={() => { setCancelModal(null); setCancelReason(""); }}
+          title="Cancel Booking"
+          description={`Cancel booking ${cancelModal.reference}? This action cannot be undone.`}
+          confirmLabel="Cancel Booking"
+          variant="danger"
+          loading={cancelMut.isPending}
+          onConfirm={() => cancelMut.mutate({ id: cancelModal.id, reason: cancelReason })}
+        >
+          <Textarea
+            label="Cancellation reason"
+            placeholder="Provide a reason for cancellation…"
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            rows={3}
+          />
+        </ConfirmModal>
+      )}
     </div>
   );
 }

@@ -73,6 +73,7 @@ export default function ReportsPage() {
   const { data: usersData } = useQuery({
     queryKey: ["reports-users"],
     queryFn: fetchUsers,
+    enabled: canViewFinancials,
   });
 
   const bookings: Booking[] = bookingsData?.bookings ?? [];

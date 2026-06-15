@@ -22,7 +22,7 @@ function CategoryIcon({ category }: { category: string }) {
 }
 
 const fetchListings = (params: Record<string, string>) =>
-  listingApi.get(`/admin/listings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  listingApi.get("/admin/listings", { params }).then((r) => r.data.data ?? r.data);
 
 export default function ListingsPage() {
   const { token, user, _hasHydrated } = useAuthStore();
@@ -71,13 +71,19 @@ export default function ListingsPage() {
     }).filter(([, v]) => v !== "")
   );
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-listings", params],
+    queryKey: ["admin-listings", page, limit, q, status, category, effectiveCountry],
     queryFn: () => fetchListings(params),
     // Wait for auth store to rehydrate so scopedCountries/effectiveCountry are correct
     enabled: !!token && _hasHydrated,
   });
 
-  const listings: Listing[] = data?.listings ?? [];
+  const rawListings: Listing[] = data?.listings ?? [];
+  const listings = isCountryManager && scopedCountries.length > 0
+    ? rawListings.filter((l) => {
+        const listingCountry = l.country?.toUpperCase();
+        return listingCountry ? scopedCountries.some((sc) => sc.toUpperCase() === listingCountry) : false;
+      })
+    : rawListings;
   const total: number = data?.total ?? 0;
 
   const suspendMut = useMutation({
