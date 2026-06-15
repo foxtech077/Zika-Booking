@@ -16,7 +16,7 @@ import { voucherRoutes } from "./routes/vouchers.js";
 import { providerRoutes } from "./routes/provider.js";
 import { icalRoutes, startIcalPoller } from "./routes/ical.js";
 import { messagingRoutes } from "./routes/messaging.js";
-import { startRetentionJob } from "./lib/retention-job.js";
+import { startCommissionScheduler } from "./lib/commissionScheduler.js";
 import { bookingDocumentRoutes } from "./routes/booking-documents.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
@@ -158,7 +158,7 @@ async function main() {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Listing Service] listening on ${HOST}:${PORT}`);
     startIcalPoller();
-    startRetentionJob();
+    startCommissionScheduler();
   } catch (err) {
     app.log.error(err);
     process.exit(1);
