@@ -465,7 +465,7 @@ export function CarForm({ listingId, listing }: Props) {
   const title = current?.name ?? listing.name ?? "Untitled Vehicle";
 
   return (
-    <div className="h-screen bg-[#EEF2E6] flex flex-col overflow-hidden p-4 md:p-6">
+    <div className="w-full h-full flex flex-col min-h-0 overflow-hidden">
       <div className="w-full max-w-[1600px] mx-auto flex flex-col flex-1 min-h-0">
         {/* ── Standalone Header Card ── */}
         <div className="bg-white border border-border rounded-2xl shadow-sm px-6 py-4 flex items-center justify-between shrink-0 mb-4">
