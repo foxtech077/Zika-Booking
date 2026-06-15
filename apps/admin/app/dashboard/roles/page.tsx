@@ -101,6 +101,7 @@ export default function RolesPage() {
 
   // List state
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
 
@@ -120,7 +121,7 @@ export default function RolesPage() {
   const [editScope, setEditScope] = useState("");
   const [editCountries, setEditCountries] = useState<string[]>([]);
 
-  const params = { q, ...(roleFilter ? { role: roleFilter } : {}), page: String(page), limit: "20" };
+  const params = { q, ...(roleFilter ? { role: roleFilter } : {}), page: String(page), limit: String(limit) };
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-operators", params],
@@ -323,6 +324,8 @@ export default function RolesPage() {
               ],
             },
           ] : []}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -332,7 +335,7 @@ export default function RolesPage() {
           emptyDescription="Create your first admin account using the button above."
           emptyIcon={<Users2 className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={visibleTotal} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={visibleTotal} onPageChange={setPage} />
       </Card>
 
       {/* Permission matrix */}

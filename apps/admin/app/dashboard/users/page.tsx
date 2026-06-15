@@ -28,7 +28,7 @@ export default function UsersPage() {
     : [];
 
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [userType, setUserType] = useState("");
@@ -205,6 +205,8 @@ export default function UsersPage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -215,7 +217,7 @@ export default function UsersPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<Users className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} onLimitChange={(newL) => { setLimit(newL); setPage(1); }} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* User detail drawer */}

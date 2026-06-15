@@ -32,13 +32,14 @@ function StarDisplay({ rating }: { rating: number }) {
 export default function ReviewsPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [isHidden, setIsHidden] = useState("");
   const [rating, setRating] = useState("");
   const [hideModal, setHideModal] = useState<ListingReview | null>(null);
   const [hideReason, setHideReason] = useState("");
 
-  const params = { q, ...(isHidden ? { isHidden } : {}), ...(rating ? { rating } : {}), page: String(page), limit: "20" };
+  const params = { q, ...(isHidden ? { isHidden } : {}), ...(rating ? { rating } : {}), page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-reviews", params],
     queryFn: () => fetchReviews(params),
@@ -171,6 +172,8 @@ export default function ReviewsPage() {
               options: [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `${n} Star${n > 1 ? "s" : ""}` })),
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -179,7 +182,7 @@ export default function ReviewsPage() {
           emptyTitle="No reviews found"
           emptyIcon={<Star className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Hide reason modal */}

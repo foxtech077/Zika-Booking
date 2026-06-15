@@ -37,6 +37,7 @@ export default function RefundManagementPage() {
 
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
@@ -89,11 +90,10 @@ export default function RefundManagementPage() {
   }, [refunds, user, countryFilter, statusFilter, searchQuery]);
 
   // Paginated list
-  const limit = 10;
   const paginatedRefunds = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredRefunds.slice(start, start + limit);
-  }, [filteredRefunds, page]);
+  }, [filteredRefunds, page, limit]);
 
   // Find eligible transactions for refund (successful ones that aren't already refunded or fully escrowed for refund)
   const eligibleTransactions = useMemo(() => {
@@ -355,6 +355,8 @@ export default function RefundManagementPage() {
               options: CM_OPTIONS,
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
 
         <DataTable

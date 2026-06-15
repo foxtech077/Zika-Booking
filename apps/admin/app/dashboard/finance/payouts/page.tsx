@@ -34,6 +34,7 @@ export default function PayoutManagementPage() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<Payout["status"]>("pending");
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
@@ -76,11 +77,10 @@ export default function PayoutManagementPage() {
   }, [payouts, activeTab, user, countryFilter, searchQuery]);
 
   // Paginated data
-  const limit = 10;
   const paginatedPayouts = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredPayouts.slice(start, start + limit);
-  }, [filteredPayouts, page]);
+  }, [filteredPayouts, page, limit]);
 
   // Total summary by status for badge counts
   const tabCounts = useMemo(() => {
@@ -277,6 +277,8 @@ export default function PayoutManagementPage() {
               options: CM_OPTIONS,
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
 
         <DataTable

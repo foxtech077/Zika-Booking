@@ -31,7 +31,7 @@ export default function BookingsPage() {
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
-  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const role = useAuthStore(state => state.user?.role);
 
@@ -72,18 +72,6 @@ export default function BookingsPage() {
         { value: "hotel", label: "Hotel" },
         { value: "apartment", label: "Apartment" },
         { value: "car", label: "Car" },
-      ],
-    },
-    {
-      key: "rowsPerPage",
-      label: "",
-      value: String(rowsPerPage),
-      onChange: (v: string) => { setRowsPerPage(Number(v)); setPage(1); },
-      options: [
-        { value: "5", label: "5" },
-        { value: "10", label: "10" },
-        { value: "20", label: "20" },
-        { value: "50", label: "50" },
       ],
     },
   ];
@@ -213,6 +201,8 @@ export default function BookingsPage() {
           onSearchChange={(v: string) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
           filters={filterItems}
+          limit={rowsPerPage}
+          onLimitChange={(newL) => { setRowsPerPage(newL); setPage(1); }}
         />
 
         <DataTable

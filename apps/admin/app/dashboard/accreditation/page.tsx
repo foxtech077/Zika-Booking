@@ -79,6 +79,7 @@ export default function AccreditationPage() {
   const userCountryScope = user?.countryScope ?? [];
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [selectedTask, setSelectedTask] = useState<ListingReviewTask | null>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -90,7 +91,7 @@ export default function AccreditationPage() {
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  // const params = { page: String(page), limit: "20" };
+  // const params = { page: String(page), limit: String(limit) };
 
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [docUrl, setDocUrl] = useState<{ url: string; fileType: string } | null>(null);
@@ -120,7 +121,7 @@ export default function AccreditationPage() {
   const params = Object.fromEntries(
     Object.entries({
       page: String(page),
-      limit: "20",
+      limit: String(limit),
       country: effectiveCountry,
     }).filter(([, v]) => v !== "")
   );
@@ -274,22 +275,26 @@ export default function AccreditationPage() {
       />
 
       <Card padding="none">
-      {canShowCountryFilter && (
-          <FilterBar
-            filters={[
-              {
-                key: "country",
-                label: "All Countries",
-                value: country,
-                onChange: (v: string) => {
-                  setCountry(v);
-                  setPage(1);
-                },
-                options: countryOptions,
-              },
-            ]}
-          />
-        )}
+        <FilterBar
+          filters={
+            canShowCountryFilter
+              ? [
+                  {
+                    key: "country",
+                    label: "All Countries",
+                    value: country,
+                    onChange: (v: string) => {
+                      setCountry(v);
+                      setPage(1);
+                    },
+                    options: countryOptions,
+                  },
+                ]
+              : undefined
+          }
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
+        />
         <DataTable
           columns={columns}
           data={tasks}
@@ -299,7 +304,7 @@ export default function AccreditationPage() {
           emptyDescription="All hotel listings have been reviewed."
           emptyIcon={<BadgeCheck className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* ── Review detail drawer ─────────────────────────────────────────── */}

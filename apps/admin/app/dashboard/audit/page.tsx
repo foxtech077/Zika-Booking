@@ -66,12 +66,13 @@ function DiffViewer({ oldVal, newVal }: { oldVal: string | null; newVal: string 
 
 export default function AuditPage() {
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [role, setRole] = useState("");
   const [action, setAction] = useState("");
   const [selected, setSelected] = useState<AuditLog | null>(null);
 
-  const params = { ...(q ? { q } : {}), ...(role ? { role } : {}), ...(action ? { action } : {}), page: String(page), limit: "20" };
+  const params = { ...(q ? { q } : {}), ...(role ? { role } : {}), ...(action ? { action } : {}), page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-audit", params],
     queryFn: () => fetchAudit(params),
@@ -171,6 +172,8 @@ export default function AuditPage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -180,7 +183,7 @@ export default function AuditPage() {
           emptyTitle="No audit entries found"
           emptyIcon={<ClipboardList className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Audit detail drawer */}

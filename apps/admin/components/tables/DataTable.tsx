@@ -146,18 +146,16 @@ interface PaginationProps {
   limit: number;
   total: number;
   onPageChange: (page: number) => void;
-  /** When provided, renders a page-size dropdown (10 / 20 / 30 / 40) */
-  onLimitChange?: (limit: number) => void;
 }
 
-const PAGE_SIZE_OPTIONS = [10, 20, 30, 40];
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 
-export function Pagination({ page, limit, total, onPageChange, onLimitChange }: PaginationProps) {
+export function Pagination({ page, limit, total, onPageChange }: PaginationProps) {
   const totalPages = Math.ceil(total / limit);
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 
-  if (totalPages <= 1 && !onLimitChange) return null;
+  if (totalPages <= 1) return null;
 
   return (
     <div className="flex items-center justify-between px-4 py-3 border-t border-border">
@@ -166,23 +164,6 @@ export function Pagination({ page, limit, total, onPageChange, onLimitChange }: 
           Showing <span className="font-medium">{from}–{to}</span> of{" "}
           <span className="font-medium">{total.toLocaleString()}</span> results
         </p>
-        {onLimitChange && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-400">·</span>
-            <select
-              value={limit}
-              onChange={(e) => onLimitChange(Number(e.target.value))}
-              className="py-1 pl-2 pr-6 text-xs bg-white border border-border rounded-lg text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary appearance-none cursor-pointer transition-colors"
-              aria-label="Rows per page"
-            >
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {size} / page
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
       {totalPages > 1 && (
         <div className="flex gap-1">
@@ -252,10 +233,12 @@ interface FilterBarProps {
   }[];
   actions?: ReactNode;
   children?: ReactNode;
+  limit?: number;
+  onLimitChange?: (limit: number) => void;
 }
 
 export function FilterBar({
-  search, onSearchChange, searchPlaceholder = "Search…", filters, actions, children
+  search, onSearchChange, searchPlaceholder = "Search…", filters, actions, children, limit, onLimitChange
 }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">
@@ -291,7 +274,34 @@ export function FilterBar({
         </select>
       ))}
       {children}
-      {actions && <div className="ml-auto flex gap-2">{actions}</div>}
+      {(onLimitChange !== undefined || actions !== undefined) && (
+        <div className="ml-auto flex items-center gap-3">
+          {onLimitChange && limit !== undefined && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Rows:</span>
+              <select
+                value={limit}
+                onChange={(e) => onLimitChange(Number(e.target.value))}
+                className="py-1.5 pl-3 pr-8 text-xs bg-white border border-border rounded-lg text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary appearance-none cursor-pointer transition-colors"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "right 0.5rem center",
+                  backgroundSize: "1em"
+                }}
+                aria-label="Rows per page"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {actions}
+        </div>
+      )}
     </div>
   );
 }

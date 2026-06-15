@@ -38,7 +38,7 @@ export default function ListingsPage() {
 
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
@@ -47,7 +47,7 @@ export default function ListingsPage() {
   // Sync country selection after auth store hydration
   useEffect(() => {
     if (scopedCountries.length > 0 && !country) {
-      setCountry(scopedCountries[0]);
+      setCountry(scopedCountries[0] ?? "");
     }
   }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Listing | null>(null);
@@ -248,6 +248,8 @@ export default function ListingsPage() {
                 ]
               : []),
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -258,7 +260,7 @@ export default function ListingsPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<Building2 className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} onLimitChange={(newL) => { setLimit(newL); setPage(1); }} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Detail drawer */}

@@ -17,10 +17,11 @@ const fetchFeeds = (params: Record<string, string>) =>
 export default function ChannelPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [isActive, setIsActive] = useState("");
   const [syncingId, setSyncingId] = useState<string | null>(null);
 
-  const params = { ...(isActive ? { isActive } : {}), page: String(page), limit: "20" };
+  const params = { ...(isActive ? { isActive } : {}), page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-ical-feeds", params],
     queryFn: () => fetchFeeds(params),
@@ -162,6 +163,8 @@ export default function ChannelPage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -171,7 +174,7 @@ export default function ChannelPage() {
           emptyDescription="Listings will appear here when providers add iCal feeds."
           emptyIcon={<Cable className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
     </div>
   );

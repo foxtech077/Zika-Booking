@@ -20,11 +20,12 @@ const fetchMessages = (id: string) =>
 
 export default function MessagingPage() {
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [selected, setSelected] = useState<Conversation | null>(null);
 
-  const params = { q, ...(status ? { status } : {}), page: String(page), limit: "20" };
+  const params = { q, ...(status ? { status } : {}), page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-conversations", params],
     queryFn: () => fetchConversations(params),
@@ -123,6 +124,8 @@ export default function MessagingPage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -132,7 +135,7 @@ export default function MessagingPage() {
           emptyTitle="No conversations found"
           emptyIcon={<MessageSquare className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Message thread drawer */}

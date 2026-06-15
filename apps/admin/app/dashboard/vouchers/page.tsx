@@ -19,6 +19,7 @@ const fetchVouchers = (params: Record<string, string>) =>
 export default function VouchersPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [isActive, setIsActive] = useState("");
   const [addModal, setAddModal] = useState(false);
   const [toggleError, setToggleError] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export default function VouchersPage() {
     validUntil: "",
   });
 
-  const params = { ...(isActive ? { isActive } : {}), page: String(page), limit: "20" };
+  const params = { ...(isActive ? { isActive } : {}), page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-vouchers", params],
     queryFn: () => fetchVouchers(params),
@@ -204,6 +205,8 @@ export default function VouchersPage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -213,7 +216,7 @@ export default function VouchersPage() {
           emptyDescription="Create your first promotional voucher."
           emptyIcon={<Ticket className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Create voucher modal */}

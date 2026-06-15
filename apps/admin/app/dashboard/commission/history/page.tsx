@@ -27,6 +27,7 @@ export default function CommissionHistoryPage() {
 
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -66,11 +67,10 @@ export default function CommissionHistoryPage() {
   }, [commissionHistory, user, countryFilter, startDate, endDate, searchQuery]);
 
   // Paginate records
-  const limit = 10;
   const paginatedHistory = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredHistory.slice(start, start + limit);
-  }, [filteredHistory, page]);
+  }, [filteredHistory, page, limit]);
 
   // CSV Export Action
   const handleExportCsv = () => {
@@ -192,6 +192,8 @@ export default function CommissionHistoryPage() {
               options: CM_OPTIONS,
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         >
           <div className="flex items-center gap-2">
             <input

@@ -34,6 +34,7 @@ export default function BookingPaymentsPage() {
 
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [status, setStatus] = useState("");
   const [gateway, setGateway] = useState("");
@@ -87,11 +88,10 @@ export default function BookingPaymentsPage() {
   }, [transactions, user, country, status, gateway, searchQuery]);
 
   // Paginate transactions
-  const limit = 10;
   const paginatedTxs = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredTxs.slice(start, start + limit);
-  }, [filteredTxs, page]);
+  }, [filteredTxs, page, limit]);
 
   // Actions
   const handleForceStatusSync = (id: string, newStatus: Transaction["status"]) => {
@@ -302,6 +302,8 @@ export default function BookingPaymentsPage() {
               options: CM_OPTIONS,
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
 
         <DataTable
