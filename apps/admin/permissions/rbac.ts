@@ -12,6 +12,7 @@ export type Permission =
   | "manage_listings"
   | "view_bookings"
   | "manage_bookings"
+  | "manage_manual_booking"
   | "view_finance"
   | "manage_finance"
   | "view_commission"
@@ -36,7 +37,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_dashboard", "view_users", "manage_users",
     "view_accreditation", "manage_accreditation",
     "view_listings", "manage_listings",
-    "view_bookings", "manage_bookings",
+    "view_bookings", "manage_bookings", "manage_manual_booking",
     "view_finance", "manage_finance",
     "view_commission", "manage_commission",
     "view_vouchers", "manage_vouchers",
@@ -52,7 +53,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_dashboard", "view_users", "manage_users",
     "view_accreditation", "manage_accreditation",
     "view_listings", "manage_listings",
-    "view_bookings", "manage_bookings",
+    "view_bookings", "manage_bookings", "manage_manual_booking",
     "view_finance",
     "view_commission", "manage_commission",
     "view_vouchers", "manage_vouchers",
@@ -68,7 +69,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_dashboard",
     "view_accreditation", "manage_accreditation",
     "view_listings", "manage_listings",
-    "view_bookings",
+    "view_bookings", "manage_manual_booking",
     "view_finance",
     "view_reviews",
     "view_messaging",

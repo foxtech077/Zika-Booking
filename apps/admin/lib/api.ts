@@ -1,11 +1,7 @@
 import axios from "axios";
 
 export const api = axios.create({
-<<<<<<< HEAD
-  baseURL: "https://admin.kainook.com",
-=======
   baseURL: process.env.NEXT_PUBLIC_API_URL,
->>>>>>> 25f4b9c698d379b7b945cf1379909920033c67b3
   withCredentials: true,
   timeout: 15_000,
 });

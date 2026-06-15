@@ -460,7 +460,7 @@ export default function RolesPage() {
             />
           </div>
 
-          {form.role === "country_manager" && (
+          {(form.role === "country_manager" || form.role === "sales") && (
             isScopedAdmin ? (
               /* Scoped admin: can only assign countries from their own scope */
               <div>
@@ -492,7 +492,7 @@ export default function RolesPage() {
                   })}
                 </div>
                 {createCountries.length === 0 && (
-                  <p className="mt-1.5 text-xs text-slate-400">Select at least one country for this manager.</p>
+                  <p className="mt-1.5 text-xs text-slate-400">Select at least one country for this account.</p>
                 )}
               </div>
             ) : (
@@ -503,7 +503,7 @@ export default function RolesPage() {
                 value={form.countryScope}
                 onChange={(e) => setForm((f) => ({ ...f, countryScope: e.target.value }))}
                 placeholder="MT, GB, DE"
-                hint="Countries this manager will have access to"
+                hint="Countries this user will have access to"
               />
             )
           )}
@@ -550,7 +550,7 @@ export default function RolesPage() {
             onChange={(e) => setEditRole(e.target.value as AdminRole)}
             options={allowedRoleOptions}
           />
-          {editRole === "country_manager" && (
+          {(editRole === "country_manager" || editRole === "sales") && (
             isScopedAdmin ? (
               /* Scoped admin: restrict country scope to their own countries */
               <div>

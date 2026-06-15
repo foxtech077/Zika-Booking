@@ -14,27 +14,6 @@ const nextConfig = {
 			},
 		];
 	},
-<<<<<<< HEAD
-	async rewrites() {
-		return [
-			{
-				source: "/api/:path*",
-				destination: `${authApiUrl}/:path*`,
-				basePath: false,
-			},
-			{
-				source: "/listing-api/:path*",
-				destination: `${process.env.ADMIN_LISTING_API_URL ?? "http://localhost:3003"}/:path*`,
-				basePath: false,
-			},
-			{
-				source: "/payment-api/:path*",
-				destination: `${process.env.ADMIN_PAYMENT_API_URL ?? "http://localhost:3004"}/:path*`,
-				basePath: false,
-			},
-		];
-	},
-=======
 	// async rewrites() {
 	// 	return [
 	// 		{
@@ -47,7 +26,6 @@ const nextConfig = {
 	// 		},
 	// 	];
 	// },
->>>>>>> 25f4b9c698d379b7b945cf1379909920033c67b3
 };
 
 export default nextConfig;
