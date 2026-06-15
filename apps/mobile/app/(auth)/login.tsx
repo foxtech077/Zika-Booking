@@ -55,7 +55,7 @@ export default function LoginScreen() {
 
   const loginMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", { email: form.email, password: form.password });
+      const res = await api.post<ApiResponse<AuthResponse>>("auth/login", { email: form.email, password: form.password });
       if (!res.data.success) throw res.data;
       return res.data.data;
     },
@@ -232,7 +232,7 @@ export function GoogleSignInButton({ onError }: { onError: (msg: string) => void
       const signInResult = await _GoogleSignin.signIn();
       const idToken = (signInResult as any).data?.idToken ?? (signInResult as any).idToken;
       if (!idToken) throw new Error("No ID token");
-      const res = await api.post("/auth/oauth/google", { idToken });
+      const res = await api.post("auth/oauth/google", { idToken });
       return (res.data as { data: AuthResponse }).data;
     },
     onSuccess: async (data) => {
@@ -276,7 +276,7 @@ function AppleSignInButton() {
       const cred = await AppleAuthentication.signInAsync({
         requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
       });
-      const res = await api.post("/auth/oauth/apple", { authorizationCode: cred.authorizationCode, identityToken: cred.identityToken });
+      const res = await api.post("auth/oauth/apple", { authorizationCode: cred.authorizationCode, identityToken: cred.identityToken });
       return (res.data as { data: AuthResponse }).data;
     },
     onSuccess: async (data) => {

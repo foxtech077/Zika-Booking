@@ -84,7 +84,7 @@ export default function RegisterScreen() {
         message?: string;
         user?: PublicUser;
         tokens?: { accessToken: string };
-      }>>("/auth/register", payload);
+      }>>( "auth/register", payload);
       return res.data;
     },
     onSuccess: async (data) => {
