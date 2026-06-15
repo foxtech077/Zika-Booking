@@ -79,7 +79,38 @@ function validateEffectiveDate(dateStr: string): string | null {
 export async function commissionRoutes(app: FastifyInstance) {
   // ── GET /admin/commission-rates — list overall configurations ─────
   app.get("/admin/commission-rates", {
-    preHandler: [requireAdmin]
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Commission"],
+      summary: "Get commission configuration",
+      description: "Returns global commission rate and country-specific overrides.",
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            globalCommissionRate: { type: "number" },
+            countryOverrides: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  country: { type: "string" },
+                  currentRate: { type: "number" },
+                  pendingRate: { type: ["number", "null"] },
+                  effectiveFrom: { type: ["string", "null"], format: "date-time" },
+                  lastReason: { type: "string" },
+                  setBy: { type: "string" },
+                  createdAt: { type: "string", format: "date-time" },
+                  updatedAt: { type: "string", format: "date-time" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminReq = req as AdminRequest;
     const role = adminReq.adminRole;
@@ -113,7 +144,43 @@ export async function commissionRoutes(app: FastifyInstance) {
 
   // ── POST /admin/commission/global — Super Admin only ─────────────
   app.post("/admin/commission/global", {
-    preHandler: [requireAdmin]
+    preHandler: [requireAdmin], schema: {
+      tags: ["Commission"],
+      summary: "Update global commission rate",
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        required: [
+          "rate",
+          "effectiveFrom",
+          "applyToAllCountries",
+          "reason",
+          "notifyProviders"
+        ],
+        properties: {
+          rate: {
+            type: "number",
+            minimum: 0,
+            maximum: 50,
+            description: "New global commission rate"
+          },
+          effectiveFrom: {
+            type: "string",
+            format: "date"
+          },
+          applyToAllCountries: {
+            type: "boolean"
+          },
+          reason: {
+            type: "string",
+            maxLength: 500
+          },
+          notifyProviders: {
+            type: "boolean"
+          }
+        }
+      }
+    }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminReq = req as AdminRequest;
     if (adminReq.adminRole !== "super_admin") {
@@ -143,7 +210,7 @@ export async function commissionRoutes(app: FastifyInstance) {
     }
 
     const effectiveTime = new Date(effectiveFrom);
-    
+
     const newSettings = await prisma.platformSettings.upsert({
       where: { id: 1 },
       update: {
@@ -183,7 +250,42 @@ export async function commissionRoutes(app: FastifyInstance) {
 
   // ── POST /admin/commission-rates — country overrides ─────────────
   app.post("/admin/commission-rates", {
-    preHandler: [requireAdmin]
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Commission"],
+      summary: "Create or update country commission override",
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        required: [
+          "country",
+          "rate",
+          "reason",
+          "notifyProviders"
+        ],
+        properties: {
+          country: {
+            type: "string"
+          },
+          rate: {
+            type: "number",
+            minimum: 0,
+            maximum: 50
+          },
+          effectiveFrom: {
+            type: "string",
+            format: "date-time"
+          },
+          reason: {
+            type: "string",
+            maxLength: 500
+          },
+          notifyProviders: {
+            type: "boolean"
+          }
+        }
+      }
+    }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminReq = req as AdminRequest;
     const role = adminReq.adminRole;
@@ -291,7 +393,46 @@ export async function commissionRoutes(app: FastifyInstance) {
 
   // ── POST /admin/commission-rates/bulk — Bulk update ─────────────
   app.post("/admin/commission-rates/bulk", {
-    preHandler: [requireAdmin]
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Commission"],
+      summary: "Bulk update country commission rates",
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        required: [
+          "countries",
+          "rate",
+          "reason",
+          "notifyProviders"
+        ],
+        properties: {
+          countries: {
+            type: "array",
+            minItems: 1,
+            items: {
+              type: "string"
+            }
+          },
+          rate: {
+            type: "number",
+            minimum: 0,
+            maximum: 50
+          },
+          effectiveFrom: {
+            type: "string",
+            format: "date-time"
+          },
+          reason: {
+            type: "string",
+            maxLength: 500
+          },
+          notifyProviders: {
+            type: "boolean"
+          }
+        }
+      }
+    }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminReq = req as AdminRequest;
     const role = adminReq.adminRole;
@@ -390,7 +531,21 @@ export async function commissionRoutes(app: FastifyInstance) {
 
   // ── DELETE /admin/commission-rates/:country — remove override ─────
   app.delete("/admin/commission-rates/:country", {
-    preHandler: [requireAdmin]
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Commission"],
+      summary: "Remove country commission override",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["country"],
+        properties: {
+          country: {
+            type: "string"            
+          }
+        }
+      }
+    }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminReq = req as AdminRequest;
     const { country } = req.params as { country: string };
@@ -422,7 +577,21 @@ export async function commissionRoutes(app: FastifyInstance) {
   });
 
   // ── GET /commission-rates/effective/:country — resolve rate ─────────
-  app.get("/commission-rates/effective/:country", async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/commission-rates/effective/:country", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Commission"],
+      summary: "Get effective commission rate",
+      params: {
+        type: "object",
+        required: ["country"],
+        properties: {
+          country: {
+            type: "string"}
+        }
+      }
+    }
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
 
@@ -440,7 +609,31 @@ export async function commissionRoutes(app: FastifyInstance) {
 
   // ── GET /admin/commission/history — Audit trail list ─────────────────
   app.get("/admin/commission/history", {
-    preHandler: [requireAdmin]
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Commission"],
+      summary: "Commission audit history",
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: "object",
+        properties: {
+          country: {
+            type: "string"
+          },
+          startDate: {
+            type: "string",
+            format: "date"
+          },
+          endDate: {
+            type: "string",
+            format: "date"
+          },
+          changedBy: {
+            type: "string"
+          }
+        }
+      }
+    }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminReq = req as AdminRequest;
     const role = adminReq.adminRole;
@@ -501,7 +694,13 @@ export async function commissionRoutes(app: FastifyInstance) {
 
   // ── GET /admin/commission/export — Export CSV ──
   app.get("/admin/commission/export", {
-    preHandler: [requireAdmin]
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Commission"],
+      summary: "Export commission history CSV",
+      description: "Available to Super Admin and Finance Agent",
+      security: [{ bearerAuth: [] }]
+    }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminReq = req as AdminRequest;
     const role = adminReq.adminRole;
