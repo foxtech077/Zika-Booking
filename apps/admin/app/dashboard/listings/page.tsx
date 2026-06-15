@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
@@ -25,13 +25,31 @@ const fetchListings = (params: Record<string, string>) =>
   listingApi.get(`/admin/listings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 export default function ListingsPage() {
-  const { token } = useAuthStore();
+  const { token, user, _hasHydrated } = useAuthStore();
+  const isCountryManager = user?.role === "country_manager";
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+  const countryOptions = scopedCountries.length > 0
+    ? scopedCountries.map((c) => ({ value: c, label: c }))
+    : [
+        "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
+      ].map((c) => ({ value: c, label: c }));
+
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
+
+  // Sync country selection after auth store hydration
+  useEffect(() => {
+    if (scopedCountries.length > 0 && !country) {
+      setCountry(scopedCountries[0] ?? "");
+    }
+  }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Listing | null>(null);
   const [suspendModal, setSuspendModal] = useState<Listing | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
@@ -40,11 +58,23 @@ export default function ListingsPage() {
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
 
-  const params = { q, status, category, country, page: String(page), limit: "20" };
+  // For country managers, always send their scoped country; otherwise send user-chosen filter
+  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
+  const params = Object.fromEntries(
+    Object.entries({
+      q,
+      status,
+      category,
+      country: effectiveCountry,
+      page: String(page),
+      limit: String(limit),
+    }).filter(([, v]) => v !== "")
+  );
   const { data, isLoading } = useQuery({
     queryKey: ["admin-listings", params],
     queryFn: () => fetchListings(params),
-    enabled: !!token,
+    // Wait for auth store to rehydrate so scopedCountries/effectiveCountry are correct
+    enabled: !!token && _hasHydrated,
   });
 
   const listings: Listing[] = data?.listings ?? [];
@@ -203,6 +233,20 @@ export default function ListingsPage() {
                 { value: "car", label: "Car" },
               ],
             },
+            ...(canShowCountryFilter
+              ? [
+                  {
+                    key: "country",
+                    label: scopedCountries.length > 0 ? "Select Country" : "All Countries",
+                    value: country,
+                    onChange: (v: string) => {
+                      setCountry(v);
+                      setPage(1);
+                    },
+                    options: countryOptions,
+                  },
+                ]
+              : []),
           ]}
         />
         <DataTable
@@ -214,7 +258,7 @@ export default function ListingsPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<Building2 className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} onLimitChange={(newL) => { setLimit(newL); setPage(1); }} />
       </Card>
 
       {/* Detail drawer */}
@@ -234,27 +278,27 @@ export default function ListingsPage() {
               {[
                 ["ID", selected.id],
                 ["Category", selected.category],
-              ["Status", selected.status],
-              ["Country", selected.country ?? "—"],
-              ["Town", selected.town ?? "—"],
-              ["Star Rating", selected.starRating ?? "—"],
-              ["Claimed Stars", selected.claimedStarRating ?? "—"],
-              ["Price/Night", selected.pricePerNight ? formatCurrency(Number(selected.pricePerNight), selected.currency ?? "USD") : "—"],
-              ["Submissions", selected.submissionCount],
-              ["Provider ID", selected.providerId],
-              ["Approved", formatDate(selected.approvedAt)],
-              ["Rejected", formatDate(selected.rejectedAt)],
-              ["Suspended", formatDate(selected.suspendedAt)],
-              ["Created", formatDate(selected.createdAt)],
-            ].map(([k, v]) => (
-              <div key={String(k)} className="flex justify-between gap-4">
-                <dt className="text-slate-500 flex-shrink-0">{k}</dt>
-                <dd className="text-slate-900 font-medium text-right truncate">{String(v)}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      )}
+                ["Status", selected.status],
+                ["Country", selected.country ?? "—"],
+                ["Town", selected.town ?? "—"],
+                ["Star Rating", selected.starRating ?? "—"],
+                ["Claimed Stars", selected.claimedStarRating ?? "—"],
+                ["Price/Night", selected.pricePerNight ? formatCurrency(Number(selected.pricePerNight), selected.currency ?? "USD") : "—"],
+                ["Submissions", selected.submissionCount],
+                ["Provider ID", selected.providerId],
+                ["Approved", formatDate(selected.approvedAt)],
+                ["Rejected", formatDate(selected.rejectedAt)],
+                ["Suspended", formatDate(selected.suspendedAt)],
+                ["Created", formatDate(selected.createdAt)],
+              ].map(([k, v]) => (
+                <div key={String(k)} className="flex justify-between gap-4">
+                  <dt className="text-slate-500 flex-shrink-0">{k}</dt>
+                  <dd className="text-slate-900 font-medium text-right truncate">{String(v)}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
       </SlideDrawer>
 
       {/* Suspend modal */}

@@ -61,7 +61,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_channel", "manage_channel",
     "view_audit",
     "view_reports",
-    "view_settings",
+    // "view_settings" removed — global platform settings is super_admin only
     "view_roles",
   ],
   country_manager: [
@@ -77,11 +77,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
   ],
   sales: [
     "view_dashboard",
-    "view_listings",
     "view_bookings",
-    "view_vouchers", "manage_vouchers",
-    "view_commission",
-    "view_reports",
   ],
   support: [
     "view_dashboard",
@@ -112,6 +108,22 @@ export function getRolePermissions(role: AdminRole): Permission[] {
   return ROLE_PERMISSIONS[role] ?? [];
 }
 
+/**
+ * Returns the set of roles that the given role is allowed to create or assign.
+ * - super_admin → all non-super_admin roles
+ * - admin       → only country_manager and sales
+ * - others      → none
+ */
+export function getAllowedRolesToCreate(role: AdminRole | undefined | null): AdminRole[] {
+  if (role === "super_admin") {
+    return ["admin", "country_manager", "sales", "support", "finance"];
+  }
+  if (role === "admin") {
+    return ["country_manager", "sales"];
+  }
+  return [];
+}
+
 // ── Sidebar navigation with RBAC ─────────────────────────────────────────────
 
 export interface NavItem {
@@ -131,36 +143,41 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     group: "Overview",
     items: [
-      { label: "Dashboard",     href: "/dashboard",              icon: "LayoutDashboard", permission: "view_dashboard" },
+      { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", permission: "view_dashboard" },
     ],
   },
   {
     group: "Operations",
     items: [
-      { label: "Users",          href: "/dashboard/users",         icon: "Users",           permission: "view_users" },
-      { label: "Accreditation",  href: "/dashboard/accreditation", icon: "BadgeCheck",      permission: "view_accreditation" },
-      { label: "Listings",       href: "/dashboard/listings",      icon: "Building2",       permission: "view_listings" },
-      { label: "Bookings",       href: "/dashboard/bookings",      icon: "CalendarDays",    permission: "view_bookings" },
-      { label: "Reviews",        href: "/dashboard/reviews",       icon: "Star",            permission: "view_reviews" },
-      { label: "Messaging",      href: "/dashboard/messaging",     icon: "MessageSquare",   permission: "view_messaging" },
-      { label: "Channel Sync",   href: "/dashboard/channel",       icon: "Cable",           permission: "view_channel" },
+      { label: "Users", href: "/dashboard/users", icon: "Users", permission: "view_users" },
+      { label: "Accreditation", href: "/dashboard/accreditation", icon: "BadgeCheck", permission: "view_accreditation" },
+      { label: "Listings", href: "/dashboard/listings", icon: "Building2", permission: "view_listings" },
+      { label: "Bookings", href: "/dashboard/bookings", icon: "CalendarDays", permission: "view_bookings" },
+      { label: "Reviews", href: "/dashboard/reviews", icon: "Star", permission: "view_reviews" },
+      { label: "Messaging", href: "/dashboard/messaging", icon: "MessageSquare", permission: "view_messaging" },
+      { label: "Channel Sync", href: "/dashboard/channel", icon: "Cable", permission: "view_channel" },
     ],
   },
   {
     group: "Finance",
     items: [
-      { label: "Finance",        href: "/dashboard/finance",       icon: "DollarSign",      permission: "view_finance" },
-      { label: "Commission",     href: "/dashboard/commission",    icon: "Percent",         permission: "view_commission" },
-      { label: "Vouchers",       href: "/dashboard/vouchers",      icon: "Ticket",          permission: "view_vouchers" },
+      { label: "Payment Dashboard", href: "/dashboard/finance", icon: "LayoutDashboard", permission: "view_finance" },
+      { label: "Booking Payments", href: "/dashboard/finance/payments", icon: "CreditCard", permission: "view_finance" },
+      { label: "Payout Management", href: "/dashboard/finance/payouts", icon: "Coins", permission: "view_finance" },
+      { label: "Refund Management", href: "/dashboard/finance/refunds", icon: "RotateCcw", permission: "view_finance" },
+      { label: "Commission Settings", href: "/dashboard/commission", icon: "Percent", permission: "view_commission" },
+      { label: "Commission History", href: "/dashboard/commission/history", icon: "History", permission: "view_commission" },
+      { label: "Financial Reports", href: "/dashboard/finance/reports", icon: "BarChart3", permission: "view_finance" },
+      { label: "Vouchers", href: "/dashboard/vouchers", icon: "Ticket", permission: "view_vouchers" },
     ],
   },
   {
     group: "Administration",
     items: [
-      { label: "Roles & Admins", href: "/dashboard/roles",         icon: "ShieldCheck",     permission: "view_roles" },
-      { label: "Audit Trail",    href: "/dashboard/audit",         icon: "ClipboardList",   permission: "view_audit" },
-      { label: "Reports",        href: "/dashboard/reports",       icon: "BarChart3",       permission: "view_reports" },
-      { label: "Settings",       href: "/dashboard/settings",      icon: "Settings",        permission: "view_settings" },
+      { label: "Roles & Admins", href: "/dashboard/roles", icon: "ShieldCheck", permission: "view_roles" },
+      { label: "Audit Trail", href: "/dashboard/audit", icon: "ClipboardList", permission: "view_audit" },
+      { label: "Reports", href: "/dashboard/reports", icon: "BarChart3", permission: "view_reports" },
+      { label: "Settings", href: "/dashboard/settings", icon: "Settings", permission: "view_settings" },
     ],
   },
 ];

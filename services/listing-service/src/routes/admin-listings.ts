@@ -2031,6 +2031,8 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
     const booking = await prisma.booking.findUnique({
@@ -2041,6 +2043,13 @@ return { actioned: true };
       },
     });
     if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+
+    // country_manager can only view bookings whose listing falls within their scope
+    if (admin.adminRole === "country_manager") {
+      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+        return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+      }
+    }
 
     return sendSuccess(reply, 200, booking);
   });
@@ -2186,14 +2195,29 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
     const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
+
+    // country_manager: restrict to conversations whose listing is in their country scope.
+    // Conversation has no direct Prisma relation to Listing, so we resolve the
+    // allowed listing IDs first, then filter by listingId.
+    let scopedListingIds: string[] | null = null;
+    if (admin.adminRole === "country_manager") {
+      const scopedListings = await prisma.listing.findMany({
+        where: { country: { in: admin.countryScope } },
+        select: { id: true },
+      });
+      scopedListingIds = scopedListings.map((l) => l.id);
+    }
 
     const where: any = {
       AND: [
         status ? { status } : {},
         q ? { OR: [{ guestId: { contains: q } }, { bookingId: { contains: q } }] } : {},
+        scopedListingIds !== null ? { listingId: { in: scopedListingIds } } : {},
       ],
     };
 
@@ -2284,10 +2308,23 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
     const convo = await prisma.conversation.findUnique({ where: { id } });
     if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
+
+    // country_manager: ensure this conversation belongs to a listing in their scope
+    if (admin.adminRole === "country_manager") {
+      const listing = await prisma.listing.findUnique({
+        where: { id: convo.listingId },
+        select: { country: true },
+      });
+      if (!listing || !admin.countryScope.includes(listing.country ?? "")) {
+        return sendError(reply, 403, "FORBIDDEN", "Conversation is outside your country scope.");
+      }
+    }
 
     const messages = await prisma.message.findMany({
       where: { conversationId: id },
