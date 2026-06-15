@@ -3,7 +3,7 @@ import axios from "axios";
 const TOKEN_KEY = "zika:access_token";
 
 export const api = axios.create({
-  baseURL: "/api",
+  baseURL: process.env.NEXT_PUBLIC_API_URL,
   withCredentials: true,
   timeout: 15_000,
 });
