@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
+import { K } from "../../constants/theme";
 
 interface Listing {
   id: string;
@@ -180,7 +181,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 16 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   addButton: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: K.colors.accent,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",

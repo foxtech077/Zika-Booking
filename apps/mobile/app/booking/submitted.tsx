@@ -8,6 +8,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { K } from "../../constants/theme";
 
 export default function BookingSubmittedScreen() {
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function BookingSubmittedScreen() {
           <Text style={styles.preparationTitle}>Please wait while we prepare:</Text>
           {preparationItems.map((item) => (
             <View key={item.label} style={styles.prepItem}>
-              <Ionicons name={item.icon} size={20} color="#1a73e8" style={styles.prepIcon} />
+              <Ionicons name={item.icon} size={20} color={K.colors.accent} style={styles.prepIcon} />
               <Text style={styles.prepText}>{item.label}</Text>
               <Ionicons name="ellipsis-horizontal" size={16} color="#9ca3af" style={styles.dots} />
             </View>
@@ -141,12 +142,12 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   primaryBtn: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: K.colors.accent,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
     width: "100%",
-    shadowColor: "#1a73e8",
+    shadowColor: K.colors.accent,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,

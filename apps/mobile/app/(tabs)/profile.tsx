@@ -4,17 +4,11 @@ import { useMutation } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
 import { Button } from "../../components/ui/Button";
+import { K, tierColor } from "../../constants/theme";
 
 // ── Loyalty helpers ───────────────────────────────────────────────────────────
 
 type Tier = "bronze" | "silver" | "gold" | "diamond";
-
-const TIER_COLORS: Record<Tier, string> = {
-  bronze: "#cd7f32",
-  silver: "#c0c0c0",
-  gold: "#ffd700",
-  diamond: "#b9f2ff",
-};
 
 const TIER_NEXT_THRESHOLD: Record<Tier, number | null> = {
   bronze: 1000,
@@ -47,7 +41,7 @@ function progressToNextTier(points: number, tier: Tier): { pct: number; ptsNeede
 // ── Loyalty Card ──────────────────────────────────────────────────────────────
 
 function LoyaltyCard({ points, tier }: { points: number; tier: Tier }) {
-  const color = TIER_COLORS[tier];
+  const color = tierColor(tier);
   const { pct, ptsNeeded, nextTierLabel } = progressToNextTier(points, tier);
   const tierLabel = tier.toUpperCase();
 
@@ -81,7 +75,7 @@ export default function ProfileScreen() {
   const { user, clearAuth } = useAuthStore();
 
   const logoutMutation = useMutation({
-    mutationFn: () => api.post("/auth/logout"),
+    mutationFn: () => api.post("auth/logout"),
     onSettled: async () => {
       await clearAuth();
       router.replace("/(auth)/login");
@@ -89,7 +83,7 @@ export default function ProfileScreen() {
   });
 
   const logoutAllMutation = useMutation({
-    mutationFn: () => api.post("/auth/logout-all"),
+    mutationFn: () => api.post("auth/logout-all"),
     onSettled: async () => {
       await clearAuth();
       router.replace("/(auth)/login");
@@ -141,61 +135,61 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingHorizontal: 24,
+    backgroundColor: K.colors.bgCard,
+    paddingHorizontal: K.spacing.xxl,
     paddingTop: 48,
   },
-  name: { fontSize: 24, fontWeight: "800", color: "#111827", marginBottom: 4 },
-  email: { fontSize: 15, color: "#6b7280", marginBottom: 4 },
-  meta: { fontSize: 13, color: "#9ca3af", marginBottom: 24, textTransform: "capitalize" },
+  name: { fontSize: K.font.xxl, fontWeight: "800", color: K.colors.textDark, marginBottom: 4 },
+  email: { fontSize: K.font.base, color: K.colors.textMuted, marginBottom: 4 },
+  meta: { fontSize: K.font.sm, color: K.colors.textSubtle, marginBottom: K.spacing.xxl, textTransform: "capitalize" },
 
   // Loyalty card
   loyaltyCard: {
     borderWidth: 2,
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: K.radius.lg,
+    padding: K.spacing.lg,
     marginBottom: 28,
-    backgroundColor: "#fafafa",
+    backgroundColor: K.colors.bgSubtle,
   },
   loyaltyHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: K.spacing.md,
   },
   tierBadge: {
-    borderRadius: 20,
-    paddingHorizontal: 12,
+    borderRadius: K.radius.full,
+    paddingHorizontal: K.spacing.md,
     paddingVertical: 5,
   },
   tierBadgeText: {
-    fontSize: 12,
+    fontSize: K.font.xs,
     fontWeight: "800",
-    color: "#111827",
+    color: K.colors.textDark,
     letterSpacing: 0.5,
   },
   loyaltyPoints: {
-    fontSize: 20,
+    fontSize: K.font.xl,
     fontWeight: "800",
-    color: "#111827",
+    color: K.colors.textDark,
   },
   progressTrack: {
     height: 8,
-    backgroundColor: "#e5e7eb",
-    borderRadius: 4,
+    backgroundColor: K.colors.borderMid,
+    borderRadius: K.radius.xs,
     overflow: "hidden",
-    marginBottom: 8,
+    marginBottom: K.spacing.sm,
   },
   progressFill: {
     height: "100%",
-    borderRadius: 4,
+    borderRadius: K.radius.xs,
     minWidth: 4,
   },
   loyaltyFooter: {
-    fontSize: 12,
-    color: "#6b7280",
+    fontSize: K.font.xs,
+    color: K.colors.textMuted,
     fontWeight: "500",
   },
 
-  logoutAllWrapper: { marginTop: 12 },
+  logoutAllWrapper: { marginTop: K.spacing.md },
 });

@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
+import { K } from "../../constants/theme";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -578,7 +579,7 @@ export default function BookingDetailScreen() {
                   style={styles.reviewBtn}
                   onPress={() => router.push(`/review/${booking.id}` as any)}
                 >
-                  <Ionicons name="star-outline" size={16} color="#1a73e8" style={{ marginRight: 6 }} />
+                  <Ionicons name="star-outline" size={16} color={K.colors.accent} style={{ marginRight: 6 }} />
                   <Text style={styles.reviewBtnText}>Leave a Review</Text>
                 </TouchableOpacity>
               )
@@ -678,7 +679,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#bfdbfe",
   },
-  referenceValue: { fontSize: 15, fontWeight: "800", color: "#1a73e8", letterSpacing: 0.5 },
+  referenceValue: { fontSize: 15, fontWeight: "800", color: K.colors.accent, letterSpacing: 0.5 },
   statusBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
   statusBadgeText: { fontSize: 12, fontWeight: "700" },
 
@@ -780,7 +781,7 @@ const styles = StyleSheet.create({
   actionsSection: { gap: 12, marginTop: 4, marginBottom: 20 },
 
   payBtn: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: K.colors.accent,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -802,7 +803,7 @@ const styles = StyleSheet.create({
 
   reviewBtn: {
     borderWidth: 2,
-    borderColor: "#1a73e8",
+    borderColor: K.colors.accent,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -810,7 +811,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#eff6ff",
   },
-  reviewBtnText: { fontSize: 15, fontWeight: "700", color: "#1a73e8" },
+  reviewBtnText: { fontSize: 15, fontWeight: "700", color: K.colors.accent },
 
   reviewSubmittedBox: {
     borderWidth: 1,
@@ -839,7 +840,7 @@ const styles = StyleSheet.create({
   // Error / skeleton
   errorTitle: { fontSize: 18, fontWeight: "700", color: "#111827", marginTop: 16, marginBottom: 20, textAlign: "center" },
   backButton: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: K.colors.accent,
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 24,

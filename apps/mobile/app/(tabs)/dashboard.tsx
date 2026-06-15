@@ -12,6 +12,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
+import { K } from "../../constants/theme";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -52,17 +53,17 @@ function formatCurrency(amount: number, currency?: string): string {
 function statusInfo(status: string): { label: string; bg: string; textColor: string } {
   switch (status) {
     case "confirmed":
-      return { label: "Confirmed", bg: "#dcfce7", textColor: "#16a34a" };
+      return { label: "Confirmed", bg: K.colors.confirmed.bg, textColor: K.colors.confirmed.text };
     case "pending_payment":
-      return { label: "Pending", bg: "#fef3c7", textColor: "#92400e" };
+      return { label: "Pending", bg: K.colors.pending.bg, textColor: K.colors.pending.text };
     case "completed":
-      return { label: "Completed", bg: "#f3f4f6", textColor: "#6b7280" };
+      return { label: "Completed", bg: K.colors.completed.bg, textColor: K.colors.completed.text };
     case "cancelled_by_guest":
     case "cancelled_by_provider":
     case "cancelled_by_system":
-      return { label: "Cancelled", bg: "#fee2e2", textColor: "#dc2626" };
+      return { label: "Cancelled", bg: K.colors.cancelled.bg, textColor: K.colors.cancelled.text };
     default:
-      return { label: status, bg: "#f3f4f6", textColor: "#6b7280" };
+      return { label: status, bg: K.colors.completed.bg, textColor: K.colors.completed.text };
   }
 }
 
@@ -217,7 +218,7 @@ export default function ProviderDashboardScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#1a73e8" />
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={K.colors.accent} />
         }
       >
         {/* Stats row 1 */}
@@ -266,19 +267,19 @@ export default function ProviderDashboardScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f9fafb" },
+  container: { flex: 1, backgroundColor: K.colors.bgSubtle },
 
   header: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
-    backgroundColor: "#fff",
+    paddingHorizontal: K.spacing.lg,
+    paddingTop: K.spacing.sm,
+    paddingBottom: K.spacing.md,
+    backgroundColor: K.colors.bgCard,
     borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
+    borderBottomColor: K.colors.border,
   },
-  headerTitle: { fontSize: 24, fontWeight: "800", color: "#111827" },
+  headerTitle: { fontSize: K.font.xxl, fontWeight: "800", color: K.colors.textDark },
 
-  scrollContent: { padding: 16, gap: 14 },
+  scrollContent: { padding: K.spacing.lg, gap: 14 },
 
   // Stats
   statsRow: {
@@ -288,45 +289,47 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 14,
+    backgroundColor: K.colors.bgCard,
+    borderRadius: K.radius.lg,
+    padding: K.spacing.lg,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: K.colors.border,
     alignItems: "flex-start",
     justifyContent: "center",
     minHeight: 70,
+    ...K.shadow.xs,
   },
   statCardAccent: {
-    backgroundColor: "#eff6ff",
-    borderColor: "#bfdbfe",
+    backgroundColor: K.colors.accentSurface,
+    borderColor: K.colors.accentDim,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: K.font.lg,
     fontWeight: "800",
-    color: "#111827",
+    color: K.colors.textDark,
     marginBottom: 4,
     flexShrink: 1,
   },
   statLabel: {
-    fontSize: 11,
-    color: "#6b7280",
+    fontSize: K.font.xs,
+    color: K.colors.textMuted,
     fontWeight: "500",
   },
 
   // Chart
   chartCard: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: K.colors.bgCard,
+    borderRadius: K.radius.lg,
+    padding: K.spacing.lg,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: K.colors.border,
+    ...K.shadow.xs,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: K.font.base,
     fontWeight: "700",
-    color: "#111827",
-    marginBottom: 16,
+    color: K.colors.textDark,
+    marginBottom: K.spacing.lg,
   },
   chartBars: {
     flexDirection: "row",
@@ -346,63 +349,64 @@ const styles = StyleSheet.create({
   },
   chartBar: {
     width: "60%",
-    backgroundColor: "#1a73e8",
-    borderRadius: 4,
+    backgroundColor: K.colors.accent,
+    borderRadius: K.radius.xs,
     minHeight: 4,
   },
   chartBarLabel: {
-    fontSize: 10,
-    color: "#6b7280",
+    fontSize: K.font.xs,
+    color: K.colors.textMuted,
     marginTop: 6,
     textAlign: "center",
   },
 
   // Recent bookings
   recentCard: {
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 16,
+    backgroundColor: K.colors.bgCard,
+    borderRadius: K.radius.lg,
+    padding: K.spacing.lg,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: K.colors.border,
+    ...K.shadow.xs,
   },
   bookingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    paddingVertical: 10,
+    paddingVertical: K.spacing.sm + 2,
   },
-  bookingRowMain: { flex: 1, marginRight: 12 },
+  bookingRowMain: { flex: 1, marginRight: K.spacing.md },
   bookingRowRight: { alignItems: "flex-end", gap: 6 },
-  bookingTitle: { fontSize: 14, fontWeight: "700", color: "#111827", marginBottom: 2 },
-  bookingGuest: { fontSize: 13, color: "#374151", marginBottom: 2 },
-  bookingRef: { fontSize: 11, color: "#9ca3af", fontFamily: "monospace" },
-  bookingAmount: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  bookingTitle: { fontSize: K.font.sm + 1, fontWeight: "700", color: K.colors.textDark, marginBottom: 2 },
+  bookingGuest: { fontSize: K.font.sm, color: K.colors.textBody, marginBottom: 2 },
+  bookingRef: { fontSize: K.font.xs, color: K.colors.textSubtle, fontFamily: "monospace" },
+  bookingAmount: { fontSize: K.font.sm + 1, fontWeight: "700", color: K.colors.textDark },
 
   statusBadge: {
-    borderRadius: 20,
-    paddingHorizontal: 8,
+    borderRadius: K.radius.full,
+    paddingHorizontal: K.spacing.sm,
     paddingVertical: 3,
   },
-  statusBadgeText: { fontSize: 11, fontWeight: "600" },
+  statusBadgeText: { fontSize: K.font.xs, fontWeight: "600" },
 
-  separator: { height: 1, backgroundColor: "#f3f4f6" },
+  separator: { height: 1, backgroundColor: K.colors.bgSection },
 
   // Skeleton
   skeletonBox: {
-    backgroundColor: "#e5e7eb",
-    borderRadius: 12,
+    backgroundColor: K.colors.bgSection,
+    borderRadius: K.radius.md,
   },
 
   // Error
   errorState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16 },
-  errorText: { fontSize: 16, color: "#6b7280" },
+  errorText: { fontSize: K.font.base, color: K.colors.textMuted },
   retryBtn: {
-    backgroundColor: "#1a73e8",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
+    backgroundColor: K.colors.accent,
+    borderRadius: K.radius.sm + 2,
+    paddingVertical: K.spacing.sm + 2,
+    paddingHorizontal: K.spacing.xxl,
   },
-  retryBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+  retryBtnText: { color: K.colors.textLight, fontWeight: "700", fontSize: K.font.sm + 1 },
 
-  emptyText: { fontSize: 14, color: "#9ca3af", textAlign: "center", paddingVertical: 16 },
+  emptyText: { fontSize: K.font.sm + 1, color: K.colors.textSubtle, textAlign: "center", paddingVertical: K.spacing.lg },
 });

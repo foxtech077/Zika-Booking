@@ -19,14 +19,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
 import { listingApi } from "../../lib/listing-api";
 import { ListingImage } from "../../components/ListingImage";
+import { K } from "../../constants/theme";
 
 const { width: W } = Dimensions.get("window");
-const GREEN = "#1B5E20";
-const GREEN_LIGHT = "#F0FFF4";
-const GREEN_BORDER = "#BBF7D0";
-const TEXT = "#111827";
-const MUTED = "#6B7280";
-const BORDER = "#E5E7EB";
 
 type Category = "hotels" | "apartments" | "cars";
 
@@ -134,23 +129,23 @@ function DatePickerModal({
 }
 
 const dp = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
-  sheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-  title: { fontSize: 17, fontWeight: "700", color: "#111827", textAlign: "center", marginBottom: 16 },
-  navRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  navBtn: { padding: 8 },
-  navArrow: { fontSize: 22, color: "#1B5E20", fontWeight: "700" },
-  monthLabel: { fontSize: 16, fontWeight: "700", color: "#111827" },
-  dowRow: { flexDirection: "row", marginBottom: 8 },
-  dow: { width: "14.28%", textAlign: "center", fontSize: 12, fontWeight: "600", color: "#6B7280" },
+  overlay: { flex: 1, backgroundColor: K.colors.overlay, justifyContent: "flex-end" },
+  sheet: { backgroundColor: K.colors.bgCard, borderTopLeftRadius: K.radius.xxl, borderTopRightRadius: K.radius.xxl, padding: K.spacing.xxl, paddingBottom: 40, borderWidth: 1, borderColor: K.colors.border },
+  title: { fontSize: K.font.lg, fontWeight: "700", color: K.colors.textDark, textAlign: "center", marginBottom: K.spacing.lg },
+  navRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: K.spacing.md },
+  navBtn: { padding: K.spacing.sm },
+  navArrow: { fontSize: K.font.xl + 2, color: K.colors.accent, fontWeight: "700" },
+  monthLabel: { fontSize: K.font.lg, fontWeight: "700", color: K.colors.textDark },
+  dowRow: { flexDirection: "row", marginBottom: K.spacing.sm },
+  dow: { width: "14.28%", textAlign: "center", fontSize: K.font.xs, fontWeight: "600", color: K.colors.textMuted },
   grid: { flexDirection: "row", flexWrap: "wrap" },
   emptyCell: { width: "14.28%", height: 40 },
-  cell: { width: "14.28%", height: 40, alignItems: "center", justifyContent: "center", borderRadius: 20 },
+  cell: { width: "14.28%", height: 40, alignItems: "center", justifyContent: "center", borderRadius: K.radius.full },
   cellDisabled: { opacity: 0.3 },
-  cellText: { fontSize: 14, fontWeight: "500", color: "#111827" },
-  cellTextDisabled: { color: "#9CA3AF" },
-  cancelBtn: { marginTop: 16, alignItems: "center", paddingVertical: 12 },
-  cancelText: { fontSize: 15, color: "#6B7280", fontWeight: "600" },
+  cellText: { fontSize: K.font.sm + 1, fontWeight: "500", color: K.colors.textDark },
+  cellTextDisabled: { color: K.colors.textSubtle },
+  cancelBtn: { marginTop: K.spacing.lg, alignItems: "center", paddingVertical: K.spacing.md },
+  cancelText: { fontSize: K.font.base, color: K.colors.textMuted, fontWeight: "600" },
 });
 
 // ── Listing Card ──────────────────────────────────────────────────────────────
@@ -172,18 +167,18 @@ function ListingCard({
         {!imgError && displayPhoto ? (
           <ListingImage uri={displayPhoto} style={c.photo} onError={() => setImgError(true)} />
         ) : (
-          <View style={[c.photo, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
+          <View style={[c.photo, { backgroundColor: K.colors.darkGreenMid, alignItems: "center", justifyContent: "center" }]}>
             <Text style={{ fontSize: 28 }}>{isCar ? "🚗" : "🏨"}</Text>
           </View>
         )}
         {badgeLabel ? (
-          <View style={[c.badge, { backgroundColor: badgeColor ?? GREEN }]}>
+          <View style={[c.badge, { backgroundColor: badgeColor ?? K.colors.accent }]}>
             <Text style={c.badgeText}>{badgeLabel}</Text>
           </View>
         ) : null}
         {item.starRating != null && item.starRating > 0 ? (
           <View style={c.ratingBadge}>
-            <Ionicons name="star" size={10} color="#F59E0B" />
+            <Ionicons name="star" size={10} color={K.colors.warning} />
             <Text style={c.ratingText}>{item.starRating}</Text>
           </View>
         ) : null}
@@ -191,7 +186,7 @@ function ListingCard({
       <View style={c.body}>
         <Text style={c.title} numberOfLines={1}>{item.title}</Text>
         <View style={c.row}>
-          <Ionicons name="location-outline" size={11} color={MUTED} />
+          <Ionicons name="location-outline" size={11} color={K.colors.textMuted} />
           <Text style={c.loc} numberOfLines={1}>
             {item.city}{item.distanceKm != null ? ` · ${item.distanceKm.toFixed(1)}km` : ""}
           </Text>
@@ -206,95 +201,37 @@ function ListingCard({
 
 const c = StyleSheet.create({
   card: {
-    backgroundColor: "#fff", borderRadius: 14, overflow: "hidden",
-    borderWidth: 1, borderColor: BORDER,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+    backgroundColor: K.colors.bgCard, borderRadius: K.radius.lg, overflow: "hidden",
+    borderWidth: 1, borderColor: K.colors.border,
+    ...K.shadow.sm,
   },
   photo: { width: "100%", height: 130 },
   badge: {
     position: "absolute", top: 10, left: 10,
-    borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4,
+    borderRadius: K.radius.full, paddingHorizontal: K.spacing.sm, paddingVertical: 4,
   },
-  badgeText: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  badgeText: { color: "#051008", fontSize: K.font.xs, fontWeight: "700" },
   ratingBadge: {
     position: "absolute", top: 10, right: 10,
-    backgroundColor: "rgba(0,0,0,0.55)", borderRadius: 10,
+    backgroundColor: K.colors.overlay, borderRadius: K.radius.sm,
     paddingHorizontal: 6, paddingVertical: 3,
     flexDirection: "row", alignItems: "center", gap: 3,
   },
-  ratingText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  body: { padding: 10 },
-  title: { fontSize: 13, fontWeight: "700", color: TEXT, marginBottom: 3 },
+  ratingText: { color: K.colors.textLight, fontSize: K.font.xs, fontWeight: "700" },
+  body: { padding: K.spacing.sm + 2 },
+  title: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark, marginBottom: 3 },
   row: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 5 },
-  loc: { fontSize: 11, color: MUTED, flex: 1 },
-  price: { fontSize: 14, fontWeight: "800", color: GREEN },
-  priceUnit: { fontSize: 10, fontWeight: "400", color: MUTED },
-});
-
-// ── Nearby Row ────────────────────────────────────────────────────────────────
-
-function NearbyCard({ item, onPress, photoUrl }: { item: SearchResult; onPress: () => void; photoUrl?: string | null }) {
-  const isCar = item.listingType === "car";
-  const rate = isCar ? item.dailyRate : item.nightlyRate;
-  const [imgError, setImgError] = useState(false);
-  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
-  return (
-    <TouchableOpacity style={nb.card} onPress={onPress} activeOpacity={0.85}>
-      {!imgError && displayPhoto ? (
-        <ListingImage uri={displayPhoto} style={nb.photo} onError={() => setImgError(true)} />
-      ) : (
-        <View style={[nb.photo, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
-          <Text style={{ fontSize: 22 }}>{isCar ? "🚗" : "🏨"}</Text>
-        </View>
-      )}
-      <View style={nb.info}>
-        <Text style={nb.title} numberOfLines={1}>{item.title}</Text>
-        <View style={nb.row}>
-          <Ionicons name="location-outline" size={12} color={MUTED} />
-          <Text style={nb.loc}>{item.city} · {item.distanceKm?.toFixed(1)}km away</Text>
-        </View>
-        <Text style={nb.price}>
-          {fmtPrice(rate, item.currency)}<Text style={nb.unit}>/{isCar ? "day" : "night"}</Text>
-        </Text>
-      </View>
-      {item.starRating != null && item.starRating > 0 ? (
-        <View style={nb.star}>
-          <Ionicons name="star" size={12} color="#F59E0B" />
-          <Text style={nb.starText}>{item.starRating}</Text>
-        </View>
-      ) : null}
-    </TouchableOpacity>
-  );
-}
-
-const nb = StyleSheet.create({
-  card: {
-    flexDirection: "row", backgroundColor: "#fff", borderRadius: 14,
-    overflow: "hidden", borderWidth: 1, borderColor: BORDER, marginBottom: 10,
-  },
-  photo: { width: 80, height: 80 },
-  info: { flex: 1, padding: 10, justifyContent: "center" },
-  title: { fontSize: 14, fontWeight: "700", color: TEXT, marginBottom: 3 },
-  row: { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 4 },
-  loc: { fontSize: 11, color: MUTED },
-  price: { fontSize: 13, fontWeight: "800", color: GREEN },
-  unit: { fontSize: 10, fontWeight: "400", color: MUTED },
-  star: { paddingRight: 12, alignItems: "center", justifyContent: "center", gap: 2 },
-  starText: { fontSize: 12, fontWeight: "700", color: TEXT },
+  loc: { fontSize: K.font.xs, color: K.colors.textMuted, flex: 1 },
+  price: { fontSize: K.font.sm + 1, fontWeight: "800", color: K.colors.accent },
+  priceUnit: { fontSize: K.font.xs, fontWeight: "400", color: K.colors.textMuted },
 });
 
 // ── Section Header ────────────────────────────────────────────────────────────
 
-function SectionHeader({ title, subtitle, onMore }: {
-  title: string; subtitle?: string; onMore?: () => void;
-}) {
+function SectionHeader({ title, onMore }: { title: string; onMore?: () => void }) {
   return (
     <View style={sh.row}>
-      <View style={{ flex: 1 }}>
-        <Text style={sh.title}>{title}</Text>
-        {subtitle ? <Text style={sh.sub}>{subtitle}</Text> : null}
-      </View>
+      <Text style={sh.title}>{title}</Text>
       {onMore ? (
         <TouchableOpacity onPress={onMore}>
           <Text style={sh.more}>View More</Text>
@@ -305,105 +242,13 @@ function SectionHeader({ title, subtitle, onMore }: {
 }
 
 const sh = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "flex-start", marginBottom: 12, paddingHorizontal: 16 },
-  title: { fontSize: 17, fontWeight: "800", color: TEXT },
-  sub: { fontSize: 12, color: MUTED, marginTop: 2 },
-  more: { fontSize: 13, color: GREEN, fontWeight: "700" },
+  row: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: K.spacing.md, paddingHorizontal: K.spacing.lg },
+  title: { fontSize: K.font.lg, fontWeight: "800", color: K.colors.textDark },
+  more: { fontSize: K.font.sm, color: K.colors.accent, fontWeight: "700" },
 });
 
-// ── Featured Card ─────────────────────────────────────────────────────────────
-function FeaturedCard({
-  item, onPress, photoUrl,
-}: {
-  item: SearchResult; onPress: () => void; photoUrl?: string | null;
-}) {
-  const [imgError, setImgError] = useState(false);
-  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
-  return (
-    <TouchableOpacity style={s.featuredCard} onPress={onPress} activeOpacity={0.88}>
-      {!imgError && displayPhoto ? (
-        <ListingImage uri={displayPhoto} style={s.featuredPhoto} onError={() => setImgError(true)} />
-      ) : (
-        <View style={[s.featuredPhoto, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
-          <Text style={{ fontSize: 36 }}>🏨</Text>
-        </View>
-      )}
-      <View style={s.featuredOverlay}>
-        <View style={s.featuredBadgeWrap}>
-          <Text style={s.featuredBadgeText}>FEATURED & EXCLUSIVE</Text>
-        </View>
-        <Text style={s.featuredTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={s.featuredLoc}>{item.city}, {item.countryCode}</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <Text style={s.featuredPrice}>
-            {fmtPrice(item.nightlyRate, item.currency)}<Text style={{ fontSize: 12, fontWeight: "400" }}>/night</Text>
-          </Text>
-          <View style={s.featuredBtn}>
-            <Text style={s.featuredBtnText}>Book</Text>
-          </View>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-// ── Premium Car Card ──────────────────────────────────────────────────────────
-function PremiumCarCard({
-  item, onPress, photoUrl, isLast,
-}: {
-  item: SearchResult; onPress: () => void; photoUrl?: string | null; isLast: boolean;
-}) {
-  const [imgError, setImgError] = useState(false);
-  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
-  return (
-    <TouchableOpacity
-      style={[c.card, { width: 220, marginRight: isLast ? 0 : 12 }]}
-      onPress={onPress}
-      activeOpacity={0.85}
-    >
-      {!imgError && displayPhoto ? (
-        <ListingImage uri={displayPhoto} style={[c.photo, { height: 140 }]} onError={() => setImgError(true)} />
-      ) : (
-        <View style={[c.photo, { height: 140, backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
-          <Text style={{ fontSize: 28 }}>🚗</Text>
-        </View>
-      )}
-      <View style={c.body}>
-        <View style={s.carBadge}><Text style={s.carBadgeText}>LUXURY</Text></View>
-        <Text style={c.title} numberOfLines={1}>{item.carMake} {item.carModel} {item.carYear}</Text>
-        <Text style={{ fontSize: 11, color: MUTED, marginBottom: 4 }}>{item.transmission} · {item.seats} seats</Text>
-        <Text style={c.price}>{fmtPrice(item.dailyRate, item.currency)}<Text style={c.priceUnit}>/day</Text></Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// ── Trending Card ─────────────────────────────────────────────────────────────
-function TrendingCard({
-  item, onPress, photoUrl,
-}: {
-  item: SearchResult; onPress: () => void; photoUrl?: string | null;
-}) {
-  const [imgError, setImgError] = useState(false);
-  const displayPhoto = photoUrl ?? item.primaryPhotoUrl;
-  return (
-    <TouchableOpacity style={s.trendCard} onPress={onPress} activeOpacity={0.85}>
-      {!imgError && displayPhoto ? (
-        <ListingImage uri={displayPhoto} style={s.trendPhoto} onError={() => setImgError(true)} />
-      ) : (
-        <View style={[s.trendPhoto, { backgroundColor: "#D1FAE5", alignItems: "center", justifyContent: "center" }]}>
-          <Text style={{ fontSize: 24 }}>🏨</Text>
-        </View>
-      )}
-      <View style={s.trendOverlay}>
-        <Text style={s.trendTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={s.trendPrice}>{fmtPrice(item.nightlyRate ?? item.dailyRate, item.currency)}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-// Helper to format Date to YYYY-MM-DD in local time
 function formatLocalDate(d: Date): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -411,7 +256,6 @@ function formatLocalDate(d: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-// Helper to format Date to ISO string with local timezone offset
 function formatLocalISOString(d: Date): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -420,11 +264,8 @@ function formatLocalISOString(d: Date): string {
   const minutes = String(d.getMinutes()).padStart(2, "0");
   const seconds = String(d.getSeconds()).padStart(2, "0");
   const ms = String(d.getMilliseconds()).padStart(3, "0");
-  
   const offset = -d.getTimezoneOffset();
-  if (offset === 0) {
-    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}Z`;
-  }
+  if (offset === 0) return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}Z`;
   const sign = offset > 0 ? "+" : "-";
   const absOffset = Math.abs(offset);
   const offsetHours = String(Math.floor(absOffset / 60)).padStart(2, "0");
@@ -432,15 +273,22 @@ function formatLocalISOString(d: Date): string {
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}${sign}${offsetHours}:${offsetMinutes}`;
 }
 
+// ── Category config ────────────────────────────────────────────────────────────
+
+const CATEGORIES: { key: Category; label: string; icon: React.ComponentProps<typeof Ionicons>["name"] }[] = [
+  { key: "hotels", label: "Hotel", icon: "business" },
+  { key: "apartments", label: "Apartment", icon: "home" },
+  { key: "cars", label: "Car", icon: "car" },
+];
+
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
   const firstName = user?.firstName ?? "Explorer";
+  const lastName = (user as any)?.lastName ?? "";
   const loyaltyPoints = user?.loyaltyPoints ?? 0;
   const currentTier = user?.currentTier ?? "bronze";
 
@@ -452,6 +300,7 @@ export default function HomeScreen() {
   const [returnDate, setReturnDate] = useState<Date | null>(null);
   const [guests, setGuests] = useState(1);
   const [datePicker, setDatePicker] = useState<"checkIn" | "checkOut" | "pickup" | "return" | null>(null);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   // ── API Queries ──────────────────────────────────────────────────────────
   const { data: hotelsData, isLoading: hotelsLoading } = useQuery<SearchResult[]>({
@@ -487,9 +336,6 @@ export default function HomeScreen() {
     staleTime: 60000,
   });
 
-  // ── Curated segments ─────────────────────────────────────────────────────
-  // listingType guard prevents mis-categorised listings (e.g. a listing whose
-  // name is "car") from polluting hotel / apartment sections.
   const bestOffers = [
     ...(hotelsData ?? []).filter((h) => h.listingType !== "car" && h.nightlyRate != null && h.nightlyRate <= 15000),
     ...(apartmentsData ?? []).filter((a) => a.listingType !== "car" && a.longStayDiscountEnabled),
@@ -500,44 +346,29 @@ export default function HomeScreen() {
     ...(apartmentsData ?? []).filter((a) => a.listingType !== "car" && a.isAccredited),
   ].slice(0, 8);
 
-  const featured: SearchResult[] = [];
-  const nearbyAll: SearchResult[] = [];
-  const premiumCars: SearchResult[] = [];
-  const trending: SearchResult[] = [];
+  // The hero featured listing — best available
+  const featuredListing = recommended[0] ?? bestOffers[0] ?? hotelsData?.[0] ?? null;
 
-  // ── Batch-fetch fresh photo URLs ─────────────────────────────────────────
-  // POST /listings/batch-summary is the public "Search" API designed for card
-  // display. It does not require provider auth, so traveler guests can call it.
-  // We fall back to individual GET /listings/{id}/public calls if the batch
-  // endpoint fails or returns no photo data.
   const displayedIds = useMemo(() => {
     const ids = new Set<string>();
-    [...bestOffers, ...recommended, ...featured, ...nearbyAll, ...premiumCars, ...trending]
-      .forEach((item) => ids.add(item.id));
+    [...bestOffers, ...recommended].forEach((item) => ids.add(item.id));
+    if (featuredListing) ids.add(featuredListing.id);
     return Array.from(ids);
-  }, [bestOffers, recommended, featured, nearbyAll, premiumCars, trending]);
+  }, [bestOffers, recommended, featuredListing]);
 
   const photoQueries = useQueries({
     queries: displayedIds.map((id) => ({
-      // "photo-v2" key — avoids stale cache from previous attempts
       queryKey: ["photo-v2", id],
       queryFn: async (): Promise<string | null> => {
-        const endpoint = `/listings/${id}/public`;
-        console.log(`[Home Listing Cards] API Endpoint Called: ${endpoint}`);
-        console.log(`[Home Listing Cards] Listing ID: ${id}`);
         try {
-          const res = await listingApi.get<{ data: { primaryPhotoUrl?: string; photos: Array<{ cdnUrl: string }> } }>(endpoint);
-          const returnedPrimaryPhotoUrl = res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
-          const returnedPhotoGalleryUrls = res.data.data?.photos?.map((p) => p.cdnUrl) ?? [];
-          console.log(`[Home Listing Cards] Returned primaryPhotoUrl: ${returnedPrimaryPhotoUrl}`);
-          console.log(`[Home Listing Cards] Returned photo gallery URLs:`, returnedPhotoGalleryUrls);
-          return returnedPrimaryPhotoUrl;
-        } catch (error) {
-          console.error(`[Home Listing Cards] Error fetching from ${endpoint}:`, error);
+          const res = await listingApi.get<{ data: { primaryPhotoUrl?: string; photos: Array<{ cdnUrl: string }> } }>(
+            `/listings/${id}/public`
+          );
+          return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
+        } catch {
           return null;
         }
       },
-      // staleTime: 0 so each session gets fresh presigned URLs (they expire)
       staleTime: 0,
       gcTime: 5 * 60_000,
       retry: 0,
@@ -584,37 +415,147 @@ export default function HomeScreen() {
         (pos) => {
           const { latitude, longitude } = pos.coords;
           const apiCat = category === "cars" ? "car" : category === "apartments" ? "apartment" : "hotel";
-          const params: Record<string, string> = {
-            category: apiCat,
-            guests: String(guests),
-            geoLat: String(latitude),
-            geoLng: String(longitude),
-          };
-          if (category !== "cars") {
-            if (checkIn) params.checkIn = formatLocalDate(checkIn);
-            if (checkOut) params.checkOut = formatLocalDate(checkOut);
-          } else {
-            if (pickupDate) params.pickupDatetime = formatLocalISOString(pickupDate);
-            if (returnDate) params.returnDatetime = formatLocalISOString(returnDate);
-          }
-          router.push({ pathname: "/search", params });
+          router.push({ pathname: "/search", params: { category: apiCat, guests: String(guests), geoLat: String(latitude), geoLng: String(longitude) } });
         },
-        () => Alert.alert("Location Error", "Could not get your location. Please enable location services.")
+        () => Alert.alert("Location Error", "Could not get your location.")
       );
-    } else {
-      Alert.alert("Not supported", "Location detection is not available on this device.");
     }
   }
 
-  function tierColor() {
-    const map: Record<string, string> = { bronze: "#CD7F32", silver: "#9CA3AF", gold: "#F59E0B", diamond: "#60A5FA" };
-    return map[currentTier] ?? "#9CA3AF";
+  function getTierColor() {
+    const map: Record<string, string> = {
+      bronze: K.colors.tierBronze,
+      silver: K.colors.tierSilver,
+      gold: K.colors.tierGold,
+      diamond: K.colors.tierDiamond,
+    };
+    return map[currentTier] ?? K.colors.tierSilver;
   }
 
   const allLoading = hotelsLoading || aptsLoading || carsLoading;
 
   return (
     <SafeAreaView style={s.container}>
+      {/* ── Date Picker Modals ── */}
+      <DatePickerModal
+        visible={datePicker === "checkIn"}
+        title="Select Check-in Date"
+        onSelect={d => { setCheckIn(d); if (checkOut && d >= checkOut) setCheckOut(null); }}
+        onClose={() => setDatePicker(null)}
+      />
+      <DatePickerModal
+        visible={datePicker === "checkOut"}
+        title="Select Check-out Date"
+        minDate={checkIn ?? undefined}
+        onSelect={d => setCheckOut(d)}
+        onClose={() => setDatePicker(null)}
+      />
+      <DatePickerModal
+        visible={datePicker === "pickup"}
+        title="Select Pickup Date"
+        onSelect={d => {
+          const dt = new Date(d); dt.setHours(10, 0, 0, 0);
+          setPickupDate(dt);
+          if (returnDate && dt >= returnDate) setReturnDate(null);
+        }}
+        onClose={() => setDatePicker(null)}
+      />
+      <DatePickerModal
+        visible={datePicker === "return"}
+        title="Select Return Date"
+        minDate={pickupDate ?? undefined}
+        onSelect={d => { const dt = new Date(d); dt.setHours(10, 0, 0, 0); setReturnDate(dt); }}
+        onClose={() => setDatePicker(null)}
+      />
+
+      {/* ── Search Bottom Sheet ── */}
+      <Modal visible={showSearchModal} transparent animationType="slide" onRequestClose={() => setShowSearchModal(false)}>
+        <TouchableOpacity style={{ flex: 1, backgroundColor: K.colors.overlay }} activeOpacity={1} onPress={() => setShowSearchModal(false)} />
+        <View style={s.sheet}>
+          <View style={s.sheetHandle} />
+          <Text style={s.sheetTitle}>Find your perfect stay</Text>
+
+          {/* Location */}
+          <View style={s.sheetRow}>
+            <Ionicons name="location-outline" size={18} color={K.colors.accent} style={{ marginRight: 10 }} />
+            <TextInput
+              style={s.sheetInput}
+              value={location}
+              onChangeText={setLocation}
+              placeholder="City, country…"
+              placeholderTextColor={K.colors.textSubtle}
+            />
+            <TouchableOpacity onPress={detectUserLocation} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="navigate" size={18} color={K.colors.accent} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Dates */}
+          {category !== "cars" ? (
+            <View style={s.sheetDatesRow}>
+              <TouchableOpacity style={s.sheetDateBtn} onPress={() => setDatePicker("checkIn")}>
+                <Ionicons name="calendar-outline" size={15} color={K.colors.accent} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.sheetDateLabel}>Check-in</Text>
+                  <Text style={s.sheetDateValue}>{fmtDate(checkIn)}</Text>
+                </View>
+              </TouchableOpacity>
+              <View style={s.sheetDateGap} />
+              <TouchableOpacity style={s.sheetDateBtn} onPress={() => setDatePicker("checkOut")}>
+                <Ionicons name="calendar-outline" size={15} color={K.colors.accent} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.sheetDateLabel}>Check-out</Text>
+                  <Text style={s.sheetDateValue}>{fmtDate(checkOut)}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={s.sheetDatesRow}>
+              <TouchableOpacity style={s.sheetDateBtn} onPress={() => setDatePicker("pickup")}>
+                <Ionicons name="calendar-outline" size={15} color={K.colors.accent} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.sheetDateLabel}>Pickup</Text>
+                  <Text style={s.sheetDateValue}>{fmtDate(pickupDate)}</Text>
+                </View>
+              </TouchableOpacity>
+              <View style={s.sheetDateGap} />
+              <TouchableOpacity style={s.sheetDateBtn} onPress={() => setDatePicker("return")}>
+                <Ionicons name="calendar-outline" size={15} color={K.colors.accent} style={{ marginRight: 6 }} />
+                <View>
+                  <Text style={s.sheetDateLabel}>Return</Text>
+                  <Text style={s.sheetDateValue}>{fmtDate(returnDate)}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Guests */}
+          <View style={s.sheetRow}>
+            <Ionicons name="people-outline" size={16} color={K.colors.textMuted} style={{ marginRight: 8 }} />
+            <Text style={s.sheetGuestLabel}>Guests</Text>
+            <View style={s.guestsCounter}>
+              <TouchableOpacity style={s.guestBtn} onPress={() => setGuests(g => Math.max(1, g - 1))}>
+                <Text style={s.guestBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={s.guestCount}>{guests}</Text>
+              <TouchableOpacity style={s.guestBtn} onPress={() => setGuests(g => Math.min(20, g + 1))}>
+                <Text style={s.guestBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Search CTA */}
+          <TouchableOpacity
+            style={s.sheetSearchBtn}
+            onPress={() => { setShowSearchModal(false); handleSearch(); }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="search" size={18} color="#051008" style={{ marginRight: 8 }} />
+            <Text style={s.sheetSearchBtnText}>Search</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       <ScrollView
         style={s.scroll}
         contentContainerStyle={s.scrollContent}
@@ -623,262 +564,181 @@ export default function HomeScreen() {
       >
         {/* ── Header ── */}
         <View style={s.header}>
-          <View>
-            <Text style={s.brand}>KAINOOK</Text>
-            <Text style={s.greeting}>{greeting}, {firstName} 👋</Text>
+          <View style={s.headerLeft}>
+            <View style={s.avatar}>
+              <Text style={s.avatarText}>{firstName.charAt(0).toUpperCase()}</Text>
+            </View>
+            <View>
+              <Text style={s.welcomeLabel}>Welcome Back 🔥</Text>
+              <Text style={s.userName}>{firstName}{lastName ? ` ${lastName}` : ""}</Text>
+            </View>
           </View>
-          <TouchableOpacity style={s.iconBtn}>
-            <Ionicons name="notifications-outline" size={22} color={TEXT} />
+          <TouchableOpacity style={s.notifBtn}>
+            <Ionicons name="notifications" size={20} color={K.colors.textLight} />
           </TouchableOpacity>
         </View>
 
-        {/* ── Category Tabs ── */}
-        <View style={s.tabsRow}>
-          {(["hotels", "apartments", "cars"] as Category[]).map((cat) => (
+        {/* ── Search Bar ── */}
+        <TouchableOpacity style={s.searchBar} onPress={() => setShowSearchModal(true)} activeOpacity={0.85}>
+          <Ionicons name="search" size={18} color={K.colors.textMuted} style={{ marginRight: 10 }} />
+          <Text style={s.searchBarText} numberOfLines={1}>
+            {location.trim() ? location : "Search for places..."}
+          </Text>
+          <TouchableOpacity onPress={detectUserLocation} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="mic" size={18} color={K.colors.textMuted} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+
+        {/* ── Category Pills ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.catScroll}>
+          {CATEGORIES.map((cat) => (
             <TouchableOpacity
-              key={cat}
-              style={[s.tab, category === cat && s.tabActive]}
-              onPress={() => setCategory(cat)}
+              key={cat.key}
+              style={[s.catPill, category === cat.key && s.catPillActive]}
+              onPress={() => setCategory(cat.key)}
+              activeOpacity={0.8}
             >
-              <Text style={[s.tabText, category === cat && s.tabTextActive]}>
-                {cat.charAt(0).toUpperCase() + cat.slice(1)}
+              <Ionicons
+                name={cat.icon}
+                size={16}
+                color={category === cat.key ? "#051008" : K.colors.textMuted}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={[s.catPillText, category === cat.key && s.catPillTextActive]}>
+                {cat.label}
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
 
-        {/* ── Search Card ── */}
-        <View style={s.searchCard}>
-          {/* Location */}
-          <View style={s.searchRow}>
-            <Ionicons name="location-outline" size={18} color={GREEN} style={{ marginRight: 10 }} />
-            <TextInput
-              style={s.locationInput}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="Anywhere (city, country…)"
-              placeholderTextColor={MUTED}
-            />
-            <TouchableOpacity onPress={detectUserLocation} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="navigate" size={18} color={GREEN} />
-            </TouchableOpacity>
+        {/* ── Featured Listing Card ── */}
+        {allLoading ? (
+          <View style={s.featuredSkeleton}>
+            <ActivityIndicator color={K.colors.accent} size="large" />
           </View>
-
-          {/* Dates — Stays vs Cars */}
-          {category !== "cars" ? (
-            <View style={s.datesRow}>
-              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("checkIn")} activeOpacity={0.7}>
-                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
-                <View>
-                  <Text style={s.dateBtnLabel}>Check-in</Text>
-                  <Text style={[s.dateBtnValue, !checkIn && s.dateBtnPlaceholder]}>{fmtDate(checkIn)}</Text>
-                </View>
-              </TouchableOpacity>
-              <View style={s.dateDivider} />
-              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("checkOut")} activeOpacity={0.7}>
-                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
-                <View>
-                  <Text style={s.dateBtnLabel}>Check-out</Text>
-                  <Text style={[s.dateBtnValue, !checkOut && s.dateBtnPlaceholder]}>{fmtDate(checkOut)}</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={s.datesRow}>
-              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("pickup")} activeOpacity={0.7}>
-                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
-                <View>
-                  <Text style={s.dateBtnLabel}>Pickup Date</Text>
-                  <Text style={[s.dateBtnValue, !pickupDate && s.dateBtnPlaceholder]}>{fmtDate(pickupDate)}</Text>
-                </View>
-              </TouchableOpacity>
-              <View style={s.dateDivider} />
-              <TouchableOpacity style={s.dateBtn} onPress={() => setDatePicker("return")} activeOpacity={0.7}>
-                <Ionicons name="calendar-outline" size={15} color={GREEN} style={{ marginRight: 6 }} />
-                <View>
-                  <Text style={s.dateBtnLabel}>Return Date</Text>
-                  <Text style={[s.dateBtnValue, !returnDate && s.dateBtnPlaceholder]}>{fmtDate(returnDate)}</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Guests */}
-          <View style={s.guestsRow}>
-            <Ionicons name="people-outline" size={16} color={MUTED} style={{ marginRight: 8 }} />
-            <Text style={s.guestsLabel}>Guests</Text>
-            <View style={s.guestsCounter}>
+        ) : featuredListing ? (
+          (() => {
+            const isCar = featuredListing.listingType === "car";
+            const rate = isCar ? featuredListing.dailyRate : featuredListing.nightlyRate;
+            const photo = photoMap[featuredListing.id] ?? null;
+            return (
               <TouchableOpacity
-                style={s.guestBtn}
-                onPress={() => setGuests(g => Math.max(1, g - 1))}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={s.featuredCard}
+                onPress={() => navToListing(featuredListing.id, isCar)}
+                activeOpacity={0.88}
               >
-                <Text style={s.guestBtnText}>−</Text>
+                {photo ? (
+                  <ListingImage uri={photo} style={s.featuredImg} />
+                ) : (
+                  <View style={[s.featuredImg, { alignItems: "center", justifyContent: "center", backgroundColor: K.colors.darkGreenMid }]}>
+                    <Text style={{ fontSize: 56 }}>{isCar ? "🚗" : "🏨"}</Text>
+                  </View>
+                )}
+                {/* Heart */}
+                <View style={s.heartBtn}>
+                  <Ionicons name="heart-outline" size={18} color="#fff" />
+                </View>
+                {/* Info overlay */}
+                <View style={s.featuredOverlay}>
+                  <View style={s.featuredOverlayTop}>
+                    <View style={{ flex: 1, marginRight: 12 }}>
+                      <Text style={s.featuredTitle} numberOfLines={1}>{featuredListing.title}</Text>
+                      <Text style={s.featuredLoc} numberOfLines={1}>
+                        {featuredListing.city}{featuredListing.countryCode ? `, ${featuredListing.countryCode}` : ""}
+                      </Text>
+                    </View>
+                    {rate != null && (
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={s.featuredPrice}>
+                          {featuredListing.currency} {rate.toLocaleString()}
+                        </Text>
+                        <Text style={s.featuredPriceUnit}>/{isCar ? "day" : "night"}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={s.featuredBadgesRow}>
+                    <View style={s.featuredBadge}>
+                      <Ionicons name="moon-outline" size={10} color={K.colors.accent} />
+                      <Text style={s.featuredBadgeText}>Night</Text>
+                    </View>
+                    {featuredListing.starRating != null && featuredListing.starRating > 0 && (
+                      <View style={s.featuredBadge}>
+                        <Ionicons name="star" size={10} color={K.colors.warning} />
+                        <Text style={[s.featuredBadgeText, { color: K.colors.textLightMuted }]}>
+                          {featuredListing.starRating}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
               </TouchableOpacity>
-              <Text style={s.guestCount}>{guests}</Text>
-              <TouchableOpacity
-                style={s.guestBtn}
-                onPress={() => setGuests(g => Math.min(20, g + 1))}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Text style={s.guestBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-        <TouchableOpacity style={s.searchBtn} onPress={handleSearch} activeOpacity={0.85}>
-          <Ionicons name="search" size={18} color="#fff" style={{ marginRight: 8 }} />
-          <Text style={s.searchBtnText}>
-            {location.trim()
-              ? `Search ${category === "cars" ? "Cars" : "Stays"} in ${location}`
-              : `Browse All ${category === "cars" ? "Cars" : "Stays"}`}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Date picker modals */}
-        <DatePickerModal
-          visible={datePicker === "checkIn"}
-          title="Select Check-in Date"
-          onSelect={d => { setCheckIn(d); if (checkOut && d >= checkOut) setCheckOut(null); }}
-          onClose={() => setDatePicker(null)}
-        />
-        <DatePickerModal
-          visible={datePicker === "checkOut"}
-          title="Select Check-out Date"
-          minDate={checkIn ?? undefined}
-          onSelect={d => setCheckOut(d)}
-          onClose={() => setDatePicker(null)}
-        />
-        <DatePickerModal
-          visible={datePicker === "pickup"}
-          title="Select Pickup Date"
-          onSelect={d => {
-            const dateWithTime = new Date(d);
-            dateWithTime.setHours(10, 0, 0, 0); // default to 10:00 AM
-            setPickupDate(dateWithTime);
-            if (returnDate && dateWithTime >= returnDate) setReturnDate(null);
-          }}
-          onClose={() => setDatePicker(null)}
-        />
-        <DatePickerModal
-          visible={datePicker === "return"}
-          title="Select Return Date"
-          minDate={pickupDate ?? undefined}
-          onSelect={d => {
-            const dateWithTime = new Date(d);
-            dateWithTime.setHours(10, 0, 0, 0); // default to 10:00 AM
-            setReturnDate(dateWithTime);
-          }}
-          onClose={() => setDatePicker(null)}
-        />
-
-        {/* ── KAI-Points ── */}
-        {user ? (
-          <View style={s.loyaltyCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.loyaltyLabel}>KAI-Points Balance</Text>
-              <Text style={s.loyaltyPoints}>{loyaltyPoints.toLocaleString()} <Text style={s.loyaltyPtSuffix}>KAI-Points</Text></Text>
-              <View style={s.tierRow}>
-                <View style={[s.tierDot, { backgroundColor: tierColor() }]} />
-                <Text style={s.tierLabel}>{currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} Member</Text>
-              </View>
-            </View>
-            <Ionicons name="diamond-outline" size={32} color="rgba(255,255,255,0.25)" />
-          </View>
+            );
+          })()
         ) : null}
 
-        {/* ── Promo Banner ── */}
-        <View style={s.promoBanner}>
-          <View style={s.promoTag}><Text style={s.promoTagText}>Exclusive Reward</Text></View>
-          <Text style={s.promoTitle}>15% Off Your Next Stay</Text>
-          <TouchableOpacity onPress={() => Alert.alert("Voucher Copied!", 'Use code "EXPLORER24" at checkout.')}>
-            <Text style={s.promoCode}>Use Code: EXPLORER24</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Browse by Category ── */}
-        <View style={s.section}>
-          <SectionHeader title="Browse by Category" />
-          <View style={s.catRow}>
-            {[
-              { label: "Hotels", icon: "🏨", route: "/browse/hotels", color: "#EFF6FF", border: "#BFDBFE" },
-              { label: "Apartments", icon: "🏠", route: "/browse/apartments", color: "#F0FDF4", border: "#BBF7D0" },
-              { label: "Cars", icon: "🚗", route: "/browse/cars", color: "#FFF7ED", border: "#FED7AA" },
-            ].map((cat) => (
-              <TouchableOpacity
-                key={cat.label}
-                style={[s.catCard, { backgroundColor: cat.color, borderColor: cat.border }]}
-                onPress={() => router.push(cat.route as any)}
-                activeOpacity={0.8}
-              >
-                <Text style={s.catIcon}>{cat.icon}</Text>
-                <Text style={s.catLabel}>{cat.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
         {/* ── Best Offers ── */}
-        <View style={s.section}>
-          <SectionHeader
-            title="Best Offers & Deals"
-            onMore={() => router.push("/browse/hotels" as any)}
-          />
-          {allLoading ? (
-            <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
-          ) : bestOffers.length > 0 ? (
+        {bestOffers.length > 0 && (
+          <View style={s.section}>
+            <SectionHeader title="Best Offers" onMore={() => router.push("/browse/hotels" as any)} />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
               {bestOffers.map((item, idx) => (
                 <View key={item.id} style={{ marginRight: idx < bestOffers.length - 1 ? 12 : 0 }}>
                   <ListingCard
-                    item={item} width={200}
-                    badgeLabel={item.longStayDiscountEnabled ? "LONG STAY" : "BEST DEAL"}
-                    badgeColor={item.longStayDiscountEnabled ? "#8B5CF6" : "#DC2626"}
+                    item={item}
+                    width={190}
+                    badgeLabel={item.longStayDiscountEnabled ? "LONG STAY" : "DEAL"}
+                    badgeColor={item.longStayDiscountEnabled ? "#8B5CF6" : K.colors.error}
                     photoUrl={photoMap[item.id]}
                     onPress={() => navToListing(item.id, false)}
                   />
                 </View>
               ))}
             </ScrollView>
-          ) : null}
-        </View>
+          </View>
+        )}
 
-        {/* ── Recommended Stays ── */}
-        <View style={s.section}>
-          <SectionHeader
-            title="Recommended Stays"
-            subtitle="Top-rated gems selected just for you"
-            onMore={() => router.push("/browse/hotels" as any)}
-          />
-          {hotelsLoading ? (
-            <ActivityIndicator color={GREEN} style={{ marginLeft: 16 }} />
-          ) : recommended.length > 0 ? (
+        {/* ── Recommended ── */}
+        {recommended.length > 0 && (
+          <View style={s.section}>
+            <SectionHeader title="Recommended Stays" onMore={() => router.push("/browse/hotels" as any)} />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
               {recommended.map((item, idx) => (
                 <View key={item.id} style={{ marginRight: idx < recommended.length - 1 ? 12 : 0 }}>
-                  <ListingCard item={item} width={210} badgeLabel="TOP RATED" badgeColor="#F59E0B"
+                  <ListingCard
+                    item={item}
+                    width={190}
+                    badgeLabel="TOP RATED"
+                    badgeColor={K.colors.warning}
                     photoUrl={photoMap[item.id]}
-                    onPress={() => navToListing(item.id, false)} />
+                    onPress={() => navToListing(item.id, false)}
+                  />
                 </View>
               ))}
             </ScrollView>
-          ) : null}
-        </View>
+          </View>
+        )}
 
+        {/* ── KAI Points ── */}
+        {user && (
+          <View style={s.loyaltyCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.loyaltyLabel}>KAI-Points Balance</Text>
+              <Text style={s.loyaltyPoints}>
+                {loyaltyPoints.toLocaleString()}{" "}
+                <Text style={s.loyaltyPtSuffix}>KAI-Points</Text>
+              </Text>
+              <View style={s.tierRow}>
+                <View style={[s.tierDot, { backgroundColor: getTierColor() }]} />
+                <Text style={s.tierLabel}>
+                  {currentTier.charAt(0).toUpperCase() + currentTier.slice(1)} Member
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="diamond-outline" size={36} color="rgba(255,255,255,0.20)" />
+          </View>
+        )}
 
-
-        {/* ── CTA Banner ── */}
-        <View style={s.ctaBanner}>
-          <Text style={s.ctaTitle}>Unlock the{"\n"}Extraordinary</Text>
-          <Text style={s.ctaSub}>Kainook members enjoy exclusive stay credits and access to over 1,000 properties worldwide.</Text>
-          <TouchableOpacity style={s.ctaBtn}>
-            <Text style={s.ctaBtnText}>Explore Member Perks</Text>
-            <Ionicons name="arrow-forward" size={14} color={GREEN} style={{ marginLeft: 6 }} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ height: 80 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -887,160 +747,168 @@ export default function HomeScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: { flex: 1, backgroundColor: K.colors.bgSubtle },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: 20 },
 
+  // ── Header
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 16, paddingTop: 12, paddingBottom: 14, backgroundColor: "#fff",
+    paddingHorizontal: K.spacing.lg, paddingTop: K.spacing.md, paddingBottom: K.spacing.xl,
   },
-  brand: { fontSize: 22, fontWeight: "900", color: GREEN, letterSpacing: 1 },
-  greeting: { fontSize: 13, color: MUTED, marginTop: 2 },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: "#F9FAFB",
-    alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: BORDER,
-  },
-
-  tabsRow: { flexDirection: "row", paddingHorizontal: 16, paddingBottom: 14, gap: 8 },
-  tab: {
-    paddingHorizontal: 18, paddingVertical: 8, borderRadius: 20,
-    borderWidth: 1.5, borderColor: BORDER, backgroundColor: "#fff",
-  },
-  tabActive: { backgroundColor: GREEN, borderColor: GREEN },
-  tabText: { fontSize: 13, fontWeight: "600", color: MUTED },
-  tabTextActive: { color: "#fff" },
-
-  searchCard: {
-    marginHorizontal: 16, backgroundColor: "#fff", borderRadius: 14,
-    borderWidth: 1.5, borderColor: BORDER,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
-    overflow: "hidden",
-  },
-  searchRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 14, paddingVertical: 13,
-    borderBottomWidth: 1, borderBottomColor: BORDER,
-  },
-  locationInput: { flex: 1, fontSize: 15, color: TEXT, fontWeight: "500" },
-
-  datesRow: {
-    flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER,
-  },
-  dateBtn: {
-    flex: 1, flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 14, paddingVertical: 12,
-  },
-  dateDivider: { width: 1, backgroundColor: BORDER, marginVertical: 8 },
-  dateBtnLabel: { fontSize: 11, color: MUTED, fontWeight: "600", marginBottom: 2 },
-  dateBtnValue: { fontSize: 13, fontWeight: "600", color: TEXT },
-  dateBtnPlaceholder: { color: MUTED, fontWeight: "400" },
-
-  guestsRow: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 14, paddingVertical: 12,
-  },
-  guestsLabel: { flex: 1, fontSize: 14, color: TEXT, fontWeight: "500" },
-  guestsCounter: { flexDirection: "row", alignItems: "center", gap: 16 },
-  guestBtn: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: GREEN,
+  headerLeft: { flexDirection: "row", alignItems: "center", gap: K.spacing.md },
+  avatar: {
+    width: 46, height: 46, borderRadius: 23,
+    backgroundColor: K.colors.darkGreenCard,
+    borderWidth: 2, borderColor: K.colors.accent,
     alignItems: "center", justifyContent: "center",
   },
-  guestBtnText: { fontSize: 20, color: "#fff", fontWeight: "700", lineHeight: 24 },
-  guestCount: { fontSize: 16, fontWeight: "700", color: TEXT, minWidth: 20, textAlign: "center" },
-
-  searchBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    marginHorizontal: 16, marginTop: 10, backgroundColor: GREEN,
-    borderRadius: 14, paddingVertical: 14,
+  avatarText: { fontSize: K.font.xl, fontWeight: "900", color: K.colors.accent },
+  welcomeLabel: { fontSize: K.font.xs, color: K.colors.textMuted, fontWeight: "500", marginBottom: 2 },
+  userName: { fontSize: K.font.base + 1, fontWeight: "800", color: K.colors.textDark },
+  notifBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: K.colors.bgCard,
+    borderWidth: 1, borderColor: K.colors.border,
+    alignItems: "center", justifyContent: "center",
   },
-  searchBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
-  loyaltyCard: {
+  // ── Search bar
+  searchBar: {
     flexDirection: "row", alignItems: "center",
-    marginHorizontal: 16, marginTop: 14,
-    backgroundColor: "#0D3B1E", borderRadius: 18, padding: 18,
+    marginHorizontal: K.spacing.lg, marginBottom: K.spacing.xl,
+    backgroundColor: K.colors.bgCard,
+    borderRadius: K.radius.full,
+    paddingHorizontal: K.spacing.lg, paddingVertical: K.spacing.md + 2,
+    borderWidth: 1, borderColor: K.colors.border,
+    ...K.shadow.sm,
   },
-  loyaltyLabel: { fontSize: 11, color: "rgba(255,255,255,0.6)", fontWeight: "600", marginBottom: 4 },
-  loyaltyPoints: { fontSize: 22, fontWeight: "900", color: "#fff" },
-  loyaltyPtSuffix: { fontSize: 12, fontWeight: "500", color: "rgba(255,255,255,0.7)" },
-  tierRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
-  tierDot: { width: 8, height: 8, borderRadius: 4 },
-  tierLabel: { fontSize: 12, color: "rgba(255,255,255,0.8)", fontWeight: "600" },
+  searchBarText: { flex: 1, fontSize: K.font.sm + 1, color: K.colors.textMuted, fontWeight: "500" },
 
-  promoBanner: {
-    marginHorizontal: 16, marginTop: 12, backgroundColor: GREEN_LIGHT,
-    borderRadius: 14, padding: 16, borderWidth: 1, borderColor: GREEN_BORDER,
+  // ── Category pills
+  catScroll: { paddingHorizontal: K.spacing.lg, paddingBottom: K.spacing.xl, gap: 10 },
+  catPill: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: K.spacing.lg, paddingVertical: K.spacing.sm + 2,
+    borderRadius: K.radius.full,
+    backgroundColor: K.colors.bgCard,
+    borderWidth: 1, borderColor: K.colors.border,
   },
-  promoTag: {
-    backgroundColor: "#D1FAE5", borderRadius: 20, alignSelf: "flex-start",
-    paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8,
-  },
-  promoTagText: { fontSize: 10, fontWeight: "700", color: "#2E7D32" },
-  promoTitle: { fontSize: 20, fontWeight: "800", color: GREEN, marginBottom: 8 },
-  promoCode: {
-    fontSize: 14, fontWeight: "700", color: GREEN, backgroundColor: "#D1FAE5",
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, alignSelf: "flex-start",
-    overflow: "hidden",
-  },
+  catPillActive: { backgroundColor: K.colors.accent, borderColor: K.colors.accent },
+  catPillText: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textMuted },
+  catPillTextActive: { color: "#051008" },
 
-  section: { marginTop: 24 },
-  catRow: { flexDirection: "row", paddingHorizontal: 16, gap: 10 },
-  catCard: {
-    flex: 1, alignItems: "center", justifyContent: "center",
-    borderRadius: 14, borderWidth: 1.5, paddingVertical: 18,
-  },
-  catIcon: { fontSize: 28, marginBottom: 6 },
-  catLabel: { fontSize: 12, fontWeight: "700", color: TEXT },
-  carousel: { paddingHorizontal: 16, paddingBottom: 4 },
-
+  // ── Featured card
   featuredCard: {
-    width: W - 56, borderRadius: 20, overflow: "hidden", marginRight: 12,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10, elevation: 5,
+    marginHorizontal: K.spacing.lg,
+    borderRadius: K.radius.xxl,
+    overflow: "hidden",
+    marginBottom: K.spacing.xxl,
+    ...K.shadow.lg,
   },
-  featuredPhoto: { width: "100%", height: 240 },
+  featuredSkeleton: {
+    marginHorizontal: K.spacing.lg,
+    height: 300, borderRadius: K.radius.xxl,
+    backgroundColor: K.colors.bgCard,
+    alignItems: "center", justifyContent: "center",
+    marginBottom: K.spacing.xxl,
+    borderWidth: 1, borderColor: K.colors.border,
+  },
+  featuredImg: { width: "100%", height: 300 },
+  heartBtn: {
+    position: "absolute", top: K.spacing.md, right: K.spacing.md,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: K.colors.glassBg,
+    borderWidth: 1, borderColor: K.colors.glassBorder,
+    alignItems: "center", justifyContent: "center",
+  },
   featuredOverlay: {
     position: "absolute", bottom: 0, left: 0, right: 0,
-    backgroundColor: "rgba(0,0,0,0.55)", padding: 16,
+    backgroundColor: K.colors.glassBgStrong,
+    padding: K.spacing.lg,
+    borderTopWidth: 1, borderTopColor: K.colors.glassBorder,
   },
-  featuredBadgeWrap: {
-    backgroundColor: "rgba(255,255,255,0.2)", alignSelf: "flex-start",
-    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 8,
-    borderWidth: 1, borderColor: "rgba(255,255,255,0.4)",
+  featuredOverlayTop: { flexDirection: "row", alignItems: "flex-start", marginBottom: K.spacing.sm },
+  featuredTitle: { fontSize: K.font.lg, fontWeight: "800", color: K.colors.textLight, marginBottom: 2 },
+  featuredLoc: { fontSize: K.font.xs, color: K.colors.textLightMuted },
+  featuredPrice: { fontSize: K.font.base + 1, fontWeight: "800", color: K.colors.textLight },
+  featuredPriceUnit: { fontSize: K.font.xs, color: K.colors.textLightDim },
+  featuredBadgesRow: { flexDirection: "row", gap: K.spacing.sm },
+  featuredBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: K.colors.glassBg,
+    borderRadius: K.radius.full,
+    paddingHorizontal: K.spacing.sm + 2, paddingVertical: 3,
+    borderWidth: 1, borderColor: K.colors.glassBorder,
   },
-  featuredBadgeText: { fontSize: 10, fontWeight: "700", color: "#fff", letterSpacing: 1 },
-  featuredTitle: { fontSize: 18, fontWeight: "800", color: "#fff", marginBottom: 4 },
-  featuredLoc: { fontSize: 12, color: "rgba(255,255,255,0.8)", marginBottom: 10 },
-  featuredPrice: { fontSize: 18, fontWeight: "800", color: "#fff" },
-  featuredBtn: { backgroundColor: "#fff", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  featuredBtnText: { fontSize: 12, fontWeight: "700", color: GREEN },
+  featuredBadgeText: { fontSize: K.font.xs, color: K.colors.accent, fontWeight: "700" },
 
-  trendGrid: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 16, gap: 10 },
-  trendCard: { width: (W - 48) / 2, borderRadius: 14, overflow: "hidden" },
-  trendPhoto: { width: "100%", height: 140 },
-  trendOverlay: {
-    position: "absolute", bottom: 0, left: 0, right: 0,
-    backgroundColor: "rgba(0,0,0,0.45)", padding: 10,
-  },
-  trendTitle: { color: "#fff", fontWeight: "700", fontSize: 12 },
-  trendPrice: { color: "#BBF7D0", fontWeight: "700", fontSize: 12, marginTop: 2 },
+  // ── Sections
+  section: { marginBottom: K.spacing.xxl },
+  carousel: { paddingHorizontal: K.spacing.lg, paddingBottom: 4 },
 
-  carBadge: {
-    backgroundColor: GREEN_LIGHT, borderRadius: 6, alignSelf: "flex-start",
-    paddingHorizontal: 7, paddingVertical: 3, marginBottom: 6,
-    borderWidth: 1, borderColor: GREEN_BORDER,
+  // ── Loyalty card
+  loyaltyCard: {
+    flexDirection: "row", alignItems: "center",
+    marginHorizontal: K.spacing.lg, marginBottom: K.spacing.lg,
+    backgroundColor: K.colors.darkGreen,
+    borderRadius: K.radius.xl, padding: K.spacing.xl,
+    borderWidth: 1, borderColor: K.colors.border,
   },
-  carBadgeText: { fontSize: 9, fontWeight: "800", color: "#2E7D32", letterSpacing: 0.8 },
+  loyaltyLabel: { fontSize: K.font.xs, color: K.colors.textLightDim, fontWeight: "600", marginBottom: 4 },
+  loyaltyPoints: { fontSize: K.font.xl + 2, fontWeight: "900", color: K.colors.textLight },
+  loyaltyPtSuffix: { fontSize: K.font.xs, fontWeight: "500", color: K.colors.textLightMuted },
+  tierRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6 },
+  tierDot: { width: 8, height: 8, borderRadius: K.radius.full },
+  tierLabel: { fontSize: K.font.xs, color: K.colors.textLightMuted, fontWeight: "600" },
 
-  ctaBanner: {
-    marginHorizontal: 16, marginTop: 24, backgroundColor: "#0D3B1E",
-    borderRadius: 20, padding: 24,
+  // ── Search bottom sheet
+  sheet: {
+    backgroundColor: K.colors.bgCard,
+    borderTopLeftRadius: K.radius.xxl, borderTopRightRadius: K.radius.xxl,
+    padding: K.spacing.xxl, paddingBottom: 44,
+    borderWidth: 1, borderColor: K.colors.border,
   },
-  ctaTitle: { fontSize: 24, fontWeight: "900", color: "#fff", lineHeight: 30, marginBottom: 10 },
-  ctaSub: { fontSize: 13, color: "rgba(255,255,255,0.75)", lineHeight: 19, marginBottom: 20 },
-  ctaBtn: {
-    flexDirection: "row", alignItems: "center", backgroundColor: "#fff",
-    alignSelf: "flex-start", borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10,
+  sheetHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: K.colors.border,
+    alignSelf: "center", marginBottom: K.spacing.xl,
   },
-  ctaBtnText: { fontSize: 13, fontWeight: "700", color: GREEN },
+  sheetTitle: { fontSize: K.font.xl, fontWeight: "800", color: K.colors.textDark, marginBottom: K.spacing.lg },
+  sheetRow: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: K.colors.bgSection,
+    borderRadius: K.radius.lg,
+    paddingHorizontal: K.spacing.lg, paddingVertical: K.spacing.md + 2,
+    marginBottom: K.spacing.md,
+    borderWidth: 1, borderColor: K.colors.border,
+  },
+  sheetInput: { flex: 1, fontSize: K.font.base, color: K.colors.textDark, fontWeight: "500" },
+  sheetDatesRow: { flexDirection: "row", marginBottom: K.spacing.md },
+  sheetDateBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center",
+    backgroundColor: K.colors.bgSection,
+    borderRadius: K.radius.lg,
+    paddingHorizontal: K.spacing.md, paddingVertical: K.spacing.md,
+    borderWidth: 1, borderColor: K.colors.border,
+  },
+  sheetDateGap: { width: K.spacing.sm },
+  sheetDateLabel: { fontSize: K.font.xs, color: K.colors.textMuted, fontWeight: "600", marginBottom: 2 },
+  sheetDateValue: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textDark },
+  sheetGuestLabel: { flex: 1, fontSize: K.font.sm + 1, color: K.colors.textDark, fontWeight: "500" },
+  guestsCounter: { flexDirection: "row", alignItems: "center", gap: K.spacing.lg },
+  guestBtn: {
+    width: 32, height: 32, borderRadius: K.radius.full,
+    backgroundColor: K.colors.accent,
+    alignItems: "center", justifyContent: "center",
+  },
+  guestBtnText: { fontSize: K.font.xl, color: "#051008", fontWeight: "700", lineHeight: 24 },
+  guestCount: { fontSize: K.font.lg, fontWeight: "700", color: K.colors.textDark, minWidth: 20, textAlign: "center" },
+  sheetSearchBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    marginTop: K.spacing.sm,
+    backgroundColor: K.colors.accent,
+    borderRadius: K.radius.lg,
+    paddingVertical: K.spacing.lg,
+  },
+  sheetSearchBtnText: { color: "#051008", fontSize: K.font.lg, fontWeight: "800" },
 });
