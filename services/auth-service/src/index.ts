@@ -106,6 +106,7 @@ async function build() {
       : [
           process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
           process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+          "https://kainook.com"
         ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
