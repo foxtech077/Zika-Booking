@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { ZodError } from "zod";
 import {
   registerSchema,
@@ -836,19 +836,24 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 401, "OAUTH_FAILED", "Sign in with Google failed. Please try again.");
     }
 
-    const { email, given_name: firstName, family_name: lastName, sub: googleSub } = googlePayload;
+        const { email, given_name: firstName, family_name: lastName, sub: googleSub } = googlePayload;
 
-    // Check if account exists with a different auth method
+    // Check if account exists
     const existingByEmail = await prisma.user.findUnique({ where: { email } });
-    if (existingByEmail && !existingByEmail.oauthProvider) {
-      return sendError(reply, 409, "ACCOUNT_EXISTS", "An account with this email already exists. Please sign in with your password.");
-    }
 
-    let user = existingByEmail;
+    if (!existingByEmail) {
+      // Prevent Providers from creating new accounts through Google OAuth.
+      if (userType === "provider") {
+        return sendError(
+          reply,
+          400,
+          "REGISTRATION_DENIED",
+          "Providers are not allowed to use Google OAuth for initial registration."
+        );
+      }
 
-    if (!user) {
-      // New user
-      user = await prisma.user.create({
+      // Guest is allowed to register
+      const user = await prisma.user.create({
         data: {
           firstName: firstName ?? "User",
           lastName: lastName ?? "",
@@ -858,23 +863,59 @@ export async function authRoutes(app: FastifyInstance) {
           emailVerifiedAt: new Date(),
           oauthProvider: "google",
           oauthSub: googleSub,
-          userType: (userType ?? "guest") as "guest" | "provider",
+          userType: "guest",
           businessName: businessName ?? null,
           country: country ?? null,
         },
       });
       await sendWelcomeEmail(email, user.firstName).catch(() => null);
       const tokens = await issueTokens(reply, user.id, user.userType, user.status);
-      const needsAccountType = !userType;
-      return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType });
+      return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: false });
+    }
+
+    let user = existingByEmail;
+
+    if (user.userType === "provider") {
+      // After a Provider account has been created and verified, the Provider may use "Continue with Google" to sign in
+      if (!user.emailVerified || user.status !== "active") {
+        return sendError(
+          reply,
+          403,
+          "EMAIL_NOT_VERIFIED",
+          "Please verify your email address to sign in."
+        );
+      }
+
+      // Google email exactly matches the Provider's registered email (since we did a findUnique by email).
+      // Link the oauth provider details if they are not already set.
+      if (!user.oauthProvider || user.oauthProvider !== "google") {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            oauthProvider: "google",
+            oauthSub: googleSub,
+          },
+        });
+      }
+    } else {
+      // Existing Guest user
+      if (!user.oauthProvider) {
+        return sendError(
+          reply,
+          409,
+          "ACCOUNT_EXISTS",
+          "An account with this email already exists. Please sign in with your password."
+        );
+      }
     }
 
     // Returning user
-    if (user.status === "pending_verification") {
-      return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
+    if (user.status === "suspended") {
+      return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
     }
-    if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
-    if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
+    if (user.status === "banned") {
+      return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
+    }
 
     const tokens = await issueTokens(reply, user.id, user.userType, user.status);
     return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });

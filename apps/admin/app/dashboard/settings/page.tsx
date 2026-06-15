@@ -165,54 +165,25 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* Platform features — super_admin only */}
-      {isGlobalAdmin && (
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Platform Features" description="Core features and their current status" />
-          </div>
-          <div className="divide-y divide-border">
-            {PLATFORM_FEATURES.map(({ feature, description, status }) => (
-              <div key={feature} className="flex items-start justify-between gap-4 px-5 py-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{feature}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{description}</p>
-                </div>
-                <div className="flex-shrink-0">
-                  <Badge label="Enabled" status="active" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Environment info — super_admin only */}
-      {isGlobalAdmin && (
-        <Card>
-          <CardHeader title="Environment" description="Runtime configuration" />
-          <div className="mt-4 space-y-2 text-sm">
-            {[
-              ["Node Environment", "development"],
-              ["Admin Port", "3002"],
-              ["Main Website", "https://kainook.com"],
-              ["Admin Portal", "https://admin.kainook.com"],
-              ["Provider Portal", "https://provider.kainook.com"],
-              ["API Gateway", "https://api.kainook.com"],
-              ["Auth Service", "https://api.kainook.com/auth"],
-              ["Listing Service", "https://api.kainook.com/listings"],
-              ["Payment Service", "https://api.kainook.com/payments"],
-              ["Next.js Version", "14.2.21"],
-              ["React Version", "18.3.1"],
-            ].map(([k, v]) => (
-              <div key={String(k)} className="flex justify-between py-1.5 border-b border-border last:border-0">
-                <span className="text-slate-500">{k}</span>
-                <span className="font-mono text-slate-800 text-xs bg-slate-100 px-2 py-0.5 rounded">{v}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      {/* Environment info */}
+      <Card>
+        <CardHeader title="Environment" description="Runtime configuration" />
+        <div className="mt-4 space-y-2 text-sm">
+          {[
+            ["Node Environment", "development"],
+            ["Admin Port", "3002"],
+            ["Auth Service", "api.kainook.com/auth"],
+            ["Listing Service", "api.kainook.com/listings"],
+            ["Next.js Version", "14.2.21"],
+            ["React Version", "18.3.1"],
+          ].map(([k, v]) => (
+            <div key={String(k)} className="flex justify-between py-1.5 border-b border-border last:border-0">
+              <span className="text-slate-500">{k}</span>
+              <span className="font-mono text-slate-800 text-xs bg-slate-100 px-2 py-0.5 rounded">{v}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

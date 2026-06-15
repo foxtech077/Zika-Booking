@@ -14,6 +14,7 @@ const nextConfig = {
 			},
 		];
 	},
+<<<<<<< HEAD
 	async rewrites() {
 		return [
 			{
@@ -33,6 +34,20 @@ const nextConfig = {
 			},
 		];
 	},
+=======
+	// async rewrites() {
+	// 	return [
+	// 		{
+	// 			source: "/api/:path*",
+	// 			destination: `${process.env.ADMIN_API_URL ?? "https://api.kainook.com/auth"}/:path*`,
+	// 		},
+	// 		{
+	// 			source: "/listing-api/:path*",
+	// 			destination: `${process.env.ADMIN_LISTING_API_URL ?? "https://api.kainook.com/listings"}/:path*`,
+	// 		},
+	// 	];
+	// },
+>>>>>>> 25f4b9c698d379b7b945cf1379909920033c67b3
 };
 
 export default nextConfig;
