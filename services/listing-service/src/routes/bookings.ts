@@ -1473,5 +1473,69 @@ const promotionDiscount = baseAmount * promotionRate;
     },
   );
 
+  // ── GET /bookings/:id — INTERNAL endpoint for payment service ────────────
+  app.get(
+    "/bookings/:id",
+    {
+      schema: {
+        tags: ["Internal"],
+        summary: "Internal endpoint to get booking by ID",
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+      },
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const { id } = req.params as { id: string };
+
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: {
+          listing: true,
+        },
+      });
+
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+
+      let hostEmail = "host@example.com";
+      try {
+        const userResult = await prisma.$queryRawUnsafe<{ email: string }[]>(
+          `SELECT email FROM auth."User" WHERE id = $1`,
+          booking.listing.providerId
+        );
+        if (userResult && userResult.length > 0 && userResult[0]) {
+          hostEmail = userResult[0].email;
+        }
+      } catch (err) {
+        // Fallback if cross-schema query fails
+      }
+
+      return sendSuccess(reply, 200, {
+        id: booking.id,
+        code: booking.reference,
+        status: booking.status,
+        amount: Number(booking.subtotal || 0),
+        discount: Number(booking.discountAmount || 0) + Number(booking.voucherDiscount || 0),
+        serviceFee: 0,
+        tax: 0,
+        transactionId: booking.paymentId,
+        paymentMethod: "stripe",
+        payoutAmount: Number(booking.providerPayout || 0),
+        checkIn: booking.checkIn?.toISOString().slice(0, 10),
+        checkOut: booking.checkOut?.toISOString().slice(0, 10),
+        user: {
+          name: `${booking.guestFirstName} ${booking.guestLastName}`,
+          email: booking.guestEmail,
+        },
+        listing: {
+          title: booking.listing.name,
+          hostEmail: hostEmail,
+        },
+      });
+    }
+  );
+
   // Note: GET /provider/bookings is in provider.ts (full pagination + status filter)
 }
