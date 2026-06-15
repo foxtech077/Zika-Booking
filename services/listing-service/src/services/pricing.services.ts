@@ -1,5 +1,5 @@
 // services/pricing.service.ts
-import { convertCurrency } from "./ fx.services";
+import { convertCurrency } from "./fx.services";
 
 export async function getPricing(req: any, basePriceUSD: number) {
   const country = req.location?.country || "IN";

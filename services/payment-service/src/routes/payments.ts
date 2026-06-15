@@ -280,7 +280,7 @@ export async function paymentRoutes(app: FastifyInstance) {
             },
             statement_descriptor_suffix: "ZIKA",
           },
-          { idempotencyKey: `pi-${bookingId}-${attemptNumber}` }, // ✅ attempt-aware
+          { idempotencyKey: `pi-${bookingId}-${attemptNumber}` }, //  attempt-aware
         );
       } catch (err: any) {
         if (err.code === "authentication_required") {

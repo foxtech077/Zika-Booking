@@ -12,7 +12,7 @@ export type BillingInput = {
   rate: number;
   deliveryFee?: number;
 
-  promotionRate?: number; 
+  promotionDiscount?: number; 
   voucherAmount?: number;
 
   taxRate?: number;
@@ -26,10 +26,10 @@ export function calculateBilling(input: {
   pickupDatetime?: string;
   returnDatetime?: string;
   rate: number;
-  deliveryFee: number;
-  promotionDiscount: number; 
-  voucherAmount: number;
-  taxRate: number;
+  deliveryFee?: number;
+  promotionDiscount?: number; 
+  voucherAmount?: number;
+  taxRate?: number;
   commissionRate: number;
 }) {
   function calculateDays(pickup?: string, drop?: string): number {
@@ -51,14 +51,17 @@ export function calculateBilling(input: {
 
   const baseAmount = Number((units * input.rate).toFixed(2));
 
+  const promo = input.promotionDiscount ?? 0;
+  const voucher = input.voucherAmount ?? 0;
+
   //  Best of promotion vs voucher — NO stacking
-  const discount = Math.max(input.promotionDiscount, input.voucherAmount);
+  const discount = Math.max(promo, voucher);
 
   const subtotal = Number(Math.max(0, baseAmount - discount).toFixed(2));
 
   const serviceFee = Math.ceil(subtotal * 0.05 * 100) / 100;
 
-  const taxAmount = Number((subtotal * input.taxRate).toFixed(2));
+  const taxAmount = Number((subtotal * (input.taxRate ?? 0)).toFixed(2));
 
   const deliveryFee = Math.max(0, input.deliveryFee ?? 0);
 
@@ -75,10 +78,10 @@ export function calculateBilling(input: {
     baseAmount,
     subtotal,
     discount,
-    promotionDiscount: input.promotionDiscount,
-    voucherDiscount: input.voucherAmount,
+    promotionDiscount: promo,
+    voucherDiscount: voucher,
     appliedDiscountType:
-      input.promotionDiscount >= input.voucherAmount ? "promotion" : "voucher",
+      promo >= voucher ? "promotion" : "voucher",
     serviceFee,
     taxAmount,
     deliveryFee,
