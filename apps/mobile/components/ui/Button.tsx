@@ -1,110 +1,32 @@
-import {
-  TouchableOpacity,
-  Text,
-  ActivityIndicator,
-  StyleSheet,
-  type TouchableOpacityProps,
-  type StyleProp,
-  type ViewStyle,
-  type TextStyle,
-} from "react-native";
-import { K } from "../../constants/theme";
+import { TouchableOpacity, Text, ActivityIndicator, type TouchableOpacityProps } from "react-native";
 
 interface ButtonProps extends TouchableOpacityProps {
   title: string;
   loading?: boolean;
-  variant?: "primary" | "secondary" | "ghost" | "danger";
-  size?: "sm" | "md" | "lg";
-  textStyle?: StyleProp<TextStyle>;
-  containerStyle?: StyleProp<ViewStyle>;
+  variant?: "primary" | "secondary" | "ghost";
 }
 
-export function Button({
-  title,
-  loading,
-  variant = "primary",
-  size = "md",
-  disabled,
-  style,
-  textStyle,
-  containerStyle,
-  ...props
-}: ButtonProps) {
-  const isDisabled = disabled || loading;
+export function Button({ title, loading, variant = "primary", disabled, ...props }: ButtonProps) {
+  const base = "rounded-lg px-6 py-4 items-center flex-row justify-center";
+  const variants = {
+    primary: "bg-primary",
+    secondary: "bg-white border border-primary",
+    ghost: "bg-transparent",
+  };
+  const textVariants = {
+    primary: "text-white font-semibold text-base",
+    secondary: "text-primary font-semibold text-base",
+    ghost: "text-primary font-semibold text-base",
+  };
 
   return (
     <TouchableOpacity
-      style={[
-        styles.base,
-        styles[variant],
-        size === "sm" ? styles.sizeSm : size === "lg" ? styles.sizeLg : styles.sizeMd,
-        isDisabled && styles.disabled,
-        containerStyle,
-        style,
-      ]}
-      disabled={isDisabled}
-      activeOpacity={0.82}
+      className={`${base} ${variants[variant]} ${disabled || loading ? "opacity-60" : ""}`}
+      disabled={disabled || loading}
       {...props}
     >
-      {loading && (
-        <ActivityIndicator
-          size="small"
-          color={variant === "primary" || variant === "danger" ? "#FFFFFF" : K.colors.accent}
-          style={styles.spinner}
-        />
-      )}
-      <Text
-        style={[
-          styles.text,
-          variant === "secondary" ? styles.textSecondary
-            : variant === "ghost" ? styles.textGhost
-            : variant === "danger" ? styles.textDanger
-            : styles.textPrimary,
-          size === "sm" ? styles.textSm : size === "lg" ? styles.textLg : styles.textMd,
-          textStyle,
-        ]}
-      >
-        {title}
-      </Text>
+      {loading && <ActivityIndicator size="small" color={variant === "primary" ? "#fff" : "#1a73e8"} className="mr-2" />}
+      <Text className={textVariants[variant]}>{title}</Text>
     </TouchableOpacity>
   );
 }
-
-const styles = StyleSheet.create({
-  base: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: K.radius.md,
-  },
-
-  // Variants
-  primary: { backgroundColor: K.colors.accent },
-  secondary: {
-    backgroundColor: "transparent",
-    borderWidth: 1.5,
-    borderColor: K.colors.accent,
-  },
-  ghost: { backgroundColor: "transparent" },
-  danger: { backgroundColor: K.colors.error },
-
-  // Sizes
-  sizeSm: { paddingHorizontal: K.spacing.lg, paddingVertical: K.spacing.sm, minHeight: 40 },
-  sizeMd: { paddingHorizontal: K.spacing.xxl, paddingVertical: K.spacing.md + 2, minHeight: 52 },
-  sizeLg: { paddingHorizontal: K.spacing.xxxl, paddingVertical: K.spacing.lg, minHeight: 58 },
-
-  // Text base
-  text: { fontWeight: "700", letterSpacing: 0.2 },
-  textPrimary: { color: "#FFFFFF" },
-  textSecondary: { color: K.colors.accent },
-  textGhost: { color: K.colors.accent },
-  textDanger: { color: "#FFFFFF" },
-
-  // Text sizes
-  textSm: { fontSize: K.font.sm },
-  textMd: { fontSize: K.font.base },
-  textLg: { fontSize: K.font.lg },
-
-  disabled: { opacity: 0.55 },
-  spinner: { marginRight: K.spacing.sm },
-});

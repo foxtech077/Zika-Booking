@@ -20,7 +20,6 @@ import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { paymentApi } from "../../lib/payment-api";
 import { initializeStripe, resolveStripePublishableKey } from "../../lib/stripe-config";
-import { K } from "../../constants/theme";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -713,7 +712,7 @@ export default function PaymentScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={K.colors.accent} />
+          <ActivityIndicator size="large" color="#1a73e8" />
           <Text style={styles.loadingText}>Loading booking details...</Text>
         </View>
       </SafeAreaView>
@@ -742,7 +741,7 @@ export default function PaymentScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={K.colors.accent} />
+          <ActivityIndicator size="large" color="#1a73e8" />
           <Text style={styles.pollingTitle}>Card payment is being processed...</Text>
           <Text style={styles.pollingSubtitle}>Awaiting payment confirmation...</Text>
           <Text style={styles.pollingHint}>Please do not close this screen.</Text>
@@ -758,7 +757,7 @@ export default function PaymentScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <Ionicons name="phone-portrait" size={64} color={K.colors.accent} />
+          <Ionicons name="phone-portrait" size={64} color="#1a73e8" />
           <Text style={styles.pollingTitle}>
             Payment request sent to {maskedNumber}
           </Text>
@@ -769,7 +768,7 @@ export default function PaymentScreen() {
             <Text style={styles.countdownLabel}>Time remaining</Text>
             <Text style={styles.countdownValue}>{msToCountdown(taraCountdownMs)}</Text>
           </View>
-          <ActivityIndicator size="small" color={K.colors.accent} style={{ marginTop: 8 }} />
+          <ActivityIndicator size="small" color="#1a73e8" style={{ marginTop: 8 }} />
           <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
@@ -899,7 +898,7 @@ export default function PaymentScreen() {
             <Ionicons
               name="card-outline"
               size={28}
-              color={provider === "stripe" ? K.colors.accent : "#6b7280"}
+              color={provider === "stripe" ? "#1a73e8" : "#6b7280"}
             />
             <Text style={[styles.methodTileTitle, provider === "stripe" && styles.methodTileTitleSelected]}>
               Pay by Card
@@ -919,7 +918,7 @@ export default function PaymentScreen() {
             <Ionicons
               name="phone-portrait-outline"
               size={28}
-              color={provider === "tara" ? K.colors.accent : "#6b7280"}
+              color={provider === "tara" ? "#1a73e8" : "#6b7280"}
             />
             <Text style={[styles.methodTileTitle, provider === "tara" && styles.methodTileTitleSelected]}>
               Mobile Money
@@ -956,7 +955,7 @@ export default function PaymentScreen() {
                     <Ionicons
                       name={method.provider === "stripe" ? "card-outline" : "phone-portrait-outline"}
                       size={16}
-                      color={selectedSavedMethodId === method.id ? K.colors.accent : "#6b7280"}
+                      color={selectedSavedMethodId === method.id ? "#1a73e8" : "#6b7280"}
                     />
                     <Text
                       style={[
@@ -1148,7 +1147,7 @@ const styles = StyleSheet.create({
   summaryReference: { fontSize: 13, fontWeight: "600", color: "#374151", letterSpacing: 0.5 },
   summaryDivider: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 12 },
   summaryTotalLabel: { fontSize: 16, fontWeight: "600", color: "#111827" },
-  summaryTotalAmount: { fontSize: 22, fontWeight: "800", color: K.colors.accent },
+  summaryTotalAmount: { fontSize: 22, fontWeight: "800", color: "#1a73e8" },
 
   // Section label
   sectionLabel: {
@@ -1172,9 +1171,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  methodTileSelected: { borderColor: K.colors.accent, backgroundColor: "#eff6ff" },
+  methodTileSelected: { borderColor: "#1a73e8", backgroundColor: "#eff6ff" },
   methodTileTitle: { fontSize: 14, fontWeight: "700", color: "#374151", textAlign: "center" },
-  methodTileTitleSelected: { color: K.colors.accent },
+  methodTileTitleSelected: { color: "#1a73e8" },
   methodTileSubtitle: { fontSize: 11, color: "#6b7280", textAlign: "center" },
 
   // Saved methods
@@ -1191,9 +1190,9 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
     backgroundColor: "#fff",
   },
-  savedMethodChipSelected: { borderColor: K.colors.accent, backgroundColor: "#eff6ff" },
+  savedMethodChipSelected: { borderColor: "#1a73e8", backgroundColor: "#eff6ff" },
   savedMethodChipText: { fontSize: 13, fontWeight: "500", color: "#374151" },
-  savedMethodChipTextSelected: { color: K.colors.accent },
+  savedMethodChipTextSelected: { color: "#1a73e8" },
 
   // Input section
   inputSection: { marginBottom: 20 },
@@ -1277,7 +1276,7 @@ const styles = StyleSheet.create({
   },
   prefixDropdownItemSelected: { backgroundColor: "#eff6ff" },
   prefixDropdownText: { fontSize: 14, color: "#374151" },
-  prefixDropdownTextSelected: { color: K.colors.accent, fontWeight: "600" },
+  prefixDropdownTextSelected: { color: "#1a73e8", fontWeight: "600" },
 
   // Tara note
   taraNote: {
@@ -1308,12 +1307,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  checkboxChecked: { backgroundColor: K.colors.accent, borderColor: K.colors.accent },
+  checkboxChecked: { backgroundColor: "#1a73e8", borderColor: "#1a73e8" },
   checkboxLabel: { fontSize: 13, color: "#374151", flex: 1 },
 
   // Buttons
   primaryBtn: {
-    backgroundColor: K.colors.accent,
+    backgroundColor: "#1a73e8",
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
@@ -1406,7 +1405,7 @@ const styles = StyleSheet.create({
     borderColor: "#bfdbfe",
   },
   countdownLabel: { fontSize: 12, color: "#6b7280", marginBottom: 4 },
-  countdownValue: { fontSize: 36, fontWeight: "800", color: K.colors.accent, letterSpacing: 2 },
+  countdownValue: { fontSize: 36, fontWeight: "800", color: "#1a73e8", letterSpacing: 2 },
 
   // Failure view
   failureContainer: { alignItems: "center", paddingTop: 24, paddingBottom: 16 },

@@ -1,37 +1,8 @@
 import { Tabs, Redirect } from "expo-router";
-import { View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
-import { K } from "../../constants/theme";
 
-type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
-
-function TabIcon({
-  name,
-  focused,
-}: {
-  name: IoniconName;
-  focused: boolean;
-}) {
-  return (
-    <View
-      style={{
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: focused ? K.colors.tabActive : "transparent",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <Ionicons
-        name={name}
-        size={22}
-        color={focused ? "#051008" : K.colors.tabInactive}
-      />
-    </View>
-  );
-}
+const GREEN = "#1B5E20";
 
 export default function TabLayout() {
   const user = useAuthStore((s) => s.user);
@@ -43,29 +14,48 @@ export default function TabLayout() {
     return <Redirect href="/(provider)" />;
   }
 
+  const isProvider = false;
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarShowLabel: false,
+        tabBarActiveTintColor: GREEN,
+        tabBarInactiveTintColor: "#9CA3AF",
         tabBarStyle: {
           position: "absolute",
           bottom: 16,
           left: 20,
           right: 20,
           height: 68,
-          borderRadius: K.radius.xxxl,
-          backgroundColor: K.colors.tabBarBg,
+          borderRadius: 34,
+          backgroundColor: "#fff",
           borderTopWidth: 0,
-          ...K.shadow.xl,
+          elevation: 14,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.15,
+          shadowRadius: 20,
+          paddingBottom: 8,
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: "700",
+          marginTop: 2,
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? "home" : "home-outline"} focused={focused} />
+          title: "Home",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "home" : "home-outline"}
+              size={26}
+              color={color}
+            />
           ),
         }}
       />
@@ -73,8 +63,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="saved"
         options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? "heart" : "heart-outline"} focused={focused} />
+          title: "Saved",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "bookmark" : "bookmark-outline"}
+              size={26}
+              color={color}
+            />
           ),
         }}
       />
@@ -82,8 +77,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="bookings"
         options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? "calendar" : "calendar-outline"} focused={focused} />
+          title: "Bookings",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "calendar" : "calendar-outline"}
+              size={26}
+              color={color}
+            />
           ),
         }}
       />
@@ -91,8 +91,13 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? "person" : "person-outline"} focused={focused} />
+          title: "Profile",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "person" : "person-outline"}
+              size={26}
+              color={color}
+            />
           ),
         }}
       />
@@ -100,9 +105,14 @@ export default function TabLayout() {
       <Tabs.Screen
         name="dashboard"
         options={{
-          href: null,
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? "grid" : "grid-outline"} focused={focused} />
+          href: isProvider ? undefined : null,
+          title: "Dashboard",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? "grid" : "grid-outline"}
+              size={26}
+              color={color}
+            />
           ),
         }}
       />

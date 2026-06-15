@@ -15,7 +15,6 @@ import { useQuery } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
-import { K } from "../../constants/theme";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -81,23 +80,23 @@ function formatDateRange(booking: BookingSummary): string {
 function statusInfo(status: BookingStatus): { label: string; bg: string; textColor: string } {
   switch (status) {
     case "pending":
-      return { label: "Pending", bg: K.colors.pending.bg, textColor: K.colors.pending.text };
+      return { label: "Pending", bg: "#fef3c7", textColor: "#92400e" };
     case "confirmed":
-      return { label: "Confirmed", bg: K.colors.confirmed.bg, textColor: K.colors.confirmed.text };
+      return { label: "Confirmed", bg: "#dcfce7", textColor: "#16a34a" };
     case "pending_payment":
-      return { label: "Pending Payment", bg: K.colors.pending.bg, textColor: K.colors.pending.text };
+      return { label: "Pending Payment", bg: "#fef3c7", textColor: "#92400e" };
     case "active":
-      return { label: "Active", bg: K.colors.active.bg, textColor: K.colors.active.text };
+      return { label: "Active", bg: "#dbeafe", textColor: "#1d4ed8" };
     case "completed":
-      return { label: "Completed", bg: K.colors.completed.bg, textColor: K.colors.completed.text };
+      return { label: "Completed", bg: "#f3f4f6", textColor: "#6b7280" };
     case "refunded":
-      return { label: "Refunded", bg: K.colors.refunded.bg, textColor: K.colors.refunded.text };
+      return { label: "Refunded", bg: "#f0fdf4", textColor: "#15803d" };
     case "cancelled_by_guest":
     case "cancelled_by_provider":
     case "cancelled_by_system":
-      return { label: "Cancelled", bg: K.colors.cancelled.bg, textColor: K.colors.cancelled.text };
+      return { label: "Cancelled", bg: "#fee2e2", textColor: "#dc2626" };
     default:
-      return { label: status, bg: K.colors.completed.bg, textColor: K.colors.completed.text };
+      return { label: status, bg: "#f3f4f6", textColor: "#6b7280" };
   }
 }
 
@@ -251,7 +250,7 @@ export default function BookingsScreen() {
             <RefreshControl
               refreshing={isRefetching}
               onRefresh={refetch}
-              tintColor={K.colors.accent}
+              tintColor="#1a73e8"
             />
           }
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -264,81 +263,80 @@ export default function BookingsScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.colors.bgSubtle },
+  container: { flex: 1, backgroundColor: "#f9fafb" },
 
   header: {
-    paddingHorizontal: K.spacing.lg,
-    paddingTop: K.spacing.sm,
-    paddingBottom: K.spacing.md,
-    backgroundColor: K.colors.bgCard,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+    backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: K.colors.border,
+    borderBottomColor: "#e5e7eb",
   },
-  headerTitle: { fontSize: K.font.xxl, fontWeight: "800", color: K.colors.textDark },
+  headerTitle: { fontSize: 24, fontWeight: "800", color: "#111827" },
 
   // Tabs
   tabRow: {
     flexDirection: "row",
-    backgroundColor: K.colors.bgCard,
+    backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: K.colors.border,
+    borderBottomColor: "#e5e7eb",
   },
   tabItem: {
     flex: 1,
-    paddingVertical: K.spacing.md,
+    paddingVertical: 12,
     alignItems: "center",
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
   },
-  tabItemActive: { borderBottomColor: K.colors.accent },
-  tabLabel: { fontSize: K.font.sm, fontWeight: "500", color: K.colors.textMuted },
-  tabLabelActive: { color: K.colors.accent, fontWeight: "700" },
+  tabItemActive: { borderBottomColor: "#1a73e8" },
+  tabLabel: { fontSize: 14, fontWeight: "500", color: "#6b7280" },
+  tabLabelActive: { color: "#1a73e8", fontWeight: "700" },
 
   // List
-  listContent: { padding: K.spacing.lg },
+  listContent: { padding: 16 },
   listContentEmpty: { flex: 1 },
-  separator: { height: K.spacing.md },
+  separator: { height: 12 },
 
   // Card
   card: {
     flexDirection: "row",
-    backgroundColor: K.colors.bgCard,
-    borderRadius: K.radius.lg,
+    backgroundColor: "#fff",
+    borderRadius: 14,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: K.colors.border,
-    ...K.shadow.sm,
+    borderColor: "#e5e7eb",
   },
   cardThumb: {
     width: 80,
     height: 100,
-    backgroundColor: K.colors.bgSection,
+    backgroundColor: "#f3f4f6",
   },
-  cardThumbPlaceholder: { backgroundColor: K.colors.borderMid },
+  cardThumbPlaceholder: { backgroundColor: "#e5e7eb" },
   cardContent: {
     flex: 1,
-    padding: K.spacing.md,
+    padding: 12,
     justifyContent: "space-between",
   },
-  cardTitle: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark, marginBottom: 2 },
-  cardReference: { fontSize: K.font.xs, color: K.colors.textMuted, marginBottom: 4, fontFamily: "monospace" },
-  cardDateRange: { fontSize: K.font.xs, color: K.colors.textBody, marginBottom: 6 },
+  cardTitle: { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 2 },
+  cardReference: { fontSize: 12, color: "#6b7280", marginBottom: 4, fontFamily: "monospace" },
+  cardDateRange: { fontSize: 12, color: "#374151", marginBottom: 6 },
   cardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  cardAmount: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark },
+  cardAmount: { fontSize: 14, fontWeight: "700", color: "#111827" },
 
   // Status badge
   statusBadge: {
-    borderRadius: K.radius.full,
-    paddingHorizontal: K.spacing.sm,
+    borderRadius: 20,
+    paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  statusBadgeText: { fontSize: K.font.xs, fontWeight: "600" },
+  statusBadgeText: { fontSize: 11, fontWeight: "600" },
 
   // Skeleton
   skeletonLine: {
     height: 12,
-    borderRadius: K.radius.xs,
-    backgroundColor: K.colors.bgSection,
+    borderRadius: 6,
+    backgroundColor: "#e5e7eb",
   },
 
   // Empty state
@@ -346,7 +344,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: K.spacing.xxxl,
+    paddingHorizontal: 32,
   },
-  emptyStateText: { fontSize: K.font.base, color: K.colors.textMuted, textAlign: "center" },
+  emptyStateText: { fontSize: 16, color: "#6b7280", textAlign: "center" },
 });

@@ -17,7 +17,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
-import { K } from "../../constants/theme";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -121,7 +120,7 @@ function SavedListingCard({
         />
       ) : (
         <View style={styles.cardPhotoPlaceholder}>
-          <Ionicons name="image-outline" size={28} color={K.colors.textSubtle} />
+          <Ionicons name="image-outline" size={28} color="#9ca3af" />
         </View>
       )}
 
@@ -142,7 +141,7 @@ function SavedListingCard({
         onPress={() => onRemove(listingId, listing.title)}
         disabled={removePending}
       >
-        <Ionicons name="trash-outline" size={20} color={K.colors.error} />
+        <Ionicons name="trash-outline" size={20} color="#dc2626" />
       </TouchableOpacity>
     </TouchableOpacity>
   );
@@ -167,7 +166,7 @@ export default function SavedScreen() {
           <Text style={styles.headerTitle}>Saved</Text>
         </View>
         <View style={styles.emptyContainer}>
-          <Ionicons name="information-circle-outline" size={56} color={K.colors.textSubtle} />
+          <Ionicons name="information-circle-outline" size={56} color="#9ca3af" />
           <Text style={styles.emptyTitle}>Not available</Text>
           <Text style={styles.emptySubtitle}>
             Favourites are available for traveller accounts.
@@ -274,7 +273,7 @@ export default function SavedScreen() {
         renderItem={renderItem}
         contentContainerStyle={isEmpty ? styles.emptyListContent : styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={K.colors.accent} />
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#1a73e8" />
         }
         ListHeaderComponent={
           <View style={styles.headerRow}>
@@ -283,7 +282,7 @@ export default function SavedScreen() {
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="heart-outline" size={64} color={K.colors.borderMid} />
+            <Ionicons name="heart-outline" size={64} color="#d1d5db" />
             <Text style={styles.emptyTitle}>No saved listings yet</Text>
             <Text style={styles.emptySubtitle}>
               Start exploring to save listings you love.
@@ -304,7 +303,7 @@ export default function SavedScreen() {
               disabled={loadingMore}
             >
               {loadingMore ? (
-                <ActivityIndicator size="small" color={K.colors.accent} />
+                <ActivityIndicator size="small" color="#1a73e8" />
               ) : (
                 <Text style={styles.loadMoreText}>Load more</Text>
               )}
@@ -320,76 +319,75 @@ export default function SavedScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.colors.bgSubtle },
+  container: { flex: 1, backgroundColor: "#f9fafb" },
 
   headerRow: {
-    paddingHorizontal: K.spacing.xl,
-    paddingTop: K.spacing.sm,
-    paddingBottom: K.spacing.md,
-    backgroundColor: K.colors.bgSubtle,
+    paddingHorizontal: 18,
+    paddingTop: 8,
+    paddingBottom: 12,
+    backgroundColor: "#f9fafb",
   },
-  headerTitle: { fontSize: K.font.xxl + 2, fontWeight: "700", color: K.colors.textDark },
+  headerTitle: { fontSize: 26, fontWeight: "700", color: "#111827" },
 
-  listContent: { paddingHorizontal: K.spacing.lg, paddingBottom: K.spacing.xxxl },
-  emptyListContent: { flex: 1, paddingHorizontal: K.spacing.lg },
+  listContent: { paddingHorizontal: 16, paddingBottom: 32 },
+  emptyListContent: { flex: 1, paddingHorizontal: 16 },
 
   // Card
   card: {
     flexDirection: "row",
-    backgroundColor: K.colors.bgCard,
-    borderRadius: K.radius.lg,
-    marginBottom: K.spacing.md,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: K.colors.border,
+    borderColor: "#e5e7eb",
     overflow: "hidden",
     alignItems: "center",
-    paddingRight: K.spacing.md,
-    ...K.shadow.sm,
+    paddingRight: 12,
   },
   cardPhoto: { width: 90, height: 90 },
   cardPhotoPlaceholder: {
     width: 90,
     height: 90,
-    backgroundColor: K.colors.bgSection,
+    backgroundColor: "#f3f4f6",
     alignItems: "center",
     justifyContent: "center",
   },
-  cardInfo: { flex: 1, paddingHorizontal: K.spacing.md, paddingVertical: K.spacing.sm + 2 },
-  cardTitle: { fontSize: K.font.sm + 1, fontWeight: "600", color: K.colors.textDark, marginBottom: 3, lineHeight: 20 },
-  cardMeta: { fontSize: K.font.xs, color: K.colors.textMuted, marginBottom: 4 },
-  cardPrice: { fontSize: K.font.sm + 1, fontWeight: "700", color: K.colors.textDark, marginBottom: 2 },
-  cardSaved: { fontSize: K.font.xs, color: K.colors.textSubtle },
-  trashButton: { paddingLeft: K.spacing.sm },
+  cardInfo: { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
+  cardTitle: { fontSize: 14, fontWeight: "600", color: "#111827", marginBottom: 3, lineHeight: 20 },
+  cardMeta: { fontSize: 12, color: "#6b7280", marginBottom: 4 },
+  cardPrice: { fontSize: 14, fontWeight: "700", color: "#111827", marginBottom: 2 },
+  cardSaved: { fontSize: 11, color: "#9ca3af" },
+  trashButton: { paddingLeft: 8 },
 
   // Empty state
   emptyContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: K.spacing.xxxl,
+    paddingHorizontal: 32,
     paddingTop: 60,
   },
-  emptyTitle: { fontSize: K.font.lg + 1, fontWeight: "700", color: K.colors.textDark, marginTop: K.spacing.lg, marginBottom: K.spacing.sm },
-  emptySubtitle: { fontSize: K.font.sm + 1, color: K.colors.textMuted, textAlign: "center", lineHeight: 20, marginBottom: K.spacing.xxl },
+  emptyTitle: { fontSize: 18, fontWeight: "700", color: "#111827", marginTop: 16, marginBottom: 8 },
+  emptySubtitle: { fontSize: 14, color: "#6b7280", textAlign: "center", lineHeight: 20, marginBottom: 24 },
   exploreBtn: {
-    backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    paddingHorizontal: K.spacing.xxxl,
-    paddingVertical: K.spacing.md + 1,
+    backgroundColor: "#1a73e8",
+    borderRadius: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 13,
   },
-  exploreBtnText: { color: K.colors.textLight, fontWeight: "700", fontSize: K.font.base },
+  exploreBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 
   // Load more
   loadMoreBtn: {
     alignItems: "center",
-    paddingVertical: K.spacing.lg,
-    marginTop: K.spacing.xs,
-    marginBottom: K.spacing.xxl,
+    paddingVertical: 16,
+    marginTop: 4,
+    marginBottom: 24,
   },
-  loadMoreText: { color: K.colors.accent, fontWeight: "600", fontSize: K.font.sm + 1 },
+  loadMoreText: { color: "#1a73e8", fontWeight: "600", fontSize: 14 },
 
   // Skeleton
-  skeletonPhoto: { width: 90, height: 90, backgroundColor: K.colors.bgSection },
-  skeletonContent: { flex: 1, paddingHorizontal: K.spacing.md, paddingVertical: K.spacing.md },
-  skeletonLine: { backgroundColor: K.colors.bgSection, borderRadius: K.radius.xs },
+  skeletonPhoto: { width: 90, height: 90, backgroundColor: "#e5e7eb" },
+  skeletonContent: { flex: 1, paddingHorizontal: 12, paddingVertical: 12 },
+  skeletonLine: { backgroundColor: "#e5e7eb", borderRadius: 4 },
 });

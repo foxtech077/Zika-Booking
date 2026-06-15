@@ -20,7 +20,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
-import { K } from "../../constants/theme";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -673,7 +672,7 @@ export default function BookingFlowScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color={K.colors.accent} />
+          <ActivityIndicator size="large" color="#1a73e8" />
           <Text style={styles.loadingText}>Securing your reservation...</Text>
         </View>
       </SafeAreaView>
@@ -704,7 +703,7 @@ export default function BookingFlowScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
-          <Ionicons name="lock-closed" size={64} color={K.colors.accent} />
+          <Ionicons name="lock-closed" size={64} color="#1a73e8" />
           <Text style={styles.errorTitle}>Sign in to book</Text>
           <Text style={styles.errorBody}>
             You need to be signed in to make a reservation.
@@ -737,7 +736,7 @@ export default function BookingFlowScreen() {
 
           {/* Pending bookings list from backend */}
           {pendingLoading ? (
-            <ActivityIndicator color={K.colors.accent} style={{ marginVertical: 24 }} />
+            <ActivityIndicator color="#1a73e8" style={{ marginVertical: 24 }} />
           ) : pendingBookings.length > 0 ? (
             <View style={styles.pendingList}>
               {pendingBookings.map((b) => {
@@ -1047,7 +1046,7 @@ export default function BookingFlowScreen() {
                   <Switch
                     value={deliveryRequested}
                     onValueChange={setDeliveryRequested}
-                    trackColor={{ true: K.colors.accent }}
+                    trackColor={{ true: "#1a73e8" }}
                   />
                 </View>
 
@@ -1353,15 +1352,15 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   stepDotActive: {
-    backgroundColor: K.colors.accent,
-    borderColor: K.colors.accent,
+    backgroundColor: "#1a73e8",
+    borderColor: "#1a73e8",
     width: 12,
     height: 12,
     borderRadius: 6,
   },
   stepDotDone: { backgroundColor: "#16a34a", borderColor: "#16a34a" },
   stepLabel: { fontSize: 10, color: "#9ca3af", textAlign: "center" },
-  stepLabelActive: { color: K.colors.accent, fontWeight: "600" },
+  stepLabelActive: { color: "#1a73e8", fontWeight: "600" },
   stepLabelDone: { color: "#16a34a" },
 
   // ── Timer banners ───────────────────────────────────────────────────────────
@@ -1489,7 +1488,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: K.colors.accent,
+    backgroundColor: "#1a73e8",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1516,7 +1515,7 @@ const styles = StyleSheet.create({
   discountValue: { color: "#16a34a" },
   totalRow: { borderTopWidth: 1, borderTopColor: "#e5e7eb", marginTop: 4, paddingTop: 8 },
   totalLabel: { fontSize: 16, fontWeight: "700", color: "#111827", flex: 1 },
-  totalValue: { fontSize: 16, fontWeight: "700", color: K.colors.accent },
+  totalValue: { fontSize: 16, fontWeight: "700", color: "#1a73e8" },
   guestSummarySection: { borderTopWidth: 1, borderTopColor: "#f3f4f6", paddingTop: 14 },
   guestSummaryText: { fontSize: 14, color: "#374151" },
   policySection: { borderTopWidth: 1, borderTopColor: "#f3f4f6", paddingTop: 14 },
@@ -1528,7 +1527,7 @@ const styles = StyleSheet.create({
   promoRow: { flexDirection: "row", gap: 10, alignItems: "center" },
   promoInput: { flex: 1, letterSpacing: 1 },
   promoBtn: {
-    backgroundColor: K.colors.accent,
+    backgroundColor: "#1a73e8",
     borderRadius: 10,
     paddingHorizontal: 18,
     paddingVertical: 11,
@@ -1555,12 +1554,12 @@ const styles = StyleSheet.create({
     marginTop: 1,
     flexShrink: 0,
   },
-  checkboxChecked: { backgroundColor: K.colors.accent, borderColor: K.colors.accent },
+  checkboxChecked: { backgroundColor: "#1a73e8", borderColor: "#1a73e8" },
   termsText: { fontSize: 13, color: "#374151", lineHeight: 20, flex: 1 },
 
   // Buttons
   primaryBtn: {
-    backgroundColor: K.colors.accent,
+    backgroundColor: "#1a73e8",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -1584,10 +1583,10 @@ const styles = StyleSheet.create({
   pendingCardTitle: { fontSize: 14, fontWeight: "700", color: "#111827", marginBottom: 2 },
   pendingCardRef: { fontSize: 11, color: "#6b7280", fontFamily: "monospace", marginBottom: 2 },
   pendingCardDate: { fontSize: 12, color: "#374151", marginBottom: 2 },
-  pendingCardAmount: { fontSize: 13, fontWeight: "700", color: K.colors.accent },
+  pendingCardAmount: { fontSize: 13, fontWeight: "700", color: "#1a73e8" },
   pendingCardBtns: { gap: 8 },
   pendingPayBtn: {
-    backgroundColor: K.colors.accent,
+    backgroundColor: "#1a73e8",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
