@@ -124,7 +124,7 @@ export default function LoginPage() {
       } catch {
         // ignore malformed token – we’ll just send empty email
       }
-      router.push(`/auth/login?email=${encodeURIComponent(email)}`);
+      router.push(`/auth/auth/login?email=${encodeURIComponent(email)}`);
       return;
     }
 
@@ -157,7 +157,7 @@ export default function LoginPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", form);
+      const res = await api.post<ApiResponse<AuthResponse>>("/auth/auth/login", form);
       if (!res.data.success) throw res.data;
       return res.data.data;
     },
