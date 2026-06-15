@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import type { Listing } from "@/types/provider";
+import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
 import { FormShell, type FormStep } from "./shared/FormShell";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
@@ -81,13 +82,6 @@ const CANCELLATION_POLICIES = [
   { value: "flexible", label: "Flexible – free cancellation up to 24 h" },
   { value: "moderate", label: "Moderate – free cancellation up to 5 days" },
   { value: "strict", label: "Strict – no refund within 14 days" },
-];
-
-const CURRENCIES = [
-  { value: "USD", label: "USD ($)" },
-  { value: "EUR", label: "EUR (€)" },
-  { value: "GBP", label: "GBP (£)" },
-  { value: "ZAR", label: "ZAR (R)" },
 ];
 
 const CAR_CATEGORY_VALUES = new Set(CAR_CATEGORIES.map((x) => x.value));
@@ -709,7 +703,7 @@ export function CarForm({ listingId, listing }: Props) {
                     required
                     error={tried && !(Number(s.pricePerDay) > 0) ? "Daily rate must be > 0." : undefined}
                   />
-                  <Select label="Currency" value={s.currency} onChange={(e) => set("currency", e.target.value)} options={CURRENCIES} />
+                  <CurrencyCombobox label="Currency" value={s.currency} onChange={(val) => set("currency", val)} />
                 </div>
                 <Select
                   label="Cancellation Policy"

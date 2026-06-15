@@ -16,11 +16,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
-import type { Listing } from "@/types/provider";
 import { FormShell, type FormStep } from "./shared/FormShell";
+import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
+import { Listing } from "@/types/provider";
 
 // ── Enums ────────────────────────────────────────────────────────────────────
 
@@ -28,13 +29,6 @@ const CANCELLATION_POLICIES = [
   { value: "flexible", label: "Flexible – free cancellation up to 24 h" },
   { value: "moderate", label: "Moderate – free cancellation up to 5 days" },
   { value: "strict",   label: "Strict – no refund within 14 days" },
-];
-
-const CURRENCIES = [
-  { value: "USD", label: "USD ($)" },
-  { value: "EUR", label: "EUR (€)" },
-  { value: "GBP", label: "GBP (£)" },
-  { value: "ZAR", label: "ZAR (R)" },
 ];
 
 const CANCELLATION_POLICY_VALUES = new Set(CANCELLATION_POLICIES.map((x) => x.value));
@@ -397,7 +391,7 @@ export function ApartmentForm({ listingId, listing }: Props) {
                     required
                     error={tried && !(Number(s.pricePerNight) > 0) ? "Price must be > 0." : undefined}
                   />
-                  <Select label="Currency" value={s.currency} onChange={(e) => set("currency", e.target.value)} options={CURRENCIES} />
+                  <CurrencyCombobox label="Currency" value={s.currency} onChange={(val) => set("currency", val)} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Input
