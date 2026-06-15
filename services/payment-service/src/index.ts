@@ -17,7 +17,7 @@ async function build() {
     trustProxy: true,
   });
 
-  // ── Swagger API documentation ─────────────────────────────────────────────
+  // ── Swgger API documentation ─────────────────────────────────────────────
   await app.register(swagger, {
     openapi: {
       info: {
