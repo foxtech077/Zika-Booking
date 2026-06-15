@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
+  Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -20,8 +22,28 @@ import { K } from "../../constants/theme";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// ── Layout constants ───────────────────────────────────────────────────────────
+const SCREEN_W = Dimensions.get("window").width;
+// scroll padding (16×2) + card padding (16×2) = 64 consumed horizontally
+const CELL_SIZE = Math.floor((SCREEN_W - 64) / 7) - 2;
 
+// ── Calendar config ────────────────────────────────────────────────────────────
+const DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+type DateStatus = "confirmed" | "held" | "blocked" | "available";
+
+const DATE_CFG: Record<DateStatus, { bg: string; text: string; stripe: boolean; label: string }> = {
+  confirmed: { bg: "#DCFCE7", text: "#16A34A", stripe: false, label: "Confirmed" },
+  held:      { bg: "#FEF3C7", text: "#92400E", stripe: false, label: "Held" },
+  blocked:   { bg: "#E2E8F0", text: "#64748B", stripe: true,  label: "External Block" },
+  available: { bg: "#FFFFFF", text: K.colors.textDark, stripe: false, label: "Available" },
+};
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 interface ListingItem {
   id: string;
   name: string | null;
@@ -41,18 +63,185 @@ interface IcalFeed {
   createdAt: string;
 }
 
+interface BlockedDateItem {
+  id: string;
+  type: "blocked" | "confirmed" | "held";
+  startDate: string | null;
+  endDate: string | null;
+  summary: string;
+  platform: string;
+}
+
+// ── Stripe pattern overlay (for external-block cells) ─────────────────────────
+function StripePattern({ size }: { size: number }) {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute", left: 0, right: 0, top: 0, bottom: 0,
+        overflow: "hidden",
+        borderRadius: K.radius.sm - 2,
+      }}
+    >
+      {[0.25, 0.5, 0.75].map((frac, i) => (
+        <View
+          key={i}
+          style={{
+            position: "absolute",
+            left: size * frac - 1,
+            top: -(size * 0.6),
+            width: 1.5,
+            height: size * 2.5,
+            backgroundColor: "rgba(100,116,139,0.35)",
+            transform: [{ rotate: "45deg" }],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+// ── Single calendar date cell ──────────────────────────────────────────────────
+function CalendarCell({ day, status, isToday }: { day: number; status: DateStatus; isToday: boolean }) {
+  const cfg = DATE_CFG[status];
+  return (
+    <View
+      style={[
+        cs.cell,
+        { backgroundColor: cfg.bg, width: CELL_SIZE, height: CELL_SIZE },
+        isToday && cs.cellToday,
+      ]}
+    >
+      {cfg.stripe && <StripePattern size={CELL_SIZE} />}
+      <Text style={[cs.cellTxt, { color: isToday ? K.colors.accent : cfg.text }]}>
+        {day}
+      </Text>
+    </View>
+  );
+}
+
+// ── Monthly availability calendar ─────────────────────────────────────────────
+function AvailabilityCalendar({ blockedDates }: { blockedDates: BlockedDateItem[] }) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth()); // 0-indexed
+
+  const todayKey = now.toISOString().slice(0, 10);
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+
+  // Expand all date ranges into a per-day lookup map
+  const dateMap = useMemo(() => {
+    const map: Record<string, "blocked" | "confirmed" | "held"> = {};
+    for (const b of blockedDates) {
+      if (!b.startDate) continue;
+      const start = new Date(b.startDate + "T00:00:00");
+      const end = b.endDate ? new Date(b.endDate + "T00:00:00") : new Date(start);
+      const cursor = new Date(start);
+      while (cursor <= end) {
+        const key = cursor.toISOString().slice(0, 10);
+        const existing = map[key];
+        // Priority: confirmed > held > blocked
+        if (!existing || b.type === "confirmed" || (b.type === "held" && existing === "blocked")) {
+          map[key] = b.type;
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+    return map;
+  }, [blockedDates]);
+
+  // Build week rows for the displayed month
+  const weeks = useMemo(() => {
+    const firstDay = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    let offset = firstDay.getDay(); // 0 = Sun
+    offset = offset === 0 ? 6 : offset - 1; // convert to Mon = 0
+    const flat: (number | null)[] = Array(offset).fill(null);
+    for (let d = 1; d <= daysInMonth; d++) flat.push(d);
+    while (flat.length % 7 !== 0) flat.push(null);
+    const rows: (number | null)[][] = [];
+    for (let i = 0; i < flat.length; i += 7) rows.push(flat.slice(i, i + 7));
+    return rows;
+  }, [year, month]);
+
+  const goPrev = () => {
+    if (month === 0) { setYear((y) => y - 1); setMonth(11); }
+    else setMonth((m) => m - 1);
+  };
+  const goNext = () => {
+    if (month === 11) { setYear((y) => y + 1); setMonth(0); }
+    else setMonth((m) => m + 1);
+  };
+
+  return (
+    <View>
+      {/* Month navigation */}
+      <View style={cs.calNav}>
+        <TouchableOpacity onPress={goPrev} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Feather name="chevron-left" size={20} color={K.colors.textMid} />
+        </TouchableOpacity>
+        <Text style={cs.calNavLabel}>{MONTH_NAMES[month]} {year}</Text>
+        <TouchableOpacity onPress={goNext} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Feather name="chevron-right" size={20} color={K.colors.textMid} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Day-of-week headers */}
+      <View style={cs.calRow}>
+        {DAY_LABELS.map((label, i) => (
+          <View key={i} style={{ width: CELL_SIZE, alignItems: "center" }}>
+            <Text style={cs.calDayHdr}>{label}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Week rows */}
+      {weeks.map((week, wi) => (
+        <View key={wi} style={cs.calRow}>
+          {week.map((day, di) => {
+            if (day === null) {
+              return <View key={`pad-${di}`} style={{ width: CELL_SIZE, height: CELL_SIZE }} />;
+            }
+            const dateKey = `${year}-${pad2(month + 1)}-${pad2(day)}`;
+            const status: DateStatus = dateMap[dateKey] ?? "available";
+            return (
+              <CalendarCell key={dateKey} day={day} status={status} isToday={dateKey === todayKey} />
+            );
+          })}
+        </View>
+      ))}
+
+      {/* Legend */}
+      <View style={cs.legend}>
+        {(["confirmed", "held", "blocked"] as const).map((t) => (
+          <View key={t} style={cs.legendItem}>
+            <View style={[cs.legendSwatch, { backgroundColor: DATE_CFG[t].bg }]}>
+              {t === "blocked" && <StripePattern size={12} />}
+            </View>
+            <Text style={cs.legendLabel}>{DATE_CFG[t].label}</Text>
+          </View>
+        ))}
+        <View style={cs.legendItem}>
+          <View style={[cs.legendSwatch, cs.legendToday]} />
+          <Text style={cs.legendLabel}>Today</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// ── Main screen ────────────────────────────────────────────────────────────────
 export default function CalendarSyncScreen() {
   const queryClient = useQueryClient();
 
-  // Selected property
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
-
-  // New feed form
   const [selectedPlatform, setSelectedPlatform] = useState<"Airbnb" | "Booking.com">("Airbnb");
   const [externalUrl, setExternalUrl] = useState("");
   const [copied, setCopied] = useState(false);
+  const [syncingFeedId, setSyncingFeedId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch listings list
+  // ── Queries ────────────────────────────────────────────────────────────────
   const listingsQ = useQuery<{ listings: ListingItem[]; total: number }>({
     queryKey: ["myListingsForChannels"],
     queryFn: async () => {
@@ -63,17 +252,6 @@ export default function CalendarSyncScreen() {
     },
   });
 
-  // Default to first listing
-  useEffect(() => {
-    if (listingsQ.data?.listings && listingsQ.data.listings.length > 0 && !selectedListingId) {
-      setSelectedListingId(listingsQ.data.listings[0].id);
-    }
-  }, [listingsQ.data, selectedListingId]);
-
-  // Selected Listing Detail
-  const activeListing = listingsQ.data?.listings.find((l) => l.id === selectedListingId);
-
-  // Fetch feeds for selected listing
   const feedsQ = useQuery<{ feeds: IcalFeed[] }>({
     queryKey: ["providerFeeds", selectedListingId],
     queryFn: async () => {
@@ -84,18 +262,26 @@ export default function CalendarSyncScreen() {
     enabled: !!selectedListingId,
   });
 
-  // Fetch blocked dates count for selected listing
-  const blockedDatesQ = useQuery<{ blockedDates: any[] }>({
+  const blockedDatesQ = useQuery<{ blockedDates: BlockedDateItem[] }>({
     queryKey: ["providerBlockedDates", selectedListingId],
     queryFn: async () => {
       if (!selectedListingId) return { blockedDates: [] };
-      const res = await listingApi.get<{ data: { blockedDates: any[] } }>(`/listings/${selectedListingId}/blocked-dates`);
+      const res = await listingApi.get<{ data: { blockedDates: BlockedDateItem[] } }>(
+        `/listings/${selectedListingId}/blocked-dates`
+      );
       return res.data.data;
     },
     enabled: !!selectedListingId,
   });
 
-  // Mutations
+  // Default to first listing on load
+  useEffect(() => {
+    if (listingsQ.data?.listings && listingsQ.data.listings.length > 0 && !selectedListingId) {
+      setSelectedListingId(listingsQ.data.listings[0].id);
+    }
+  }, [listingsQ.data, selectedListingId]);
+
+  // ── Mutations ──────────────────────────────────────────────────────────────
   const connectMutation = useMutation({
     mutationFn: async (args: { platform: string; feedUrl: string }) => {
       if (!selectedListingId) throw new Error("No property selected");
@@ -142,11 +328,14 @@ export default function CalendarSyncScreen() {
       const res = await listingApi.post(`/listings/${selectedListingId}/ical-feeds/${feedId}/sync`);
       return res.data;
     },
+    onMutate: (feedId) => {
+      setSyncingFeedId(feedId);
+    },
     onSuccess: (res: any) => {
+      setSyncingFeedId(null);
       queryClient.invalidateQueries({ queryKey: ["providerFeeds", selectedListingId] });
       queryClient.invalidateQueries({ queryKey: ["providerBlockedDates", selectedListingId] });
       queryClient.invalidateQueries({ queryKey: ["providerListingsForSync"] });
-
       if (res.data?.error) {
         Alert.alert("Sync Issues", `Sync finished with error: ${res.data.error}`);
       } else {
@@ -155,12 +344,13 @@ export default function CalendarSyncScreen() {
       }
     },
     onError: (err: any) => {
+      setSyncingFeedId(null);
       const msg = err.response?.data?.error?.message ?? "Synchronization failed.";
       Alert.alert("Sync Error", msg);
     },
   });
 
-  // Outbound iCal Feed URL
+  // ── Handlers ───────────────────────────────────────────────────────────────
   const outboundUrl = selectedListingId
     ? `${listingApi.defaults.baseURL}/listings/${selectedListingId}/ical`
     : "";
@@ -183,13 +373,6 @@ export default function CalendarSyncScreen() {
       console.warn(e);
     }
   };
-
-  // Maps active feeds to platforms
-  const feeds = feedsQ.data?.feeds ?? [];
-  const airbnbFeed = feeds.find((f) => f.platform.toLowerCase() === "airbnb");
-  const bookingFeed = feeds.find((f) => f.platform.toLowerCase() === "booking.com" || f.platform.toLowerCase() === "booking");
-
-  const totalBlockedDates = blockedDatesQ.data?.blockedDates ?? [];
 
   const handleConnect = () => {
     if (!externalUrl.trim()) {
@@ -214,6 +397,16 @@ export default function CalendarSyncScreen() {
     );
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.allSettled([
+      listingsQ.refetch(),
+      feedsQ.refetch(),
+      blockedDatesQ.refetch(),
+    ]);
+    setRefreshing(false);
+  };
+
   const formatLastSync = (iso: string | null) => {
     if (!iso) return "Never";
     const d = new Date(iso);
@@ -225,20 +418,45 @@ export default function CalendarSyncScreen() {
     });
   };
 
+  // ── Derived data ───────────────────────────────────────────────────────────
+  const feeds = feedsQ.data?.feeds ?? [];
+  const activeListing = listingsQ.data?.listings.find((l) => l.id === selectedListingId);
+  const airbnbFeed = feeds.find((f) => f.platform.toLowerCase() === "airbnb");
+  const bookingFeed = feeds.find(
+    (f) => f.platform.toLowerCase() === "booking.com" || f.platform.toLowerCase() === "booking"
+  );
+  const blockedDates = blockedDatesQ.data?.blockedDates ?? [];
+
+  // Per-platform external block counts (type = "blocked" means from external feed)
+  const airbnbBlockCount = blockedDates.filter(
+    (d) => d.type === "blocked" && d.platform?.toLowerCase() === "airbnb"
+  ).length;
+  const bookingBlockCount = blockedDates.filter(
+    (d) =>
+      d.type === "blocked" &&
+      (d.platform?.toLowerCase() === "booking.com" || d.platform?.toLowerCase() === "booking")
+  ).length;
+
+  const canGoBack = router.canGoBack();
   const isLoading = listingsQ.isLoading || feedsQ.isLoading;
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={{ flex: 1 }}
     >
       <View style={st.container}>
-        {/* ── Header ─────────────────────────────────────────── */}
+        {/* ── Header ───────────────────────────────────────────────────────── */}
         <SafeAreaView edges={["top"]} style={st.header}>
           <View style={st.headerRow}>
-            <TouchableOpacity onPress={() => router.back()} style={st.backBtn}>
-              <Feather name="chevron-left" size={24} color="#fff" />
-            </TouchableOpacity>
+            {canGoBack ? (
+              <TouchableOpacity onPress={() => router.back()} style={st.backBtn}>
+                <Feather name="chevron-left" size={24} color="#fff" />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 40 }} />
+            )}
             <Text style={st.headerTitle}>Calendar Sync</Text>
             <View style={{ width: 40 }} />
           </View>
@@ -252,8 +470,16 @@ export default function CalendarSyncScreen() {
           <ScrollView
             showsVerticalScrollIndicator={false}
             contentContainerStyle={st.scroll}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor={K.colors.accent}
+                colors={[K.colors.accent]}
+              />
+            }
           >
-            {/* ── Property Selector ───────────────────────────── */}
+            {/* ── Property Selector ──────────────────────────────────────── */}
             <View style={st.section}>
               <Text style={st.sectionLabel}>Select Property</Text>
               <ScrollView
@@ -286,10 +512,27 @@ export default function CalendarSyncScreen() {
 
             {selectedListingId ? (
               <>
-                {/* ── Zika Outbound iCal Feed ─────────────────── */}
-                <View style={st.card}>
+                {/* ── Availability Calendar ─────────────────────────────── */}
+                <Text style={st.sectionLabel}>Availability Overview</Text>
+                <View style={st.calCard}>
                   <View style={st.cardHead}>
                     <Ionicons name="calendar-outline" size={20} color={K.colors.accent} />
+                    <Text style={st.cardTitle}>Monthly Calendar</Text>
+                    {blockedDatesQ.isFetching && !refreshing && (
+                      <ActivityIndicator
+                        size="small"
+                        color={K.colors.accent}
+                        style={{ marginLeft: "auto" }}
+                      />
+                    )}
+                  </View>
+                  <AvailabilityCalendar blockedDates={blockedDates} />
+                </View>
+
+                {/* ── Kainook Outbound iCal Feed ────────────────────────── */}
+                <View style={st.card}>
+                  <View style={st.cardHead}>
+                    <Ionicons name="link-outline" size={20} color={K.colors.accent} />
                     <Text style={st.cardTitle}>My Kainook Calendar Feed</Text>
                   </View>
                   <Text style={st.cardDesc}>
@@ -301,7 +544,10 @@ export default function CalendarSyncScreen() {
                     </Text>
                   </View>
                   <View style={st.actionRow}>
-                    <TouchableOpacity style={[st.actionBtn, copied && st.actionBtnSuccess]} onPress={handleCopy}>
+                    <TouchableOpacity
+                      style={[st.actionBtn, copied && st.actionBtnSuccess]}
+                      onPress={handleCopy}
+                    >
                       <Feather name={copied ? "check" : "copy"} size={14} color="#fff" />
                       <Text style={st.actionBtnTxt}>{copied ? "Copied!" : "Copy URL"}</Text>
                     </TouchableOpacity>
@@ -312,10 +558,21 @@ export default function CalendarSyncScreen() {
                   </View>
                 </View>
 
-                {/* ── Connected Channels ──────────────────────── */}
+                {/* ── Connected Sync Channels ───────────────────────────── */}
                 <Text style={st.sectionLabel}>Connected Sync Channels</Text>
-                
-                {/* Airbnb Sync Card */}
+
+                {/* No-feeds empty state */}
+                {feeds.length === 0 && (
+                  <View style={st.noFeedsEmpty}>
+                    <Feather name="link-2" size={32} color={K.colors.textMuted} />
+                    <Text style={st.noFeedsTitle}>No Channels Connected</Text>
+                    <Text style={st.noFeedsSub}>
+                      Connect your Airbnb or Booking.com calendar below to automatically import blocked dates.
+                    </Text>
+                  </View>
+                )}
+
+                {/* Airbnb channel card */}
                 <View style={st.channelCard}>
                   <View style={st.channelHead}>
                     <View style={st.channelInfo}>
@@ -327,8 +584,18 @@ export default function CalendarSyncScreen() {
                         <Text style={st.channelSub}>iCal Calendar Connection</Text>
                       </View>
                     </View>
-                    <View style={[st.statusBadge, { backgroundColor: airbnbFeed ? "#D1FAE5" : "#E2E8F0" }]}>
-                      <Text style={[st.statusBadgeTxt, { color: airbnbFeed ? "#065F46" : "#64748B" }]}>
+                    <View
+                      style={[
+                        st.statusBadge,
+                        { backgroundColor: airbnbFeed ? "#D1FAE5" : "#E2E8F0" },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          st.statusBadgeTxt,
+                          { color: airbnbFeed ? "#065F46" : "#64748B" },
+                        ]}
+                      >
                         {airbnbFeed ? "Connected" : "Disconnected"}
                       </Text>
                     </View>
@@ -338,27 +605,41 @@ export default function CalendarSyncScreen() {
                     <View style={st.channelBody}>
                       <View style={st.syncDetails}>
                         <View style={st.syncDetailRow}>
-                          <Text style={st.syncDetailLbl}>Last Synchronization:</Text>
+                          <Text style={st.syncDetailLbl}>Last Synchronization</Text>
                           <Text style={st.syncDetailVal}>{formatLastSync(airbnbFeed.lastSyncedAt)}</Text>
                         </View>
                         <View style={st.syncDetailRow}>
-                          <Text style={st.syncDetailLbl}>Imported Blocks Count:</Text>
-                          <Text style={st.syncDetailVal}>{totalBlockedDates.length} Dates Blocked</Text>
+                          <Text style={st.syncDetailLbl}>Imported Blocks</Text>
+                          <Text style={st.syncDetailVal}>{airbnbBlockCount} dates</Text>
                         </View>
                         <View style={st.syncDetailRow}>
-                          <Text style={st.syncDetailLbl}>Sync Health:</Text>
-                          <Text style={[st.syncDetailVal, { color: airbnbFeed.lastError ? "#EF4444" : "#10B981", fontWeight: "700" }]}>
-                            {airbnbFeed.lastError ? "Action Required" : "Healthy"}
+                          <Text style={st.syncDetailLbl}>Sync Health</Text>
+                          <Text
+                            style={[
+                              st.syncDetailVal,
+                              {
+                                color: airbnbFeed.lastError ? K.colors.error : K.colors.success,
+                                fontWeight: "700",
+                              },
+                            ]}
+                          >
+                            {airbnbFeed.lastError ? "Action Required" : "Healthy ✓"}
                           </Text>
                         </View>
+                        {airbnbFeed.lastError && (
+                          <View style={st.errorBox}>
+                            <Feather name="alert-triangle" size={12} color="#DC2626" />
+                            <Text style={st.errorTxt}>{airbnbFeed.lastError}</Text>
+                          </View>
+                        )}
                       </View>
                       <View style={st.channelActions}>
-                        <TouchableOpacity 
-                          style={st.syncBtn} 
+                        <TouchableOpacity
+                          style={[st.syncBtn, syncingFeedId !== null && { opacity: 0.7 }]}
                           onPress={() => syncMutation.mutate(airbnbFeed.id)}
-                          disabled={syncMutation.isPending}
+                          disabled={syncingFeedId !== null}
                         >
-                          {syncMutation.isPending ? (
+                          {syncingFeedId === airbnbFeed.id ? (
                             <ActivityIndicator size="small" color="#fff" />
                           ) : (
                             <>
@@ -367,7 +648,11 @@ export default function CalendarSyncScreen() {
                             </>
                           )}
                         </TouchableOpacity>
-                        <TouchableOpacity style={st.disconnectBtn} onPress={() => handleDisconnect(airbnbFeed.id, "Airbnb")}>
+                        <TouchableOpacity
+                          style={st.disconnectBtn}
+                          onPress={() => handleDisconnect(airbnbFeed.id, "Airbnb")}
+                          disabled={syncingFeedId !== null}
+                        >
                           <Feather name="trash-2" size={12} color="#EF4444" />
                           <Text style={st.disconnectBtnTxt}>Disconnect</Text>
                         </TouchableOpacity>
@@ -375,12 +660,14 @@ export default function CalendarSyncScreen() {
                     </View>
                   ) : (
                     <View style={st.channelEmpty}>
-                      <Text style={st.channelEmptyTxt}>Airbnb is not currently synced with this listing.</Text>
+                      <Text style={st.channelEmptyTxt}>
+                        Airbnb is not currently synced with this listing.
+                      </Text>
                     </View>
                   )}
                 </View>
 
-                {/* Booking.com Sync Card */}
+                {/* Booking.com channel card */}
                 <View style={st.channelCard}>
                   <View style={st.channelHead}>
                     <View style={st.channelInfo}>
@@ -392,8 +679,18 @@ export default function CalendarSyncScreen() {
                         <Text style={st.channelSub}>iCal Calendar Connection</Text>
                       </View>
                     </View>
-                    <View style={[st.statusBadge, { backgroundColor: bookingFeed ? "#D1FAE5" : "#E2E8F0" }]}>
-                      <Text style={[st.statusBadgeTxt, { color: bookingFeed ? "#065F46" : "#64748B" }]}>
+                    <View
+                      style={[
+                        st.statusBadge,
+                        { backgroundColor: bookingFeed ? "#D1FAE5" : "#E2E8F0" },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          st.statusBadgeTxt,
+                          { color: bookingFeed ? "#065F46" : "#64748B" },
+                        ]}
+                      >
                         {bookingFeed ? "Connected" : "Disconnected"}
                       </Text>
                     </View>
@@ -403,27 +700,41 @@ export default function CalendarSyncScreen() {
                     <View style={st.channelBody}>
                       <View style={st.syncDetails}>
                         <View style={st.syncDetailRow}>
-                          <Text style={st.syncDetailLbl}>Last Synchronization:</Text>
+                          <Text style={st.syncDetailLbl}>Last Synchronization</Text>
                           <Text style={st.syncDetailVal}>{formatLastSync(bookingFeed.lastSyncedAt)}</Text>
                         </View>
                         <View style={st.syncDetailRow}>
-                          <Text style={st.syncDetailLbl}>Imported Blocks Count:</Text>
-                          <Text style={st.syncDetailVal}>{totalBlockedDates.length} Dates Blocked</Text>
+                          <Text style={st.syncDetailLbl}>Imported Blocks</Text>
+                          <Text style={st.syncDetailVal}>{bookingBlockCount} dates</Text>
                         </View>
                         <View style={st.syncDetailRow}>
-                          <Text style={st.syncDetailLbl}>Sync Health:</Text>
-                          <Text style={[st.syncDetailVal, { color: bookingFeed.lastError ? "#EF4444" : "#10B981", fontWeight: "700" }]}>
-                            {bookingFeed.lastError ? "Action Required" : "Healthy"}
+                          <Text style={st.syncDetailLbl}>Sync Health</Text>
+                          <Text
+                            style={[
+                              st.syncDetailVal,
+                              {
+                                color: bookingFeed.lastError ? K.colors.error : K.colors.success,
+                                fontWeight: "700",
+                              },
+                            ]}
+                          >
+                            {bookingFeed.lastError ? "Action Required" : "Healthy ✓"}
                           </Text>
                         </View>
+                        {bookingFeed.lastError && (
+                          <View style={st.errorBox}>
+                            <Feather name="alert-triangle" size={12} color="#DC2626" />
+                            <Text style={st.errorTxt}>{bookingFeed.lastError}</Text>
+                          </View>
+                        )}
                       </View>
                       <View style={st.channelActions}>
-                        <TouchableOpacity 
-                          style={st.syncBtn} 
+                        <TouchableOpacity
+                          style={[st.syncBtn, syncingFeedId !== null && { opacity: 0.7 }]}
                           onPress={() => syncMutation.mutate(bookingFeed.id)}
-                          disabled={syncMutation.isPending}
+                          disabled={syncingFeedId !== null}
                         >
-                          {syncMutation.isPending ? (
+                          {syncingFeedId === bookingFeed.id ? (
                             <ActivityIndicator size="small" color="#fff" />
                           ) : (
                             <>
@@ -432,7 +743,11 @@ export default function CalendarSyncScreen() {
                             </>
                           )}
                         </TouchableOpacity>
-                        <TouchableOpacity style={st.disconnectBtn} onPress={() => handleDisconnect(bookingFeed.id, "Booking.com")}>
+                        <TouchableOpacity
+                          style={st.disconnectBtn}
+                          onPress={() => handleDisconnect(bookingFeed.id, "Booking.com")}
+                          disabled={syncingFeedId !== null}
+                        >
                           <Feather name="trash-2" size={12} color="#EF4444" />
                           <Text style={st.disconnectBtnTxt}>Disconnect</Text>
                         </TouchableOpacity>
@@ -440,12 +755,14 @@ export default function CalendarSyncScreen() {
                     </View>
                   ) : (
                     <View style={st.channelEmpty}>
-                      <Text style={st.channelEmptyTxt}>Booking.com is not currently synced with this listing.</Text>
+                      <Text style={st.channelEmptyTxt}>
+                        Booking.com is not currently synced with this listing.
+                      </Text>
                     </View>
                   )}
                 </View>
 
-                {/* ── Add New Channel ─────────────────────────── */}
+                {/* ── Add New Sync Channel ──────────────────────────────── */}
                 <View style={st.card}>
                   <View style={st.cardHead}>
                     <Ionicons name="add-circle-outline" size={20} color={K.colors.accent} />
@@ -454,8 +771,8 @@ export default function CalendarSyncScreen() {
                   <Text style={st.cardDesc}>
                     Import calendar blocks from Airbnb or Booking.com by connecting their export feed URL.
                   </Text>
-                  
-                  {/* Platform Selector */}
+
+                  {/* Platform selector */}
                   <View style={st.formGroup}>
                     <Text style={st.inputLabel}>Channel Type</Text>
                     <View style={st.selectorRow}>
@@ -468,17 +785,25 @@ export default function CalendarSyncScreen() {
                         </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
-                        style={[st.selectorItem, selectedPlatform === "Booking.com" && st.selectorItemActive]}
+                        style={[
+                          st.selectorItem,
+                          selectedPlatform === "Booking.com" && st.selectorItemActive,
+                        ]}
                         onPress={() => setSelectedPlatform("Booking.com")}
                       >
-                        <Text style={[st.selectorTxt, selectedPlatform === "Booking.com" && st.selectorTxtActive]}>
+                        <Text
+                          style={[
+                            st.selectorTxt,
+                            selectedPlatform === "Booking.com" && st.selectorTxtActive,
+                          ]}
+                        >
                           Booking.com
                         </Text>
                       </TouchableOpacity>
                     </View>
                   </View>
 
-                  {/* iCal Feed Input */}
+                  {/* iCal URL input */}
                   <View style={st.formGroup}>
                     <Text style={st.inputLabel}>External iCal Calendar URL</Text>
                     <TextInput
@@ -492,8 +817,8 @@ export default function CalendarSyncScreen() {
                     />
                   </View>
 
-                  <TouchableOpacity 
-                    style={[st.connectBtn, connectMutation.isPending && { opacity: 0.7 }]} 
+                  <TouchableOpacity
+                    style={[st.connectBtn, connectMutation.isPending && { opacity: 0.7 }]}
                     onPress={handleConnect}
                     disabled={connectMutation.isPending}
                   >
@@ -508,13 +833,13 @@ export default function CalendarSyncScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {/* ── Sync History & Error Logs ───────────────── */}
+                {/* ── Sync History & Error Logs ─────────────────────────── */}
                 <View style={st.card}>
                   <View style={st.cardHead}>
                     <Feather name="activity" size={18} color={K.colors.accent} />
                     <Text style={st.cardTitle}>Sync History & Logs</Text>
                   </View>
-                  
+
                   {feeds.length === 0 ? (
                     <Text style={st.logsEmpty}>No calendar feeds linked to this listing yet.</Text>
                   ) : (
@@ -522,22 +847,31 @@ export default function CalendarSyncScreen() {
                       <View key={feed.id} style={st.logRow}>
                         <View style={st.logMeta}>
                           <View style={st.logMetaLeft}>
-                            <View style={[st.logDot, { backgroundColor: feed.lastError ? "#EF4444" : "#10B981" }]} />
+                            <View
+                              style={[
+                                st.logDot,
+                                { backgroundColor: feed.lastError ? K.colors.error : K.colors.success },
+                              ]}
+                            />
                             <Text style={st.logPlatform}>{feed.platform}</Text>
                           </View>
                           <Text style={st.logTime}>
-                            {feed.lastSyncedAt ? new Date(feed.lastSyncedAt).toLocaleTimeString() : "Never"}
+                            {feed.lastSyncedAt
+                              ? new Date(feed.lastSyncedAt).toLocaleTimeString()
+                              : "Never synced"}
                           </Text>
                         </View>
                         {feed.lastError ? (
                           <View style={st.logErrorBox}>
                             <Text style={st.logErrorTitle}>Sync Issue Detected:</Text>
                             <Text style={st.logErrorText}>{feed.lastError}</Text>
-                            <Text style={st.logErrorHint}>Verify the iCal URL matches exactly and try Syncing again.</Text>
+                            <Text style={st.logErrorHint}>
+                              Verify the iCal URL matches exactly and try syncing again.
+                            </Text>
                           </View>
                         ) : (
                           <Text style={st.logSuccessText}>
-                            Synchronization completely successful. Imported dates are locked.
+                            Synchronization successful. Imported dates are locked.
                           </Text>
                         )}
                       </View>
@@ -546,10 +880,13 @@ export default function CalendarSyncScreen() {
                 </View>
               </>
             ) : (
+              /* No listing selected */
               <View style={st.emptyState}>
                 <Feather name="alert-circle" size={48} color={K.colors.textMuted} />
                 <Text style={st.emptyStateTitle}>No Property Selected</Text>
-                <Text style={st.emptyStateSub}>Please create a listing first to manage calendar sync settings.</Text>
+                <Text style={st.emptyStateSub}>
+                  Please create a listing first to manage calendar sync settings.
+                </Text>
               </View>
             )}
             <View style={{ height: 100 }} />
@@ -560,6 +897,78 @@ export default function CalendarSyncScreen() {
   );
 }
 
+// ── Calendar-specific styles (separate object to avoid naming conflicts) ────────
+const cs = StyleSheet.create({
+  cell: {
+    borderRadius: K.radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  cellToday: {
+    borderWidth: 2,
+    borderColor: K.colors.accent,
+  },
+  cellTxt: {
+    fontSize: 11,
+    fontWeight: "600",
+    zIndex: 1,
+  },
+  calNav: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  calNavLabel: {
+    fontSize: K.font.base,
+    fontWeight: "700",
+    color: K.colors.textDark,
+  },
+  calRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  calDayHdr: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: K.colors.textMuted,
+    textAlign: "center",
+  },
+  legend: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: K.colors.border,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  legendSwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    overflow: "hidden",
+  },
+  legendToday: {
+    backgroundColor: "#fff",
+    borderWidth: 2,
+    borderColor: K.colors.accent,
+  },
+  legendLabel: {
+    fontSize: 10,
+    color: K.colors.textMuted,
+    fontWeight: "600",
+  },
+});
+
+// ── Main stylesheet ────────────────────────────────────────────────────────────
 const st = StyleSheet.create({
   container: {
     flex: 1,
@@ -599,7 +1008,7 @@ const st = StyleSheet.create({
     gap: 16,
   },
   section: {
-    marginBottom: 8,
+    marginBottom: 4,
   },
   sectionLabel: {
     fontSize: K.font.sm,
@@ -636,6 +1045,16 @@ const st = StyleSheet.create({
   listingNameActive: {
     color: "#fff",
     fontWeight: "700",
+  },
+  // Calendar card (slightly different padding than generic card)
+  calCard: {
+    backgroundColor: "#fff",
+    borderRadius: K.radius.xl,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: K.colors.border,
+    gap: 12,
+    ...K.shadow.sm,
   },
   card: {
     backgroundColor: "#fff",
@@ -712,6 +1131,29 @@ const st = StyleSheet.create({
     fontWeight: "700",
     color: K.colors.accent,
   },
+  // No-feeds empty state
+  noFeedsEmpty: {
+    backgroundColor: "#F8FAF9",
+    borderRadius: K.radius.xl,
+    padding: 28,
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    borderStyle: "dashed",
+  },
+  noFeedsTitle: {
+    fontSize: K.font.base,
+    fontWeight: "700",
+    color: K.colors.textDark,
+    marginTop: 4,
+  },
+  noFeedsSub: {
+    fontSize: 12,
+    color: K.colors.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
+  },
   channelCard: {
     backgroundColor: "#fff",
     borderRadius: K.radius.xl,
@@ -787,6 +1229,23 @@ const st = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: K.colors.textDark,
+  },
+  errorBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+    backgroundColor: "#FEF2F2",
+    borderRadius: K.radius.sm,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+    marginTop: 2,
+  },
+  errorTxt: {
+    flex: 1,
+    fontSize: 11,
+    color: "#B91C1C",
+    lineHeight: 16,
   },
   channelActions: {
     flexDirection: "row",

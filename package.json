@@ -19,9 +19,11 @@
 		"db:studio:auth": "turbo run db:studio --filter=@zika/auth-service",
 		"db:studio:listing": "turbo run db:studio --filter=@zika/listing-service",
 		"db:seed:auth": "turbo run db:seed --filter=@zika/auth-service",
-		"db:seed:all": "tsx scripts/seed-all.ts"
+		"db:seed:all": "tsx scripts/seed-all.ts",
+		"prepare": "husky"
 	},
 	"devDependencies": {
+		"husky": "^9.1.7",
 		"prettier": "^3.4.2",
 		"prisma": "^7.8.0",
 		"tsx": "^4.21.0",
