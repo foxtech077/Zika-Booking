@@ -4,11 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Settings, CheckCircle, AlertCircle, Server } from "lucide-react";
 import { api } from "@/lib/api";
 import { listingApi } from "@/lib/listing-api";
-import { paymentApi } from "@/lib/payment-api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { useAuthStore } from "@/stores/auth";
-import { canAccess } from "@/permissions/rbac";
 import { formatRelativeTime } from "@/lib/utils";
 
 const checkHealth = (client: any, label: string) =>
@@ -16,8 +14,6 @@ const checkHealth = (client: any, label: string) =>
 
 export default function SettingsPage() {
   const { user } = useAuthStore();
-  // Global platform sections are super_admin only
-  const isGlobalAdmin = canAccess(user?.role, "manage_settings");
 
   const { data: authHealth } = useQuery({
     queryKey: ["health-auth"],
@@ -31,16 +27,9 @@ export default function SettingsPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: paymentHealth } = useQuery({
-    queryKey: ["health-payment"],
-    queryFn: () => checkHealth(paymentApi, "Payment Service"),
-    refetchInterval: 30_000,
-  });
-
   const services = [
-    { ...(authHealth ?? { service: "Auth Service", status: "checking" }), endpoint: "https://api.kainook.com/auth", description: "Authentication, sessions, admin users, audit logs" },
-    { ...(listingHealth ?? { service: "Listing Service", status: "checking" }), endpoint: "https://api.kainook.com/listings", description: "Listings, bookings, commission, vouchers, reviews" },
-    { ...(paymentHealth ?? { service: "Payment Service", status: "checking" }), endpoint: "https://api.kainook.com/payments", description: "Payments, saved methods, payment status" },
+    { ...(authHealth ?? { service: "Auth Service", status: "checking" }), port: 3001, description: "Authentication, sessions, admin users, audit logs" },
+    { ...(listingHealth ?? { service: "Listing Service", status: "checking" }), port: 3003, description: "Listings, bookings, commission, vouchers, reviews" },
   ];
 
   const SESSION_SETTINGS = [
@@ -90,7 +79,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-slate-900">{svc.service}</p>
-                <p className="text-xs text-slate-500">{svc.endpoint} - {svc.description}</p>
+                <p className="text-xs text-slate-500">Port {svc.port} · {svc.description}</p>
               </div>
               <Badge
                 label={svc.status === "checking" ? "Checking…" : svc.status === "healthy" ? "Healthy" : "Degraded"}
@@ -121,27 +110,25 @@ export default function SettingsPage() {
         </div>
       </Card>
 
-      {/* Platform features — super_admin only */}
-      {isGlobalAdmin && (
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Platform Features" description="Core features and their current status" />
-          </div>
-          <div className="divide-y divide-border">
-            {PLATFORM_FEATURES.map(({ feature, description, status }) => (
-              <div key={feature} className="flex items-start justify-between gap-4 px-5 py-4">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">{feature}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{description}</p>
-                </div>
-                <div className="flex-shrink-0">
-                  <Badge label="Enabled" status="active" />
-                </div>
+      {/* Platform features */}
+      <Card padding="none">
+        <div className="p-5 border-b border-border">
+          <CardHeader title="Platform Features" description="Core features and their current status" />
+        </div>
+        <div className="divide-y divide-border">
+          {PLATFORM_FEATURES.map(({ feature, description, status }) => (
+            <div key={feature} className="flex items-start justify-between gap-4 px-5 py-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">{feature}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{description}</p>
               </div>
-            ))}
-          </div>
-        </Card>
-      )}
+              <div className="flex-shrink-0">
+                <Badge label="Enabled" status="active" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
 
       {/* Environment info */}
       <Card>

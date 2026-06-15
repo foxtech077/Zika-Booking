@@ -7,28 +7,6 @@ export const api = axios.create({
 });
 
 const TOKEN_KEY = "zika:admin_session";
-const AUTH_FLOW_PATHS = [
-  "/admin/auth/login",
-  "/admin/auth/totp/setup",
-  "/admin/auth/totp/confirm",
-  "/admin/auth/totp/verify",
-  "/admin/auth/webauthn/challenge",
-  "/admin/auth/webauthn/verify",
-];
-
-function requestPath(url?: string) {
-  if (!url) return "";
-  try {
-    return new URL(url, "http://localhost").pathname;
-  } catch {
-    return url;
-  }
-}
-
-function isAuthFlowRequest(url?: string) {
-  const path = requestPath(url);
-  return AUTH_FLOW_PATHS.some((authPath) => path.endsWith(authPath));
-}
 
 export function getAdminToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -43,19 +21,9 @@ export function clearAdminToken() {
   if (typeof window !== "undefined") sessionStorage.removeItem(TOKEN_KEY);
 }
 
-export function clearRefreshTokenCookie() {
-  if (typeof document === "undefined") return;
-
-  for (const path of ["/", "/api", "/admin"]) {
-    document.cookie = `refreshToken=; Max-Age=0; path=${path}; SameSite=Lax`;
-  }
-}
-
 api.interceptors.request.use((config) => {
   const token = getAdminToken();
-  if (token && !isAuthFlowRequest(config.url) && !config.headers.Authorization) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -64,7 +32,6 @@ api.interceptors.response.use(
   (error) => {
     const status = error?.response?.status;
     const code   = error?.response?.data?.error?.code ?? "";
-    const isAuthFlow = isAuthFlowRequest(error?.config?.url);
 
     const isAuthFailure =
       status === 401 ||
@@ -76,9 +43,7 @@ api.interceptors.response.use(
       // Clear all admin session data then hard-navigate to login
       sessionStorage.removeItem("zika:admin_session");
       sessionStorage.removeItem("zika:admin_auth");
-      if (!window.location.pathname.endsWith("/login")) {
-        window.location.href = "/admin/login";
-      }
+      window.location.href = "/admin/login";
     }
 
     return Promise.reject(error);
