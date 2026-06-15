@@ -223,6 +223,7 @@ export default function ListingsScreen() {
       });
       return res.data.data;
     },
+    enabled: !!user,
   });
 
   // Summary data (booking counts per listing)
@@ -232,7 +233,7 @@ export default function ListingsScreen() {
       const res = await listingApi.get<{ data: { listings: SummaryItem[] } }>("/provider/listings/summary");
       return res.data.data;
     },
-    enabled: listingsQ.isSuccess,
+    enabled: !!user && listingsQ.isSuccess,
   });
 
   // Dashboard stats (for the stats strip)
@@ -242,6 +243,7 @@ export default function ListingsScreen() {
       const res = await listingApi.get<{ data: DashboardStats }>("/provider/dashboard");
       return res.data.data;
     },
+    enabled: !!user,
   });
 
   // Mutations

@@ -119,6 +119,7 @@ export interface AdminSessionPayload {
   sub: string;        // adminUserId
   role: string;
   sessionId: string;
+  countryScope?: string[];
   iat: number;
   exp: number;
 }

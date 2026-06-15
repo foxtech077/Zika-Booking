@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["listing"]
+  schemas  = ["listing", "auth"]
 }
 
 enum ListingCategory {
@@ -544,15 +544,49 @@ model ListingReview {
 
 // ── E11 — Commission Management ───────────────────────────────────────────────
 
+model PlatformSettings {
+  id                          String    @id @default("global")
+  globalCommissionRate        Decimal   @default(0.0500) @map("global_commission_rate") @db.Decimal(6, 4)
+  pendingGlobalRate           Decimal?  @map("pending_global_rate") @db.Decimal(6, 4)
+  pendingGlobalEffectiveFrom  DateTime? @map("pending_global_effective_from")
+  pendingGlobalReason         String?   @map("pending_global_reason") @db.VarChar(500)
+  updatedAt                   DateTime  @updatedAt @map("updated_at")
+  updatedBy                   String?   @map("updated_by") @db.VarChar(100)
+
+  @@map("platform_settings")
+  @@schema("listing")
+}
+
 model CommissionRate {
-  id          String   @id @default(uuid())
-  country     String   @unique @db.Char(2)
-  rate        Decimal  @db.Decimal(6, 4)
-  setBy       String   @map("set_by")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                   String    @id @default(uuid())
+  country              String    @unique @db.Char(2)
+  rate                 Decimal   @db.Decimal(6, 4)
+  pendingRate          Decimal?  @map("pending_rate") @db.Decimal(6, 4)
+  pendingEffectiveFrom DateTime? @map("pending_effective_from")
+  pendingReason        String?   @map("pending_reason") @db.VarChar(500)
+  setBy                String    @map("set_by")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
 
   @@map("commission_rates")
+  @@schema("listing")
+}
+
+model CommissionHistory {
+  id                String   @id @default(uuid())
+  scope             String   @db.VarChar(10)
+  countryCode       String?  @map("country_code") @db.Char(2)
+  oldRate           Decimal  @map("old_rate") @db.Decimal(6, 4)
+  newRate           Decimal  @map("new_rate") @db.Decimal(6, 4)
+  effectiveFrom     DateTime @map("effective_from")
+  changedBy         String   @map("changed_by") @db.VarChar(100)
+  changedByRole     String   @map("changed_by_role") @db.VarChar(50)
+  reason            String   @db.VarChar(500)
+  applyToAll        Boolean  @default(false) @map("apply_to_all")
+  providersNotified Boolean  @default(false) @map("providers_notified")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@map("commission_history")
   @@schema("listing")
 }
 
@@ -735,3 +769,20 @@ model Report {
   @@map("reports")
   @@schema("listing")
 }
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  adminId    String
+  role       String    @db.VarChar(50)
+  action     String    @db.VarChar(100)
+  targetType String?   @db.VarChar(50)
+  targetId   String?
+  oldValue   String?   @db.Text
+  newValue   String?   @db.Text
+  ipAddress  String    @db.VarChar(45)
+  timestamp  DateTime  @default(now())
+
+  @@map("AuditLog")
+  @@schema("auth")
+}
+

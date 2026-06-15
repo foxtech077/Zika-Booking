@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
+
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
   sendListingApprovedEmail,
@@ -111,7 +112,7 @@ async function verifyListingScope(
   }
 
   if (admin.adminRole === "country_manager") {
-    if (!admin.adminCountry || listing.country !== admin.adminCountry) {
+    if (!listing.country || !admin.countryScope.includes(listing.country)) {
       throw new Error("OUT_OF_SCOPE");
     }
   }
@@ -121,7 +122,7 @@ async function verifyListingScope(
 export async function adminListingRoutes(app: FastifyInstance) {
 
   // ── GET /admin/listings/review-queue (UC-2.8) ─────────────────────────────
- app.get("/admin/listings/review-queue", {
+  app.get("/admin/listings/review-queue", {
     preHandler: [requireAdmin],
     schema: {
       tags: ["Admin Listings"],
@@ -193,19 +194,19 @@ export async function adminListingRoutes(app: FastifyInstance) {
       slaStatus === "breached"
         ? { slaDeadline: { lt: now } }
         : slaStatus === "approaching"
-        ? {
+          ? {
             slaDeadline: {
               gte: now,
               lt: new Date(now.getTime() + 4 * 60 * 60 * 1000),
             },
           }
-        : slaStatus === "ok"
-        ? {
-            slaDeadline: {
-              gte: new Date(now.getTime() + 4 * 60 * 60 * 1000),
-            },
-          }
-        : {};
+          : slaStatus === "ok"
+            ? {
+              slaDeadline: {
+                gte: new Date(now.getTime() + 4 * 60 * 60 * 1000),
+              },
+            }
+            : {};
     const isCountryManager = admin.adminRole === "country_manager";
 
     const listingFilter: any = {
@@ -213,7 +214,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
     };
 
     if (isCountryManager) {
-      listingFilter.country = admin.adminCountry ?? "UNDEFINED_COUNTRY";
+      if (country) {
+        if (admin.countryScope.includes(country)) {
+          listingFilter.country = country;
+        } else {
+          listingFilter.country = { in: [] };
+        }
+      } else {
+        listingFilter.country = { in: admin.countryScope };
+      }
     } else if (country) {
       listingFilter.country = country;
     }
@@ -256,21 +265,21 @@ export async function adminListingRoutes(app: FastifyInstance) {
       },
     });
 
- const total = await prisma.listingReviewTask.count({
-  where: {
-    status: taskStatus
-      ? (taskStatus as ReviewTaskStatus)
-      : { in: ["open", "escalated"] },
-    AND: [
-      slaFilter,
-      {
-        listing: {
-          is: listingFilter,
-        },
+    const total = await prisma.listingReviewTask.count({
+      where: {
+        status: taskStatus
+          ? (taskStatus as ReviewTaskStatus)
+          : { in: ["open", "escalated"] },
+        AND: [
+          slaFilter,
+          {
+            listing: {
+              is: listingFilter,
+            },
+          },
+        ],
       },
-    ],
-  },
-});
+    });
 
     const signedTasks = await Promise.all(
       tasks.map(async (t) => ({
@@ -368,26 +377,26 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-} 
+      throw error;
+    }
     const listing = await prisma.listing.findUnique({
       where: { id },
       include: {
@@ -472,31 +481,31 @@ try {
     if (!checkAdminRole(req, reply)) return;
     const admin = req as AdminRequest;
     const { id, docId } = req.params as { id: string; docId: string };
-try {
-    await verifyListingScope(admin, id);
-  } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "LISTING_NOT_FOUND") {
-        return sendError(
-          reply,
-          404,
-          "NOT_FOUND",
-          "Listing not found."
-        );
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(
+            reply,
+            404,
+            "NOT_FOUND",
+            "Listing not found."
+          );
+        }
+
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
       }
 
-      if (error.message === "OUT_OF_SCOPE") {
-        return sendError(
-          reply,
-          403,
-          "FORBIDDEN",
-          "This listing is outside your country scope."
-        );
-      }
+      throw error;
     }
-
-    throw error;
-  }
 
     const doc = await prisma.listingDocument.findFirst({ where: { id: docId, listingId: id } });
     if (!doc) return sendError(reply, 404, "NOT_FOUND", "Document not found.");
@@ -532,39 +541,41 @@ try {
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId },include: {
-    listing: {
-      select: {
-        id: true,
+    const task = await prisma.listingReviewTask.findUnique({
+      where: { id: taskId }, include: {
+        listing: {
+          select: {
+            id: true,
+          },
+        },
       },
-    },
-  }, });
+    });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
     try {
-  await verifyListingScope(admin, task.listing.id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(
-        reply,
-        404,
-        "NOT_FOUND",
-        "Listing not found."
-      );
-    }
+      await verifyListingScope(admin, task.listing.id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(
+            reply,
+            404,
+            "NOT_FOUND",
+            "Listing not found."
+          );
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This review task is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This review task is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     if (!["open", "escalated"].includes(task.status)) {
       return sendError(reply, 409, "TASK_RESOLVED", "Cannot assign a resolved task.");
     }
@@ -602,38 +613,41 @@ try {
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId },include: {
-    listing: {
-      select: {
-        id: true,
-      },
-    },} });
+    const task = await prisma.listingReviewTask.findUnique({
+      where: { id: taskId }, include: {
+        listing: {
+          select: {
+            id: true,
+          },
+        },
+      }
+    });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
     try {
-  await verifyListingScope(admin, task.listing.id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(
-        reply,
-        404,
-        "NOT_FOUND",
-        "Listing not found."
-      );
-    }
+      await verifyListingScope(admin, task.listing.id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(
+            reply,
+            404,
+            "NOT_FOUND",
+            "Listing not found."
+          );
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This review task is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This review task is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     if (!["open", "escalated"].includes(task.status)) {
       return sendError(reply, 409, "TASK_RESOLVED", "Cannot unassign a resolved task.");
     }
@@ -679,39 +693,41 @@ try {
     const { taskId } = req.params as { taskId: string };
     const { reason } = req.body as { reason?: string };
 
-    const task = await prisma.listingReviewTask.findUnique({ where: { id: taskId },include: {
-    listing: {
-      select: {
-        id: true,
+    const task = await prisma.listingReviewTask.findUnique({
+      where: { id: taskId }, include: {
+        listing: {
+          select: {
+            id: true,
+          },
+        },
       },
-    },
-  }, });
+    });
     if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
     try {
-  await verifyListingScope(admin, task.listing.id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(
-        reply,
-        404,
-        "NOT_FOUND",
-        "Listing not found."
-      );
-    }
+      await verifyListingScope(admin, task.listing.id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(
+            reply,
+            404,
+            "NOT_FOUND",
+            "Listing not found."
+          );
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This review task is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This review task is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     if (!["open", "awaiting_provider_response"].includes(task.status)) {
       return sendError(reply, 409, "INVALID_STATUS", "Only open or awaiting-provider-response tasks can be escalated.");
     }
@@ -748,9 +764,9 @@ try {
         type: "object",
         required: ["decision"],
         properties: {
-          decision: { 
-            type: "string", 
-            enum: ["unblock_warning", "unblock_no_warning", "keep_suspended", "ban"] 
+          decision: {
+            type: "string",
+            enum: ["unblock_warning", "unblock_no_warning", "keep_suspended", "ban"]
           },
           adminNote: { type: "string", minLength: 1 },
         },
@@ -765,6 +781,7 @@ try {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
     const { decision, adminNote } = req.body as { decision: string; adminNote?: string };
@@ -845,6 +862,19 @@ try {
           metadata: { taskId, decision, adminNote: adminNote ?? null },
         },
       });
+
+      await tx.auditLog.create({
+        data: {
+          adminId: admin.adminId,
+          role: admin.adminRole,
+          action: "review_task_resolved",
+          targetType: "listing",
+          targetId: task.listingId,
+          oldValue: task.status,
+          newValue: JSON.stringify({ decision, outcome: nextStatus }),
+          ipAddress: req.ip,
+        },
+      });
     });
 
     return sendSuccess(reply, 200, { message: `Task resolved with decision: ${decision}.` });
@@ -865,29 +895,37 @@ try {
     },
     preHandler: [requireAdmin],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply, MODERATOR_ROLES)) return;
+   
     const admin = req as AdminRequest;
-    const { id } = req.params as { id: string };
-    try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
-
-    if (error.message === "OUT_OF_SCOPE") {
+    if (!MODERATOR_ROLES.has(admin.adminRole)) {
       return sendError(
         reply,
         403,
         "FORBIDDEN",
-        "This listing is outside your country scope."
+        "You do not have permission to approve listings or assign star ratings."
       );
     }
-  }
+    const { id } = req.params as { id: string };
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-  throw error;
-}
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
+
+      throw error;
+    }
     const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
 
     if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
@@ -936,29 +974,48 @@ try {
       }
 
       await tx.listingModerationLog.create({
+  data: {
+    listingId: id,
+    action: "approved",
+    actorId: admin.adminId,
+    actorRole: admin.adminRole,
+    metadata: {
+      starRating,
+      claimedStarRating: listing.claimedStarRating,
+      adminNote: adminNote ?? null,
+      taskId: task?.id ?? null,
+      submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+      ipAddress: req.ip,
+    },
+  },
+});
+
+      await tx.auditLog.create({
         data: {
-          listingId: id,
-          action: "approved",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: {
-            starRating,
+          adminId: admin.adminId,
+          role: admin.adminRole,
+          action: "listing_approved",
+          targetType: "listing",
+          targetId: id,
+          oldValue: JSON.stringify({
+            status: listing.status,
             claimedStarRating: listing.claimedStarRating,
-            adminNote: adminNote ?? null,
-            taskId: task?.id ?? null,
-            submissionNumber: task?.submissionNumber ?? listing.submissionCount,
-            ipAddress: req.ip,
-          },
+          }),
+          newValue: JSON.stringify({
+            status: "approved",
+            starRating,
+          }),
+          ipAddress: req.ip,
         },
       });
 
-      return { actioned: true };
-    });
-
+return { actioned: true };
+});
     if (!result.actioned) {
       return sendError(reply, 409, "INVALID_STATUS",
         "Listing is not pending review — it may have already been actioned by another admin.");
     }
+
 
     sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
     return sendSuccess(reply, 200, { message: "Listing approved and published." });
@@ -1022,26 +1079,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     const { reasons, providerNote, adminNote } = req.body as {
       reasons: string[];
       providerNote?: string;
@@ -1107,7 +1164,23 @@ try {
           },
         },
       });
-
+      await tx.auditLog.create({
+        data: {
+          adminId: admin.adminId,
+          role: admin.adminRole,
+          action: "listing_rejected",
+          targetType: "listing",
+          targetId: id,
+          oldValue: JSON.stringify({
+            status: listing.status,
+          }),
+          newValue: JSON.stringify({
+            status: "rejected",
+            reasons,
+          }),
+          ipAddress: req.ip,
+        },
+      });
       return { actioned: true };
     });
 
@@ -1165,26 +1238,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     const { starRating, reason } = req.body as { starRating: number; reason: string };
 
     if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
@@ -1199,17 +1272,39 @@ try {
     const oldRating = listing.starRating ?? 0;
 
     await prisma.$transaction([
-      prisma.listing.update({ where: { id }, data: { starRating } }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action: "star_rating_updated",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: { oldRating, newRating: starRating, reason, ipAddress: req.ip },
-        },
-      }),
-    ]);
+  prisma.listing.update({
+    where: { id },
+    data: { starRating },
+  }),
+
+  prisma.listingModerationLog.create({
+    data: {
+      listingId: id,
+      action: "star_rating_updated",
+      actorId: admin.adminId,
+      actorRole: admin.adminRole,
+      metadata: {
+        oldRating,
+        newRating: starRating,
+        reason,
+        ipAddress: req.ip,
+      },
+    },
+  }),
+
+  prisma.auditLog.create({
+    data: {
+      adminId: admin.adminId,
+      role: admin.adminRole,
+      action: "star_rating_updated",
+      targetType: "listing",
+      targetId: id,
+      oldValue: String(oldRating),
+      newValue: String(starRating),
+      ipAddress: req.ip,
+    },
+  }),
+]);
 
     sendStarRatingUpdatedEmail(listing.providerId, listing.name ?? id, oldRating, starRating, reason).catch(() => null);
     return sendSuccess(reply, 200, { message: "Star rating updated." });
@@ -1259,26 +1354,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };
 
     if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Suspension reason is required.");
@@ -1290,20 +1385,44 @@ try {
     }
 
     await prisma.$transaction([
-      prisma.listing.update({
-        where: { id },
-        data: { status: "suspended", suspendedAt: new Date(), suspendedBy: admin.adminId, suspensionReason: reason },
-      }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action: "suspended",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: { reason, previousStatus: listing.status, notifyProvider, ipAddress: req.ip },
-        },
-      }),
-    ]);
+  prisma.listing.update({
+    where: { id },
+    data: {
+      status: "suspended",
+      suspendedAt: new Date(),
+      suspendedBy: admin.adminId,
+      suspensionReason: reason,
+    },
+  }),
+
+  prisma.listingModerationLog.create({
+    data: {
+      listingId: id,
+      action: "suspended",
+      actorId: admin.adminId,
+      actorRole: admin.adminRole,
+      metadata: {
+        reason,
+        previousStatus: listing.status,
+        notifyProvider,
+        ipAddress: req.ip,
+      },
+    },
+  }),
+
+  prisma.auditLog.create({
+    data: {
+      adminId: admin.adminId,
+      role: admin.adminRole,
+      action: "listing_suspended",
+      targetType: "listing",
+      targetId: id,
+      oldValue: listing.status,
+      newValue: "suspended",
+      ipAddress: req.ip,
+    },
+  }),
+]);
 
     if (notifyProvider) {
       sendListingSuspendedEmail(listing.providerId, listing.name ?? id).catch(() => null);
@@ -1348,26 +1467,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
     const { reason } = req.body as { reason?: string };
 
     const listing = await prisma.listing.findUnique({ where: { id } });
@@ -1392,6 +1511,18 @@ try {
             suspensionReason: listing.suspensionReason ?? null,
             ipAddress: req.ip,
           },
+        },
+      }),
+      prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId,
+          role: admin.adminRole,
+          action: "listing_reinstated",
+          targetType: "listing",
+          targetId: id,
+          oldValue: listing.status,
+          newValue: restoreStatus,
+          ipAddress: req.ip,
         },
       }),
     ]);
@@ -1458,26 +1589,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
 
     const listing = await prisma.listing.findUnique({
       where: { id },
@@ -1569,26 +1700,26 @@ try {
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-try {
-  await verifyListingScope(admin, id);
-} catch (error) {
-  if (error instanceof Error) {
-    if (error.message === "LISTING_NOT_FOUND") {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
+    try {
+      await verifyListingScope(admin, id);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === "LISTING_NOT_FOUND") {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+        }
 
-    if (error.message === "OUT_OF_SCOPE") {
-      return sendError(
-        reply,
-        403,
-        "FORBIDDEN",
-        "This listing is outside your country scope."
-      );
-    }
-  }
+        if (error.message === "OUT_OF_SCOPE") {
+          return sendError(
+            reply,
+            403,
+            "FORBIDDEN",
+            "This listing is outside your country scope."
+          );
+        }
+      }
 
-  throw error;
-}
+      throw error;
+    }
 
     const listing = await prisma.listing.findUnique({
       where: { id },
@@ -1690,7 +1821,13 @@ try {
         q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { town: { contains: q, mode: "insensitive" as const } }] } : {},
         status ? { status: status as any } : {},
         category ? { category: category as any } : {},
-        isCountryManager ? { country: admin.adminCountry ?? "UNDEFINED_COUNTRY" } : (country ? { country } : {}),
+        isCountryManager
+          ? (country
+              ? (admin.countryScope.includes(country)
+                  ? { country }
+                  : { country: { in: [] } })
+              : { country: { in: admin.countryScope } })
+          : (country ? { country } : {}),
       ],
     };
 
@@ -1793,9 +1930,22 @@ try {
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
     const { q = "", status, listingType, country, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
+
+    const isCountryManager = admin.adminRole === "country_manager";
+
+    // Country managers are scoped to their assigned countries
+    const countryFilter: any = isCountryManager
+      ? (country
+          ? (admin.countryScope.includes(country)
+              ? { listing: { country } }
+              : { listing: { country: { in: [] } } }) // out-of-scope country → empty result
+          : { listing: { country: { in: admin.countryScope } } })
+      : (country ? { listing: { country } } : {});
 
     const where: any = {
       AND: [
@@ -1809,7 +1959,7 @@ try {
         } : {},
         status ? { status } : {},
         listingType ? { listingType } : {},
-        country ? { listing: { country } } : {},
+        countryFilter,
       ],
     };
 
@@ -1849,36 +1999,36 @@ try {
         },
       },
       response: {
-  200: ok({
-    type: "object",
-    properties: {
-      id: { type: "string" },
-      status: { type: "string" },
-      checkIn: { type: "string" },
-      checkOut: { type: "string" },
-      totalAmount: { type: "number" },
+        200: ok({
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            status: { type: "string" },
+            checkIn: { type: "string" },
+            checkOut: { type: "string" },
+            totalAmount: { type: "number" },
 
-      listing: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-          country: { type: "string" },
-          category: { type: "string" }
-        }
+            listing: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                country: { type: "string" },
+                category: { type: "string" }
+              }
+            },
+
+            statusLog: {
+              type: "array",
+              items: {
+                type: "object"
+              }
+            }
+          }
+        }),
+        404: ErrorResponse,
+        401: ErrorResponse,
+        403: ErrorResponse,
       },
-
-      statusLog: {
-        type: "array",
-        items: {
-          type: "object"
-        }
-      }
-    }
-  }),
-  404: ErrorResponse,
-  401: ErrorResponse,
-  403: ErrorResponse,
-},
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
@@ -1961,6 +2111,19 @@ try {
         actorType: "admin",
         changedBy: admin.adminId,
         reason,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        adminId: admin.adminId,
+        role: admin.adminRole,
+        action: "booking_cancelled",
+        targetType: "booking",
+        targetId: id,
+        oldValue: booking.status,
+        newValue: "cancelled_by_system",
+        ipAddress: req.ip,
       },
     });
 
@@ -2383,5 +2546,365 @@ try {
       page: parseInt(page, 10),
       limit: take,
     });
+  });
+
+  // ── GET /admin/booking-requests/pending ──────────────────────────────────
+  app.get("/admin/booking-requests/pending", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Bookings"],
+      summary: "List pending booking requests waiting for manual approval",
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: "object",
+        properties: {
+          ...PageQuery,
+        },
+      },
+      response: {
+        200: ok({
+          type: "object",
+          properties: {
+            requests: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  reference: { type: "string" },
+                  guestFirstName: { type: "string" },
+                  guestLastName: { type: "string" },
+                  totalAmount: { type: "number" },
+                  currency: { type: "string" },
+                  createdAt: { type: "string", format: "date-time" },
+                  listing: {
+                    type: "object",
+                    properties: { name: { type: "string", nullable: true }, country: { type: "string", nullable: true } }
+                  }
+                }
+              }
+            },
+            total: { type: "integer" },
+            page: { type: "integer" },
+            limit: { type: "integer" },
+          }
+        }),
+        401: ErrorResponse,
+        403: ErrorResponse,
+      }
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
+    const { page = "1", limit = "20" } = req.query as Record<string, string>;
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const take = Math.min(parseInt(limit, 10), 100);
+
+    const isCountryManager = admin.adminRole === "country_manager" || admin.adminRole === "sales";
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+
+    const where: any = {
+      status: "pending_payment",
+      createdAt: { lt: twoHoursAgo },
+      listing: {
+        instantBooking: false,
+        ...(isCountryManager ? { country: { in: admin.countryScope } } : {}),
+      },
+    };
+
+    const [total, requests] = await Promise.all([
+      prisma.booking.count({ where }),
+      prisma.booking.findMany({
+        where, skip, take,
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true, reference: true, guestFirstName: true, guestLastName: true,
+          totalAmount: true, currency: true, createdAt: true,
+          listing: { select: { name: true, country: true } }
+        }
+      }),
+    ]);
+
+    return sendSuccess(reply, 200, { requests, total, page: parseInt(page, 10), limit: take });
+  });
+
+  // ── POST /admin/booking-requests/:id/approve ─────────────────────────────
+  app.post("/admin/booking-requests/:id/approve", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Bookings"],
+      summary: "Approve a pending booking request",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } },
+      },
+      response: {
+        200: ok({ type: "object", properties: { message: { type: "string" } } }),
+        403: ErrorResponse,
+        404: ErrorResponse,
+        409: ErrorResponse,
+      }
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
+    const { id } = req.params as { id: string };
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: { listing: true },
+    });
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    if (booking.status !== "pending_payment") {
+      return sendError(reply, 409, "INVALID_STATUS", "Booking is not pending.");
+    }
+    
+    if (["country_manager", "sales"].includes(admin.adminRole)) {
+      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+      }
+    }
+
+    await prisma.booking.update({
+      where: { id },
+      data: { status: "confirmed", confirmedAt: new Date() },
+    });
+
+    await prisma.bookingStatusLog.create({
+      data: { bookingId: id, fromStatus: "pending_payment", toStatus: "confirmed", actorType: "admin", changedBy: admin.adminId },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_approved",
+        targetType: "booking", targetId: id,
+        oldValue: "pending_payment", newValue: "confirmed", ipAddress: req.ip,
+      },
+    });
+
+    const { sendBookingConfirmationEmail } = await import("../lib/email.js");
+    sendBookingConfirmationEmail(
+      booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
+      {
+        reference: booking.reference, listingName: booking.listing.name ?? "Your listing",
+        listingType: booking.listingType, checkIn: booking.checkIn?.toISOString(),
+        checkOut: booking.checkOut?.toISOString(), pickupDatetime: booking.pickupDatetime?.toISOString(),
+        returnDatetime: booking.returnDatetime?.toISOString(), nightsOrDays: booking.nightsOrDays,
+        totalAmount: Number(booking.totalAmount), currency: booking.currency,
+      }
+    ).catch(() => {});
+
+    const { getRedis } = await import("../lib/redis.js");
+    const lockSuffix = booking.checkIn
+      ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
+      : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
+    await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+
+    return sendSuccess(reply, 200, { message: "Booking request approved." });
+  });
+
+  // ── POST /admin/booking-requests/:id/decline ─────────────────────────────
+  app.post("/admin/booking-requests/:id/decline", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Bookings"],
+      summary: "Decline a pending booking request",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } },
+      },
+      body: {
+        type: "object",
+        required: ["reason"],
+        properties: { reason: { type: "string" } },
+      },
+      response: {
+        200: ok({ type: "object", properties: { message: { type: "string" } } }),
+        403: ErrorResponse,
+        404: ErrorResponse,
+        409: ErrorResponse,
+      }
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
+    const { id } = req.params as { id: string };
+    const { reason } = req.body as { reason: string };
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: { listing: true },
+    });
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    if (booking.status !== "pending_payment") {
+      return sendError(reply, 409, "INVALID_STATUS", "Booking is not pending.");
+    }
+    
+    if (["country_manager", "sales"].includes(admin.adminRole)) {
+      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+      }
+    }
+
+    await prisma.booking.update({
+      where: { id },
+      data: { status: "cancelled_by_system", cancelledAt: new Date(), cancelledBy: "admin", cancellationReason: reason },
+    });
+
+    await prisma.bookingStatusLog.create({
+      data: { bookingId: id, fromStatus: "pending_payment", toStatus: "cancelled_by_system", actorType: "admin", changedBy: admin.adminId, reason },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_declined",
+        targetType: "booking", targetId: id,
+        oldValue: "pending_payment", newValue: "cancelled_by_system", ipAddress: req.ip,
+      },
+    });
+
+    const { sendBookingCancellationEmail } = await import("../lib/email.js");
+    sendBookingCancellationEmail(
+      booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
+      { 
+        reference: booking.reference, 
+        reason,
+        listingName: booking.listing.name ?? "Your listing",
+        refundAmount: 0,
+        currency: booking.currency
+      }
+    ).catch(() => {});
+
+    const { getRedis } = await import("../lib/redis.js");
+    const lockSuffix = booking.checkIn
+      ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
+      : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
+    await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+
+    return sendSuccess(reply, 200, { message: "Booking request declined." });
+  });
+
+  // ── POST /admin/booking-requests/:id/request-info ────────────────────────
+  app.post("/admin/booking-requests/:id/request-info", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Bookings"],
+      summary: "Request more info from guest",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } },
+      },
+      body: {
+        type: "object",
+        required: ["message"],
+        properties: { message: { type: "string" } },
+      },
+      response: {
+        200: ok({ type: "object", properties: { message: { type: "string" } } }),
+        403: ErrorResponse,
+        404: ErrorResponse,
+      }
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
+    const { id } = req.params as { id: string };
+    const { message } = req.body as { message: string };
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: { listing: true },
+    });
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    
+    if (["country_manager", "sales"].includes(admin.adminRole)) {
+      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+      }
+    }
+
+    let conversation = await prisma.conversation.findUnique({
+      where: { bookingId: id },
+    });
+
+    if (!conversation) {
+      conversation = await prisma.conversation.create({
+        data: {
+          bookingId: id,
+          listingId: booking.listingId,
+          guestId: booking.guestId,
+          providerId: booking.providerId,
+        },
+      });
+    }
+
+    await prisma.message.create({
+      data: {
+        conversationId: conversation.id,
+        senderId: admin.adminId,
+        senderType: "admin",
+        body: message,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_info_asked",
+        targetType: "booking", targetId: id, ipAddress: req.ip,
+      },
+    });
+
+    return sendSuccess(reply, 200, { message: "Message sent to guest." });
+  });
+
+  // ── POST /admin/booking-requests/:id/escalate ────────────────────────────
+  app.post("/admin/booking-requests/:id/escalate", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Bookings"],
+      summary: "Escalate booking request to host",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: { id: { type: "string" } },
+      },
+      response: {
+        200: ok({ type: "object", properties: { message: { type: "string" } } }),
+        403: ErrorResponse,
+        404: ErrorResponse,
+      }
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
+    const { id } = req.params as { id: string };
+
+    const booking = await prisma.booking.findUnique({
+      where: { id },
+      include: { listing: true },
+    });
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    
+    if (["country_manager", "sales"].includes(admin.adminRole)) {
+      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+      }
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_escalated",
+        targetType: "booking", targetId: id, ipAddress: req.ip,
+      },
+    });
+
+    return sendSuccess(reply, 200, { message: "Request escalated to host." });
   });
 }
