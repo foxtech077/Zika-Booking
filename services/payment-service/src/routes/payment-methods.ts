@@ -377,17 +377,6 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
             data: { isDefault: true },
           }),
         ]);
-
-        if (method.paymentProvider === "stripe" && method.providerPmId) {
-          const customerAccount = await prisma.customerAccount.findUnique({
-            where: { userId_paymentProvider: { userId, paymentProvider: "stripe" } },
-          });
-          if (customerAccount) {
-            await stripe.customers.update(customerAccount.providerCustomerId, {
-              invoice_settings: { default_payment_method: method.providerPmId },
-            }).catch((err: Error) => console.error("Failed to update Stripe default PM:", err.message));
-          }
-        }
       }
 
       const updated = await prisma.paymentMethod.findUniqueOrThrow({ where: { id } });
@@ -444,17 +433,6 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
             where: { id: next.id },
             data: { isDefault: true },
           });
-
-          if (next.paymentProvider === "stripe" && next.providerPmId) {
-            const customerAccount = await prisma.customerAccount.findUnique({
-              where: { userId_paymentProvider: { userId, paymentProvider: "stripe" } },
-            });
-            if (customerAccount) {
-              await stripe.customers.update(customerAccount.providerCustomerId, {
-                invoice_settings: { default_payment_method: next.providerPmId },
-              }).catch((err: Error) => console.error("Failed to update Stripe default PM:", err.message));
-            }
-          }
         }
       }
 

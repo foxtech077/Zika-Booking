@@ -7,10 +7,35 @@ import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js"
 import Stripe from "stripe";
 
 
+const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 const STRIPE_WEBHOOK_SECRET = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
 const TARA_WEBHOOK_SECRET = process.env["TARA_WEBHOOK_SECRET"] ?? "";
 
-import { failBooking, fetchBooking } from "../lib/booking.js";
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+async function confirmBooking(bookingId: string, paymentId: string, paymentProvider: string) {
+  try {
+    await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}/confirm`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId, paymentProvider }),
+    });
+  } catch (err) {
+    console.error("[webhook] Failed to confirm booking", bookingId, err);
+  }
+}
+
+async function failBooking(bookingId: string) {
+  try {
+    await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}/fail`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ failureReason: "Payment failed after maximum attempts." }),
+    });
+  } catch (err) {
+    console.error("[webhook] Failed to mark booking as failed", bookingId, err);
+  }
+}
 
 // ── Route plugin ──────────────────────────────────────────────────────────────
 
@@ -53,9 +78,9 @@ export async function webhookRoutes(app: FastifyInstance) {
   
     console.log("Event:", event.type);
   
-   
+    // ========================
     // PAYMENT SUCCESS
-
+    // ========================
     if (event.type === "payment_intent.succeeded") {
       const intent = event.data.object as Stripe.PaymentIntent;
   
@@ -69,31 +94,8 @@ export async function webhookRoutes(app: FastifyInstance) {
       }
   
       //  IDEMPOTENCY CHECK — must be FIRST, before any side effects
-      const result = await prisma.payment.updateMany({
-        where: {
-          id: payment.id,
-          status: { not: "captured" }
-        },
-        data: {
-          status: "captured",
-          capturedAt: new Date(),
-        },
-      });
-      
-      if (result.count === 0) {
-        try {
-          const booking = await fetchBooking(payment.bookingId);
-          if (booking && booking.status !== "confirmed") {
-            console.log(`[stripe] Retrying bookingConfirmedHandler for captured payment: ${payment.id}`);
-            await bookingConfirmedHandler({
-              id: payment.id,
-              paymentProvider: payment.paymentProvider,
-              metadata: { bookingId: payment.bookingId },
-            });
-          }
-        } catch (e) {
-          console.error("Retry handler check failed", e);
-        }
+      if (payment.status === "captured") {
+        console.log("Already captured, skipping duplicate webhook");
         return reply.send({ received: true });
       }
   
@@ -122,16 +124,15 @@ export async function webhookRoutes(app: FastifyInstance) {
       //  emails + PDF + confirm booking — runs only once
       await bookingConfirmedHandler({
         id: payment.id,
-        paymentProvider: payment.paymentProvider,
         metadata: { bookingId: payment.bookingId },
       });
   
       return reply.send({ received: true });
     }
   
-  
+    // ========================
     // PAYMENT FAILED
-   
+    // ========================
     if (event.type === "payment_intent.payment_failed") {
       const intent = event.data.object as any;
   
@@ -159,9 +160,9 @@ export async function webhookRoutes(app: FastifyInstance) {
       return reply.send({ received: true });
     }
   
-
+    // ========================
     // REFUND
-   
+    // ========================
     if (event.type === "charge.refunded") {
       const charge = event.data.object as any;
   
@@ -186,8 +187,9 @@ export async function webhookRoutes(app: FastifyInstance) {
       return reply.send({ received: true });
     }
   
+    // ========================
     // SETUP INTENT
- 
+    // ========================
     if (event.type === "setup_intent.succeeded") {
       const setupIntent = event.data.object as any;
   
@@ -237,8 +239,6 @@ export async function webhookRoutes(app: FastifyInstance) {
     // default fallback
     return reply.send({ received: true });
   });
-
-  
   // ── POST /payments/tara/webhook ───────────────────────────────────────────
   app.post("/tara/webhook", {
     schema: {
@@ -336,19 +336,6 @@ export async function webhookRoutes(app: FastifyInstance) {
       }
 
       if (payment.status === "captured") {
-        try {
-          const booking = await fetchBooking(payment.bookingId);
-          if (booking && booking.status !== "confirmed") {
-            console.log(`[tara] Retrying bookingConfirmedHandler for captured payment: ${payment.id}`);
-            await bookingConfirmedHandler({
-              id: payment.id,
-              paymentProvider: "tara",
-              metadata: { bookingId: payment.bookingId },
-            });
-          }
-        } catch (e) {
-          console.error("Retry handler check failed", e);
-        }
         return reply.status(200).send({ received: true });
       }
 
@@ -361,11 +348,7 @@ export async function webhookRoutes(app: FastifyInstance) {
         },
       });
 
-      await bookingConfirmedHandler({
-        id: payment.id,
-        paymentProvider: "tara",
-        metadata: { bookingId: payment.bookingId },
-      });
+      await confirmBooking(payment.bookingId, payment.id, "tara");
 
     } else if (body.event === "payment_failed") {
       const payment = await prisma.payment.findFirst({

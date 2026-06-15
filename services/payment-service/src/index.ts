@@ -78,7 +78,7 @@ async function build() {
     "application/json",
     { parseAs: "buffer" },
     (req, body, done) => {
-      if (req.raw.url === "/stripe/webhook") {
+      if (req.routeOptions?.url === "/stripe/webhook") {
         (req as any).rawBody = body;  //  save raw buffer here
         done(null, body);
         return;
