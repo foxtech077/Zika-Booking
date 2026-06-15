@@ -13,7 +13,6 @@ import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
-const DEFAULT_COMMISSION_RATE = 0.05;
 
 // ── Sequence bootstrap ────────────────────────────────────────────────────────
 
@@ -36,8 +35,28 @@ import { getEffectiveCommissionRate } from "../services/commission.service.js";
 
 // ── Commission helper ─────────────────────────────────────────────────────────
 
+async function getGlobalCommissionRate(): Promise<number> {
+  const settings = await prisma.platformSettings.upsert({
+    where: { id: "global" },
+    update: {},
+    create: { id: "global" },
+  });
+  const now = new Date();
+  if (settings.pendingGlobalRate != null && settings.pendingGlobalEffectiveFrom && settings.pendingGlobalEffectiveFrom <= now) {
+    return Number(settings.pendingGlobalRate);
+  }
+  return Number(settings.globalCommissionRate);
+}
+
 async function getCommissionRate(country: string | null): Promise<number> {
-  return getEffectiveCommissionRate(country);
+  if (!country) return getGlobalCommissionRate();
+  const rate = await prisma.commissionRate.findUnique({ where: { country } });
+  if (!rate) return getGlobalCommissionRate();
+  const now = new Date();
+  if (rate.pendingRate != null && rate.pendingEffectiveFrom && rate.pendingEffectiveFrom <= now) {
+    return Number(rate.pendingRate);
+  }
+  return Number(rate.rate);
 }
 
 // ── Availability checker ──────────────────────────────────────────────────────

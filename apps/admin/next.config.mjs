@@ -12,18 +12,18 @@ const nextConfig = {
 			},
 		];
 	},
-	async rewrites() {
-		return [
-			{
-				source: "/api/:path*",
-				destination: `${process.env.ADMIN_API_URL ?? "https://api.kainook.com/auth"}/:path*`,
-			},
-			{
-				source: "/listing-api/:path*",
-				destination: `${process.env.ADMIN_LISTING_API_URL ?? "https://api.kainook.com/listings"}/:path*`,
-			},
-		];
-	},
+	// async rewrites() {
+	// 	return [
+	// 		{
+	// 			source: "/api/:path*",
+	// 			destination: `${process.env.ADMIN_API_URL ?? "https://api.kainook.com/auth"}/:path*`,
+	// 		},
+	// 		{
+	// 			source: "/listing-api/:path*",
+	// 			destination: `${process.env.ADMIN_LISTING_API_URL ?? "https://api.kainook.com/listings"}/:path*`,
+	// 		},
+	// 	];
+	// },
 };
 
 export default nextConfig;

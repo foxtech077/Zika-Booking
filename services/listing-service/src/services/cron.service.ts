@@ -7,28 +7,28 @@ import { prisma } from "../lib/prisma.js";
 export async function promotePendingRates(): Promise<void> {
   const now = new Date();
 
-  // Find all country overrides with pending rates that should take effect (effectiveFrom <= now)
-  const pendingOverrides = await prisma.countryCommission.findMany({
+  // Find all country overrides with pending rates that should take effect (pendingEffectiveFrom <= now)
+  const pendingOverrides = await prisma.commissionRate.findMany({
     where: {
       pendingRate: { not: null },
-      effectiveFrom: { lte: now },
+      pendingEffectiveFrom: { lte: now },
     },
   });
 
   for (const override of pendingOverrides) {
     if (override.pendingRate === null) continue;
 
-    const oldRate = override.currentRate;
+    const oldRate = override.rate;
     const newRate = override.pendingRate;
 
     await prisma.$transaction([
       // 1. Promote pending to current
-      prisma.countryCommission.update({
+      prisma.commissionRate.update({
         where: { id: override.id },
         data: {
-          currentRate: newRate,
+          rate: newRate,
           pendingRate: null,
-          effectiveFrom: null,
+          pendingEffectiveFrom: null,
         },
       }),
       // 2. Add to commission history
@@ -38,10 +38,10 @@ export async function promotePendingRates(): Promise<void> {
           countryCode: override.country,
           oldRate,
           newRate,
-          effectiveFrom: override.effectiveFrom || now,
+          effectiveFrom: override.pendingEffectiveFrom || now,
           changedBy: override.setBy,
           changedByRole: "admin",
-          reason: override.lastReason || "Promoted scheduled rate change",
+          reason: override.pendingReason || "Promoted scheduled rate change",
           applyToAll: false,
           providersNotified: false,
         },
