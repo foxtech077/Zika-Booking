@@ -63,7 +63,7 @@ api.interceptors.response.use(
   (res) => res,
   (error) => {
     const status = error?.response?.status;
-    const code   = error?.response?.data?.error?.code ?? "";
+    const code = error?.response?.data?.error?.code ?? "";
     const isAuthFlow = isAuthFlowRequest(error?.config?.url);
 
     const isAuthFailure =
@@ -73,7 +73,7 @@ api.interceptors.response.use(
     const isLoginPage = typeof window !== "undefined" && window.location.pathname.includes("/login");
 
     if (isAuthFailure && !isLoginPage && typeof window !== "undefined") {
-      // Clear all admin session data then hard-navigate to login
+      // Clear all admin session data then hard‑navigate to login
       sessionStorage.removeItem("zika:admin_session");
       sessionStorage.removeItem("zika:admin_auth");
       if (!window.location.pathname.endsWith("/login")) {
