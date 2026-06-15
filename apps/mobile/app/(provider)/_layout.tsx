@@ -58,6 +58,20 @@ function ProfileIcon({ active }: { active: boolean }) {
   );
 }
 
+function ChannelsIcon({ active }: { active: boolean }) {
+  const c = active ? K.colors.accent : K.colors.tabInactive;
+  return (
+    <View style={{ width: 28, height: 28, alignItems: "center", justifyContent: "center" }}>
+      {/* Chain-link shape: two rounded rectangles joined by a bar */}
+      <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={{ width: 11, height: 7, borderRadius: 3.5, borderWidth: 2, borderColor: c }} />
+        <View style={{ width: 4, height: 2, backgroundColor: c }} />
+        <View style={{ width: 11, height: 7, borderRadius: 3.5, borderWidth: 2, borderColor: c }} />
+      </View>
+    </View>
+  );
+}
+
 export default function ProviderLayout() {
   const user = useAuthStore((s) => s.user);
 
@@ -114,7 +128,8 @@ export default function ProviderLayout() {
       <Tabs.Screen
         name="channels"
         options={{
-          href: null,
+          title: "Channels",
+          tabBarIcon: ({ focused }) => <ChannelsIcon active={focused} />,
         }}
       />
     </Tabs>
