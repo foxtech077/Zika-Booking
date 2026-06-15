@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const api = axios.create({
-  baseURL: "/api",
+  baseURL: "https://admin.kainook.com",
   withCredentials: true,
   timeout: 15_000,
 });
