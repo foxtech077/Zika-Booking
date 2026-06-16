@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import type { Listing } from "@/types/provider";
+import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
 import { FormShell, type FormStep } from "./shared/FormShell";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
@@ -81,13 +82,6 @@ const CANCELLATION_POLICIES = [
   { value: "flexible", label: "Flexible – free cancellation up to 24 h" },
   { value: "moderate", label: "Moderate – free cancellation up to 5 days" },
   { value: "strict", label: "Strict – no refund within 14 days" },
-];
-
-const CURRENCIES = [
-  { value: "USD", label: "USD ($)" },
-  { value: "EUR", label: "EUR (€)" },
-  { value: "GBP", label: "GBP (£)" },
-  { value: "ZAR", label: "ZAR (R)" },
 ];
 
 const CAR_CATEGORY_VALUES = new Set(CAR_CATEGORIES.map((x) => x.value));
@@ -376,10 +370,10 @@ function validateStep(step: Step, s: CarState): string[] {
 }
 
 const STEPS: FormStep[] = [
-  { id: "vehicle", label: "Identity & classification", sublabel: "Listing title, make, model, year, category, units, colour, licence plate, odometer" },
-  { id: "specs", label: "Technical specs", sublabel: "Seats, doors, transmission, fuel type, drive type, engine size, air conditioning" },
-  { id: "pricing", label: "Rental terms & insurance", sublabel: "Price, currency, rental days, driver age, mileage, fuel policy, security deposit, cancellation, insurance, roadside, cross‑border, documents" },
-  { id: "media", label: "Media & Documents", sublabel: "Photos & vehicle documents" },
+  { id: "vehicle", label: "Identity & classification", sublabel: "Basic Info" },
+  { id: "specs", label: "Technical specs", sublabel: "Features" },
+  { id: "pricing", label: "Rental terms & insurance", sublabel: "Pricing" },
+  { id: "media", label: "Media & Documents", sublabel: "Uploads" },
 ];
 
 const apiErr = (e: any) => {
@@ -471,31 +465,29 @@ export function CarForm({ listingId, listing }: Props) {
   const title = current?.name ?? listing.name ?? "Untitled Vehicle";
 
   return (
-    <div className="min-h-screen bg-[#EEF2E6] flex flex-col">
-      {/* ── Sticky Header ── */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-[#4c6a48]/15 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
-          <button
-            onClick={() => router.push("/dashboard/listings")}
-            className="w-9 h-9 rounded-xl border border-[#556B2F]/30 bg-white flex items-center justify-center text-[#556B2F] hover:bg-[#e6ebe4] transition-all"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold text-[#556B2F] uppercase tracking-widest">Car Rental Listing</p>
-            <h1 className="text-lg font-bold text-slate-900 truncate leading-tight"></h1>
+    <div className="w-full h-full flex flex-col min-h-0 overflow-hidden">
+      <div className="w-full max-w-[1600px] mx-auto flex flex-col flex-1 min-h-0">
+        {/* ── Standalone Header Card ── */}
+        <div className="bg-white border border-border rounded-2xl shadow-sm px-6 py-4 flex items-center justify-between shrink-0 mb-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/dashboard/listings")}
+              className="w-9 h-9 rounded-xl border border-[#556B2F]/30 bg-white flex items-center justify-center text-[#556B2F] hover:bg-[#e6ebe4] transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-[#556B2F] uppercase tracking-widest">Car Rental Listing</p>
+              <h1 className="text-lg font-bold text-slate-900 truncate leading-tight">{title}</h1>
+            </div>
           </div>
-          <div className="ml-auto shrink-0"><Badge label={status} status={status} /></div>
+          <div className="flex items-center gap-2">
+            <Badge label={status} status={status} />
+          </div>
         </div>
-      </div>
 
-      {/* ── Main scroll area ── */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4 pb-28 animate-fade-in">
-
-          {ok  && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
-          {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark"><AlertCircle className="w-4 h-4 text-danger shrink-0" />{err}</div>}
-
+        {/* ── Main Form Shell ── */}
+        <div className="flex-1 min-h-0 overflow-hidden">
           <FormShell
             steps={STEPS}
             activeStep={step}
@@ -503,8 +495,95 @@ export function CarForm({ listingId, listing }: Props) {
             onStepClick={(id) => { setTried(false); setStep(id as Step); }}
             isComplete={isComplete}
             isLocked={isLocked}
+            footer={
+              <div className="w-full flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard/listings")}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#556B2F]/30 text-sm font-semibold text-[#556B2F] bg-white hover:bg-[#e6ebe4] transition-all"
+                  >
+                    Exit
+                  </button>
+                  {step !== "vehicle" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const idx = STEPS.findIndex((t) => t.id === step);
+                        const prev = STEPS[idx - 1];
+                        if (prev) { setTried(false); setStep(prev.id as Step); }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-all"
+                    >
+                      ← Back
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={saveMut.isPending}
+                    onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#556B2F]/40 text-sm font-semibold text-[#556B2F] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Save Draft
+                  </button>
+                  {step !== "media" ? (
+                    <button
+                      type="submit"
+                      form="car-edit-form"
+                      disabled={saveMut.isPending}
+                      className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#556B2F] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                    >
+                      Save &amp; Continue →
+                    </button>
+                  ) : (
+                    <>
+                      {["draft", "deactivated"].includes(status) && (
+                        <button
+                          type="button"
+                          disabled={activateMut.isPending || saveMut.isPending}
+                          onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#556B2F] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
+                        </button>
+                      )}
+                      {status === "active" && (
+                        <button
+                          type="button"
+                          disabled={deactivateMut.isPending}
+                          onClick={() => deactivateMut.mutate()}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            }
           >
             <form id="car-edit-form" onSubmit={handleNext} className="space-y-5">
+              {/* Banners nested inside scrollable area */}
+              {(ok || err) && (
+                <div className="space-y-3">
+                  {ok && (
+                    <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark">
+                      <CheckCircle className="w-4 h-4 text-success shrink-0" />
+                      {ok}
+                    </div>
+                  )}
+                  {err && (
+                    <div className="flex items-center gap-2 rounded-2xl bg-danger-50 border border-danger/20 px-4 py-3 text-sm text-danger-dark">
+                      <AlertCircle className="w-4 h-4 text-danger shrink-0" />
+                      {err}
+                    </div>
+                  )}
+                </div>
+              )}
               <Card className="min-h-[420px]">
 
             {/* ── Vehicle step ── */}
@@ -709,7 +788,7 @@ export function CarForm({ listingId, listing }: Props) {
                     required
                     error={tried && !(Number(s.pricePerDay) > 0) ? "Daily rate must be > 0." : undefined}
                   />
-                  <Select label="Currency" value={s.currency} onChange={(e) => set("currency", e.target.value)} options={CURRENCIES} />
+                  <CurrencyCombobox label="Currency" value={s.currency} onChange={(val) => set("currency", val)} />
                 </div>
                 <Select
                   label="Cancellation Policy"
@@ -838,78 +917,6 @@ export function CarForm({ listingId, listing }: Props) {
               </Card>
             </form>
           </FormShell>
-        </div>
-      </div>
-
-      {/* ── Sticky Footer ── */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-[#EEF2E6]/95 backdrop-blur-sm border-t border-[#3E4E22]/15 shadow-[0_-4px_20px_rgba(62,78,34,0.08)]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard/listings")}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#556B2F]/30 text-sm font-semibold text-[#556B2F] bg-white hover:bg-[#e6ebe4] transition-all"
-            >
-              Exit
-            </button>
-            {step !== "vehicle" && (
-              <button
-                type="button"
-                onClick={() => {
-                  const idx = STEPS.findIndex((t) => t.id === step);
-                  const prev = STEPS[idx - 1];
-                  if (prev) { setTried(false); setStep(prev.id as Step); }
-                }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-all"
-              >
-                ← Back
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={saveMut.isPending}
-              onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#556B2F]/40 text-sm font-semibold text-[#556B2F] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
-            >
-              <Save className="w-3.5 h-3.5" /> Save Draft
-            </button>
-            {step !== "media" ? (
-              <button
-                type="submit"
-                form="car-edit-form"
-                disabled={saveMut.isPending}
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#556B2F] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
-              >
-                Save &amp; Continue →
-              </button>
-            ) : (
-              <>
-                {["draft", "deactivated"].includes(status) && (
-                  <button
-                    type="button"
-                    disabled={activateMut.isPending || saveMut.isPending}
-                    onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }}
-                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#556B2F] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
-                  </button>
-                )}
-                {status === "active" && (
-                  <button
-                    type="button"
-                    disabled={deactivateMut.isPending}
-                    onClick={() => deactivateMut.mutate()}
-                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm"
-                  >
-                    Deactivate
-                  </button>
-                )}
-              </>
-            )}
-          </div>
         </div>
       </div>
     </div>

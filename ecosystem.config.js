@@ -22,13 +22,6 @@ module.exports = {
 			interpreter: "none",
 		},
 		{
-			name: "@zika-provider",
-			script: "pnpm",
-			args: "start",
-			cwd: "/home/ubuntu/Zika-Booking/apps/provider",
-			interpreter: "none",
-		},
-		{
 			name: "@zika-admin",
 			script: "pnpm",
 			args: "start",

@@ -46,11 +46,7 @@ export default function EditListingPage() {
   const props = { listingId, listing };
 
   return (
-    /* Container Wrapper:
-      - min-h-screen allows the sticky sidebar calculation engine to map against the viewport height
-      - py-6 and px adjustments match your inner dashboard framework seamlessly
-    */
-    <div className="w-full min-h-screen py-6">
+    <div className="w-full h-full min-h-0 flex flex-col overflow-hidden">
       {listing.category === "hotel" && <HotelForm {...props} />}
       {listing.category === "apartment" && <ApartmentForm {...props} />}
       {listing.category === "car" && <CarForm {...props} />}

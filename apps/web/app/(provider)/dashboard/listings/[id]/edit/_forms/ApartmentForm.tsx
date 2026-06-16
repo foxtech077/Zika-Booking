@@ -16,11 +16,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
-import type { Listing } from "@/types/provider";
 import { FormShell, type FormStep } from "./shared/FormShell";
+import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
-import { AMENITY_OPTIONS, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
+import { AMENITY_OPTIONS, CATEGORY_MAP, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
+import { Listing } from "@/types/provider";
 
 // ── Enums ────────────────────────────────────────────────────────────────────
 
@@ -28,13 +29,6 @@ const CANCELLATION_POLICIES = [
   { value: "flexible", label: "Flexible – free cancellation up to 24 h" },
   { value: "moderate", label: "Moderate – free cancellation up to 5 days" },
   { value: "strict",   label: "Strict – no refund within 14 days" },
-];
-
-const CURRENCIES = [
-  { value: "USD", label: "USD ($)" },
-  { value: "EUR", label: "EUR (€)" },
-  { value: "GBP", label: "GBP (£)" },
-  { value: "ZAR", label: "ZAR (R)" },
 ];
 
 const CANCELLATION_POLICY_VALUES = new Set(CANCELLATION_POLICIES.map((x) => x.value));
@@ -167,6 +161,7 @@ function buildPayload(s: ApartmentState): Record<string, unknown> {
 
   p.longStayEnabled = hasValidLongStay;
   p.longStayMinNights = hasValidLongStay ? lsNights : null;
+  p.longStayDiscountType = hasValidLongStay ? "percentage" : null;
   p.longStayDiscountValue = hasValidLongStay ? lsValue : null;
 
   p.amenities       = groupAmenities(s.selectedAmenities);
@@ -312,31 +307,29 @@ export function ApartmentForm({ listingId, listing }: Props) {
   const title  = current?.name  ?? listing.name ?? "Untitled Apartment";
 
   return (
-    <div className="min-h-screen bg-[#f8f9f6] flex flex-col">
-      {/* ── Sticky Header ── */}
-      <div className="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-[#4c6a48]/15 shadow-sm">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
-          <button
-            onClick={() => router.push("/dashboard/listings")}
-            className="w-9 h-9 rounded-xl border border-[#4c6a48]/30 bg-white flex items-center justify-center text-[#4c6a48] hover:bg-[#e6ebe4] transition-all"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold text-[#4c6a48] uppercase tracking-widest">Apartment Listing</p>
-            <h1 className="text-lg font-bold text-slate-900 truncate leading-tight">{title}</h1>
+    <div className="w-full h-full flex flex-col min-h-0 overflow-hidden">
+      <div className="w-full max-w-[1600px] mx-auto flex flex-col flex-1 min-h-0">
+        {/* ── Standalone Header Card ── */}
+        <div className="bg-white border border-border rounded-2xl shadow-sm px-6 py-4 flex items-center justify-between shrink-0 mb-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/dashboard/listings")}
+              className="w-9 h-9 rounded-xl border border-[#4c6a48]/30 bg-white flex items-center justify-center text-[#4c6a48] hover:bg-[#e6ebe4] transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-[#4c6a48] uppercase tracking-widest">Apartment Listing</p>
+              <h1 className="text-lg font-bold text-slate-900 truncate leading-tight">{title}</h1>
+            </div>
           </div>
-          <div className="ml-auto shrink-0"><Badge label={status} status={status} /></div>
+          <div className="flex items-center gap-2">
+            <Badge label={status} status={status} />
+          </div>
         </div>
-      </div>
 
-      {/* ── Main scroll area ── */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4 pb-28 animate-fade-in">
-
-          {ok  && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
-          {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark"><AlertCircle className="w-4 h-4 text-danger shrink-0" />{err}</div>}
-
+        {/* ── Main Form Shell ── */}
+        <div className="flex-1 min-h-0 overflow-hidden">
           <FormShell
             steps={STEPS}
             activeStep={step}
@@ -344,8 +337,95 @@ export function ApartmentForm({ listingId, listing }: Props) {
             onStepClick={(id) => { setTried(false); setStep(id as Step); }}
             isComplete={isComplete}
             isLocked={isLocked}
+            footer={
+              <div className="w-full flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard/listings")}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/30 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] transition-all"
+                  >
+                    Exit
+                  </button>
+                  {step !== "property" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const idx  = STEPS.findIndex((t) => t.id === step);
+                        const prev = STEPS[idx - 1];
+                        if (prev) { setTried(false); setStep(prev.id as Step); }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-all"
+                    >
+                      ← Back
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={saveMut.isPending}
+                    onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/40 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Save Draft
+                  </button>
+                  {step !== "media" ? (
+                    <button
+                      type="submit"
+                      form="apartment-edit-form"
+                      disabled={saveMut.isPending}
+                      className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                    >
+                      Save &amp; Continue →
+                    </button>
+                  ) : (
+                    <>
+                      {["draft", "deactivated"].includes(status) && (
+                        <button
+                          type="button"
+                          disabled={activateMut.isPending || saveMut.isPending}
+                          onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
+                        </button>
+                      )}
+                      {status === "active" && (
+                        <button
+                          type="button"
+                          disabled={deactivateMut.isPending}
+                          onClick={() => deactivateMut.mutate()}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            }
           >
             <form id="apartment-edit-form" onSubmit={handleNext} className="space-y-5">
+              {/* Banners nested inside scrollable area */}
+              {(ok || err) && (
+                <div className="space-y-3">
+                  {ok && (
+                    <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark">
+                      <CheckCircle className="w-4 h-4 text-success shrink-0" />
+                      {ok}
+                    </div>
+                  )}
+                  {err && (
+                    <div className="flex items-center gap-2 rounded-2xl bg-danger-50 border border-danger/20 px-4 py-3 text-sm text-danger-dark">
+                      <AlertCircle className="w-4 h-4 text-danger shrink-0" />
+                      {err}
+                    </div>
+                  )}
+                </div>
+              )}
               <Card className="min-h-[420px]">
 
             {/* ── Property step ── */}
@@ -397,7 +477,7 @@ export function ApartmentForm({ listingId, listing }: Props) {
                     required
                     error={tried && !(Number(s.pricePerNight) > 0) ? "Price must be > 0." : undefined}
                   />
-                  <Select label="Currency" value={s.currency} onChange={(e) => set("currency", e.target.value)} options={CURRENCIES} />
+                  <CurrencyCombobox label="Currency" value={s.currency} onChange={(val) => set("currency", val)} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Input
@@ -486,25 +566,54 @@ export function ApartmentForm({ listingId, listing }: Props) {
 {step === "amenities" && (
   <div className="space-y-5 animate-fade-in">
     <h3 className="text-lg font-bold text-slate-900">Amenities</h3>
-    <div className="grid grid-cols-2 gap-2.5">
-      {AMENITY_OPTIONS.map((opt) => {
-        const active = s.selectedAmenities.includes(opt.value);
-        return (
-          <button type="button" key={opt.value}
-            onClick={() => set("selectedAmenities", active
-              ? s.selectedAmenities.filter((k) => k !== opt.value)
-              : [...s.selectedAmenities, opt.value])}
-            className={cn("flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
-              active ? "border-primary bg-primary-50 text-primary-700 font-semibold" : "border-border bg-white text-slate-600 hover:border-slate-300")}
-          >
-            <div className={cn("w-4 h-4 rounded flex items-center justify-center border text-xs",
-              active ? "bg-primary border-primary text-white" : "border-slate-300")}>
-              {active ? "✓" : ""}
+    <div>
+      {(() => {
+        const grouped = AMENITY_OPTIONS.reduce((acc, opt) => {
+          const cat = CATEGORY_MAP[opt.value] ?? "Services";
+          (acc[cat] ??= []).push(opt);
+          return acc;
+        }, {} as Record<string, typeof AMENITY_OPTIONS[number][]>);
+        return Object.entries(grouped).map(([cat, opts]) => (
+          <div key={cat} className="mb-4">
+            <h4 className="text-sm font-medium text-slate-700 mb-1">{cat}</h4>
+            <div className="grid grid-cols-2 gap-2.5">
+              {opts.map((opt) => {
+                const active = s.selectedAmenities.includes(opt.value);
+                return (
+                  <button
+                    type="button"
+                    key={opt.value}
+                    onClick={() =>
+                      set(
+                        "selectedAmenities",
+                        active
+                          ? s.selectedAmenities.filter((k) => k !== opt.value)
+                          : [...s.selectedAmenities, opt.value]
+                      )
+                    }
+                    className={cn(
+                      "flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
+                      active
+                        ? "border-primary bg-primary-50 text-primary-700 font-semibold"
+                        : "border-border bg-white text-slate-600 hover:border-slate-300"
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "w-4 h-4 rounded flex items-center justify-center border text-xs",
+                        active ? "bg-primary border-primary text-white" : "border-slate-300"
+                      )}
+                    >
+                      {active ? "✓" : ""}
+                    </div>
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
-            {opt.label}
-          </button>
-        );
-      })}
+          </div>
+        ));
+      })()}
     </div>
     <div className="mt-3 flex gap-2">
       <Input
@@ -544,78 +653,6 @@ export function ApartmentForm({ listingId, listing }: Props) {
               </Card>
             </form>
           </FormShell>
-        </div>
-      </div>
-
-      {/* ── Sticky Footer ── */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-[#4c6a48]/15 shadow-[0_-4px_20px_rgba(76,106,72,0.08)]">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => router.push("/dashboard/listings")}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/30 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] transition-all"
-            >
-              Exit
-            </button>
-            {step !== "property" && (
-              <button
-                type="button"
-                onClick={() => {
-                  const idx  = STEPS.findIndex((t) => t.id === step);
-                  const prev = STEPS[idx - 1];
-                  if (prev) { setTried(false); setStep(prev.id as Step); }
-                }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-all"
-              >
-                ← Back
-              </button>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={saveMut.isPending}
-              onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/40 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
-            >
-              <Save className="w-3.5 h-3.5" /> Save Draft
-            </button>
-            {step !== "media" ? (
-              <button
-                type="submit"
-                form="apartment-edit-form"
-                disabled={saveMut.isPending}
-                className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
-              >
-                Save &amp; Continue →
-              </button>
-            ) : (
-              <>
-                {["draft", "deactivated"].includes(status) && (
-                  <button
-                    type="button"
-                    disabled={activateMut.isPending || saveMut.isPending}
-                    onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }}
-                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
-                  </button>
-                )}
-                {status === "active" && (
-                  <button
-                    type="button"
-                    disabled={deactivateMut.isPending}
-                    onClick={() => deactivateMut.mutate()}
-                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm"
-                  >
-                    Deactivate
-                  </button>
-                )}
-              </>
-            )}
-          </div>
         </div>
       </div>
     </div>
