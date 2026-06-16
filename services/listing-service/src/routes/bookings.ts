@@ -31,6 +31,8 @@ async function generateReference(countryCode: string): Promise<string> {
   return `ZIKA-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
 }
 
+import { getEffectiveCommissionRate } from "../services/commission.service.js";
+
 // ── Commission helper ─────────────────────────────────────────────────────────
 
 async function getGlobalCommissionRate(): Promise<number> {
@@ -1468,9 +1470,87 @@ const promotionDiscount = baseAmount * promotionRate;
         confirmedAt:         booking.confirmedAt?.toISOString() ?? null,
         completedAt:         booking.completedAt?.toISOString() ?? null,
         createdAt:           booking.createdAt,
-        canCancel,
       });
     },
+  );
+
+  // ── PATCH /guests/me/bookings/:id/bind-commission — bind commission at payment step ───────────
+  app.patch(
+    "/guests/me/bookings/:id/bind-commission",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "Bind active commission rate to booking (Payment Step)",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const guestId = (req as ProviderRequest).providerId;
+      const { id } = req.params as { id: string };
+
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      if (booking.guestId !== guestId) {
+        return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
+      }
+
+      if (booking.status !== "pending_payment") {
+        // Already bound/paid
+        return sendSuccess(reply, 200, {
+          id: booking.id,
+          totalAmount: Number(booking.totalAmount),
+          currency: booking.currency,
+          commissionRate: Number(booking.commissionRate),
+        });
+      }
+
+      // 1. Resolve current active commission rate
+      const rate = await getEffectiveCommissionRate(booking.listing.country);
+
+      // 2. Recalculate billing
+      const billing = calculateBilling({
+        listingCategory: booking.listingType,
+        checkIn: booking.checkIn?.toISOString().slice(0, 10),
+        checkOut: booking.checkOut?.toISOString().slice(0, 10),
+        pickupDatetime: booking.pickupDatetime?.toISOString(),
+        returnDatetime: booking.returnDatetime?.toISOString(),
+        rate: booking.nightlyRate ? Number(booking.nightlyRate) : (booking.dailyRate ? Number(booking.dailyRate) : 0),
+        deliveryFee: Number(booking.deliveryFee),
+        promotionDiscount: Number(booking.discountAmount) - Number(booking.voucherDiscount),
+        voucherAmount: Number(booking.voucherDiscount),
+        taxRate: getTaxRate(booking.listing.country),
+        commissionRate: rate,
+      });
+
+      // 3. Update the booking record
+      const updated = await prisma.booking.update({
+        where: { id },
+        data: {
+          commissionRate: rate,
+          commissionAmount: billing.commissionAmount,
+          providerPayout: billing.providerPayout,
+          totalAmount: billing.totalAmount,
+          subtotal: billing.subtotal,
+        },
+      });
+
+      return sendSuccess(reply, 200, {
+        id: updated.id,
+        totalAmount: Number(updated.totalAmount),
+        currency: updated.currency,
+        commissionRate: Number(updated.commissionRate),
+      });
+    }
   );
 
   // Note: GET /provider/bookings is in provider.ts (full pagination + status filter)
