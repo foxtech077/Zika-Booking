@@ -26,6 +26,7 @@ import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, CATEGORY_MAP, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
+import { getCurrencyForCountry } from "./shared/countryCurrencyMap";
 
 // ── Enums (values match backend exactly) ────────────────────────────────────
 
@@ -489,8 +490,27 @@ export function HotelForm({ listingId, listing }: Props) {
                   address={s.address}
                   town={s.town}
                   country={s.country}
-                  onChange={(f, v) => set(f, f === "country" ? v.toUpperCase().slice(0, 2) : v)}
-                  onGeocoded={(r) => setS((p) => ({ ...p, lat: r.lat, lng: r.lng, town: r.town, country: r.country }))}
+                  onChange={(f, v) => {
+                    const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
+                    set(f, normalized);
+                    // Auto-populate currency when country changes
+                    if (f === "country") {
+                      const detectedCurrency = getCurrencyForCountry(normalized);
+                      if (detectedCurrency) set("currency", detectedCurrency);
+                    }
+                  }}
+                  onGeocoded={(r) => {
+                    const detectedCurrency = getCurrencyForCountry(r.country);
+                    setS((p) => ({
+                      ...p,
+                      lat: r.lat,
+                      lng: r.lng,
+                      town: r.town,
+                      country: r.country,
+                      // Auto-populate currency from geocoded country (only if a mapping exists)
+                      ...(detectedCurrency ? { currency: detectedCurrency } : {}),
+                    }));
+                  }}
                   errors={tried ? {
                     address: !s.address.trim() ? "Address is required." : undefined,
                     town:    !s.town.trim()    ? "Town is required."    : undefined,

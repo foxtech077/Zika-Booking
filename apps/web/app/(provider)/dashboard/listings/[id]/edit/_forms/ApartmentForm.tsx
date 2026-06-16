@@ -22,6 +22,7 @@ import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, CATEGORY_MAP, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { Listing } from "@/types/provider";
+import { getCurrencyForCountry } from "./shared/countryCurrencyMap";
 
 // ── Enums ────────────────────────────────────────────────────────────────────
 
@@ -455,8 +456,27 @@ export function ApartmentForm({ listingId, listing }: Props) {
                   address={s.address}
                   town={s.town}
                   country={s.country}
-                  onChange={(f, v) => set(f, f === "country" ? v.toUpperCase().slice(0, 2) : v)}
-                  onGeocoded={(r) => setS((p) => ({ ...p, lat: r.lat, lng: r.lng, town: r.town, country: r.country }))}
+                  onChange={(f, v) => {
+                    const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
+                    set(f, normalized);
+                    // Auto-populate currency when country changes
+                    if (f === "country") {
+                      const detectedCurrency = getCurrencyForCountry(normalized);
+                      if (detectedCurrency) set("currency", detectedCurrency);
+                    }
+                  }}
+                  onGeocoded={(r) => {
+                    const detectedCurrency = getCurrencyForCountry(r.country);
+                    setS((p) => ({
+                      ...p,
+                      lat: r.lat,
+                      lng: r.lng,
+                      town: r.town,
+                      country: r.country,
+                      // Auto-populate currency from geocoded country (only if a mapping exists)
+                      ...(detectedCurrency ? { currency: detectedCurrency } : {}),
+                    }));
+                  }}
                   errors={tried ? {
                     address: !s.address.trim() ? "Address is required." : undefined,
                   } : undefined}
@@ -550,11 +570,11 @@ export function ApartmentForm({ listingId, listing }: Props) {
                       />
                       <Input
                         label="Discount (%)"
-                        type="number" min="0.01" max="100"
+                        type="number" min="0" max="100" step="any"
                         value={s.longStayDiscountValue}
                         onChange={(e) => set("longStayDiscountValue", e.target.value)}
                         placeholder="E.g., 10"
-                        error={tried && !(Number(s.longStayDiscountValue) > 0) ? "Must be > 0." : undefined}
+                        error={tried && s.longStayDiscountValue !== "" && !(Number(s.longStayDiscountValue) > 0) ? "Must be > 0." : undefined}
                       />
                     </div>
                   )}

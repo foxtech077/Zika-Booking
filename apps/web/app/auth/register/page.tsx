@@ -39,7 +39,7 @@ export default function RegisterPage() {
         businessName: userType === "provider" ? form.businessName : undefined,
         country: userType === "provider" ? form.country || undefined : undefined,
       };
-      const res = await api.post<ApiResponse<Partial<AuthResponse> & { message?: string }>>("/auth/register", payload);
+      const res = await api.post<ApiResponse<Partial<AuthResponse> & { message?: string }>>("/auth/auth/register", payload);
       if (!res.data.success) throw res.data;
       return res.data.data;
     },

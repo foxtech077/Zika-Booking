@@ -21,6 +21,7 @@ import { FormShell, type FormStep } from "./shared/FormShell";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
+import { getCurrencyForCountry } from "./shared/countryCurrencyMap";
 
 // ── Enums (values must match backend Zod enum exactly) ───────────────────────
 
@@ -63,18 +64,18 @@ const MILEAGE_POLICY_OPTIONS = [
 
 const FUEL_POLICY_OPTIONS = [
   { value: "full_to_full", label: "Full to Full" },
-  { value: "same_to_same", label: "Same to Same" },
-  { value: "free_tank", label: "Free Tank" },
+  // { value: "same_to_same", label: "Same to Same" },
+  // { value: "free_tank", label: "Free Tank" },
   { value: "full_to_empty", label: "Full to Empty" },
   { value: "pre_purchase", label: "Pre-purchase" },
 ];
 
 const INSURANCE_TYPE_OPTIONS = [
-  { value: "basic", label: "Basic" },
-  { value: "standard", label: "Standard" },
-  { value: "premium", label: "Premium" },
-  { value: "comprehensive", label: "Comprehensive" },
+  // { value: "basic", label: "Basic" },
+  // { value: "standard", label: "Standard" },
+  // { value: "premium", label: "Premium" },
   { value: "basic_third_party", label: "Basic Third Party" },
+  { value: "comprehensive", label: "Comprehensive" },
   { value: "premium_zero_excess", label: "Premium Zero Excess" },
 ];
 
@@ -691,8 +692,27 @@ export function CarForm({ listingId, listing }: Props) {
                     town={s.town}
                     country={s.country}
                     addressLabel="Pickup Address"
-                    onChange={(f, v) => set(f, f === "country" ? v.toUpperCase().slice(0, 2) : v)}
-                    onGeocoded={(r) => setS((p) => ({ ...p, lat: r.lat, lng: r.lng, town: r.town, country: r.country }))}
+                    onChange={(f, v) => {
+                      const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
+                      set(f, normalized);
+                      // Auto-populate currency when country changes
+                      if (f === "country") {
+                        const detectedCurrency = getCurrencyForCountry(normalized);
+                        if (detectedCurrency) set("currency", detectedCurrency);
+                      }
+                    }}
+                    onGeocoded={(r) => {
+                      const detectedCurrency = getCurrencyForCountry(r.country);
+                      setS((p) => ({
+                        ...p,
+                        lat: r.lat,
+                        lng: r.lng,
+                        town: r.town,
+                        country: r.country,
+                        // Auto-populate currency from geocoded country (only if a mapping exists)
+                        ...(detectedCurrency ? { currency: detectedCurrency } : {}),
+                      }));
+                    }}
                     errors={tried ? {
                       address: !s.address.trim() ? "Pickup address is required." : undefined,
                     } : undefined}
