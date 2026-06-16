@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
@@ -151,6 +151,8 @@ async function build() {
 
   return app;
 }
+
+import { startNightlyJob } from "./services/cron.service.js";
 
 async function main() {
   const app = await build();
