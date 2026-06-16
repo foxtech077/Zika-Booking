@@ -1,5 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
+import { generateReference, getCommissionRate } from "./bookings.js";
+import { getTaxRate } from "../services/getTaxRate.services.js";
+import { calculateBilling } from "../services/billing.service.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
@@ -1862,6 +1865,118 @@ return { actioned: true };
       listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
     );
     return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
+  });
+
+  // ── POST /admin/bookings/draft ───────────────────────────────────────────────
+  app.post("/admin/bookings/draft", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Bookings"],
+      summary: "Create a draft booking manually (admin)",
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        required: ["listingId", "guestFirstName", "guestLastName", "guestEmail", "guestPhone", "checkIn", "checkOut"],
+        properties: {
+          listingId: { type: "string" },
+          guestFirstName: { type: "string" },
+          guestLastName: { type: "string" },
+          guestEmail: { type: "string", format: "email" },
+          guestPhone: { type: "string" },
+          checkIn: { type: "string", format: "date-time" },
+          checkOut: { type: "string", format: "date-time" },
+          nightsOrDays: { type: "integer", minimum: 1 },
+          nightlyRate: { type: "number" },
+          guestId: { type: "string" },
+        },
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                bookingId: { type: "string" },
+                bookingReference: { type: "string" },
+                status: { type: "string" },
+                totalAmount: { type: "number" },
+                currency: { type: "string" },
+              },
+            },
+          },
+        },
+        404: ErrorResponse,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+
+    const body = req.body as any;
+    const listing = await prisma.listing.findUnique({ where: { id: body.listingId } });
+    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+    const rate = body.nightlyRate ?? Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+    const commissionRate = await getCommissionRate(listing.country ?? null);
+
+    const billing = calculateBilling({
+      listingCategory: listing.category,
+      checkIn: body.checkIn,
+      checkOut: body.checkOut,
+      rate,
+      deliveryFee: 0,
+      promotionDiscount: 0,
+      voucherAmount: 0,
+      taxRate: getTaxRate(listing.country),
+      commissionRate,
+    });
+
+    const reference = await generateReference(listing.country ?? "XX");
+
+    const booking = await prisma.booking.create({
+      data: {
+        reference,
+        listingId: listing.id,
+        guestId: body.guestId ?? "manual-guest",
+        providerId: listing.providerId,
+        listingType: listing.category,
+        status: "draft",
+
+        checkIn: new Date(body.checkIn),
+        checkOut: new Date(body.checkOut),
+        nightsOrDays: billing.units || body.nightsOrDays || 1,
+
+        guestFirstName: body.guestFirstName,
+        guestLastName: body.guestLastName,
+        guestEmail: body.guestEmail,
+        guestPhone: body.guestPhone,
+
+        nightlyRate: listing.category !== "car" ? rate : undefined,
+        dailyRate: listing.category === "car" ? rate : undefined,
+
+        subtotal: billing.subtotal,
+        totalAmount: billing.totalAmount,
+        discountAmount: 0,
+        deliveryFee: 0,
+
+        currency: listing.currency ?? "USD",
+
+        commissionRate,
+        commissionAmount: billing.commissionAmount,
+        providerPayout: billing.providerPayout,
+
+        cancellationPolicy: listing.cancellationPolicy ?? "moderate",
+      },
+    });
+
+    return sendSuccess(reply, 201, {
+      bookingId: booking.id,
+      bookingReference: booking.reference,
+      status: booking.status,
+      totalAmount: Number(booking.totalAmount),
+      currency: booking.currency,
+    });
   });
 
   // ── GET /admin/bookings ───────────────────────────────────────────────────

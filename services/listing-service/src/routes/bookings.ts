@@ -24,7 +24,7 @@ async function ensureBookingSequence(): Promise<void> {
 
 // ── Reference generator ───────────────────────────────────────────────────────
 
-async function generateReference(countryCode: string): Promise<string> {
+export async function generateReference(countryCode: string): Promise<string> {
   const result = await prisma.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('booking_seq') AS nextval`;
   const seq = Number(result[0]!.nextval);
   const padded = String(seq).padStart(6, "0");
@@ -48,7 +48,7 @@ async function getGlobalCommissionRate(): Promise<number> {
   return Number(settings.globalCommissionRate);
 }
 
-async function getCommissionRate(country: string | null): Promise<number> {
+export async function getCommissionRate(country: string | null): Promise<number> {
   if (!country) return getGlobalCommissionRate();
   const rate = await prisma.commissionRate.findUnique({ where: { country } });
   if (!rate) return getGlobalCommissionRate();
@@ -198,11 +198,34 @@ export async function bookingRoutes(app: FastifyInstance) {
     app.log.error({ err }, "Failed to ensure booking_seq"),
   );
 
- 
-    app.get("/booking/quote",{ preHandler: [ipDetect], schema: {
+  // ── Internal service auth ──────────────────────────────────────────────────
+  const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
+
+  function validateServiceToken(req: FastifyRequest, reply: FastifyReply): boolean {
+    if (!INTERNAL_SERVICE_KEY) {
+      sendError(reply, 503, "SERVICE_UNAVAILABLE", "Internal service key not configured.");
+      return false;
+    }
+    const token = req.headers["x-service-key"];
+    if (!token || token !== INTERNAL_SERVICE_KEY) {
+      sendError(reply, 401, "UNAUTHORIZED", "Invalid or missing service token.");
+      return false;
+    }
+    return true;
+  }
+
+  app.get("/booking/quote", {
+    preHandler: [ipDetect], schema: {
       tags: ["Booking"],
       summary: "Get pricing with IP-based currency + payment routing",
-
+      querystring: {
+        type: "object",
+        required: ["listingId"],
+        properties: {
+          listingId: { type: "string" },
+          currency: { type: "string" }
+        }
+      },
       headers: {
         type: "object",
         properties: {
@@ -213,22 +236,108 @@ export async function bookingRoutes(app: FastifyInstance) {
         }
       }
     }
-      },
-      async (req, reply) => {
-        const pricing = await getPricing(req, 100);
-  
-        const paymentProvider = getPaymentProvider(pricing.country);
-  
-        return reply.send({
-          success: true,
-          data: {
-            ...pricing,
-            paymentProvider,
-          },
-        });
+  },
+    async (req, reply) => {
+      const query = req.query as { listingId: string; currency?: string };
+      const listing = await prisma.listing.findUnique({
+        where: { id: query.listingId }
+      });
+
+      if (!listing) {
+        return sendError(reply, 404, "NOT_FOUND", "Listing not found");
       }
-    );
-  
+
+      const basePrice = Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+      const baseCurrency = listing.currency ?? "USD";
+      const country = req.location?.country || "IN";
+
+      let targetCurrency = query.currency;
+      if (!targetCurrency) {
+        if (country === "IN") targetCurrency = "INR";
+        else if (country === "NG") targetCurrency = "NGN";
+        else if (country === "KE") targetCurrency = "KES";
+        else if (country === "ZA") targetCurrency = "ZAR";
+        else targetCurrency = "USD";
+      }
+
+      const pricing = await getPricing(basePrice, baseCurrency, targetCurrency);
+      const paymentProvider = getPaymentProvider(country);
+
+      return reply.send({
+        success: true,
+        data: {
+          ...pricing,
+          country,
+          paymentProvider,
+        },
+      });
+    }
+  );
+
+
+  // ── GET /bookings/internal/:id ─────────────────────────────────────────────
+  app.get("/bookings/internal/:id", {
+    schema: {
+      tags: ["Bookings"],
+      summary: "Internal: fetch booking details (service-to-service only)",
+      params: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!validateServiceToken(req, reply)) return;
+
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: { listing: true },
+    });
+
+    if (!booking) {
+      return sendError(reply, 404, "NOT_FOUND", "Booking not found");
+    }
+
+    return sendSuccess(reply, 200, booking);
+  });
+
+  // ── PATCH /bookings/internal/:id/status ────────────────────────────────────
+  app.patch("/bookings/internal/:id/status", {
+    schema: {
+      tags: ["Bookings"],
+      summary: "Internal: update booking status (service-to-service only)",
+      params: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+      body: {
+        type: "object",
+        required: ["status"],
+        properties: { status: { type: "string" } },
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!validateServiceToken(req, reply)) return;
+
+    const { id } = req.params;
+    const { status } = req.body as { status: string };
+
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+
+    // Only allow draft → pending_payment transition via this endpoint
+    if (booking.status !== "draft" || status !== "pending_payment") {
+      return sendError(reply, 409, "INVALID_TRANSITION", `Cannot transition from ${booking.status} to ${status}.`);
+    }
+
+    await prisma.booking.update({ where: { id }, data: { status: "pending_payment" } });
+    await prisma.bookingStatusLog.create({
+      data: { bookingId: id, fromStatus: "draft", toStatus: "pending_payment", actorType: "system" },
+    });
+
+    return sendSuccess(reply, 200, { message: "Status updated to pending_payment." });
+  });
 
   // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
   app.post(
@@ -276,7 +385,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const guestId = (req as ProviderRequest).providerId;
-  
+
       const body = req.body as {
         listingId: string;
         checkIn?: string;
@@ -286,7 +395,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         deliveryRequested?: boolean;
         guests?: number;
       };
-  
+
       // ── 1. LISTING ─────────────────────────────
       const listing = await prisma.listing.findUnique({
         where: { id: body.listingId, deletedAt: null },
@@ -295,25 +404,25 @@ export async function bookingRoutes(app: FastifyInstance) {
         return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
       }
       // STEP 1: base rate
-const baseRate = Number(
-  listing.pricePerNight ?? listing.pricePerDay ?? 0
-);
+      const baseRate = Number(
+        listing.pricePerNight ?? listing.pricePerDay ?? 0
+      );
 
-// STEP 2: promotion logic (HERE, NOT in billing service)
-const promotionRate = 0;
+      // STEP 2: promotion logic (HERE, NOT in billing service)
+      const promotionRate = 0;
 
-// STEP 3: compute base amount
-const units = 1; // optional preview logic (or skip here)
-const baseAmount = baseRate * units;
+      // STEP 3: compute base amount
+      const units = 1; // optional preview logic (or skip here)
+      const baseAmount = baseRate * units;
 
-const promotionDiscount = baseAmount * promotionRate;
-  
-     
-  
+      const promotionDiscount = baseAmount * promotionRate;
+
+
+
       // ── 2. STATUS CHECK ─────────────────────────
       const validStatuses =
         listing.category === "hotel" ? ["approved"] : ["active"];
-  
+
       if (!validStatuses.includes(listing.status)) {
         return reply.status(410).send({
           success: false,
@@ -323,12 +432,12 @@ const promotionDiscount = baseAmount * promotionRate;
           },
         });
       }
-  
+
       // ── 3. SELF BOOKING CHECK ───────────────────
       if (listing.providerId === guestId) {
         return sendError(reply, 403, "FORBIDDEN", "You cannot book your own listing.");
       }
-  
+
       // ── 4. GUEST LIMIT ──────────────────────────
       if (body.guests && listing.maxGuests && body.guests > listing.maxGuests) {
         return sendError(
@@ -344,7 +453,7 @@ const promotionDiscount = baseAmount * promotionRate;
       const pendingCount = await prisma.booking.count({
         where: { guestId, status: "pending_payment", createdAt: { gt: pendingExpiry } },
       });
-  
+
       if (pendingCount >= 5) {
         return reply.status(429).send({
           success: false,
@@ -354,7 +463,7 @@ const promotionDiscount = baseAmount * promotionRate;
           },
         });
       }
-  
+
       // ── 6. AVAILABILITY CHECK ───────────────────
       if (listing.category !== "car" && body.checkIn && body.checkOut) {
         const avail = await checkAvailability(
@@ -363,7 +472,7 @@ const promotionDiscount = baseAmount * promotionRate;
           new Date(body.checkIn),
           new Date(body.checkOut)
         );
-  
+
         if (!avail.available) {
           return reply.status(409).send({
             success: false,
@@ -374,7 +483,7 @@ const promotionDiscount = baseAmount * promotionRate;
           });
         }
       }
-  
+
       if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
         const avail = await checkAvailability(
           listing.id,
@@ -382,7 +491,7 @@ const promotionDiscount = baseAmount * promotionRate;
           new Date(body.pickupDatetime),
           new Date(body.returnDatetime)
         );
-  
+
         if (!avail.available) {
           return reply.status(409).send({
             success: false,
@@ -393,18 +502,18 @@ const promotionDiscount = baseAmount * promotionRate;
           });
         }
       }
-  
+
       // ── 7. LOCK KEY ─────────────────────────────
       const lockKey =
         listing.category === "car"
           ? `rlk:${listing.id}:${body.pickupDatetime?.slice(0, 10)}:${body.returnDatetime?.slice(0, 10)}`
           : `rlk:${listing.id}:${body.checkIn}:${body.checkOut}`;
-  
+
       const lockToken = randomUUID();
       const ctxKey = `rlk:ctx:${lockToken}`;
-  
+
       const acquired = await redis.set(lockKey, lockToken, "PX", LOCK_TTL_MS, "NX");
-  
+
       if (!acquired) {
         return reply.status(409).send({
           success: false,
@@ -414,7 +523,7 @@ const promotionDiscount = baseAmount * promotionRate;
           },
         });
       }
-  
+
       // ── 8. STORE CONTEXT ─────────────────────────
       const ctx = {
         guestId,
@@ -426,45 +535,45 @@ const promotionDiscount = baseAmount * promotionRate;
         deliveryRequested: body.deliveryRequested ?? false,
         renewed: false,
       };
-  
+
       await redis.set(ctxKey, JSON.stringify(ctx), "PX", LOCK_TTL_MS);
-  
+
       // ── 9. BILLING (FIXED TYPES) ─────────────────
       const commissionRate = await getCommissionRate(listing.country ?? null);
-  
+
       const billing = calculateBilling({
         listingCategory: listing.category,
-      
+
         checkIn: body.checkIn,
         checkOut: body.checkOut,
         pickupDatetime: body.pickupDatetime,
         returnDatetime: body.returnDatetime,
-      
+
         rate: baseRate,
-      
+
         deliveryFee: Number(listing.deliveryFee ?? 0),
-      
-        promotionDiscount, 
+
+        promotionDiscount,
         voucherAmount: 0,
-      
+
         taxRate: getTaxRate(listing.country),
-      
+
         commissionRate,
       });
-  
+
       // ── 10. FIXED RESPONSE ───────────────────────
       const pricingPreview = {
         units: billing.units,
         baseAmount: billing.baseAmount,
         promotionDiscount: billing.promotionDiscount,
         voucherDiscount: billing.voucherDiscount,
-         serviceFee: billing.serviceFee,
+        serviceFee: billing.serviceFee,
         taxAmount: billing.taxAmount,
         deliveryFee: billing.deliveryFee,
         totalAmount: billing.totalAmount,
         currency: listing.currency,
       };
-  
+
       return sendSuccess(reply, 200, {
         lockToken,
         expiresAt: new Date(Date.now() + LOCK_TTL_MS).toISOString(),
@@ -585,28 +694,28 @@ const promotionDiscount = baseAmount * promotionRate;
           type: "object",
           required: ["lockToken", "listingId", "guestFirstName", "guestLastName", "guestEmail"],
           properties: {
-            lockToken:         { type: "string" },
-            listingId:         { type: "string" },
-            checkIn:           { type: "string", format: "date" },
-            checkOut:          { type: "string", format: "date" },
-            pickupDatetime:    { type: "string", format: "date-time" },
-            returnDatetime:    { type: "string", format: "date-time" },
+            lockToken: { type: "string" },
+            listingId: { type: "string" },
+            checkIn: { type: "string", format: "date" },
+            checkOut: { type: "string", format: "date" },
+            pickupDatetime: { type: "string", format: "date-time" },
+            returnDatetime: { type: "string", format: "date-time" },
             deliveryRequested: { type: "boolean", default: false },
-            deliveryAddress:   { type: "string" },
-            guestFirstName:    { type: "string", maxLength: 100 },
-            guestLastName:     { type: "string", maxLength: 100 },
-            guestEmail:        { type: "string", format: "email" },
-            guestPhone:        { type: "string", maxLength: 30 },
-            adults:            { type: "integer", minimum: 1 },
-            children:          { type: "integer", minimum: 0, default: 0 },
-            specialRequests:   { type: "string" },
-            driverFirstName:   { type: "string", maxLength: 100 },
-            driverLastName:    { type: "string", maxLength: 100 },
-            driverAge:         { type: "integer", minimum: 18 },
-            voucherCode:       { type: "string", maxLength: 30 },
+            deliveryAddress: { type: "string" },
+            guestFirstName: { type: "string", maxLength: 100 },
+            guestLastName: { type: "string", maxLength: 100 },
+            guestEmail: { type: "string", format: "email" },
+            guestPhone: { type: "string", maxLength: 30 },
+            adults: { type: "integer", minimum: 1 },
+            children: { type: "integer", minimum: 0, default: 0 },
+            specialRequests: { type: "string" },
+            driverFirstName: { type: "string", maxLength: 100 },
+            driverLastName: { type: "string", maxLength: 100 },
+            driverAge: { type: "integer", minimum: 18 },
+            voucherCode: { type: "string", maxLength: 30 },
           },
         },
-        response: { 
+        response: {
           201: {
             type: "object",
             properties: {
@@ -614,12 +723,12 @@ const promotionDiscount = baseAmount * promotionRate;
               data: {
                 type: "object",
                 properties: {
-                  bookingId:        { type: "string" },
+                  bookingId: { type: "string" },
                   bookingReference: { type: "string" },
-                  totalAmount:      { type: "number" },
-                  currency:         { type: "string" },
-                  status:           { type: "string" },
-                  voucherDiscount:  { type: "number" },
+                  totalAmount: { type: "number" },
+                  currency: { type: "string" },
+                  status: { type: "string" },
+                  voucherDiscount: { type: "number" },
                 },
                 required: ["bookingId", "bookingReference", "totalAmount", "currency", "status"],
               },
@@ -703,7 +812,7 @@ const promotionDiscount = baseAmount * promotionRate;
         listing.category === "car"
           ? Number(listing.pricePerDay ?? 0)
           : Number(listing.pricePerNight ?? 0);
-    
+
       // 1. BASE BILLING (NO VOUCHER)
 
       const baseBilling = calculateBilling({
@@ -719,28 +828,28 @@ const promotionDiscount = baseAmount * promotionRate;
         taxRate: getTaxRate(listing.country),
         commissionRate,
       });
-      
+
       let voucherDiscount = 0;
       let appliedVoucher: { id: string; code: string } | null = null;
-      
- 
+
+
       // 2. VOUCHER LOGIC
-      
+
       if (body.voucherCode) {
         const voucher = await prisma.voucher.findUnique({
           where: { code: body.voucherCode },
         });
-      
+
         if (!voucher) {
           return sendError(reply, 400, "INVALID_VOUCHER", "Voucher not found");
         }
-      
+
         if (!voucher.isActive) {
           return sendError(reply, 400, "INVALID_VOUCHER", "Voucher is not active.");
         }
-      
+
         const now = new Date();
-      
+
         if (now < voucher.validFrom || now > voucher.validUntil) {
           return sendError(
             reply,
@@ -749,7 +858,7 @@ const promotionDiscount = baseAmount * promotionRate;
             "Voucher is expired or not valid yet."
           );
         }
-      
+
         //  your requested logic kept exactly here
         if (voucher.discountType === "percentage") {
           voucherDiscount =
@@ -758,16 +867,16 @@ const promotionDiscount = baseAmount * promotionRate;
         } else {
           voucherDiscount = Number(voucher.discountValue);
         }
-      
+
         appliedVoucher = {
           id: voucher.id,
           code: voucher.code,
         };
       }
-      
+
 
       // 3. FINAL RECALCULATION
-      
+
       const finalBilling = calculateBilling({
         listingCategory: listing.category,
         checkIn: body.checkIn,
@@ -781,22 +890,22 @@ const promotionDiscount = baseAmount * promotionRate;
         taxRate: getTaxRate(listing.country),
         commissionRate,
       });
-      
-    
+
+
       // 4. FINAL VALUES (USE THIS ONLY)
-      
+
       const subtotal = finalBilling.subtotal;
       const totalAmount = finalBilling.totalAmount;
       const commissionAmount = finalBilling.commissionAmount;
       const providerPayout = finalBilling.providerPayout;
       const deliveryFee = finalBilling.deliveryFee;
       const discountAmount = finalBilling.promotionDiscount + voucherDiscount;
-      
-   
+
+
       // 5. BOOKING
-    
+
       const reference = await generateReference(listing.country ?? "XX");
-      
+
       const booking = await prisma.booking.create({
         data: {
           reference,
@@ -805,7 +914,7 @@ const promotionDiscount = baseAmount * promotionRate;
           providerId: listing.providerId,
           listingType: listing.category,
           status: "pending_payment",
-      
+
           checkIn: body.checkIn ? new Date(body.checkIn) : undefined,
           checkOut: body.checkOut ? new Date(body.checkOut) : undefined,
           pickupDatetime: body.pickupDatetime
@@ -814,41 +923,41 @@ const promotionDiscount = baseAmount * promotionRate;
           returnDatetime: body.returnDatetime
             ? new Date(body.returnDatetime)
             : undefined,
-      
+
           nightsOrDays: finalBilling.units,
-      
+
           guestFirstName: body.guestFirstName,
           guestLastName: body.guestLastName,
           guestEmail: body.guestEmail,
           guestPhone: body.guestPhone,
-      
+
           adults: body.adults,
           children: body.children ?? 0,
           specialRequests: body.specialRequests,
-      
+
           driverFirstName: body.driverFirstName,
           driverLastName: body.driverLastName,
           driverAge: body.driverAge,
-      
+
           deliveryRequested: body.deliveryRequested ?? false,
           deliveryAddress: body.deliveryAddress,
-      
+
           nightlyRate: listing.category !== "car" ? rate : undefined,
           dailyRate: listing.category === "car" ? rate : undefined,
-      
+
           subtotal,
           totalAmount,
           discountAmount,
           deliveryFee,
-      
+
           currency: listing.currency ?? "USD",
-      
+
           commissionRate,
           commissionAmount,
           providerPayout,
-      
+
           cancellationPolicy: listing.cancellationPolicy ?? "moderate",
-      
+
           voucherCode: appliedVoucher?.code,
           voucherDiscount,
         },
@@ -881,12 +990,12 @@ const promotionDiscount = baseAmount * promotionRate;
       }
 
       return sendSuccess(reply, 201, {
-        bookingId:        booking.id,
+        bookingId: booking.id,
         bookingReference: booking.reference,
-        totalAmount:      Number(booking.totalAmount),
-        currency:         booking.currency,
-        status:           booking.status,
-        voucherDiscount:  voucherDiscount > 0 ? voucherDiscount : undefined,
+        totalAmount: Number(booking.totalAmount),
+        currency: booking.currency,
+        status: booking.status,
+        voucherDiscount: voucherDiscount > 0 ? voucherDiscount : undefined,
       });
     },
   );
@@ -961,18 +1070,18 @@ const promotionDiscount = baseAmount * promotionRate;
         booking.guestEmail,
         `${booking.guestFirstName} ${booking.guestLastName}`,
         {
-          reference:     booking.reference,
-          listingName:   confirmedListing?.name ?? "Your listing",
-          listingType:   booking.listingType,
-          checkIn:       booking.checkIn?.toISOString(),
-          checkOut:      booking.checkOut?.toISOString(),
+          reference: booking.reference,
+          listingName: confirmedListing?.name ?? "Your listing",
+          listingType: booking.listingType,
+          checkIn: booking.checkIn?.toISOString(),
+          checkOut: booking.checkOut?.toISOString(),
           pickupDatetime: booking.pickupDatetime?.toISOString(),
           returnDatetime: booking.returnDatetime?.toISOString(),
-          nightsOrDays:  booking.nightsOrDays,
-          totalAmount:   Number(booking.totalAmount),
-          currency:      booking.currency,
+          nightsOrDays: booking.nightsOrDays,
+          totalAmount: Number(booking.totalAmount),
+          currency: booking.currency,
         },
-      ).catch(() => {});
+      ).catch(() => { });
 
       // Award loyalty points — cross-schema update to auth."User"
       // The listing service Prisma connection uses search_path=listing, so we
@@ -998,7 +1107,7 @@ const promotionDiscount = baseAmount * promotionRate;
       const lockSuffix = booking.checkIn
         ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
         : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
-      await redis.del(`rlk:${lockSuffix}`).catch(() => {});
+      await redis.del(`rlk:${lockSuffix}`).catch(() => { });
 
       return sendSuccess(reply, 200, { message: "Booking confirmed." });
     },
@@ -1089,8 +1198,8 @@ const promotionDiscount = baseAmount * promotionRate;
                 type: "object",
                 properties: {
                   refundAmount: { type: "number" },
-                  currency:     { type: "string" },
-                  message:      { type: "string" },
+                  currency: { type: "string" },
+                  message: { type: "string" },
                 },
                 required: ["refundAmount", "currency", "message"],
               },
@@ -1154,12 +1263,12 @@ const promotionDiscount = baseAmount * promotionRate;
         booking.guestEmail,
         `${booking.guestFirstName} ${booking.guestLastName}`,
         {
-          reference:   booking.reference,
+          reference: booking.reference,
           listingName: cancelledListing?.name ?? "Your booking",
           refundAmount,
-          currency:    booking.currency,
+          currency: booking.currency,
         },
-      ).catch(() => {});
+      ).catch(() => { });
 
       return sendSuccess(reply, 200, {
         refundAmount,
@@ -1199,8 +1308,8 @@ const promotionDiscount = baseAmount * promotionRate;
                 type: "object",
                 properties: {
                   refundAmount: { type: "number" },
-                  currency:     { type: "string" },
-                  message:      { type: "string" },
+                  currency: { type: "string" },
+                  message: { type: "string" },
                 },
                 required: ["refundAmount", "currency", "message"],
               },
@@ -1284,7 +1393,7 @@ const promotionDiscount = baseAmount * promotionRate;
               default: "all",
             },
             cursor: { type: "string", description: "Offset cursor for pagination" },
-            q:      { type: "string", description: "Partial booking reference search" },
+            q: { type: "string", description: "Partial booking reference search" },
           },
         },
         response: {
@@ -1295,9 +1404,9 @@ const promotionDiscount = baseAmount * promotionRate;
               data: {
                 type: "object",
                 properties: {
-                  total:      { type: "integer" },
+                  total: { type: "integer" },
                   nextCursor: { type: "string", nullable: true },
-                  bookings:   { type: "array", items: { type: "object", additionalProperties: true } },
+                  bookings: { type: "array", items: { type: "object", additionalProperties: true } },
                 },
                 required: ["total", "nextCursor", "bookings"],
               },
@@ -1310,16 +1419,16 @@ const promotionDiscount = baseAmount * promotionRate;
     async (req: FastifyRequest, reply: FastifyReply) => {
       const guestId = (req as ProviderRequest).providerId;
       const q = req.query as Record<string, string>;
-      const status    = q["status"];
+      const status = q["status"];
       const searchRef = q["q"];
-      const cursor    = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
-      const limit     = 20;
+      const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
+      const limit = 20;
 
       const where: any = { guestId };
 
       if (status && status !== "all") {
         const statusMap: Record<string, string[]> = {
-          upcoming:  ["confirmed"],
+          upcoming: ["confirmed"],
           completed: ["completed"],
           cancelled: ["cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"],
         };
@@ -1352,27 +1461,27 @@ const promotionDiscount = baseAmount * promotionRate;
       ]);
 
       const hasMore = bookings.length > limit;
-      const page    = hasMore ? bookings.slice(0, limit) : bookings;
+      const page = hasMore ? bookings.slice(0, limit) : bookings;
 
       return sendSuccess(reply, 200, {
         total,
         nextCursor: hasMore ? String(cursor + limit) : null,
         bookings: page.map((b) => ({
-          id:                    b.id,
-          reference:             b.reference,
-          status:                b.status,
-          listingType:           b.listingType,
-          listingTitle:          b.listing.name,
+          id: b.id,
+          reference: b.reference,
+          status: b.status,
+          listingType: b.listingType,
+          listingTitle: b.listing.name,
           listingPrimaryPhotoUrl: b.listing.photos[0]?.cdnUrl ?? null,
-          checkIn:               b.checkIn?.toISOString().slice(0, 10) ?? null,
-          checkOut:              b.checkOut?.toISOString().slice(0, 10) ?? null,
-          pickupDatetime:        b.pickupDatetime?.toISOString() ?? null,
-          returnDatetime:        b.returnDatetime?.toISOString() ?? null,
-          nightsOrDays:          b.nightsOrDays,
-          totalAmount:           Number(b.totalAmount),
-          currency:              b.currency,
-          voucherDiscount:       Number(b.voucherDiscount),
-          createdAt:             b.createdAt,
+          checkIn: b.checkIn?.toISOString().slice(0, 10) ?? null,
+          checkOut: b.checkOut?.toISOString().slice(0, 10) ?? null,
+          pickupDatetime: b.pickupDatetime?.toISOString() ?? null,
+          returnDatetime: b.returnDatetime?.toISOString() ?? null,
+          nightsOrDays: b.nightsOrDays,
+          totalAmount: Number(b.totalAmount),
+          currency: b.currency,
+          voucherDiscount: Number(b.voucherDiscount),
+          createdAt: b.createdAt,
         })),
       });
     },
@@ -1434,42 +1543,43 @@ const promotionDiscount = baseAmount * promotionRate;
         booking.checkIn > new Date();
 
       return sendSuccess(reply, 200, {
-        id:                  booking.id,
-        reference:           booking.reference,
-        status:              booking.status,
-        listingType:         booking.listingType,
+        id: booking.id,
+        reference: booking.reference,
+        status: booking.status,
+        listingType: booking.listingType,
         listing: {
-          id:              booking.listing.id,
-          title:           booking.listing.name,
-          address:         booking.listing.address,
-          town:            booking.listing.town,
-          country:         booking.listing.country,
+          id: booking.listing.id,
+          title: booking.listing.name,
+          address: booking.listing.address,
+          town: booking.listing.town,
+          country: booking.listing.country,
           primaryPhotoUrl: booking.listing.photos[0]?.cdnUrl ?? null,
         },
-        checkIn:             booking.checkIn?.toISOString().slice(0, 10) ?? null,
-        checkOut:            booking.checkOut?.toISOString().slice(0, 10) ?? null,
-        pickupDatetime:      booking.pickupDatetime?.toISOString() ?? null,
-        returnDatetime:      booking.returnDatetime?.toISOString() ?? null,
-        nightsOrDays:        booking.nightsOrDays,
-        adults:              booking.adults,
-        children:            booking.children,
-        specialRequests:     booking.specialRequests,
-        guestFirstName:      booking.guestFirstName,
-        guestLastName:       booking.guestLastName,
-        guestEmail:          booking.guestEmail,
-        subtotal:            Number(booking.subtotal),
-        discountAmount:      Number(booking.discountAmount),
-        deliveryFee:         Number(booking.deliveryFee),
-        voucherCode:         booking.voucherCode ?? null,
-        voucherDiscount:     Number(booking.voucherDiscount),
-        totalAmount:         Number(booking.totalAmount),
-        currency:            booking.currency,
-        cancellationPolicy:  booking.cancellationPolicy,
-        refundAmount:        booking.refundAmount ? Number(booking.refundAmount) : null,
-        cancelledAt:         booking.cancelledAt?.toISOString() ?? null,
-        confirmedAt:         booking.confirmedAt?.toISOString() ?? null,
-        completedAt:         booking.completedAt?.toISOString() ?? null,
-        createdAt:           booking.createdAt,
+        checkIn: booking.checkIn?.toISOString().slice(0, 10) ?? null,
+        checkOut: booking.checkOut?.toISOString().slice(0, 10) ?? null,
+        pickupDatetime: booking.pickupDatetime?.toISOString() ?? null,
+        returnDatetime: booking.returnDatetime?.toISOString() ?? null,
+        nightsOrDays: booking.nightsOrDays,
+        adults: booking.adults,
+        children: booking.children,
+        specialRequests: booking.specialRequests,
+        guestFirstName: booking.guestFirstName,
+        guestLastName: booking.guestLastName,
+        guestEmail: booking.guestEmail,
+        subtotal: Number(booking.subtotal),
+        discountAmount: Number(booking.discountAmount),
+        deliveryFee: Number(booking.deliveryFee),
+        voucherCode: booking.voucherCode ?? null,
+        voucherDiscount: Number(booking.voucherDiscount),
+        totalAmount: Number(booking.totalAmount),
+        currency: booking.currency,
+        cancellationPolicy: booking.cancellationPolicy,
+        refundAmount: booking.refundAmount ? Number(booking.refundAmount) : null,
+        cancelledAt: booking.cancelledAt?.toISOString() ?? null,
+        confirmedAt: booking.confirmedAt?.toISOString() ?? null,
+        completedAt: booking.completedAt?.toISOString() ?? null,
+        createdAt: booking.createdAt,
+        canCancel,
       });
     },
   );

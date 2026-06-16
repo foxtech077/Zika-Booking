@@ -64,6 +64,34 @@ export async function sendGuestEmail(
   });
 }
 
+export async function sendPaymentLinkEmail(
+  email: string,
+  guestName: string,
+  amount: number,
+  currency: string,
+  paymentUrl: string,
+  reference: string
+) {
+  await sgMail.send({
+    to: email,
+    from: {
+      email: process.env.SENDGRID_FROM_EMAIL!,
+      name: process.env.SENDGRID_FROM_NAME ?? "ZikaBooking",
+    },
+    subject: `Complete your payment for booking ${reference}`,
+    html: `
+      <h2>Complete Your Booking</h2>
+      <p>Hi ${guestName},</p>
+      <p>Your booking <strong>${reference}</strong> is almost ready.</p>
+      <p>Please complete your payment of <strong>${amount} ${currency.toUpperCase()}</strong> by clicking the link below:</p>
+      <p><a href="${paymentUrl}" style="padding: 10px 20px; background: #000; color: #fff; text-decoration: none; border-radius: 5px;">Pay Now</a></p>
+      <p>Alternatively, copy and paste this link into your browser:</p>
+      <p><a href="${paymentUrl}">${paymentUrl}</a></p>
+      <p>Thank you for choosing Zika.</p>
+    `,
+  });
+}
+
 //  ADD THIS — required by bookingConfirmedHandler.ts retry logic
 export async function sendAdminAlert(context: string, error: any) {
   await sgMail.send({
