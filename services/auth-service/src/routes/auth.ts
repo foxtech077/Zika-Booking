@@ -76,7 +76,7 @@ function publicUser(u: {
 
 export async function authRoutes(app: FastifyInstance) {
   // ── POST /auth/register  (UC-1.1, UC-1.2) ──────────────────────────────────
-  app.post("/register", {
+  app.post("/auth/register", {
     schema: {
       tags: ["User Auth"],
       body: {
