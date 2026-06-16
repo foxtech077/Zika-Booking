@@ -60,6 +60,17 @@ async function fetchBooking(bookingId: string, authHeader: string) {
   return json.data;
 }
 
+async function bindCommission(bookingId: string, authHeader: string) {
+  const res = await fetch(`${BOOKING_SERVICE_URL}/guests/me/bookings/${bookingId}/bind-commission`, {
+    method: "PATCH",
+    headers: { Authorization: authHeader },
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { success: boolean; data?: Record<string, unknown> };
+  if (!json.success || !json.data) return null;
+  return json.data;
+}
+
 // ── Route plugin ──────────────────────────────────────────────────────────────
 
 export async function paymentRoutes(app: FastifyInstance) {
@@ -274,8 +285,8 @@ export async function paymentRoutes(app: FastifyInstance) {
     const { bookingId } = req.body as { bookingId: string };
     const authHeader = req.headers.authorization ?? "";
   
-    // ── 1. Fetch booking ────────────────────────────────────────────────────
-    const booking = await fetchBooking(bookingId, authHeader);
+    // ── 1. Bind commission rate and update billing at payment step ──────────
+    const booking = await bindCommission(bookingId, authHeader);
     if (!booking) {
       return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
     }
@@ -449,9 +460,9 @@ export async function paymentRoutes(app: FastifyInstance) {
   
     const { bookingId, paymentProvider, paymentMethodId, mobileNumber } = parsed.data;
   
-    // ── 2. Fetch booking ──────────────────────────────────────────────────
+    // ── 2. Bind commission rate and update billing at payment step ──────────
     const authHeader = req.headers.authorization ?? "";
-    const booking = await fetchBooking(bookingId, authHeader);
+    const booking = await bindCommission(bookingId, authHeader);
     if (!booking) {
       return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
     }

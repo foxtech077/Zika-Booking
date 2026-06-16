@@ -17,7 +17,7 @@ async function build() {
     trustProxy: true,
   });
 
-  // ── Swagger API documentation ─────────────────────────────────────────────
+  // ── Swgger API documentation ─────────────────────────────────────────────
   await app.register(swagger, {
     openapi: {
       info: {
@@ -67,8 +67,17 @@ async function build() {
   });
 
   // ── CORS ──────────────────────────────────────────────────────────────────
+  const isDev = process.env["NODE_ENV"] !== "production";
   await app.register(cors, {
-    origin: "*",
+    origin: isDev
+      ? true
+      : [
+          process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+          process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
+          "https://kainook.com",
+        ],
+    credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   });
 
