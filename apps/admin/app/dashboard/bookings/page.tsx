@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useAuthStore } from "@/stores/auth";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle, Plus } from "lucide-react";
+import { CalendarDays, XCircle, Eye, Plus } from "lucide-react";
+import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -11,121 +11,59 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
-import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
+import { ActionModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
+import type { Booking } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
-import type { AdminRole, Booking } from "@/types/admin";
-import Link from "next/link";
+import type { AdminRole } from "@/types/admin";
+
+const COUNTRY_OPTIONS = [
+  "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
+].map((c) => ({ value: c, label: c }));
 
 const fetchBookings = (params: Record<string, string>) =>
-  listingApi.get("/admin/bookings", { params }).then((r) => r.data.data ?? r.data);
+  listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 const fetchBookingDetail = (id: string) =>
   listingApi.get(`/admin/bookings/${id}`).then((r) => r.data.data ?? r.data);
 
 export default function BookingsPage() {
   const qc = useQueryClient();
+  const { token, user, _hasHydrated } = useAuthStore();
+  const role = user?.role as AdminRole | undefined;
+  const isAdminOrSuperAdmin = user?.role === "super_admin" || user?.role === "admin";
+  const isCountryManager = user?.role === "country_manager";
+  const canManualBook = canAccess(role, "manage_manual_booking");
+  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+
+  // scopedCountries only applies to country_manager (not admin — admin sees all)
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  const countryOptions = scopedCountries.length > 0
+    ? scopedCountries.map((c) => ({ value: c, label: c }))
+    : COUNTRY_OPTIONS;
+
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [listingType, setListingType] = useState("");
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const { user, _hasHydrated } = useAuthStore();
-
-  const isCountryManager = user?.role === "country_manager";
-
-  const scopedCountries = useMemo(() => {
-    return isCountryManager ? (user?.countryScope ?? []) : [];
-  }, [isCountryManager, user?.countryScope]);
-
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
-  const countryOptions = [
-    "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
-  ].map((c) => ({ value: c, label: c }));
-
+  // Sync country selection after auth store hydration
   useEffect(() => {
-    if (!_hasHydrated) return;
     if (scopedCountries.length > 0 && !country) {
       setCountry(scopedCountries[0] ?? "");
     }
-  }, [_hasHydrated, scopedCountries, country]);
-
+  }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
-  const [rowsPerPage, setRowsPerPage] = useState(20);
 
-  const role = useAuthStore((state) => state.user?.role);
-
-  // Set default status for Sales role
-  useEffect(() => {
-    if (role === "sales" && status === "") {
-      setStatus("pending_payment");
-    }
-  }, [role, status]);
-
-  const canCreateManualBooking = canAccess(role as AdminRole, "manage_manual_booking");
-
-  // ✅ no duplicate arrays, no any[]
-  const statusOptions =
-    role === "sales"
-      ? [{ value: "pending_payment", label: "Pending Requests" }]
-      : [
-          { value: "pending_payment", label: "Pending Payment" },
-          { value: "confirmed", label: "Confirmed" },
-          { value: "completed", label: "Completed" },
-          { value: "cancelled_by_guest", label: "Cancelled by Guest" },
-          { value: "cancelled_by_provider", label: "Cancelled by Provider" },
-          { value: "cancelled_by_system", label: "Cancelled by System" },
-        ];
-
-  const filterItems = [
-    {
-      key: "status",
-      label: role === "sales" ? "Pending Requests" : "All Statuses",
-      value: status,
-      onChange: (v: string) => { setStatus(v); setPage(1); },
-      options: statusOptions,
-    },
-    {
-      key: "listingType",
-      label: "All Types",
-      value: listingType,
-      onChange: (v: string) => { setListingType(v); setPage(1); },
-      options: [
-        { value: "hotel", label: "Hotel" },
-        { value: "apartment", label: "Apartment" },
-        { value: "car", label: "Car" },
-      ],
-    },
-    ...(canShowCountryFilter
-      ? [
-          {
-            key: "country",
-            label: "All Countries",
-            value: country,
-            onChange: (v: string) => { setCountry(v); setPage(1); },
-            options: countryOptions,
-          },
-        ]
-      : []),
-    {
-      key: "rowsPerPage",
-      label: "",
-      value: String(rowsPerPage),
-      onChange: (v: string) => { setRowsPerPage(Number(v)); setPage(1); },
-      options: [
-        { value: "5", label: "5" },
-        { value: "10", label: "10" },
-        { value: "20", label: "20" },
-        { value: "50", label: "50" },
-      ],
-    },
-  ];
-
+  // For country managers, always enforce their scoped country
   const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
   const params = Object.fromEntries(
     Object.entries({
@@ -134,25 +72,39 @@ export default function BookingsPage() {
       listingType,
       country: effectiveCountry,
       page: String(page),
-      limit: String(rowsPerPage),
+      limit: String(limit),
     }).filter(([, v]) => v !== "")
   );
-
-
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-bookings", page, rowsPerPage, q, status, listingType, effectiveCountry],
+    queryKey: ["admin-bookings", params],
     queryFn: () => fetchBookings(params),
-    enabled: _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
+    // Wait for auth store to rehydrate so scopedCountries/effectiveCountry are correct
+    enabled: !!token && _hasHydrated,
   });
 
-  const rawBookings: Booking[] = data?.bookings ?? [];
-  const bookings = isCountryManager && scopedCountries.length > 0
-    ? rawBookings.filter((b) => {
-        const listingCountry = b.listing?.country?.toUpperCase();
-        return listingCountry ? scopedCountries.some((sc) => sc.toUpperCase() === listingCountry) : false;
-      })
-    : rawBookings;
+  const bookings: Booking[] = data?.bookings ?? [];
   const total: number = data?.total ?? 0;
+
+  const filteredBookings = bookings.filter((b) => {
+    if (!startDate && !endDate) return true;
+    const dateStr = b.checkIn || b.pickupDatetime || b.createdAt;
+    if (!dateStr) return true;
+    const bookingDate = new Date(dateStr);
+
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      if (bookingDate < start) return false;
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      if (bookingDate > end) return false;
+    }
+
+    return true;
+  });
 
   const { data: detailData, isLoading: loadingDetail } = useQuery({
     queryKey: ["admin-booking-detail", selected?.id],
@@ -242,7 +194,7 @@ export default function BookingsPage() {
       width: "80px",
       render: (b) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          {["pending_payment", "confirmed"].includes(b.status) && role !== "sales" && (
+          {["pending_payment", "confirmed"].includes(b.status) && (
             <button
               onClick={() => setCancelModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
@@ -262,10 +214,10 @@ export default function BookingsPage() {
         title="Bookings"
         description={`${total.toLocaleString()} total bookings`}
         action={
-          canCreateManualBooking ? (
+          canManualBook ? (
             <Link href="/dashboard/bookings/new">
               <Button leftIcon={<Plus className="h-4 w-4" />}>
-                Create Booking
+                Manual Booking
               </Button>
             </Link>
           ) : undefined
@@ -273,7 +225,8 @@ export default function BookingsPage() {
       />
 
       <Card padding="none">
-        <FilterBar
+        <FilterBar 
+        
           search={q}
           onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
@@ -303,130 +256,198 @@ export default function BookingsPage() {
                 { value: "car", label: "Car" },
               ],
             },
+            ...(canShowCountryFilter
+              ? [
+                {
+                  key: "country",
+                  label: "All Countries",
+                  value: country,
+                  onChange: (v: string) => {
+                    setCountry(v);
+                    setPage(1);
+                  },
+                  options: countryOptions,
+                },
+              ]
+              : []),
           ]}
-        />
+        >
+          {canShowCountryFilter && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setPage(1);
+                }}
+                className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
+                aria-label="Start Date"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setPage(1);
+                }}
+                className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
+                aria-label="End Date"
+              />
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => {
+                    setStartDate("");
+                    setEndDate("");
+                    setPage(1);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors text-xs"
+                  title="Clear date filter"
+                >
+                  Clear Dates
+                </button>
+              )}
+            </div>
+          )}
+        </FilterBar>
         <DataTable
           columns={columns}
-          data={bookings}
+          data={filteredBookings}
           loading={isLoading}
           onRowClick={(b) => setSelected(b)}
           emptyTitle="No bookings found"
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<CalendarDays className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} onLimitChange={(newL) => { setLimit(newL); setPage(1); }} />
       </Card>
 
-      {/* Booking detail drawer */}
-      {selected && (
-        <SlideDrawer
-          open={!!selected}
-          onClose={() => setSelected(null)}
-          title={`Booking ${selected.reference}`}
-        >
-          {loadingDetail ? (
-            <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading…</div>
-          ) : detailData ? (
-            <div className="space-y-4 p-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Guest</p>
-                  <p className="text-sm font-semibold text-slate-900">{detailData.guestFirstName} {detailData.guestLastName}</p>
-                  <p className="text-xs text-slate-500">{detailData.guestEmail}</p>
-                  {detailData.guestPhone && <p className="text-xs text-slate-500">{detailData.guestPhone}</p>}
+      {/* Detail drawer */}
+      <SlideDrawer
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={`Booking ${selected?.reference}`}
+        description={`${selected?.guestFirstName} ${selected?.guestLastName} · ${selected?.guestEmail}`}
+        width="md"
+        footer={
+          selected && ["pending_payment", "confirmed"].includes(selected.status) ? (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => { setCancelModal(selected); setSelected(null); }}
+              leftIcon={<XCircle className="h-4 w-4" />}
+            >
+              Cancel Booking
+            </Button>
+          ) : undefined
+        }
+      >
+        {loadingDetail ? (
+          <div className="space-y-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-4 bg-slate-200 rounded animate-shimmer" />
+            ))}
+          </div>
+        ) : detailData ? (
+          <div className="space-y-6">
+            {/* Summary */}
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {[
+                ["Reference", detailData.reference],
+                ["Status", ""],
+                ["Type", detailData.listingType],
+                ["Nights/Days", detailData.nightsOrDays],
+                ["Check-in", formatDate(detailData.checkIn)],
+                ["Check-out", formatDate(detailData.checkOut)],
+                ["Adults", detailData.adults ?? "—"],
+                ["Children", detailData.children ?? "—"],
+              ].map(([k, v]) => (
+                <div key={String(k)}>
+                  <dt className="text-xs text-slate-400 mb-0.5">{k}</dt>
+                  <dd className="font-medium text-slate-900">
+                    {k === "Status" ? <Badge label={detailData.status} status={detailData.status} /> : String(v)}
+                  </dd>
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Status</p>
-                  <Badge label={detailData.status} status={detailData.status} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Listing</p>
-                  <p className="text-sm text-slate-800">{detailData.listing?.name ?? detailData.listingId}</p>
-                  <p className="text-xs text-slate-500 capitalize">{detailData.listingType}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Dates</p>
-                  {detailData.checkIn ? (
-                    <p className="text-sm text-slate-800">
-                      {formatDate(detailData.checkIn, "MMM d, yyyy")} → {formatDate(detailData.checkOut, "MMM d, yyyy")}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-slate-800">
-                      {formatDate(detailData.pickupDatetime, "MMM d HH:mm")}
-                    </p>
-                  )}
-                  <p className="text-xs text-slate-500">{detailData.nightsOrDays} {detailData.listingType === "car" ? "day(s)" : "night(s)"}</p>
-                </div>
-              </div>
-
-              <div className="border-t border-border pt-4">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Financials</p>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Subtotal</span>
-                    <span>{formatCurrency(Number(detailData.subtotal), detailData.currency)}</span>
-                  </div>
-                  {Number(detailData.discountAmount) > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-600">Discount</span>
-                      <span className="text-green-600">−{formatCurrency(Number(detailData.discountAmount), detailData.currency)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm font-semibold border-t border-border pt-1 mt-1">
-                    <span>Total</span>
-                    <span>{formatCurrency(Number(detailData.totalAmount), detailData.currency)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>Commission</span>
-                    <span>{formatCurrency(Number(detailData.commissionAmount), detailData.currency)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>Provider Payout</span>
-                    <span>{formatCurrency(Number(detailData.providerPayout), detailData.currency)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {["pending_payment", "confirmed"].includes(detailData.status) && role !== "sales" && (
-                <div className="border-t border-border pt-4">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => { setCancelModal(selected); setSelected(null); }}
-                  >
-                    Cancel Booking
-                  </Button>
-                </div>
-              )}
+              ))}
             </div>
-          ) : null}
-        </SlideDrawer>
-      )}
 
-      {/* Cancel confirmation modal */}
-      {cancelModal && (
-        <ConfirmModal
-          open={!!cancelModal}
-          onClose={() => { setCancelModal(null); setCancelReason(""); }}
-          title="Cancel Booking"
-          description={`Cancel booking ${cancelModal.reference}? This action cannot be undone.`}
-          confirmLabel="Cancel Booking"
-          variant="danger"
-          loading={cancelMut.isPending}
-          onConfirm={() => cancelMut.mutate({ id: cancelModal.id, reason: cancelReason })}
-        >
-          <Textarea
-            label="Cancellation reason"
-            placeholder="Provide a reason for cancellation…"
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            rows={3}
-          />
-        </ConfirmModal>
-      )}
+            {/* Financials */}
+            <div className="bg-surface-subtle rounded-xl p-4 space-y-2 text-sm border border-border">
+              <p className="font-semibold text-slate-900 mb-2">Financial Breakdown</p>
+              {[
+                ["Subtotal", formatCurrency(Number(detailData.subtotal), detailData.currency)],
+                ["Voucher Discount", `- ${formatCurrency(Number(detailData.voucherDiscount), detailData.currency)}`],
+                ["Delivery Fee", formatCurrency(Number(detailData.deliveryFee), detailData.currency)],
+                ["Total", formatCurrency(Number(detailData.totalAmount), detailData.currency)],
+                ["Commission", formatCurrency(Number(detailData.commissionAmount), detailData.currency)],
+                ["Provider Payout", formatCurrency(Number(detailData.providerPayout), detailData.currency)],
+              ].map(([k, v]) => (
+                <div key={String(k)} className="flex justify-between">
+                  <span className={k === "Total" ? "font-semibold text-slate-900" : "text-slate-500"}>{k}</span>
+                  <span className={k === "Total" ? "font-bold text-slate-900 tabular" : "tabular text-slate-700"}>{String(v)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Status log */}
+            {detailData.statusLog?.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Status History</p>
+                <div className="relative">
+                  <div className="absolute left-2 top-0 bottom-0 w-px bg-border" />
+                  <div className="space-y-3 pl-6">
+                    {detailData.statusLog.map((log: any) => (
+                      <div key={log.id} className="relative">
+                        <div className="absolute -left-4 top-1.5 h-2 w-2 rounded-full bg-primary" />
+                        <p className="text-sm font-medium text-slate-900">
+                          {log.fromStatus ? `${slugToLabel(log.fromStatus)} → ` : ""}
+                          {slugToLabel(log.toStatus)}
+                        </p>
+                        {log.reason && <p className="text-xs text-slate-500">{log.reason}</p>}
+                        <p className="text-xs text-slate-400">{formatRelativeTime(log.createdAt)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+      </SlideDrawer>
+
+      {/* Cancel booking modal */}
+      <ActionModal
+        open={!!cancelModal}
+        onClose={() => { setCancelModal(null); setCancelReason(""); }}
+        title="Cancel booking"
+        description={`Cancel booking ${cancelModal?.reference}? This cannot be undone.`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setCancelModal(null)}>Cancel</Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={cancelMut.isPending}
+              onClick={() => cancelModal && cancelMut.mutate({ id: cancelModal.id, reason: cancelReason })}
+              leftIcon={<XCircle className="h-4 w-4" />}
+            >
+              Confirm Cancellation
+            </Button>
+          </>
+        }
+      >
+        <Textarea
+          id="cancel-reason"
+          label="Cancellation reason"
+          value={cancelReason}
+          onChange={(e) => setCancelReason(e.target.value)}
+          placeholder="Explain why this booking is being cancelled…"
+          required
+          rows={3}
+        />
+      </ActionModal>
     </div>
   );
 }

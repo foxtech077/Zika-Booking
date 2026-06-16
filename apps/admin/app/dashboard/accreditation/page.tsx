@@ -1,10 +1,10 @@
 "use client";
 
-import { useState,useEffect} from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
-import { DataTable, Pagination, type Column } from "@/components/tables/DataTable";
+import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -26,7 +26,7 @@ const REJECTION_REASONS = [
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 const fetchQueue = (params: Record<string, string>) =>
-  listingApi.get("/admin/listings/review-queue", { params }).then((r) => r.data.data ?? r.data);
+  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 const fetchDetail = (id: string) =>
   listingApi.get(`/admin/listings/${id}/review`).then((r) => r.data.data ?? r.data);
@@ -72,94 +72,6 @@ function DocViewer({ url, fileType, label, onClose }: { url: string; fileType: s
   );
 }
 
-// ── Photo lightbox ────────────────────────────────────────────────────────────
-function PhotoViewer({
-  photos,
-  initialIndex,
-  onClose,
-}: {
-  photos: { id: string; cdnUrl: string }[];
-  initialIndex: number;
-  onClose: () => void;
-}) {
-  const [index, setIndex] = useState(initialIndex);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight") {
-        setIndex((prev) => (prev + 1) % photos.length);
-      } else if (e.key === "ArrowLeft") {
-        setIndex((prev) => (prev - 1 + photos.length) % photos.length);
-      } else if (e.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [photos.length, onClose]);
-
-  const currentPhoto = photos[index];
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex flex-col bg-black/95 select-none" onClick={onClose}>
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-5 py-3 bg-black/50 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-        <p className="text-white font-medium text-sm">
-          Photo {index + 1} of {photos.length}
-        </p>
-        <button onClick={onClose} className="text-white/70 hover:text-white transition p-1.5 rounded-lg hover:bg-white/10">
-          <X className="h-5 w-5" />
-        </button>
-      </div>
-
-      {/* Main viewer area */}
-      <div className="flex-1 flex items-center justify-between p-4 relative" onClick={(e) => e.stopPropagation()}>
-        {/* Left button */}
-        <button
-          onClick={() => setIndex((prev) => (prev - 1 + photos.length) % photos.length)}
-          className="absolute left-4 z-10 p-2.5 rounded-full bg-black/50 text-white/80 hover:text-white hover:bg-black/75 transition border border-white/10"
-        >
-          <ChevronLeft className="h-6 w-6" />
-        </button>
-
-        {/* Image Container */}
-        <div className="w-full h-full flex items-center justify-center p-8">
-          {currentPhoto && (
-            <img
-              src={currentPhoto.cdnUrl}
-              alt={`Listing photo ${index + 1}`}
-              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-all duration-200"
-            />
-          )}
-        </div>
-
-        {/* Right button */}
-        <button
-          onClick={() => setIndex((prev) => (prev + 1) % photos.length)}
-          className="absolute right-4 z-10 p-2.5 rounded-full bg-black/50 text-white/80 hover:text-white hover:bg-black/75 transition border border-white/10"
-        >
-          <ChevronRight className="h-6 w-6" />
-        </button>
-      </div>
-
-      {/* Footer/Thumbnails for navigation */}
-      <div className="flex justify-center gap-2 pb-6 overflow-x-auto px-4 max-w-full shrink-0" onClick={(e) => e.stopPropagation()}>
-        {photos.map((p, idx) => (
-          <button
-            key={p.id}
-            onClick={() => setIndex(idx)}
-            className={`w-12 h-12 rounded border-2 transition overflow-hidden shrink-0 ${
-              idx === index ? "border-blue-500 scale-105" : "border-transparent opacity-60 hover:opacity-100"
-            }`}
-          >
-            <img src={p.cdnUrl} alt="" className="w-full h-full object-cover" />
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function AccreditationPage() {
   const { token, user, _hasHydrated } = useAuthStore();
@@ -176,7 +88,22 @@ export default function AccreditationPage() {
   const [providerNote, setProviderNote] = useState("");
   const [docViewer, setDocViewer] = useState<{ url: string; fileType: string; label: string } | null>(null);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
-  const [photoViewerIndex, setPhotoViewerIndex] = useState<number | null>(null);
+
+  // ── Data fetching ──────────────────────────────────────────────────────────
+  // const params = { page: String(page), limit: "20" };
+
+  const [activeDocId, setActiveDocId] = useState<string | null>(null);
+  const [docUrl, setDocUrl] = useState<{ url: string; fileType: string } | null>(null);
+  const [docLoading, setDocLoading] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
+
+  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+  const countryOptions = userCountryScope.length > 0
+    ? userCountryScope.map((c) => ({ value: c, label: c }))
+    : [
+      "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
+    ].map((c) => ({ value: c, label: c }));
 
   const [country, setCountry] = useState(() => userCountryScope[0] ?? "");
 
@@ -188,9 +115,8 @@ export default function AccreditationPage() {
   }, [userCountryScope, country]);
 
   // For country managers, always send their first scoped country as the filter.
+  // Previously this was set to "" which caused the API to return all countries.
   const effectiveCountry = isCountryManager ? (country || userCountryScope[0] || "") : country;
-
-  // ── Data fetching ──────────────────────────────────────────────────────────
   const params = Object.fromEntries(
     Object.entries({
       page: String(page),
@@ -198,9 +124,8 @@ export default function AccreditationPage() {
       country: effectiveCountry,
     }).filter(([, v]) => v !== "")
   );
-
   const { data, isLoading } = useQuery({
-    queryKey: ["accreditation-queue", page, effectiveCountry],
+    queryKey: ["accreditation-queue", params],
     queryFn: () => fetchQueue(params),
     // Wait for auth store to rehydrate so userCountryScope/effectiveCountry are correct
     enabled: !!token && _hasHydrated,
@@ -212,7 +137,7 @@ export default function AccreditationPage() {
       api
         .get("/admin/users", { params: { userType: "provider", limit: "1000" } })
         .then((r) => r.data.data ?? r.data),
-    enabled: !!token && _hasHydrated,
+    enabled: !!token,
   });
 
   const providers: PlatformUser[] = providersData?.users ?? [];
@@ -227,16 +152,16 @@ export default function AccreditationPage() {
 
   const tasks = isCountryManager && userCountryScope.length > 0
     ? rawTasks.filter((t) => {
-        const listingCountry = t.listing?.country?.toUpperCase();
-        const selectedCountry = country?.toUpperCase();
-        const inScope = listingCountry
-          ? userCountryScope.some((sc) => sc.toUpperCase() === listingCountry)
-          : false;
+      const listingCountry = t.listing?.country?.toUpperCase();
+      const selectedCountry = country?.toUpperCase();
+      const inScope = listingCountry
+        ? userCountryScope.some((sc) => sc.toUpperCase() === listingCountry)
+        : false;
 
-        return inScope && (!selectedCountry || selectedCountry === listingCountry);
-      })
+      return inScope && (!selectedCountry || selectedCountry === listingCountry);
+    })
     : rawTasks;
-  const total: number = data?.total ?? tasks.length;
+  const total: number = isCountryManager ? tasks.length : (data?.total ?? 0);
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ["listing-review-detail", selectedTask?.listing?.id],
@@ -303,9 +228,14 @@ export default function AccreditationPage() {
     {
       key: "provider",
       label: "Provider",
-      render: (t) => (
-        <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
-      ),
+      render: (t) => {
+        const name = providerMap.get(t.listing.providerId);
+        return name ? (
+          <span className="text-xs text-slate-700 font-medium">{name}</span>
+        ) : (
+          <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
+        );
+      },
     },
     {
       key: "stars",
@@ -337,15 +267,6 @@ export default function AccreditationPage() {
         <DocViewer url={docViewer.url} fileType={docViewer.fileType} label={docViewer.label} onClose={() => setDocViewer(null)} />
       )}
 
-      {/* Photo viewer lightbox */}
-      {photoViewerIndex !== null && detail?.photos && (
-        <PhotoViewer
-          photos={detail.photos}
-          initialIndex={photoViewerIndex}
-          onClose={() => setPhotoViewerIndex(null)}
-        />
-      )}
-
       <SectionHeader
         title="Hotel Accreditation Queue"
         description={`${total} hotel listings pending review`}
@@ -353,6 +274,22 @@ export default function AccreditationPage() {
       />
 
       <Card padding="none">
+        {canShowCountryFilter && (
+          <FilterBar
+            filters={[
+              {
+                key: "country",
+                label: "All Countries",
+                value: country,
+                onChange: (v: string) => {
+                  setCountry(v);
+                  setPage(1);
+                },
+                options: countryOptions,
+              },
+            ]}
+          />
+        )}
         <DataTable
           columns={columns}
           data={tasks}
@@ -395,7 +332,7 @@ export default function AccreditationPage() {
             {/* Submission summary */}
             <dl className="grid grid-cols-2 gap-3 text-sm">
               {[
-                ["Provider", selectedTask?.listing?.providerId ?? "—"],
+                ["Provider", selectedTask?.listing?.providerId ? (providerMap.get(selectedTask.listing.providerId) ?? selectedTask.listing.providerId) : "—"],
                 ["Submission Date", selectedTask?.listing?.submittedAt ? formatRelativeTime(selectedTask.listing.submittedAt) : "—"],
                 ["Claimed Stars", selectedTask?.listing?.claimedStarRating
                   ? `${"★".repeat(selectedTask.listing.claimedStarRating)} (${selectedTask.listing.claimedStarRating}★)`
@@ -459,20 +396,10 @@ export default function AccreditationPage() {
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
                   Listing Photos ({detail.photos.length})
                 </p>
-                <div className="grid grid-cols-3 gap-2">
-                  {detail.photos.slice(0, 6).map((p: any, idx: number) => (
-                    <div
-                      key={p.id}
-                      className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-500 hover:ring-offset-1 transition-all duration-200"
-                      onClick={() => setPhotoViewerIndex(idx)}
-                    >
+                <div className="grid grid-cols-2 gap-2">
+                  {detail.photos.slice(0, 6).map((p: any) => (
+                    <div key={p.id} className="aspect-video bg-slate-100 rounded-lg overflow-hidden">
                       <img src={p.cdnUrl} alt="" className="w-full h-full object-cover" />
-                      {idx === 5 && detail.photos.length > 6 && (
-                        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white">
-                          <span className="text-sm font-bold">+{detail.photos.length - 5}</span>
-                          <span className="text-[10px] opacity-80 uppercase tracking-wider font-semibold">More Photos</span>
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
