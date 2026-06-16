@@ -557,20 +557,7 @@ model PlatformSettings {
   @@schema("listing")
 }
 
-model CommissionRate {
-  id                   String    @id @default(uuid())
-  country              String    @unique @db.Char(2)
-  rate                 Decimal   @db.Decimal(6, 4)
-  pendingRate          Decimal?  @map("pending_rate") @db.Decimal(6, 4)
-  pendingEffectiveFrom DateTime? @map("pending_effective_from")
-  pendingReason        String?   @map("pending_reason") @db.VarChar(500)
-  setBy                String    @map("set_by")
-  createdAt            DateTime  @default(now()) @map("created_at")
-  updatedAt            DateTime  @updatedAt @map("updated_at")
 
-  @@map("commission_rates")
-  @@schema("listing")
-}
 
 model CommissionHistory {
   id                String   @id @default(uuid())
@@ -785,4 +772,25 @@ model AuditLog {
   @@map("AuditLog")
   @@schema("auth")
 }
+
+// ── E15 — Commission Management ───────────────────────────────────────────────
+
+
+model CommissionRate {
+  id                   String    @id @default(uuid())
+  country              String    @unique @db.Char(2)
+  rate                 Decimal   @db.Decimal(6, 4)
+  pendingRate          Decimal?  @map("pending_rate") @db.Decimal(6, 4)
+  pendingEffectiveFrom DateTime? @map("pending_effective_from")
+  pendingReason        String?   @map("pending_reason") @db.VarChar(500)
+  setBy                String    @map("set_by") @db.VarChar(100)
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@map("commission_rates")
+  @@schema("listing")
+}
+
+
+
 

@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
@@ -101,12 +101,16 @@ async function build() {
     // In development, allow all origins so the Expo mobile app (which sends no
     // Origin header from React Native) can reach the API.  In production, lock
     // down to known web / admin URLs only.
+    // localhost origins are always included so local dev works even when
+    // WEB_BASE_URL / ADMIN_BASE_URL point to the live production URLs.
     origin: isDev
       ? true
       : [
           process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
           process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-          "https://kainook.com"
+          "https://kainook.com",
+          "http://localhost:3000",
+          "http://localhost:3002",
         ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
