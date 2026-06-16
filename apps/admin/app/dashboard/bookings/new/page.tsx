@@ -8,13 +8,15 @@ import {
   ArrowLeft, User, Building2, CalendarDays, Phone, Mail,
   Globe, FileText, AlertCircle, CheckCircle2, Search,
   CreditCard, Hash, UserCircle, MapPin, Loader2,
-  Send, Save, X, ChevronRight,
+  Send, Save, X, ChevronRight, Calculator,
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { canAccess } from "@/permissions/rbac";
 import { SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Textarea } from "@/components/ui/Input";
+import { ListingSearchDropdown } from "../../../../components/ui/ListingSearchDropdown";
+import type { SelectedListing } from "../../../../components/ui/ListingSearchDropdown";
 import { formatCurrency } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
 import Link from "next/link";
@@ -106,8 +108,7 @@ export default function ManualBookingPage() {
 
   // ── Section 2: Booking Info ───────────────────────────────────────────────────
   const [listingType, setListingType]   = useState<ListingType>("hotel");
-  const [listingName, setListingName]   = useState("");
-  const [listingId, setListingId]       = useState("");
+  const [selectedListing, setSelectedListing] = useState<SelectedListing | null>(null);
   const [country, setCountry]           = useState("");
   const [checkIn, setCheckIn]           = useState("");
   const [checkOut, setCheckOut]         = useState("");
@@ -136,6 +137,7 @@ export default function ManualBookingPage() {
 
   // Reset conditional date fields when listing type changes
   useEffect(() => {
+    setSelectedListing(null);
     setCheckIn(""); setCheckOut(""); setPickup(""); setReturnDt("");
     setAvailStatus("idle"); setPrice(null);
   }, [listingType]);
@@ -152,6 +154,28 @@ export default function ManualBookingPage() {
     return Math.max(0, Math.ceil(diff / 86400000));
   })();
 
+  // ── Derived: detailed pricing factors ─────────────────────────────────────────
+  const pricePerNight = price && nights > 0 ? price.baseAmount / nights : null;
+  const pricePerGuest = price && guests > 0 ? price.total / guests : null;
+  const serviceFeeRate = price && price.baseAmount > 0 ? (price.serviceFee / price.baseAmount) * 100 : null;
+  const taxRate = price && price.baseAmount > 0 ? (price.tax / price.baseAmount) * 100 : null;
+
+  const formatDateLabel = (dateStr: string) => {
+    if (!dateStr) return "—";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatRate = (rate: number | null) => {
+    if (rate === null) return "—";
+    return rate % 1 === 0 ? `${rate}%` : `${rate.toFixed(2)}%`;
+  };
+
   // ── Validate ─────────────────────────────────────────────────────────────────
   function validate(): boolean {
     const e: Record<string, string> = {};
@@ -159,7 +183,7 @@ export default function ManualBookingPage() {
     if (!lastName.trim())  e.lastName  = "Required";
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) e.email = "Valid email required";
     if (!phone.trim())     e.phone     = "Required";
-    if (!listingName.trim()) e.listingName = "Required";
+    if (!selectedListing) e.listingName = "Please select a listing";
     if (!country.trim())     e.country    = "Required";
 
     if (isAccommodation) {
@@ -177,8 +201,8 @@ export default function ManualBookingPage() {
 
   // ── Check Availability ────────────────────────────────────────────────────────
   async function checkAvailability() {
-    if (!listingId.trim() && !listingName.trim()) {
-      setErrors((p) => ({ ...p, listingName: "Enter listing name or ID first" }));
+    if (!selectedListing) {
+      setErrors((p) => ({ ...p, listingName: "Select a listing first" }));
       return;
     }
     const hasDate = isAccommodation ? (checkIn && checkOut) : (pickup && returnDt);
@@ -194,7 +218,8 @@ export default function ManualBookingPage() {
     try {
       const params: Record<string, string> = {
         listingType,
-        ...(listingId ? { listingId } : { listingName }),
+        listingId: selectedListing.id,
+        listingName: selectedListing.name,
         ...(isAccommodation ? { checkIn, checkOut } : { pickupDatetime: pickup, returnDatetime: returnDt }),
         guests: String(guests),
       };
@@ -210,7 +235,7 @@ export default function ManualBookingPage() {
           total:      d.pricing.total      ?? 0,
           currency:   d.pricing.currency   ?? "USD",
         });
-        if (d.listingId) setListingId(d.listingId);
+        // ID is already populated from the dropdown selection
       }
     } catch {
       // Endpoint not yet live — show mock available + estimated price
@@ -231,7 +256,7 @@ export default function ManualBookingPage() {
   const sendLinkMut = useMutation({
     mutationFn: () =>
       listingApi.post("/admin/bookings/manual", {
-        listingId, listingType, listingName,
+        listingId: selectedListing!.id, listingType, listingName: selectedListing!.name,
         guestFirstName: firstName, guestLastName: lastName,
         guestEmail: email, guestPhone: phone, nationality,
         country, guests,
@@ -252,7 +277,7 @@ export default function ManualBookingPage() {
   const saveDraftMut = useMutation({
     mutationFn: () =>
       listingApi.post("/admin/bookings/drafts", {
-        listingId, listingType, listingName,
+        listingId: selectedListing!.id, listingType, listingName: selectedListing!.name,
         guestFirstName: firstName, guestLastName: lastName,
         guestEmail: email, guestPhone: phone, nationality,
         country, guests, notes,
@@ -296,7 +321,7 @@ export default function ManualBookingPage() {
             onClick={() => {
               setSubmitted(false); setLinkSent(false);
               setFirstName(""); setLastName(""); setEmail(""); setPhone("");
-              setNationality(""); setNotes(""); setListingName(""); setListingId("");
+              setNationality(""); setNotes(""); setSelectedListing(null);
               setCountry(""); setCheckIn(""); setCheckOut(""); setPickup(""); setReturnDt("");
               setGuests(1); setRooms(1); setUnits(1);
               setAvailStatus("idle"); setPrice(null);
@@ -432,7 +457,12 @@ export default function ManualBookingPage() {
               label="Country"
               required
               value={country}
-              onChange={(e) => setCountry(e.target.value)}
+              onChange={(e) => {
+                setCountry(e.target.value);
+                setSelectedListing(null);
+                setAvailStatus("idle");
+                setPrice(null);
+              }}
               options={[
                 { value: "", label: "Select country…" },
                 ...["MT","US","GB","DE","FR","ES","IT","AE","AU","CA","JP","SG","NL","BE","SE","IN","KE","NG","ZA","GH"].map((c) => ({ value: c, label: c })),
@@ -441,25 +471,16 @@ export default function ManualBookingPage() {
             />
           </div>
 
-          <Input
-            id={`${uid}-listingName`}
-            label="Listing Name"
-            required
-            placeholder="e.g. Hilton Malta, Apartments at Valletta…"
-            value={listingName}
-            onChange={(e) => setListingName(e.target.value)}
+          <ListingSearchDropdown
+            country={country}
+            listingType={listingType}
+            value={selectedListing}
+            onChange={(listing: SelectedListing | null) => {
+              setSelectedListing(listing);
+              setAvailStatus("idle");
+              setPrice(null);
+            }}
             error={errors.listingName}
-            leftIcon={<Building2 className="h-4 w-4" />}
-            hint="Enter the listing name or paste the Listing ID below."
-          />
-
-          <Input
-            id={`${uid}-listingId`}
-            label="Listing ID (optional)"
-            placeholder="lst_abc123"
-            value={listingId}
-            onChange={(e) => setListingId(e.target.value)}
-            hint="Leave blank if unknown — the system will search by name."
           />
 
           {/* Dates — accommodation vs car */}
@@ -634,34 +655,187 @@ export default function ManualBookingPage() {
       ════════════════════════════════════════════════════════════ */}
       {price && (
         <SectionCard step={4} title="Price Summary" icon={FileText}>
-          <div className="space-y-0 rounded-lg border border-border overflow-hidden">
-            <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/60 border-b border-border">
-              <span className="text-sm text-slate-500">Base Amount</span>
-              <span className="text-sm font-medium text-slate-900">{formatCurrency(price.baseAmount, price.currency)}</span>
-            </div>
-            {price.discount > 0 && (
-              <div className="flex justify-between items-center px-4 py-2.5 border-b border-border">
-                <span className="text-sm text-slate-500">Discount</span>
-                <span className="text-sm font-medium text-green-600">−{formatCurrency(price.discount, price.currency)}</span>
+          <div className="space-y-6">
+            
+            {/* 1. Booking Details Summary */}
+            <div className="bg-slate-50/50 rounded-xl p-4 border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <Building2 className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Listing Details</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">
+                      {selectedListing?.name}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary capitalize">
+                        {listingType}
+                      </span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 uppercase">
+                        <MapPin className="h-3 w-3 mr-1 text-slate-400" />
+                        {country}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
-            <div className="flex justify-between items-center px-4 py-2.5 border-b border-border">
-              <span className="text-sm text-slate-500">Service Fee</span>
-              <span className="text-sm font-medium text-slate-900">{formatCurrency(price.serviceFee, price.currency)}</span>
+
+              <div className="space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <CalendarDays className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Booking Period & Capacity</p>
+                    <p className="text-sm font-semibold text-slate-800 mt-0.5">
+                      {isAccommodation 
+                        ? `${formatDateLabel(checkIn)} – ${formatDateLabel(checkOut)}` 
+                        : `${formatDateLabel(pickup)} – ${formatDateLabel(returnDt)}`}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {nights} {isAccommodation ? (nights === 1 ? "night" : "nights") : (nights === 1 ? "day" : "days")}
+                      {" · "}{guests} {guests === 1 ? "guest" : "guests"}
+                      {listingType === "hotel" && ` · ${rooms} ${rooms === 1 ? "room" : "rooms"}`}
+                      {listingType === "apartment" && ` · ${units} ${units === 1 ? "unit" : "units"}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between items-center px-4 py-2.5 border-b border-border">
-              <span className="text-sm text-slate-500">Tax</span>
-              <span className="text-sm font-medium text-slate-900">{formatCurrency(price.tax, price.currency)}</span>
+
+            {/* 2 & 3. Per-Day and Per-Person pricing formulas */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Per-Day Breakdown */}
+              <div className="bg-slate-50/30 rounded-xl p-4 border border-slate-100 flex flex-col justify-between">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Per-Day Pricing</span>
+                  <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                    Daily Rate
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-base font-bold text-slate-800">
+                    {pricePerNight !== null 
+                      ? `${formatCurrency(pricePerNight, price.currency, { currencyDisplay: "code" })} / ${isAccommodation ? "night" : "day"}`
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-slate-500 font-mono mt-0.5">
+                    {pricePerNight !== null 
+                      ? `${formatCurrency(pricePerNight, price.currency, { currencyDisplay: "code" })} × ${nights} ${nights === 1 ? (isAccommodation ? "night" : "day") : (isAccommodation ? "nights" : "days")} = ${formatCurrency(price.baseAmount, price.currency, { currencyDisplay: "code" })}`
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Per-Guest Breakdown */}
+              <div className="bg-slate-50/30 rounded-xl p-4 border border-slate-100 flex flex-col justify-between">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Per-Person Cost</span>
+                  <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700">
+                    Per Guest
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-base font-bold text-slate-800">
+                    {pricePerGuest !== null 
+                      ? `${formatCurrency(pricePerGuest, price.currency, { currencyDisplay: "code" })} / guest`
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-slate-500 font-mono mt-0.5">
+                    {pricePerGuest !== null 
+                      ? `${formatCurrency(price.total, price.currency, { currencyDisplay: "code" })} total ÷ ${guests} ${guests === 1 ? "guest" : "guests"} = ${formatCurrency(pricePerGuest, price.currency, { currencyDisplay: "code" })} / guest`
+                      : "—"}
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="flex justify-between items-center px-4 py-3 bg-primary/5">
-              <span className="text-sm font-bold text-slate-900">Total Amount</span>
-              <span className="text-base font-bold text-primary">{formatCurrency(price.total, price.currency)}</span>
+
+            {/* 4. Fee breakdown (accommodation, service fee, tax, discount) */}
+            <div className="rounded-xl border border-slate-200/80 overflow-hidden bg-white">
+              <div className="px-4 py-3 bg-slate-50/50 border-b border-slate-100">
+                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fee Breakdown</h3>
+              </div>
+              <div className="divide-y divide-slate-100">
+                <div className="flex justify-between items-center px-4 py-3">
+                  <span className="text-sm text-slate-500">Accommodation Subtotal</span>
+                  <span className="text-sm font-semibold text-slate-800">
+                    {formatCurrency(price.baseAmount, price.currency, { currencyDisplay: "code" })}
+                  </span>
+                </div>
+                
+                {price.discount > 0 && (
+                  <div className="flex justify-between items-center px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-500">Discount</span>
+                      <span className="inline-flex items-center gap-1 rounded bg-green-50 px-1.5 py-0.5 text-xs font-semibold text-green-700">
+                        Promo
+                      </span>
+                    </div>
+                    <span className="text-sm font-bold text-green-600">
+                      −{formatCurrency(price.discount, price.currency, { currencyDisplay: "code" })}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-500">Service Fee</span>
+                    <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">
+                      Rate: {formatRate(serviceFeeRate)}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-slate-800">
+                    {formatCurrency(price.serviceFee, price.currency, { currencyDisplay: "code" })}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-500">Tax</span>
+                    <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">
+                      Rate: {formatRate(taxRate)}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-slate-800">
+                    {formatCurrency(price.tax, price.currency, { currencyDisplay: "code" })}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center px-4 py-3.5 bg-primary/5">
+                  <span className="text-sm font-bold text-slate-800">Total Amount</span>
+                  <span className="text-lg font-extrabold text-primary">
+                    {formatCurrency(price.total, price.currency, { currencyDisplay: "code" })} total
+                  </span>
+                </div>
+              </div>
             </div>
+
+            {/* 5. Calculation summary card with highlighted formulas */}
+            <div className="bg-primary/[0.02] border border-primary/10 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                  <Calculator className="h-4 w-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-700">Price Formula Breakdown</h4>
+                  <p className="text-[11px] text-slate-400">How your total booking fee is computed</p>
+                </div>
+              </div>
+              <div className="bg-white px-3 py-2 border border-slate-100 rounded-lg shadow-sm">
+                <span className="text-xs font-semibold font-mono text-slate-600">
+                  {formatCurrency(price.baseAmount, price.currency, { currencyDisplay: "code" })} (Base)
+                  {price.discount > 0 ? ` − ${formatCurrency(price.discount, price.currency, { currencyDisplay: "code" })} (Discount)` : ""}
+                  {` + ${formatCurrency(price.serviceFee, price.currency, { currencyDisplay: "code" })} (Fee)`}
+                  {` + ${formatCurrency(price.tax, price.currency, { currencyDisplay: "code" })} (Tax)`}
+                  {` = `}
+                  <span className="text-primary font-bold">{formatCurrency(price.total, price.currency, { currencyDisplay: "code" })}</span>
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-400 flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              Pricing is auto-calculated based on rules set by management and cannot be modified.
+            </p>
           </div>
-          <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
-            <AlertCircle className="h-3.5 w-3.5" />
-            Pricing is auto-calculated and cannot be edited by agents.
-          </p>
         </SectionCard>
       )}
 

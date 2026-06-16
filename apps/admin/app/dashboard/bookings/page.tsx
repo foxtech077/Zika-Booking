@@ -102,8 +102,6 @@ export default function BookingsPage() {
         { value: "car", label: "Car" },
       ],
     },
-<<<<<<< HEAD
-=======
     ...(canShowCountryFilter
       ? [
           {
@@ -115,19 +113,6 @@ export default function BookingsPage() {
           },
         ]
       : []),
-    {
-      key: "rowsPerPage",
-      label: "",
-      value: String(rowsPerPage),
-      onChange: (v: string) => { setRowsPerPage(Number(v)); setPage(1); },
-      options: [
-        { value: "5", label: "5" },
-        { value: "10", label: "10" },
-        { value: "20", label: "20" },
-        { value: "50", label: "50" },
-      ],
-    },
->>>>>>> 22d26c040c1bd8996858b660e93028e3db9a63e8
   ];
 
   const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
