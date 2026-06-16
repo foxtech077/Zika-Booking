@@ -1,21 +1,31 @@
 // middleware/ipDetect.middleware.ts
 import type { FastifyRequest, FastifyReply } from "fastify";
+import geoip from "geoip-lite";
+import { paymentRoutingConfig } from "../config/payment.config.js";
 
-const AFRICA_COUNTRIES = new Set([
-  "NG", "KE", "GH", "ZA", "UG", "TZ", "EG", "MA"
-]);
+// Use the exact same set as payment routing to ensure consistency
+const AFRICA_COUNTRIES = paymentRoutingConfig.taraCountries;
 
 export async function ipDetect(req: FastifyRequest, _reply: FastifyReply) {
-  const ip =
-    (req.headers["x-forwarded-for"] as string)?.split(",")[0] ||
-    req.ip;
+  // 1. Safe IP detection (relies on Fastify's trustProxy: true)
+  const ip = req.ip;
 
-  let country = (req.headers["cf-ipcountry"] as string | undefined)?.toUpperCase();
+  let country: string | undefined;
 
-  if (!country) {
-    country = "IN"; // fallback
+  // 2. Lookup Geo IP locally (Offline, 0 latency)
+  if (ip && ip !== "127.0.0.1" && ip !== "::1") {
+    const geo = geoip.lookup(ip);
+    if (geo && geo.country) {
+      country = geo.country.toUpperCase();
+    }
   }
 
+  // 3. Fallback to UNKNOWN
+  if (!country) {
+    country = "UNKNOWN";
+  }
+
+  // 4. Normalize and append
   req.location = {
     ip,
     country,
