@@ -4,21 +4,11 @@ import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type GuestRequest } from "../middleware/auth.js";
-<<<<<<< HEAD
-import { tr } from "zod/v4/locales";
 import { initiateTaraPayment } from "../lib/tara.js";
 
-const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
+// ── Constants & helpers for Tara payment ────────────────────────────────────
 
-async function fetchBooking(bookingId: string, authHeader: string) {
-  const res = await fetch(`${BOOKING_SERVICE_URL}/guests/me/bookings/${bookingId}`, {
-    headers: { Authorization: authHeader },
-  });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { success: boolean; data?: Record<string, unknown> };
-  if (!json.success || !json.data) return null;
-  return json.data;
-}
+const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 
 async function bindCommission(bookingId: string, authHeader: string) {
   const res = await fetch(`${BOOKING_SERVICE_URL}/guests/me/bookings/${bookingId}/bind-commission`, {
@@ -30,8 +20,6 @@ async function bindCommission(bookingId: string, authHeader: string) {
   if (!json.success || !json.data) return null;
   return json.data;
 }
-=======
->>>>>>> f7ead0664f9cbe0508cb8d3801c604e97ab0ad55
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 

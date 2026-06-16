@@ -50,11 +50,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
     }
   
-<<<<<<< HEAD
-    const rawBody = (req as any).rawBody;
-=======
     const rawBody = (req as any).rawBody as Buffer | undefined;
->>>>>>> f7ead0664f9cbe0508cb8d3801c604e97ab0ad55
   
     if (!rawBody) {
       return reply.code(400).send({
