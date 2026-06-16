@@ -4,6 +4,22 @@ import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type GuestRequest } from "../middleware/auth.js";
+import { initiateTaraPayment } from "../lib/tara.js";
+
+// ── Constants & helpers for Tara payment ────────────────────────────────────
+
+const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
+
+async function bindCommission(bookingId: string, authHeader: string) {
+  const res = await fetch(`${BOOKING_SERVICE_URL}/guests/me/bookings/${bookingId}/bind-commission`, {
+    method: "PATCH",
+    headers: { Authorization: authHeader },
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { success: boolean; data?: Record<string, unknown> };
+  if (!json.success || !json.data) return null;
+  return json.data;
+}
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -50,7 +66,7 @@ function formatMethod(m: {
 export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── GET /guests/me/payment-methods ───────────────────────────────────────
-  app.get("/guests/me/payment-methods", { preHandler: [requireUser], schema: {
+  app.get("/payments/guests/me/payment-methods", { preHandler: [requireUser], schema: {
     tags: ["Payment Methods"],
     summary: "List saved payment methods",
   }, }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -78,7 +94,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── POST /guests/me/payment-methods/stripe/setup ─────────────────────────
   app.post(
-    "/guests/me/payment-methods/stripe/setup", { preHandler: [requireUser], schema: {
+    "/payments/guests/me/payment-methods/stripe/setup", { preHandler: [requireUser], schema: {
       tags: ["Payment Methods"],
       summary: "Create Stripe SetupIntent",
     }, }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -148,7 +164,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── POST /guests/me/payment-methods/stripe/confirm ───────────────────────
-  app.post("/guests/me/payment-methods/stripe/confirm", { preHandler: [requireUser], schema: {
+  app.post("/payments/guests/me/payment-methods/stripe/confirm", { preHandler: [requireUser], schema: {
     tags: ["Payment Methods"],
     summary: "Save Stripe payment method",
     body: {
@@ -271,7 +287,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── POST /guests/me/payment-methods/tara ─────────────────────────────────
-  app.post("/guests/me/payment-methods/tara", { preHandler: [requireUser], schema: {
+  app.post("/payments/guests/me/payment-methods/tara", { preHandler: [requireUser], schema: {
     tags: ["Payment Methods"],
     summary: "Add Tara mobile money account",
     body: {
@@ -317,9 +333,66 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
     },
   );
 
+// ── POST /payments/tara ─────────────────────────────────
+  app.post(
+    "/payments/tara",
+    { preHandler: [requireUser] },
+    async (req, reply) => {
+      const { bookingId, mobileNumber } = req.body as {
+        bookingId: string;
+        mobileNumber: string;
+      };
+
+      const authHeader = req.headers.authorization ?? "";
+      const booking = (await bindCommission(bookingId, authHeader)) as any;
+
+      if (!booking) {
+        return sendError(
+          reply,
+          404,
+          "BOOKING_NOT_FOUND",
+          "Booking not found"
+        );
+      }
+
+      const currency = (booking.currency as string).toLowerCase();
+      const taraResult = await initiateTaraPayment({
+        amount: Number(booking.totalAmount),
+        currency,
+        mobileNumber,
+        reference: booking.reference ?? `tara-${bookingId}-${Date.now()}`,
+        description: `Booking ${bookingId}`,
+      });
+
+      const failedCount = await prisma.payment.count({
+        where: {
+          bookingId,
+          status: { in: ["failed", "timed_out"] },
+        },
+      });
+      const attemptNumber = failedCount + 1;
+      const idempotencyKey = `pay-${bookingId}-${attemptNumber}`;
+
+      await prisma.payment.create({
+        data: {
+          bookingId: booking.id,
+          status: "pending",
+          paymentProvider: "tara",
+          amount: Number(booking.totalAmount),
+          currency,
+          attemptNumber,
+          idempotencyKey,
+          providerPaymentId: taraResult.taraReference,
+        },
+      });
+
+      return sendSuccess(reply, 200, taraResult);
+    }
+  );
+
   // ── PATCH /guests/me/payment-methods/:id ─────────────────────────────────
   app.patch(
-    "/guests/me/payment-methods/:id",
+    "/payments/guests/me/payment-methods/:id",
     { preHandler: [requireUser], schema: {
       tags: ["Payment Methods"],
       summary: "Update payment method",
@@ -385,7 +458,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── DELETE /guests/me/payment-methods/:id ────────────────────────────────
-  app.delete("/guests/me/payment-methods/:id", { preHandler: [requireUser], schema: {
+  app.delete("/payments/guests/me/payment-methods/:id", { preHandler: [requireUser], schema: {
     tags: ["Payment Methods"],
     summary: "Delete payment method",
     params: {

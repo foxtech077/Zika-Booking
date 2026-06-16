@@ -25,7 +25,6 @@ const fetchBookingDetail = (id: string) =>
 
 export default function BookingsPage() {
   const qc = useQueryClient();
-
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -275,11 +274,36 @@ export default function BookingsPage() {
       <Card padding="none">
         <FilterBar
           search={q}
-          onSearchChange={(v: string) => { setQ(v); setPage(1); }}
+          onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
-          filters={filterItems}
+          filters={[
+            {
+              key: "status",
+              label: "All Statuses",
+              value: status,
+              onChange: (v) => { setStatus(v); setPage(1); },
+              options: [
+                { value: "pending_payment", label: "Pending Payment" },
+                { value: "confirmed", label: "Confirmed" },
+                { value: "completed", label: "Completed" },
+                { value: "cancelled_by_guest", label: "Cancelled by Guest" },
+                { value: "cancelled_by_provider", label: "Cancelled by Provider" },
+                { value: "cancelled_by_system", label: "Cancelled by System" },
+              ],
+            },
+            {
+              key: "listingType",
+              label: "All Types",
+              value: listingType,
+              onChange: (v) => { setListingType(v); setPage(1); },
+              options: [
+                { value: "hotel", label: "Hotel" },
+                { value: "apartment", label: "Apartment" },
+                { value: "car", label: "Car" },
+              ],
+            },
+          ]}
         />
-
         <DataTable
           columns={columns}
           data={bookings}
@@ -289,8 +313,7 @@ export default function BookingsPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<CalendarDays className="h-10 w-10" />}
         />
-
-        <Pagination page={page} limit={rowsPerPage} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Booking detail drawer */}

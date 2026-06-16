@@ -12,23 +12,21 @@ import { Avatar } from "@/components/ui/Avatar";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
-import { useAuthStore } from "@/stores/auth";
 import type { PlatformUser } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
 
 const fetchUsers = (params: Record<string, string>) =>
   api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
 
 export default function UsersPage() {
   const { user, _hasHydrated } = useAuthStore();
+  const isCountryManager = user?.role === "country_manager";
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  const limit = 20;
+
   const qc = useQueryClient();
 
-  // If this admin has a country scope, restrict the user list to those countries
-  const scopedCountries: string[] = user?.role === "country_manager"
-    ? (user?.countryScope ?? [])
-    : [];
-
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(20);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [userType, setUserType] = useState("");
@@ -36,19 +34,11 @@ export default function UsersPage() {
   const [confirm, setConfirm] = useState<{ action: "suspend" | "reinstate" | "ban"; user: PlatformUser } | null>(null);
   const [reason, setReason] = useState("");
 
-  const params: Record<string, string> = {
-    q,
-    ...(status ? { status } : {}),
-    ...(userType ? { userType } : {}),
-    // Inject country filter when admin is country-scoped
-    ...(scopedCountries.length > 0 ? { country: scopedCountries.join(",") } : {}),
-    page: scopedCountries.length > 0 ? "1" : String(page),
-    limit: scopedCountries.length > 0 ? "1000" : String(limit),
-  };
+  const params = { q, status, userType, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-users", page, limit, q, status, userType, scopedCountries.join(",")],
     queryFn: () => fetchUsers(params),
-    enabled: _hasHydrated && (user?.role !== "country_manager" || scopedCountries.length > 0),
+    enabled: _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
   });
 
   const rawUsers: PlatformUser[] = data?.users ?? [];
@@ -174,7 +164,7 @@ export default function UsersPage() {
     <div className="space-y-5 max-w-screen-xl">
       <SectionHeader
         title="Users"
-        description={`${total.toLocaleString()} registered users${scopedCountries.length > 0 ? ` · ${scopedCountries.join(", ")}` : ""}`}
+        description={`${total.toLocaleString()} registered users`}
         action={
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Users className="h-4 w-4" />
@@ -222,7 +212,7 @@ export default function UsersPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<Users className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} onLimitChange={(newL) => { setLimit(newL); setPage(1); }} />
+        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
       </Card>
 
       {/* User detail drawer */}

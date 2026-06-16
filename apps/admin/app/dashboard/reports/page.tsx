@@ -9,8 +9,6 @@ import { Button } from "@/components/ui/Button";
 import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Charts";
 import { formatNumber, formatCurrency, slugToLabel } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
-import { useAuthStore } from "@/stores/auth";
-import { canAccess } from "@/permissions/rbac";
 
 const fetchAllBookings = () =>
   listingApi.get("/admin/bookings?limit=100").then((r) => r.data.data ?? r.data);
@@ -63,9 +61,6 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ReportsPage() {
-  const { user } = useAuthStore();
-  // Only super_admin + finance can see deep financial reporting & export
-  const canViewFinancials = canAccess(user?.role, "manage_finance");
   const { data: bookingsData, isLoading } = useQuery({
     queryKey: ["reports-bookings"],
     queryFn: fetchAllBookings,
@@ -117,21 +112,19 @@ export default function ReportsPage() {
         title="Reports"
         description="Platform analytics and performance metrics"
         action={
-          canViewFinancials ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={exportSummary}
-              leftIcon={<Download className="h-4 w-4" />}
-            >
-              Export Summary
-            </Button>
-          ) : undefined
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={exportSummary}
+            leftIcon={<Download className="h-4 w-4" />}
+          >
+            Export Summary
+          </Button>
         }
       />
 
-      {/* KPI summary — financial cards only for super_admin + finance */}
-      <div className={`grid grid-cols-2 ${canViewFinancials ? "lg:grid-cols-4" : "lg:grid-cols-2"} gap-4`}>
+      {/* KPI summary */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Bookings"
           value={bookings.length}
@@ -139,26 +132,22 @@ export default function ReportsPage() {
           iconBg="bg-primary/10"
           loading={isLoading}
         />
-        {canViewFinancials && (
-          <StatCard
-            title="Total Revenue"
-            value={totalRevenue}
-            currency="USD"
-            icon={<TrendingUp className="h-4 w-4 text-success" />}
-            iconBg="bg-success/10"
-            loading={isLoading}
-          />
-        )}
-        {canViewFinancials && (
-          <StatCard
-            title="Commission Earned"
-            value={totalCommission}
-            currency="USD"
-            icon={<BarChart3 className="h-4 w-4 text-info" />}
-            iconBg="bg-info/10"
-            loading={isLoading}
-          />
-        )}
+        <StatCard
+          title="Total Revenue"
+          value={totalRevenue}
+          currency="USD"
+          icon={<TrendingUp className="h-4 w-4 text-success" />}
+          iconBg="bg-success/10"
+          loading={isLoading}
+        />
+        <StatCard
+          title="Commission Earned"
+          value={totalCommission}
+          currency="USD"
+          icon={<BarChart3 className="h-4 w-4 text-info" />}
+          iconBg="bg-info/10"
+          loading={isLoading}
+        />
         <StatCard
           title="Conversion Rate"
           value={Math.round(conversionRate)}
@@ -169,22 +158,20 @@ export default function ReportsPage() {
         />
       </div>
 
-      {/* Charts — revenue chart is financial-only */}
-      <div className={`grid grid-cols-1 ${canViewFinancials ? "lg:grid-cols-3" : ""} gap-4`}>
-        {canViewFinancials && (
-          <Card className="lg:col-span-2" padding="none">
-            <div className="p-5 border-b border-border">
-              <CardHeader title="12-Month Revenue Trend" description="Confirmed + completed bookings" />
-            </div>
-            <div className="p-5">
-              {isLoading ? (
-                <div className="h-60 bg-slate-100 rounded-lg animate-shimmer" />
-              ) : (
-                <RevenueBarChart data={revenueChart} height={240} />
-              )}
-            </div>
-          </Card>
-        )}
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2" padding="none">
+          <div className="p-5 border-b border-border">
+            <CardHeader title="12-Month Revenue Trend" description="Confirmed + completed bookings" />
+          </div>
+          <div className="p-5">
+            {isLoading ? (
+              <div className="h-60 bg-slate-100 rounded-lg animate-shimmer" />
+            ) : (
+              <RevenueBarChart data={revenueChart} height={240} />
+            )}
+          </div>
+        </Card>
 
         <div className="space-y-4">
           <Card padding="none">
@@ -207,27 +194,25 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Summary table — financial rows hidden from non-finance roles */}
+      {/* Summary table */}
       <Card>
         <CardHeader title="Performance Summary" description="Key platform metrics at a glance" />
         <div className="mt-4 space-y-0">
-          {([
-            { label: "Total Bookings", value: formatNumber(bookings.length), financial: false },
-            { label: "Confirmed Bookings", value: formatNumber(confirmed.length), financial: false },
-            { label: "Cancelled Bookings", value: formatNumber(cancelled.length), financial: false },
-            { label: "Total Revenue", value: formatCurrency(totalRevenue), financial: true },
-            { label: "Platform Commission", value: formatCurrency(totalCommission), financial: true },
-            { label: "Provider Payouts", value: formatCurrency(totalRevenue - totalCommission), financial: true },
-            { label: "Conversion Rate", value: `${conversionRate.toFixed(1)}%`, financial: false },
-            { label: "Total Users", value: formatNumber(usersData?.total ?? 0), financial: false },
-          ] as { label: string; value: string | number; financial: boolean }[])
-            .filter((row) => !row.financial || canViewFinancials)
-            .map(({ label, value }) => (
-              <div key={label} className="flex justify-between py-3 border-b border-border last:border-0">
-                <span className="text-sm text-slate-600">{label}</span>
-                <span className="text-sm font-semibold text-slate-900 tabular">{value}</span>
-              </div>
-            ))}
+          {[
+            { label: "Total Bookings", value: formatNumber(bookings.length) },
+            { label: "Confirmed Bookings", value: formatNumber(confirmed.length) },
+            { label: "Cancelled Bookings", value: formatNumber(cancelled.length) },
+            { label: "Total Revenue", value: formatCurrency(totalRevenue) },
+            { label: "Platform Commission", value: formatCurrency(totalCommission) },
+            { label: "Provider Payouts", value: formatCurrency(totalRevenue - totalCommission) },
+            { label: "Conversion Rate", value: `${conversionRate.toFixed(1)}%` },
+            { label: "Total Users", value: formatNumber(usersData?.total ?? 0) },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex justify-between py-3 border-b border-border last:border-0">
+              <span className="text-sm text-slate-600">{label}</span>
+              <span className="text-sm font-semibold text-slate-900 tabular">{value}</span>
+            </div>
+          ))}
         </div>
       </Card>
     </div>
