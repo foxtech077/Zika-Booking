@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -142,7 +142,7 @@ export default function LoginPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", form);
+      const res = await api.post<ApiResponse<AuthResponse>>("/auth/auth/login", form);
       if (!res.data.success) throw res.data;
       return res.data.data;
     },
