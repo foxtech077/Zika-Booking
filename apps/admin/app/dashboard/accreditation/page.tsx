@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
+import { api } from "@/lib/api";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +13,6 @@ import { Textarea, Select } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatRelativeTime } from "@/lib/utils";
-import { api } from "@/lib/api";
 import type { ListingReviewTask, PlatformUser } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 
@@ -229,14 +229,9 @@ export default function AccreditationPage() {
     {
       key: "provider",
       label: "Provider",
-      render: (t) => {
-        const name = providerMap.get(t.listing.providerId);
-        return name ? (
-          <span className="text-xs text-slate-700 font-medium">{name}</span>
-        ) : (
-          <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
-        );
-      },
+      render: (t) => (
+        <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
+      ),
     },
     {
       key: "stars",
@@ -337,7 +332,7 @@ export default function AccreditationPage() {
             {/* Submission summary */}
             <dl className="grid grid-cols-2 gap-3 text-sm">
               {[
-                ["Provider", selectedTask?.listing?.providerId ? (providerMap.get(selectedTask.listing.providerId) ?? selectedTask.listing.providerId) : "—"],
+                ["Provider", selectedTask?.listing?.providerId ?? "—"],
                 ["Submission Date", selectedTask?.listing?.submittedAt ? formatRelativeTime(selectedTask.listing.submittedAt) : "—"],
                 ["Claimed Stars", selectedTask?.listing?.claimedStarRating
                   ? `${"★".repeat(selectedTask.listing.claimedStarRating)} (${selectedTask.listing.claimedStarRating}★)`

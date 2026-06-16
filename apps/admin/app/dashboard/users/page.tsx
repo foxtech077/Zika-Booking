@@ -12,7 +12,6 @@ import { Avatar } from "@/components/ui/Avatar";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
-import { useAuthStore } from "@/stores/auth";
 import type { PlatformUser } from "@/types/admin";
 
 const fetchUsers = (params: Record<string, string>) =>
@@ -174,7 +173,7 @@ export default function UsersPage() {
     <div className="space-y-5 max-w-screen-xl">
       <SectionHeader
         title="Users"
-        description={`${total.toLocaleString()} registered users${scopedCountries.length > 0 ? ` · ${scopedCountries.join(", ")}` : ""}`}
+        description={`${total.toLocaleString()} registered users`}
         action={
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <Users className="h-4 w-4" />

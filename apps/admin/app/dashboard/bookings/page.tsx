@@ -25,7 +25,6 @@ const fetchBookingDetail = (id: string) =>
 
 export default function BookingsPage() {
   const qc = useQueryClient();
-
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -126,6 +125,7 @@ export default function BookingsPage() {
       limit: String(rowsPerPage),
     }).filter(([, v]) => v !== "")
   );
+
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-bookings", page, rowsPerPage, q, status, listingType, effectiveCountry],
@@ -263,13 +263,12 @@ export default function BookingsPage() {
       <Card padding="none">
         <FilterBar
           search={q}
-          onSearchChange={(v: string) => { setQ(v); setPage(1); }}
+          onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
           filters={filterItems}
           limit={rowsPerPage}
           onLimitChange={(newL) => { setRowsPerPage(newL); setPage(1); }}
         />
-
         <DataTable
           columns={columns}
           data={bookings}
@@ -279,8 +278,7 @@ export default function BookingsPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<CalendarDays className="h-10 w-10" />}
         />
-
-        <Pagination page={page} limit={rowsPerPage} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Booking detail drawer */}

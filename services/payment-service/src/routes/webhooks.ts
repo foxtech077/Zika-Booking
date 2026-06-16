@@ -84,10 +84,22 @@ export async function webhookRoutes(app: FastifyInstance) {
     if (event.type === "payment_intent.succeeded") {
       const intent = event.data.object as Stripe.PaymentIntent;
   
-      const payment = await prisma.payment.findFirst({
+      let payment = await prisma.payment.findFirst({
         where: { providerPaymentId: intent.id },
       });
   
+      if (!payment && intent.metadata?.bookingId) {
+        payment = await prisma.payment.findFirst({
+          where: { bookingId: intent.metadata.bookingId, status: { in: ["initiated", "pending"] } }
+        });
+        if (payment) {
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: { providerPaymentId: intent.id }
+          });
+        }
+      }
+
       if (!payment) {
         console.log("Payment not found");
         return reply.send({ received: true });

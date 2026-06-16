@@ -6,12 +6,10 @@ import { Settings, CheckCircle, AlertCircle, Server, Key } from "lucide-react";
 import { startRegistration } from "@simplewebauthn/browser";
 import { api } from "@/lib/api";
 import { listingApi } from "@/lib/listing-api";
-import { paymentApi } from "@/lib/payment-api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/stores/auth";
-import { canAccess } from "@/permissions/rbac";
 import { formatRelativeTime } from "@/lib/utils";
 
 const checkHealth = (client: any, label: string) =>
@@ -54,16 +52,9 @@ export default function SettingsPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: paymentHealth } = useQuery({
-    queryKey: ["health-payment"],
-    queryFn: () => checkHealth(paymentApi, "Payment Service"),
-    refetchInterval: 30_000,
-  });
-
   const services = [
-    { ...(authHealth ?? { service: "Auth Service", status: "checking" }), endpoint: "https://api.kainook.com/auth", description: "Authentication, sessions, admin users, audit logs" },
-    { ...(listingHealth ?? { service: "Listing Service", status: "checking" }), endpoint: "https://api.kainook.com/listings", description: "Listings, bookings, commission, vouchers, reviews" },
-    { ...(paymentHealth ?? { service: "Payment Service", status: "checking" }), endpoint: "https://api.kainook.com/payments", description: "Payments, saved methods, payment status" },
+    { ...(authHealth ?? { service: "Auth Service", status: "checking" }), port: 3001, description: "Authentication, sessions, admin users, audit logs" },
+    { ...(listingHealth ?? { service: "Listing Service", status: "checking" }), port: 3003, description: "Listings, bookings, commission, vouchers, reviews" },
   ];
 
   const SESSION_SETTINGS = [
@@ -113,7 +104,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-slate-900">{svc.service}</p>
-                <p className="text-xs text-slate-500">{svc.endpoint} - {svc.description}</p>
+                <p className="text-xs text-slate-500">Port {svc.port} · {svc.description}</p>
               </div>
               <Badge
                 label={svc.status === "checking" ? "Checking…" : svc.status === "healthy" ? "Healthy" : "Degraded"}

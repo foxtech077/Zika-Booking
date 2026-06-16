@@ -149,10 +149,9 @@ interface PaginationProps {
 }
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
-
 export function Pagination({ page, limit, total, onPageChange }: PaginationProps) {
   const totalPages = Math.ceil(total / limit);
-  const from = total === 0 ? 0 : (page - 1) * limit + 1;
+  const from = (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
 
   if (totalPages <= 1) return null;
@@ -165,50 +164,48 @@ export function Pagination({ page, limit, total, onPageChange }: PaginationProps
           <span className="font-medium">{total.toLocaleString()}</span> results
         </p>
       </div>
-      {totalPages > 1 && (
-        <div className="flex gap-1">
-          <button
-            onClick={() => onPageChange(page - 1)}
-            disabled={page <= 1}
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            ‹
-          </button>
-          {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-            let p: number;
-            if (totalPages <= 7) {
-              p = i + 1;
-            } else if (page <= 4) {
-              p = i + 1;
-            } else if (page >= totalPages - 3) {
-              p = totalPages - 6 + i;
-            } else {
-              p = page - 3 + i;
-            }
-            return (
-              <button
-                key={p}
-                onClick={() => onPageChange(p)}
-                className={cn(
-                  "h-8 w-8 flex items-center justify-center rounded-lg text-sm font-medium transition-colors",
-                  p === page
-                    ? "bg-primary text-white"
-                    : "text-slate-600 hover:bg-slate-100"
-                )}
-              >
-                {p}
-              </button>
-            );
-          })}
-          <button
-            onClick={() => onPageChange(page + 1)}
-            disabled={page >= totalPages}
-            className="h-8 w-8 flex items-center justify-center rounded-lg text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            ›
-          </button>
-        </div>
-      )}
+      <div className="flex gap-1">
+        <button
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          ‹
+        </button>
+        {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+          let p: number;
+          if (totalPages <= 7) {
+            p = i + 1;
+          } else if (page <= 4) {
+            p = i + 1;
+          } else if (page >= totalPages - 3) {
+            p = totalPages - 6 + i;
+          } else {
+            p = page - 3 + i;
+          }
+          return (
+            <button
+              key={p}
+              onClick={() => onPageChange(p)}
+              className={cn(
+                "h-8 w-8 flex items-center justify-center rounded-lg text-sm font-medium transition-colors",
+                p === page
+                  ? "bg-primary text-white"
+                  : "text-slate-600 hover:bg-slate-100"
+              )}
+            >
+              {p}
+            </button>
+          );
+        })}
+        <button
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= totalPages}
+          className="h-8 w-8 flex items-center justify-center rounded-lg text-sm text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          ›
+        </button>
+      </div>
     </div>
   );
 }
@@ -267,7 +264,7 @@ export function FilterBar({
           className="py-1.5 pl-3 pr-7 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary appearance-none transition-colors"
           aria-label={f.label}
         >
-          {f.label && <option value="">{f.label}</option>}
+          <option value="">{f.label}</option>
           {f.options.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}

@@ -22,11 +22,8 @@ export default function VouchersPage() {
   const [limit, setLimit] = useState(10);
   const [isActive, setIsActive] = useState("");
   const [addModal, setAddModal] = useState(false);
-  const [toggleError, setToggleError] = useState<string | null>(null);
   const [form, setForm] = useState({
-    title: "",
     code: "",
-    activityScope: "universal" as string,
     discountType: "percentage" as "percentage" | "fixed",
     discountValue: "",
     minOrderValue: "",
@@ -50,30 +47,14 @@ export default function VouchersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
       setAddModal(false);
-      setForm({ title: "", code: "", activityScope: "universal", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscount: "", usageLimit: "", validFrom: "", validUntil: "" });
+      setForm({ code: "", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscount: "", usageLimit: "", validFrom: "", validUntil: "" });
     },
   });
 
-  // TODO: Backend dependency — PATCH /admin/vouchers/:id is not yet implemented.
-  // This mutation uses PUT /admin/vouchers/:id as the intended endpoint.
-  // Once the backend adds a PUT or PATCH route for updating vouchers, remove the onError fallback.
   const toggleMut = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
-      listingApi.put(`/admin/vouchers/${id}`, { isActive }),
-    onSuccess: () => {
-      setToggleError(null);
-      qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
-    },
-    onError: (error: any) => {
-      const status = error?.response?.status;
-      if (status === 404) {
-        setToggleError("Voucher toggle is not yet supported by the API. A backend update (PUT /admin/vouchers/:id) is required.");
-      } else {
-        setToggleError(error?.response?.data?.message ?? "Failed to update voucher status.");
-      }
-      // Auto-dismiss after 5 seconds
-      setTimeout(() => setToggleError(null), 5000);
-    },
+      listingApi.patch(`/admin/vouchers/${id}`, { isActive }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-vouchers"] }),
   });
 
   const columns: Column<Voucher>[] = [
@@ -166,16 +147,6 @@ export default function VouchersPage() {
 
   return (
     <div className="space-y-5 max-w-screen-xl">
-      {/* Error banner for toggle failures */}
-      {toggleError && (
-        <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-          <svg className="h-5 w-5 flex-shrink-0 text-red-500" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-          </svg>
-          <span className="flex-1">{toggleError}</span>
-          <button onClick={() => setToggleError(null)} className="text-red-500 hover:text-red-700 font-medium">Dismiss</button>
-        </div>
-      )}
       <SectionHeader
         title="Vouchers"
         description={`${total.toLocaleString()} vouchers`}
@@ -234,9 +205,7 @@ export default function VouchersPage() {
               size="sm"
               loading={createMut.isPending}
               onClick={() => createMut.mutate({
-                title: form.title,
                 code: form.code.toUpperCase(),
-                activityScope: form.activityScope,
                 discountType: form.discountType,
                 discountValue: parseFloat(form.discountValue),
                 minOrderValue: form.minOrderValue ? parseFloat(form.minOrderValue) : undefined,
@@ -245,7 +214,7 @@ export default function VouchersPage() {
                 validFrom: form.validFrom,
                 validUntil: form.validUntil,
               })}
-              disabled={!form.title || !form.code || !form.discountValue || !form.validFrom || !form.validUntil}
+              disabled={!form.code || !form.discountValue || !form.validFrom || !form.validUntil}
             >
               Create Voucher
             </Button>
@@ -253,17 +222,6 @@ export default function VouchersPage() {
         }
       >
         <div className="grid grid-cols-2 gap-4">
-          <div className="col-span-2">
-            <Input
-              id="voucher-title"
-              label="Voucher Title"
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="Summer Sale 20% Off"
-              hint="A descriptive name for this voucher"
-              required
-            />
-          </div>
           <div className="col-span-2">
             <Input
               id="voucher-code"
@@ -275,19 +233,6 @@ export default function VouchersPage() {
               required
             />
           </div>
-          <Select
-            id="activity-scope"
-            label="Activity Scope"
-            value={form.activityScope}
-            onChange={(e) => setForm((f) => ({ ...f, activityScope: e.target.value }))}
-            options={[
-              { value: "universal", label: "Universal (All)" },
-              { value: "hotels", label: "Hotels" },
-              { value: "apartments", label: "Apartments" },
-              { value: "cars", label: "Cars" },
-              { value: "hotels_apartments", label: "Hotels & Apartments" },
-            ]}
-          />
           <Select
             id="discount-type"
             label="Discount Type"
