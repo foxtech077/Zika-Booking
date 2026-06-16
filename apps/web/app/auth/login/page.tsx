@@ -10,10 +10,6 @@ import { useAuthStore } from "@/stores/auth";
 import { FormField } from "@/components/ui/FormField";
 import { Button } from "@/components/ui/Button";
 import type { ApiResponse, AuthResponse } from "@zika/types";
-// ── after the other imports ──
-
-import { processGoogleLogin } from "@/app/(provider)/components/GoogleLoginHandler"; // <-- new import
-
 
 // Declare global google object for TypeScript
 declare global {
@@ -63,24 +59,21 @@ export default function LoginPage() {
     script.onload = () => {
       if (window.google && !gsiInitialized) {
         gsiInitialized = true;
-        // Initialize Google One‑Tap SDK with env var
-        const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "50229721645-fpi6euv7emir3h4n4pmr6hv9saqcfgcm.apps.googleusercontent.com";
         window.google.accounts.id.initialize({
-          client_id: clientId,
+          client_id: "397191986681-clt35826mp608u6ptq9udm8m7c7dk80u.apps.googleusercontent.com",
           callback: handleGoogleCredentialResponse,
+
         });
 
         const btn = document.getElementById("google-signin-btn");
-        if (btn) {
-          const btnWidth = btn.offsetWidth ?? 400;
-          window.google.accounts.id.renderButton(btn, {
-            theme: "outline",
-            size: "large",
-            width: btnWidth,
-            text: "continue_with",
-            shape: "rectangular",
-          });
-        }
+        const btnWidth = btn?.offsetWidth ?? 400;
+        window.google.accounts.id.renderButton(btn, {
+          theme: "outline",
+          size: "large",
+          width: btnWidth,
+          text: "continue_with",
+          shape: "rectangular",
+        });
       }
     };
 
@@ -91,45 +84,24 @@ export default function LoginPage() {
   }, []);
 
   const handleGoogleCredentialResponse = async (response: any) => {
-    // 1️⃣  Get the raw Google idToken
-    const idToken = response.credential;
-
-    // 2️⃣  Call the pure helper (no hooks inside)
-    const result = await processGoogleLogin(idToken);
-
-    if (result.success) {
-      // ---- SUCCESS -------------------------------------------------
-      const data = result.data;
-      setSession(data.tokens.accessToken, data.user as any);
-      router.replace(data.user.userType === "provider" ? "/dashboard" : "/traveller");
-      return;
-    }
-
-    // ---- FAILURE -------------------------------------------------
-    const { code, message } = result;
-
-    // 2️⃣  Email not found → go to registration (keep token)
-    if (code === "EMAIL_NOT_FOUND" || message.toLowerCase().includes("no account")) {
-      router.push(`/auth/register?google_token=${encodeURIComponent(idToken)}`);
-      return;
-    }
-
-    // 3️⃣  Account already exists → go to normal login, pre‑fill email
-    if (code === "ACCOUNT_EXISTS" || message.toLowerCase().includes("exists")) {
-      // Decode JWT payload to extract the email (only if the token is a Google JWT)
-      let email = "";
-      try {
-        const payload = JSON.parse(atob(idToken.split(".")[1]));
-        email = payload.email ?? "";
-      } catch {
-        // ignore malformed token – we’ll just send empty email
+    setError(null);
+    try {
+      const res = await api.post<ApiResponse<AuthResponse>>("/auth/oauth/google", {
+        idToken: response.credential,
+      });
+      if (!res.data.success) throw res.data;
+      const data = res.data.data;
+      const accessError = getAccountAccessError(data.user);
+      if (accessError) {
+        setError(accessError);
+        return;
       }
-      router.push(`/auth/auth/login?email=${encodeURIComponent(email)}`);
-      return;
+      setSession(data.tokens.accessToken, data.user as any);
+      router.replace(getPostLoginPath(data.user));
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message ?? "Sign in with Google failed. Please try again.";
+      setError(msg);
     }
-
-    // 4️⃣  Any other error → show it
-    setError(message);
   };
 
   const handleAppleSignInClick = () => {
@@ -209,9 +181,9 @@ export default function LoginPage() {
             priority
             className="mb-4"
           />
-          {/* <Link href="/" className="text-2xl font-bold text-primary block mb-1">
+          <Link href="/" className="text-2xl font-bold text-primary block mb-1">
             Kainook
-          </Link> */}
+          </Link>
           <p className="text-gray-500 text-sm">Sign in to your account</p>
         </div>
 
@@ -297,7 +269,7 @@ export default function LoginPage() {
               Sign In with Apple (Web)
             </h3>
             <p className="text-sm text-gray-500 mb-4 leading-relaxed">
-              Apple Sign-In on web operates via HTTP POST redirects which are restricted to verified, production-grade HTTPS domains.
+              Apple Sign-In on web operates via HTTP POST redirects which are restricted to verified, production-grade HTTPS domains. 
               <br />
               <br />
               This feature is fully implemented on our backend and mobile clients. For local web testing, please sign in using Google or your Email/Password.
