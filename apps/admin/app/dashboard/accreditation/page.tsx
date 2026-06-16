@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState,useEffect} from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
-import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
+import { DataTable, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -178,22 +178,6 @@ export default function AccreditationPage() {
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
   const [photoViewerIndex, setPhotoViewerIndex] = useState<number | null>(null);
 
-  // ── Data fetching ──────────────────────────────────────────────────────────
-  // const params = { page: String(page), limit: "20" };
-
-  const [activeDocId, setActiveDocId] = useState<string | null>(null);
-  const [docUrl, setDocUrl] = useState<{ url: string; fileType: string } | null>(null);
-  const [docLoading, setDocLoading] = useState(false);
-  const [docError, setDocError] = useState<string | null>(null);
-
-  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
-  const countryOptions = userCountryScope.length > 0
-    ? userCountryScope.map((c) => ({ value: c, label: c }))
-    : [
-        "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
-      ].map((c) => ({ value: c, label: c }));
-
   const [country, setCountry] = useState(() => userCountryScope[0] ?? "");
 
   // Sync country selection after auth store hydration
@@ -204,8 +188,9 @@ export default function AccreditationPage() {
   }, [userCountryScope, country]);
 
   // For country managers, always send their first scoped country as the filter.
-  // Previously this was set to "" which caused the API to return all countries.
   const effectiveCountry = isCountryManager ? (country || userCountryScope[0] || "") : country;
+
+  // ── Data fetching ──────────────────────────────────────────────────────────
   const params = Object.fromEntries(
     Object.entries({
       page: String(page),
@@ -213,6 +198,7 @@ export default function AccreditationPage() {
       country: effectiveCountry,
     }).filter(([, v]) => v !== "")
   );
+
   const { data, isLoading } = useQuery({
     queryKey: ["accreditation-queue", page, effectiveCountry],
     queryFn: () => fetchQueue(params),
@@ -317,14 +303,9 @@ export default function AccreditationPage() {
     {
       key: "provider",
       label: "Provider",
-      render: (t) => {
-        const name = providerMap.get(t.listing.providerId);
-        return name ? (
-          <span className="text-xs text-slate-700 font-medium">{name}</span>
-        ) : (
-          <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
-        );
-      },
+      render: (t) => (
+        <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
+      ),
     },
     {
       key: "stars",
@@ -372,22 +353,6 @@ export default function AccreditationPage() {
       />
 
       <Card padding="none">
-      {canShowCountryFilter && (
-          <FilterBar
-            filters={[
-              {
-                key: "country",
-                label: "All Countries",
-                value: country,
-                onChange: (v: string) => {
-                  setCountry(v);
-                  setPage(1);
-                },
-                options: countryOptions,
-              },
-            ]}
-          />
-        )}
         <DataTable
           columns={columns}
           data={tasks}
@@ -430,7 +395,7 @@ export default function AccreditationPage() {
             {/* Submission summary */}
             <dl className="grid grid-cols-2 gap-3 text-sm">
               {[
-                ["Provider", selectedTask?.listing?.providerId ? (providerMap.get(selectedTask.listing.providerId) ?? selectedTask.listing.providerId) : "—"],
+                ["Provider", selectedTask?.listing?.providerId ?? "—"],
                 ["Submission Date", selectedTask?.listing?.submittedAt ? formatRelativeTime(selectedTask.listing.submittedAt) : "—"],
                 ["Claimed Stars", selectedTask?.listing?.claimedStarRating
                   ? `${"★".repeat(selectedTask.listing.claimedStarRating)} (${selectedTask.listing.claimedStarRating}★)`
