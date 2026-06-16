@@ -580,11 +580,9 @@ export default function TravellerDashboard() {
       const params: Record<string, any> = {
         category: activeCategory,
         limit: 20,
-        offset: 0,
         lat,
         lng,
         radius_km: 5000,
-        sort: sortBy || "distance_asc",
       };
 
       if (searchGuests > 1) params.guests = searchGuests;
@@ -642,7 +640,7 @@ export default function TravellerDashboard() {
           if (gd?.[0]) { lat = parseFloat(gd[0].lat); lng = parseFloat(gd[0].lon); }
         } catch { }
       }
-      const params: Record<string, any> = { category: searchCategory, limit: 20, offset: nextOffset, lat, lng, radius_km: 5000, sort: sortBy || "distance_asc" };
+      const params: Record<string, any> = { category: searchCategory, limit: 20, offset: nextOffset, lat, lng, radius_km: 5000 };
       if (searchGuests > 1) params.guests = searchGuests;
       if (searchRooms > 1) params.rooms = searchRooms;
       if (priceMin > 0) params.price_min = priceMin;

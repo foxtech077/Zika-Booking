@@ -44,7 +44,7 @@ export default function RegisterPage() {
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post("/auth/register", {
+      const res = await api.post("/auth/auth/register", {
         ...form,
         userType: "provider",
       });

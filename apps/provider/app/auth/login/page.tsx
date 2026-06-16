@@ -43,7 +43,7 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async (payload: typeof form) => {
-      const res = await api.post<LoginResponse>("/auth/login", payload);
+      const res = await api.post<LoginResponse>("/auth/auth/login", payload);
       return res.data;
     },
     onSuccess: (data) => {
