@@ -1408,6 +1408,7 @@ export default function TravellerDashboard() {
                     listingId={detailListing.id}
                     name={detailListing.name}
                     imageUrl={detailListing.primaryPhotoUrl || detailListing.photos?.[0]?.cdnUrl}
+                    photos={detailListing.photos}
                   />
                 </div>
 
