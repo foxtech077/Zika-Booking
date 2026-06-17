@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
 import { useMutation } from "@tanstack/react-query";
@@ -14,7 +14,13 @@ import { listingApi } from "@/lib/listing-api";
 import { canAccess } from "@/permissions/rbac";
 import { SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea } from "@/components/ui/Input";
+import ReactSelect from "react-select";
+import { ChangeEvent } from "react";
+import ReactCountryFlag from "react-country-flag";
+import countries from "i18n-iso-countries";
+import enLocale from "i18n-iso-countries/langs/en.json";
+
+import { Input, Select as UISelect, Textarea } from "@/components/ui/Input";
 import { ListingSearchDropdown } from "../../../../components/ui/ListingSearchDropdown";
 import type { SelectedListing } from "../../../../components/ui/ListingSearchDropdown";
 import { formatCurrency } from "@/lib/utils";
@@ -24,9 +30,9 @@ import Link from "next/link";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ListingType = "hotel" | "apartment" | "car";
+type CountryOption = { value: string; label: string };
 type AvailStatus = "idle" | "checking" | "available" | "unavailable";
 type PaymentMethod = "stripe" | "tara";
-
 interface PriceSummary {
   baseAmount: number;
   discount: number;
@@ -60,7 +66,7 @@ function SectionCard({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-border/60 last:border-0">
       <span className="text-sm text-slate-500">{label}</span>
@@ -104,6 +110,24 @@ export default function ManualBookingPage() {
   const [email, setEmail]             = useState("");
   const [phone, setPhone]             = useState("");
   const [nationality, setNationality] = useState("");
+
+// Register locale for i18n-iso-countries
+countries.registerLocale(enLocale);
+
+const countryOptions: CountryOption[] = Object.entries(countries.getNames("en", { select: "official" })).map(([code, name]) => ({
+  value: code,
+  label: `${name} (${code})`,
+}));
+
+
+const formatOptionLabel = ({ value, label }: CountryOption) => (
+  <div className="flex items-center gap-2">
+    <ReactCountryFlag countryCode={value} svg style={{ width: "1.2em", height: "1.2em" }} />
+    <span>{label}</span>
+  </div>
+);
+
+
   const [notes, setNotes]             = useState("");
 
   // ── Section 2: Booking Info ───────────────────────────────────────────────────
@@ -126,7 +150,8 @@ export default function ManualBookingPage() {
 
   // ── Section 5: Payment ────────────────────────────────────────────────────────
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("stripe");
-  const [linkSent, setLinkSent]           = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
+  const [paymentLink, setPaymentLink] = useState<string>("");
 
   // ── Shared state ──────────────────────────────────────────────────────────────
   const [errors, setErrors]     = useState<Record<string, string>>({});
@@ -253,47 +278,65 @@ export default function ManualBookingPage() {
   }
 
   // ── Send Payment Link ─────────────────────────────────────────────────────────
-  const sendLinkMut = useMutation({
-    mutationFn: () =>
-      listingApi.post("/admin/bookings/manual", {
-        listingId: selectedListing!.id, listingType, listingName: selectedListing!.name,
-        guestFirstName: firstName, guestLastName: lastName,
-        guestEmail: email, guestPhone: phone, nationality,
-        country, guests,
-        ...(isAccommodation ? { checkIn, checkOut, rooms, units } : { pickupDatetime: pickup, returnDatetime: returnDt }),
-        paymentMethod,
+  // ── Draft creation mutation ────────────────────────────────────────
+  const createDraftMut = useMutation({
+    mutationFn: async () => {
+      const res = await listingApi.post("/admin/bookings/draft", {
+        listingId: selectedListing!.id,
+        listingType,
+        listingName: selectedListing!.name,
+        guestFirstName: firstName,
+        guestLastName: lastName,
+        guestEmail: email,
+        guestPhone: phone,
+        nationality,
+        country,
+        guests,
+        ...(isAccommodation
+          ? { checkIn, checkOut, rooms, units }
+          : { pickupDatetime: pickup, returnDatetime: returnDt }),
         notes,
-        agentId: user?.id,
-        agentName: user?.name,
-      }).then((r) => r.data),
-    onSuccess: () => { setSubmitted(true); setLinkSent(true); },
+      });
+      return res.data as { bookingId: string; draftId: string };
+    },
     onError: (err: any) => {
-      const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
+      const msg = err?.response?.data?.error?.message ?? "Failed to create draft booking.";
+      setErrors((p) => ({ ...p, _api: msg }));
+    },
+  });
+
+  // ── Payment link mutation ───────────────────────────────────────────────
+  const paymentLinkMut = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const endpoint = paymentMethod === "stripe" ? "/payments/stripe/payment-link" : "/payments/tara/payment-link";
+      const res = await listingApi.post(endpoint, { bookingId });
+      return res.data as { paymentLink: string };
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error?.message ?? "Failed to generate payment link.";
       setErrors((p) => ({ ...p, _api: msg }));
     },
   });
 
   // ── Save Draft ────────────────────────────────────────────────────────────────
-  const saveDraftMut = useMutation({
-    mutationFn: () =>
-      listingApi.post("/admin/bookings/drafts", {
-        listingId: selectedListing!.id, listingType, listingName: selectedListing!.name,
-        guestFirstName: firstName, guestLastName: lastName,
-        guestEmail: email, guestPhone: phone, nationality,
-        country, guests, notes,
-        ...(isAccommodation ? { checkIn, checkOut } : { pickupDatetime: pickup, returnDatetime: returnDt }),
-      }).then((r) => r.data),
-    onSuccess: () => setErrors({}),
-    onError: () => setErrors((p) => ({ ...p, _api: "Draft saved (backend not yet active — data stored locally)." })),
-  });
+  // The previous draft save mutation is replaced by createDraftMut logic.
+  // No separate saveDraftMut is needed as draft creation is part of the send flow.
 
-  function handleSendLink() {
+  async function handleSendLink() {
     if (!validate()) return;
     if (availStatus !== "available") {
       setErrors((p) => ({ ...p, _avail: "Please check availability before sending a payment link." }));
       return;
     }
-    sendLinkMut.mutate();
+    try {
+      const draft = await createDraftMut.mutateAsync();
+      const linkResp = await paymentLinkMut.mutateAsync(draft.bookingId);
+      setPaymentLink(linkResp.paymentLink);
+      setSubmitted(true);
+      setLinkSent(true);
+    } catch {
+      // Errors handled in mutations
+    }
   }
 
   // ── Success state ─────────────────────────────────────────────────────────────
@@ -313,6 +356,7 @@ export default function ManualBookingPage() {
           <InfoRow label="Booking Reference" value={bookingRef} />
           <InfoRow label="Guest" value={`${firstName} ${lastName}`} />
           <InfoRow label="Payment Method" value={paymentMethod === "stripe" ? "Stripe" : "Tara"} />
+          <InfoRow label="Payment Link" value={<a href={paymentLink} target="_blank" rel="noopener noreferrer" className="text-primary underline">Open Link</a>} />
           <InfoRow label="Created By" value={user?.name ?? "—"} />
         </div>
         <div className="flex gap-3">
@@ -413,14 +457,18 @@ export default function ManualBookingPage() {
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
-              id={`${uid}-nationality`}
-              label="Nationality"
-              placeholder="e.g. British"
-              value={nationality}
-              onChange={(e) => setNationality(e.target.value)}
-              leftIcon={<Globe className="h-4 w-4" />}
-            />
+            <ReactSelect
+                inputId={`${uid}-nationality`}
+                placeholder="Select nationality…"
+                options={countryOptions}
+                value={countryOptions.find((o) => o.value === nationality) || null}
+                onChange={(selected) => setNationality(selected?.value || "")}
+                formatOptionLabel={formatOptionLabel}
+                isClearable
+                styles={{
+                  control: (provided) => ({ ...provided, borderRadius: "0.5rem" }),
+                }}
+              />
           </div>
           <Textarea
             id={`${uid}-notes`}
@@ -440,24 +488,24 @@ export default function ManualBookingPage() {
       <SectionCard step={2} title="Booking Information" icon={Building2}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Select
+            <UISelect
               id={`${uid}-listingType`}
               label="Listing Type"
               required
               value={listingType}
-              onChange={(e) => setListingType(e.target.value as ListingType)}
+              onChange={(e: ChangeEvent<HTMLSelectElement>) => setListingType(e.target.value as ListingType)}
               options={[
                 { value: "hotel",     label: "Hotel" },
                 { value: "apartment", label: "Apartment" },
                 { value: "car",       label: "Car Rental" },
               ]}
             />
-            <Select
+            <UISelect
               id={`${uid}-country`}
               label="Country"
               required
               value={country}
-              onChange={(e) => {
+              onChange={(e: ChangeEvent<HTMLSelectElement>) => {
                 setCountry(e.target.value);
                 setSelectedListing(null);
                 setAvailStatus("idle");
@@ -924,15 +972,15 @@ export default function ManualBookingPage() {
           <Button
             type="button"
             variant="secondary"
-            loading={saveDraftMut.isPending}
+            loading={createDraftMut.isPending}
             leftIcon={<Save className="h-4 w-4" />}
-            onClick={() => saveDraftMut.mutate()}
+            onClick={() => createDraftMut.mutate()}
           >
             Save Draft
           </Button>
           <Button
             type="button"
-            loading={sendLinkMut.isPending}
+            loading={paymentLinkMut.isPending}
             leftIcon={<Send className="h-4 w-4" />}
             onClick={handleSendLink}
           >

@@ -27,6 +27,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Helper to identify auth flow requests
+export function isAuthFlowRequest(url: string | undefined): boolean {
+  if (!url) return false;
+  // Consider any admin auth endpoint as part of the auth flow
+  return /\/admin\/auth/.test(url);
+}
+
 api.interceptors.response.use(
   (res) => res,
   (error) => {

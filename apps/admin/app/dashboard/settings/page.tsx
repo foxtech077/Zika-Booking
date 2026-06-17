@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Settings, CheckCircle, AlertCircle, Server, Key } from "lucide-react";
+import { CheckCircle, AlertCircle, Server, Key } from "lucide-react";
+import { canAccess } from "@/permissions/rbac";
 import { startRegistration } from "@simplewebauthn/browser";
 import { api } from "@/lib/api";
 import { listingApi } from "@/lib/listing-api";

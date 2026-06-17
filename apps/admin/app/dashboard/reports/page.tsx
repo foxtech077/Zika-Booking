@@ -10,7 +10,7 @@ import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Chart
 import { formatNumber, formatCurrency, slugToLabel } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
 import { canAccess } from "@/permissions/rbac";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuthStore } from "@/stores/auth";
 
 const fetchAllBookings = () =>
   listingApi.get("/admin/bookings?limit=100").then((r) => r.data.data ?? r.data);
@@ -63,7 +63,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ReportsPage() {
-  const { user } = useAuth();
+  const { user } = useAuthStore();
   const { data: bookingsData, isLoading } = useQuery({
     queryKey: ["reports-bookings"],
     queryFn: fetchAllBookings,
