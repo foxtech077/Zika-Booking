@@ -1,4 +1,4 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
@@ -96,7 +96,7 @@ async function build() {
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
-  const isDev = process.env["NODE_ENV"] !== "production";
+  const isDev = process.env["NODE_ENV"] == "production";
   await app.register(cors, {
     // In development, allow all origins so the Expo mobile app (which sends no
     // Origin header from React Native) can reach the API.  In production, lock

@@ -470,41 +470,48 @@ export async function authRoutes(app: FastifyInstance) {
         });
       }
 
-      await prisma.$transaction([
-        prisma.verificationToken.update({
-          where: { id: record.id },
-          data: {
-            used: true,
-            usedAt: new Date(),
-          },
-        }),
+      try {
+        await prisma.$transaction([
+          prisma.verificationToken.update({
+            where: { id: record.id },
+            data: {
+              used: true,
+              usedAt: new Date(),
+            },
+          }),
 
-        prisma.user.update({
+          prisma.user.update({
+            where: { id: record.userId },
+            data: {
+              status: "active",
+              emailVerified: true,
+              emailVerifiedAt: new Date(),
+            },
+          }),
+        ]);
+
+        const updatedUser = await prisma.user.findUniqueOrThrow({
           where: { id: record.userId },
-          data: {
-            status: "active",
-            emailVerified: true,
-            emailVerifiedAt: new Date(),
-          },
-        }),
-      ]);
+        });
 
-      const updatedUser = await prisma.user.findUniqueOrThrow({
-        where: { id: record.userId },
-      });
+        const tokens = await issueTokens(
+          reply,
+          updatedUser.id,
+          updatedUser.userType,
+          "active"
+        );
 
-      const tokens = await issueTokens(
-        reply,
-        updatedUser.id,
-        updatedUser.userType,
-        "active"
-      );
-
-      return sendSuccess(reply, 200, {
-        message: "Email verified — welcome to Kainook!",
-        user: publicUser(updatedUser),
-        tokens,
-      });
+        return sendSuccess(reply, 200, {
+          message: "Email verified — welcome to Kainook!",
+          user: publicUser(updatedUser),
+          tokens,
+        });
+      } catch (err: any) {
+        if (err?.code === "P2025") {
+          return sendError(reply, 404, "USER_NOT_FOUND", "User account not found.");
+        }
+        return sendError(reply, 400, "VERIFICATION_FAILED", "Email verification could not be completed. Please try again.");
+      }
     }
   );
   // ── POST /auth/resend-verification  (UC-1.4) ───────────────────────────────
@@ -602,68 +609,80 @@ export async function authRoutes(app: FastifyInstance) {
     const { email, password } = parsed.data;
     console.log("[Login] Normalized email from Zod:", email);
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    console.log("[Login] DB user found:", user ? "YES" : "NO");
-    if (user) {
-      console.log("[Login] user.status:", user.status);
-      console.log("[Login] user.emailVerified:", user.emailVerified);
-      console.log("[Login] user.passwordHash is null:", user.passwordHash === null);
-      console.log("[Login] user.oauthProvider:", user.oauthProvider);
+    try {
+      const user = await prisma.user.findUnique({ where: { email } });
+      console.log("[Login] DB user found:", user ? "YES" : "NO");
+      if (user) {
+        console.log("[Login] user.status:", user.status);
+        console.log("[Login] user.emailVerified:", user.emailVerified);
+        console.log("[Login] user.passwordHash is null:", user.passwordHash === null);
+        console.log("[Login] user.oauthProvider:", user.oauthProvider);
+      }
+
+      const GENERIC = "Incorrect email or password.";
+
+      // Timing-safe: always run bcrypt even if user not found (prevents timing attacks)
+      const dummyHash = "$2b$12$invalidhashfortimingprotection000000000000000000000000000";
+      const passwordOk = user?.passwordHash
+        ? await verifyPassword(password, user.passwordHash)
+        : await verifyPassword(password, dummyHash).then(() => false);
+
+      console.log("[Login] passwordOk:", passwordOk);
+
+      if (!user || !passwordOk) {
+        console.log("[Login] FAIL → INVALID_CREDENTIALS (user found:", !!user, "passwordOk:", passwordOk, ")");
+        return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
+      }
+
+      if (user.status === "pending_verification") {
+        console.log("[Login] FAIL → EMAIL_NOT_VERIFIED");
+        return sendError(
+          reply,
+          403,
+          "EMAIL_NOT_VERIFIED",
+          "Please verify your email address to sign in."
+        );
+      }
+      if (user.status === "suspended") {
+        return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended. Please contact support for assistance.");
+      }
+      if (user.status === "banned") {
+        return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
+      }
+
+      console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      return sendSuccess(reply, 200, { user: publicUser(user), tokens });
+    } catch {
+      return sendError(reply, 400, "LOGIN_FAILED", "Unable to complete sign-in. Please check your credentials and try again.");
     }
-
-    const GENERIC = "Incorrect email or password.";
-
-    // Timing-safe: always run bcrypt even if user not found (prevents timing attacks)
-    const dummyHash = "$2b$12$invalidhashfortimingprotection000000000000000000000000000";
-    const passwordOk = user?.passwordHash
-      ? await verifyPassword(password, user.passwordHash)
-      : await verifyPassword(password, dummyHash).then(() => false);
-
-    console.log("[Login] passwordOk:", passwordOk);
-
-    if (!user || !passwordOk) {
-      console.log("[Login] FAIL → INVALID_CREDENTIALS (user found:", !!user, "passwordOk:", passwordOk, ")");
-      return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
-    }
-
-    if (user.status === "pending_verification") {
-      console.log("[Login] FAIL → EMAIL_NOT_VERIFIED");
-      return sendError(
-        reply,
-        403,
-        "EMAIL_NOT_VERIFIED",
-        "Please verify your email address to sign in."
-      );
-    }
-    if (user.status === "suspended") {
-      return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended. Please contact support for assistance.");
-    }
-    if (user.status === "banned") {
-      return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
-    }
-
-    console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
-    const tokens = await issueTokens(reply, user.id, user.userType, user.status);
-    return sendSuccess(reply, 200, { user: publicUser(user), tokens });
   });
 
   // ── POST /auth/logout  (UC-1.9) ────────────────────────────────────────────
   app.post("/auth/logout", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const refreshToken = req.cookies["refreshToken"];
-    if (refreshToken) {
-      const tokenHash = hashToken(refreshToken);
-      await prisma.session.updateMany({ where: { tokenHash }, data: { revoked: true } });
+    try {
+      const refreshToken = req.cookies["refreshToken"];
+      if (refreshToken) {
+        const tokenHash = hashToken(refreshToken);
+        await prisma.session.updateMany({ where: { tokenHash }, data: { revoked: true } });
+      }
+      reply.clearCookie("refreshToken", { path: "/" });
+      return sendSuccess(reply, 200, { message: "Signed out successfully." });
+    } catch {
+      return sendError(reply, 400, "LOGOUT_FAILED", "Sign-out could not be completed. Please try again.");
     }
-    reply.clearCookie("refreshToken", { path: "/" });
-    return sendSuccess(reply, 200, { message: "Signed out successfully." });
   });
 
   // ── POST /auth/logout-all  (UC-1.9 A2) ────────────────────────────────────
   app.post("/auth/logout-all", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const userId = (req as FastifyRequest & { userId: string }).userId;
-    await prisma.session.updateMany({ where: { userId }, data: { revoked: true } });
-    reply.clearCookie("refreshToken", { path: "/" });
-    return sendSuccess(reply, 200, { message: "Signed out from all devices." });
+    try {
+      const userId = (req as FastifyRequest & { userId: string }).userId;
+      await prisma.session.updateMany({ where: { userId }, data: { revoked: true } });
+      reply.clearCookie("refreshToken", { path: "/" });
+      return sendSuccess(reply, 200, { message: "Signed out from all devices." });
+    } catch {
+      return sendError(reply, 400, "LOGOUT_FAILED", "Sign-out from all devices could not be completed. Please try again.");
+    }
   });
 
   // ── POST /auth/refresh  (UC-1.5) ───────────────────────────────────────────
@@ -671,24 +690,28 @@ export async function authRoutes(app: FastifyInstance) {
     const refreshToken = req.cookies["refreshToken"];
     if (!refreshToken) return sendError(reply, 401, "NO_TOKEN", "No refresh token.");
 
-    const tokenHash = hashToken(refreshToken);
-    const session = await prisma.session.findUnique({
-      where: { tokenHash },
-      include: { user: true },
-    });
+    try {
+      const tokenHash = hashToken(refreshToken);
+      const session = await prisma.session.findUnique({
+        where: { tokenHash },
+        include: { user: true },
+      });
 
-    if (!session || session.revoked || session.expiresAt < new Date()) {
-      reply.clearCookie("refreshToken", { path: "/" });
-      return sendError(reply, 401, "INVALID_TOKEN", "Session expired. Please sign in again.");
-    }
-    if (session.user.status !== "active") {
-      return sendError(reply, 403, "ACCOUNT_INACTIVE", "Account is not active.");
-    }
+      if (!session || session.revoked || session.expiresAt < new Date()) {
+        reply.clearCookie("refreshToken", { path: "/" });
+        return sendError(reply, 401, "INVALID_TOKEN", "Session expired. Please sign in again.");
+      }
+      if (session.user.status !== "active") {
+        return sendError(reply, 403, "ACCOUNT_INACTIVE", "Account is not active.");
+      }
 
-    // Rotate: revoke old, issue new
-    await prisma.session.update({ where: { id: session.id }, data: { revoked: true } });
-    const tokens = await issueTokens(reply, session.userId, session.user.userType, session.user.status);
-    return sendSuccess(reply, 200, { tokens });
+      // Rotate: revoke old, issue new
+      await prisma.session.update({ where: { id: session.id }, data: { revoked: true } });
+      const tokens = await issueTokens(reply, session.userId, session.user.userType, session.user.status);
+      return sendSuccess(reply, 200, { tokens });
+    } catch {
+      return sendError(reply, 400, "REFRESH_FAILED", "Token refresh failed. Please sign in again.");
+    }
   });
 
   // ── POST /auth/forgot-password  (UC-1.8) ───────────────────────────────────
@@ -784,17 +807,24 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 410, "TOKEN_EXPIRED", "This password reset link has expired. Please request a new one.");
     }
 
-    const passwordHash = await hashPassword(password);
-    await prisma.$transaction([
-      prisma.verificationToken.update({ where: { id: record.id }, data: { used: true, usedAt: new Date() } }),
-      prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
-      prisma.session.updateMany({ where: { userId: record.userId }, data: { revoked: true } }),
-    ]);
+    try {
+      const passwordHash = await hashPassword(password);
+      await prisma.$transaction([
+        prisma.verificationToken.update({ where: { id: record.id }, data: { used: true, usedAt: new Date() } }),
+        prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+        prisma.session.updateMany({ where: { userId: record.userId }, data: { revoked: true } }),
+      ]);
 
-    const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
-    const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status);
+      const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
+      const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status);
 
-    return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser), tokens });
+      return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser), tokens });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "USER_NOT_FOUND", "User account not found. The account may have been deleted.");
+      }
+      return sendError(reply, 400, "RESET_FAILED", "Password reset could not be completed. Please request a new reset link.");
+    }
   });
 
   // ── POST /auth/oauth/google  (UC-1.6) ──────────────────────────────────────
@@ -1011,41 +1041,7 @@ export async function authRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
   });
 
-  // ── POST /auth/account-type  (post-OAuth account type selection) ───────────
-
-
-
-  // app.post("/auth/account-type", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
-  //   const parsed = accountTypeSchema.safeParse(req.body);
-  //   if (!parsed.success) {
-  //     return sendError(reply, 422, "VALIDATION_ERROR", "Validation failed",
-  //       zodFieldErrors((parsed.error as ZodError).issues));
-  //   }
-  //   const userId = (req as FastifyRequest & { userId: string }).userId;
-  //   const { userType, businessName, country } = parsed.data;
-  //   const isProvider = userType === "provider";
-  //   const updated = await prisma.user.update({
-  //     where: { id: userId },
-  //     data: {
-  //       userType: userType as "guest" | "provider",
-  //       businessName: businessName ?? null,
-  //       country: country ?? null,
-  //       status: isProvider ? "pending_verification" : undefined,
-  //     },
-  //   });
-
-  //   if (isProvider) {
-  //     await prisma.session.updateMany({
-  //       where: { userId },
-  //       data: { revoked: true },
-  //     });
-  //     reply.clearCookie("refreshToken", { path: "/" });
-  //   }
-
-  //   return sendSuccess(reply, 200, { user: publicUser(updated) });
-  // });
-
-
+  // ── POST /auth/account-type  (post-OAuth account type selection) ──────────
   app.post("/auth/account-type", {
     schema: {
       tags: ["User Auth"],
@@ -1087,55 +1083,54 @@ export async function authRoutes(app: FastifyInstance) {
       const userId = (req as FastifyRequest & { userId: string }).userId;
       const { userType, businessName, country } = parsed.data;
 
-      const updated = await prisma.user.update({
-        where: { id: userId },
-        data: {
-          userType,
-          businessName: businessName ?? null,
-          country: country ?? null,
-        },
-      });
+      try {
+        const updated = await prisma.user.update({
+          where: { id: userId },
+          data: {
+            userType,
+            businessName: businessName ?? null,
+            country: country ?? null,
+          },
+        });
 
-      return sendSuccess(reply, 200, {
-        message: "Account type updated successfully.",
-        user: publicUser(updated),
-      });
+        return sendSuccess(reply, 200, {
+          message: "Account type updated successfully.",
+          user: publicUser(updated),
+        });
+      } catch (err: any) {
+        if (err?.code === "P2025") {
+          return sendError(reply, 404, "USER_NOT_FOUND", "Your account could not be found.");
+        }
+        return sendError(reply, 400, "UPDATE_FAILED", "Account type could not be updated. Please try again.");
+      }
     }
   );
 
 
   // ── GET /auth/oauth/google/redirect (Web OAuth Start) ──────────────────────
   app.get("/auth/oauth/google/redirect", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const redirectUri = `${process.env["WEB_BASE_URL"] ?? "http://localhost:3000"}/api/auth/oauth/google/callback`;
-    const client = new OAuth2Client({
-      clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
-      clientSecret: process.env["GOOGLE_CLIENT_SECRET"],
-      redirectUri,
-    });
+    try {
+      const redirectUri = `${process.env["WEB_BASE_URL"] ?? "http://localhost:3000"}/api/auth/oauth/google/callback`;
+      const client = new OAuth2Client({
+        clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
+        clientSecret: process.env["GOOGLE_CLIENT_SECRET"],
+        redirectUri,
+      });
 
-    const authUrl = client.generateAuthUrl({
-      access_type: "offline",
-      scope: [
-        "https://www.googleapis.com/auth/userinfo.profile",
-        "https://www.googleapis.com/auth/userinfo.email",
-      ],
-      prompt: "select_account",
-    });
+      const authUrl = client.generateAuthUrl({
+        access_type: "offline",
+        scope: [
+          "https://www.googleapis.com/auth/userinfo.profile",
+          "https://www.googleapis.com/auth/userinfo.email",
+        ],
+        prompt: "select_account",
+      });
 
-    reply.redirect(authUrl);
+      reply.redirect(authUrl);
+    } catch {
+      return sendError(reply, 400, "OAUTH_INIT_FAILED", "Google sign-in could not be initiated. Please try again.");
+    }
   });
-
-
-
-  //   //-----sample---
-  // //   //app.get("/auth/oauth/google/url", async (req, reply) => {
-  //   const authUrl = client.generateAuthUrl({
-  //     access_type: "offline",
-  //     scope: ["openid", "email", "profile"],
-  //   });
-
-  //   return { authUrl };
-  // });
 
 
   // ── GET /auth/oauth/google/callback (Web OAuth Callback) ──────────────────

@@ -20,13 +20,14 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Modal from "./ui/Modal";
 import { listingsService } from "@/services/listings";
 import { uploadToS3 } from "@/lib/listing-api";
 import { useAuthStore } from "@/stores/auth";
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const ACCEPTED_EXTENSIONS = ".jpg,.jpeg,.png,.webp";
-const MAX_SIZE_MB = 10;
+const MAX_SIZE_MB = 5;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 const TOKEN_KEY = "zika:access_token";
 
@@ -107,6 +108,7 @@ export function MediaUploader({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isReordering, setIsReordering] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const canUpload =
@@ -119,6 +121,13 @@ export function MediaUploader({
 
       const invalidType = files.find((f) => !ACCEPTED_TYPES.includes(f.type));
       const tooLarge    = files.find((f) => f.size > MAX_SIZE_BYTES);
+
+      // Check total count against maxPhotos
+      const totalCount = existingPhotos.length + uploads.filter(u => u.status !== "error").length + files.length;
+      if (totalCount > maxPhotos) {
+        setLimitModalOpen(true);
+        return;
+      }
 
       if (invalidType) {
         setValidationError(
@@ -291,11 +300,24 @@ export function MediaUploader({
         </div>
       )}
 
+      {/* Validation error modal */}
       {validationError && (
-        <div className="flex items-center gap-2 px-3 py-2.5 bg-danger-50 border border-danger/30 rounded-xl text-xs text-danger font-medium">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          {validationError}
-        </div>
+        <Modal
+          open={!!validationError}
+          title="Error"
+          description={validationError}
+          onClose={() => setValidationError(null)}
+          onConfirm={() => setValidationError(null)}
+        />
+      )}
+      {limitModalOpen && (
+        <Modal
+          open={limitModalOpen}
+          title="Limit Exceeded"
+          description={`You can upload a maximum of ${maxPhotos} photos.`}
+          onClose={() => setLimitModalOpen(false)}
+          onConfirm={() => setLimitModalOpen(false)}
+        />
       )}
 
       {(existingPhotos.length > 0 || uploads.length > 0) && (

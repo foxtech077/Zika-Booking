@@ -28,6 +28,7 @@
 		"@zika/validators": "workspace:*",
 		"dotenv": "^17.4.2",
 		"fastify": "^5.2.1",
+		"geoip-lite": "^2.0.2",
 		"ioredis": "^5.4.2",
 		"jose": "^5.9.6",
 		"node-fetch": "^3.3.2",
@@ -36,6 +37,7 @@
 		"zod": "^3.24.1"
 	},
 	"devDependencies": {
+		"@types/geoip-lite": "^1.4.4",
 		"@types/node": "^22.13.4",
 		"@types/pdfkit": "^0.17.6",
 		"@types/qrcode": "^1.5.6",
