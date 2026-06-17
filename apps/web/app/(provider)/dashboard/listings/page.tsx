@@ -13,8 +13,7 @@ import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
-import { ConfirmModal } from "@/components/modals/Modals";
-import { SlideDrawer } from "@/components/drawers/SlideDrawer";
+import { ConfirmModal, Modal } from "@/components/modals/Modals";
 import { formatDate, formatCurrency, slugToLabel } from "@/lib/utils";
 import type { Listing, ListingCategory } from "@/types/provider";
 import { useAuthStore } from "@/stores/auth";
@@ -155,6 +154,7 @@ export default function ListingsPage() {
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
   const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState<number>(5);
   const [selected, setSelected] = useState<Listing | null>(null);
   const [confirm, setConfirm] = useState<{ action: string; listing: Listing } | null>(null);
   const [createError, setCreateError] = useState("");
@@ -164,7 +164,7 @@ export default function ListingsPage() {
   }, [token]);
 
   const hasClientFilters = Boolean(search.trim() || category);
-  const limit = hasClientFilters ? 50 : 20;
+  const limit = hasClientFilters ? 50 : pageSize;
   const page = Math.floor(offset / limit) + 1;
   const params = { status, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
@@ -172,22 +172,24 @@ export default function ListingsPage() {
     queryFn:  () => fetchListings(params, token),
   });
 
+  const { data: fullSelectedQuery, isLoading: isLoadingFull } = useQuery({
+    queryKey: ["provider-listing", selected?.id, Boolean(getAuthToken(token))],
+    queryFn: () => withTokenRefresh(
+      (tokenOverride) => listingApi.get(`/listings/${selected?.id}`, getAuthConfig(tokenOverride)).then(r => r.data.data ?? r.data),
+      token
+    ),
+    enabled: !!selected?.id,
+  });
+
+  const fullSelected = fullSelectedQuery || selected;
+
   const listings: Listing[] = data?.listings ?? [];
   const filteredListings = useMemo(() => {
     const q = search.trim().toLowerCase();
     return listings.filter((listing) => {
       const matchesCategory = !category || listing.category === category;
-      const searchable = [
-        getListingTitle(listing),
-        listing.category,
-        listing.status,
-        listing.town,
-        listing.country,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      const matchesSearch = !q || searchable.includes(q);
+      const name = (getListingTitle(listing) || "").toLowerCase();
+      const matchesSearch = !q || name.includes(q);
       return matchesCategory && matchesSearch;
     });
   }, [category, listings, search]);
@@ -433,6 +435,20 @@ export default function ListingsPage() {
                 ],
               },
             ]}
+            actions={
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-slate-500">Per page</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setOffset(0); }}
+                  className="h-10 rounded-xl border border-border bg-white px-3 text-sm text-slate-700 focus:ring-2 focus:ring-primary focus:border-primary outline-none"
+                >
+                  {[5,10,15,20,25,30].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+            }
           />
         </div>
 
@@ -453,93 +469,118 @@ export default function ListingsPage() {
         />
       </Card>
 
-      {/* Detail Drawer */}
-      <SlideDrawer
+      {/* Detail Modal */}
+      <Modal
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected ? getListingTitle(selected) || "Listing Details" : "Listing Details"}
         subtitle={selected ? `${slugToLabel(selected.category)} · ${slugToLabel(selected.status)}` : undefined}
-        width="lg"
+        size="lg"
+        footer={
+          <div className="flex flex-wrap items-center justify-end gap-2 w-full">
+            <Button variant="outline" onClick={() => setSelected(null)}>Close</Button>
+            {selected && canSubmit(selected) && (
+              <Button variant="primary" onClick={() => setConfirm({ action: "submit", listing: selected })}>
+                Submit for Review
+              </Button>
+            )}
+            {selected && canActivate(selected) && (
+              <Button variant="success" onClick={() => setConfirm({ action: "activate", listing: selected })}>
+                {getActivationLabel(selected.status)}
+              </Button>
+            )}
+            {selected && canDeactivate(selected.status) && (
+              <Button variant="secondary" onClick={() => setConfirm({ action: "deactivate", listing: selected })}>
+                Deactivate
+              </Button>
+            )}
+            {selected && canDelete(selected.status) && (
+              <Button variant="danger" onClick={() => setConfirm({ action: "delete", listing: selected })}>
+                Delete Draft
+              </Button>
+            )}
+          </div>
+        }
       >
         {selected && (
-          <div className="space-y-5">
+          <div className="space-y-6">
             {getPhotoUrl(selected.photos?.[0]) && (
-              <img
-                src={getPhotoUrl(selected.photos?.[0])}
-                alt={getListingTitle(selected)}
-                className="w-full h-48 object-cover rounded-xl"
-              />
-            )}
-
-            <div className="flex items-center gap-3">
-              <Badge label={selected.status} status={selected.status} dot />
-              <Badge label={selected.category} />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: getPriceLabel(selected), value: formatListingPrice(selected) },
-                { label: "Location",     value: [selected.town, selected.country].filter(Boolean).join(", ") || "—" },
-                { label: "Min Stay",     value: selected.minStayNights ? `${selected.minStayNights} night(s)` : "—" },
-                { label: "Cancellation", value: selected.cancellationPolicy ? slugToLabel(selected.cancellationPolicy) : "—" },
-                { label: "Created",      value: formatDate(selected.createdAt) },
-                { label: "Updated",      value: formatDate(selected.updatedAt) },
-              ].map((d) => (
-                <div key={d.label}>
-                  <p className="text-xs text-slate-500 font-medium">{d.label}</p>
-                  <p className="text-sm text-slate-900 font-semibold mt-0.5">{d.value}</p>
+              <div className="relative w-full h-64 rounded-2xl overflow-hidden bg-slate-100 shadow-sm border border-border">
+                <img
+                  src={getPhotoUrl(selected.photos?.[0])}
+                  alt={getListingTitle(selected)}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <Badge label={selected.status} status={selected.status} dot />
+                  <Badge label={selected.category} />
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
+            
+            {isLoadingFull && !fullSelectedQuery ? (
+               <div className="py-8 text-center text-sm text-slate-500 animate-pulse">Loading full details...</div>
+            ) : fullSelected ? (
+               <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-6 gap-x-4 bg-slate-50 p-5 rounded-2xl border border-border/60">
+                 {[
+                   { label: getPriceLabel(fullSelected), value: formatListingPrice(fullSelected) },
+                   { label: "Location",     value: [fullSelected.town, fullSelected.country].filter(Boolean).join(", ") || "—" },
+                   { label: "Min Stay",     value: fullSelected.minStayNights ? `${fullSelected.minStayNights} night(s)` : "—" },
+                   { label: "Cancellation", value: fullSelected.cancellationPolicy ? slugToLabel(fullSelected.cancellationPolicy) : "—" },
+                   
+                   ...(fullSelected.category === "hotel" ? [
+                      { label: "Unit Count", value: fullSelected.unitCount || "—" },
+                      { label: "Room Type", value: fullSelected.roomType ? slugToLabel(fullSelected.roomType) : "—" },
+                   ] : []),
+                   
+                   ...(fullSelected.category === "car" ? [
+                      { label: "Make & Model", value: fullSelected.carMake ? `${fullSelected.carMake} ${fullSelected.carModel || ""}` : "—" },
+                      { label: "Year", value: fullSelected.carYear || "—" },
+                      { label: "Transmission", value: fullSelected.transmission ? slugToLabel(fullSelected.transmission) : "—" },
+                   ] : []),
+                   
+                   ...(fullSelected.category === "apartment" ? [
+                      { label: "Max Guests", value: fullSelected.maxGuests || "—" },
+                      { label: "Bed / Bath", value: `${fullSelected.bedrooms ?? "-"} Bed / ${fullSelected.bathrooms ?? "-"} Bath` },
+                      { label: "Apt Type", value: fullSelected.apartmentType ? slugToLabel(fullSelected.apartmentType) : "—" },
+                   ] : []),
+                   
+                   { label: "Created",      value: formatDate(fullSelected.createdAt) },
+                   { label: "Updated",      value: formatDate(fullSelected.updatedAt) },
+                 ].map((d, idx) => (
+                   <div key={idx}>
+                     <p className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1">{d.label}</p>
+                     <p className="text-sm text-slate-900 font-medium">{d.value}</p>
+                   </div>
+                 ))}
+               </div>
+            ) : null}
 
-            {selected.description && (
-              <div>
-                <p className="text-xs font-medium text-slate-500 mb-1">Description</p>
-                <p className="text-sm text-slate-700 leading-relaxed">{selected.description}</p>
+            {fullSelected?.description && (
+              <div className="pt-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Description</p>
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{fullSelected.description}</p>
               </div>
             )}
 
-            {selected.rejectionReasons?.length > 0 && (
-              <div className="bg-danger-light border border-danger/20 rounded-xl p-4">
+            {fullSelected?.rejectionReasons?.length > 0 && (
+              <div className="bg-danger-light border border-danger/20 rounded-xl p-4 mt-4">
                 <p className="text-sm font-semibold text-danger mb-1">Rejection Reasons</p>
                 <ul className="list-disc pl-4 space-y-1">
-                  {selected.rejectionReasons.map((r, i) => (
+                  {fullSelected.rejectionReasons.map((r: string, i: number) => (
                     <li key={i} className="text-sm text-danger-dark">{r}</li>
                   ))}
                 </ul>
-                {selected.rejectionNote && (
+                {fullSelected.rejectionNote && (
                   <p className="text-xs text-danger-dark mt-2 border-t border-danger/20 pt-2">
-                    {selected.rejectionNote}
+                    {fullSelected.rejectionNote}
                   </p>
                 )}
               </div>
             )}
-
-            <div className="flex flex-wrap gap-2 pt-2">
-              {canSubmit(selected) && (
-                <Button variant="primary" size="sm" onClick={() => setConfirm({ action: "submit", listing: selected })}>
-                  Submit for Review
-                </Button>
-              )}
-              {canActivate(selected) && (
-                <Button variant="success" size="sm" onClick={() => setConfirm({ action: "activate", listing: selected })}>
-                  {getActivationLabel(selected.status)}
-                </Button>
-              )}
-              {canDeactivate(selected.status) && (
-                <Button variant="secondary" size="sm" onClick={() => setConfirm({ action: "deactivate", listing: selected })}>
-                  Deactivate
-                </Button>
-              )}
-              {canDelete(selected.status) && (
-                <Button variant="danger" size="sm" onClick={() => setConfirm({ action: "delete", listing: selected })}>
-                  Delete Draft
-                </Button>
-              )}
-            </div>
           </div>
         )}
-      </SlideDrawer>
+      </Modal>
 
       <ConfirmModal
         open={!!confirm}

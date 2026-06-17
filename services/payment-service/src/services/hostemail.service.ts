@@ -6,7 +6,10 @@ sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
 export async function sendHostEmail(booking: any) {
     return sgMail.send({
       to: booking.listing.hostEmail,
-      from: "bookings@zika.com",
+      from: {
+        email: process.env.SENDGRID_FROM_EMAIL!,
+        name: process.env.SENDGRID_FROM_NAME ?? "kainook",
+      },
       subject: `New booking received — ${booking.code}`,
       html: `
         <h2>New Booking</h2>
