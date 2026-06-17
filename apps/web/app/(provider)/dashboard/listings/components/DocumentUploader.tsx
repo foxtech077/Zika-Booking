@@ -83,6 +83,11 @@ const CAR_DOC_DEFINITIONS = [
     label: "Insurance Certificate",
     description: "Valid insurance certificate for the listed vehicle",
   },
+  {
+    type: "roadworthiness_certificate",
+    label: "Roadworthiness Certificate",
+    description: "Optional roadworthiness certificate for the vehicle",
+  },
 ] as const;
 
 type DocDefinition = { type: string; label: string; description: string };
@@ -192,7 +197,7 @@ export function DocumentUploader({
         <h3 className="text-base font-bold text-slate-900">Verification Documents</h3>
         <p className="text-xs text-slate-500 mt-0.5">
           {category === "car"
-            ? "Vehicle registration and insurance documents are required before activation."
+            ? "Vehicle registration and insurance documents are required before activation. The roadworthiness certificate is optional."
             : "All three documents are required before submitting for admin review."}
           {" "}PDF, JPEG, PNG, or WEBP · Max 20 MB each.
         </p>

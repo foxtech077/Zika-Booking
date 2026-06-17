@@ -7,7 +7,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Run individual apps/services
 ```bash
 pnpm dev:web        # apps/web on :3000
-pnpm dev:provider   # apps/provider on :3005
 pnpm dev:admin      # apps/admin on :3002
 pnpm dev:auth       # services/auth-service on :3001
 pnpm dev:listing    # services/listing-service on :3003
@@ -55,7 +54,7 @@ packages/
 ```
 
 ### API routing (Next.js rewrites)
-Both `apps/web` and `apps/provider` proxy via `next.config.mjs` rewrites:
+`apps/web` proxies via `next.config.mjs` rewrites:
 - `/api/*` → auth-service (`NEXT_PUBLIC_API_URL`, default `localhost:3001`)
 - `/listing-api/*` → listing-service (`NEXT_PUBLIC_LISTING_API_URL`, default `localhost:3003`)
 
@@ -83,7 +82,7 @@ Frontend code never calls services directly — always through these proxied pat
 - **Zustand** for client-only state: `stores/auth.ts` (session), `stores/listings/index.ts` (wizard draft progress — persisted to sessionStorage under `zika:listing-wizard`).
 - `QueryClientProvider` is set up in `app/providers.tsx` with `staleTime: 30_000` default.
 
-### Listing form architecture (`apps/web` and `apps/provider` are mirrors)
+### Listing form architecture
 The edit page (`dashboard/listings/[id]/edit/page.tsx`) is a tabbed multi-step form:
 - Tabs: `basic` → `pricing` → `amenities` → `specs` → `media`
 - Tabs lock sequentially: later tabs require earlier tabs to pass `validateStep()`
@@ -114,5 +113,6 @@ Address geocoding is server-side in `listing-service/src/lib/geocoding.ts`. The 
 - Photo content types: `image/jpeg`, `image/png`, `image/webp` (max 10 MB)
 - Document content types: same images + `application/pdf`
 
-### apps/web vs apps/provider
-Both apps are nearly identical in structure — same component library, same hooks, same service layer. `apps/web` hosts the provider dashboard under the `(provider)` route group alongside the traveller-facing pages. `apps/provider` is a standalone provider-only portal. Keep changes in sync between the two when modifying shared listing management logic.
+### listing form architecture
+
+The provider dashboard is hosted under the `(provider)` route group in `apps/web`. Keep changes in sync when modifying shared listing management logic.

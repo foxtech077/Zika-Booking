@@ -20,19 +20,13 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
 import type { Listing } from "@/types/provider";
+import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
 import { FormShell, type FormStep } from "./shared/FormShell";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
-import { AMENITY_OPTIONS, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
+import { AMENITY_OPTIONS, CATEGORY_MAP, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
-import {
-  DiscountSection,
-  initDiscountState,
-  appendDiscountPayload,
-  validateDiscount,
-  type DiscountState,
-  type DiscountField,
-} from "./shared/DiscountSection";
+import { getCurrencyForCountry } from "./shared/countryCurrencyMap";
 
 // ── Enums (values match backend exactly) ────────────────────────────────────
 
@@ -51,13 +45,6 @@ const CANCELLATION_POLICIES = [
   { value: "flexible", label: "Flexible – free cancellation up to 24 h" },
   { value: "moderate", label: "Moderate – free cancellation up to 5 days" },
   { value: "strict",   label: "Strict – no refund within 14 days" },
-];
-
-const CURRENCIES = [
-  { value: "USD", label: "USD ($)" },
-  { value: "EUR", label: "EUR (€)" },
-  { value: "GBP", label: "GBP (£)" },
-  { value: "ZAR", label: "ZAR (R)" },
 ];
 
 // ── State type ───────────────────────────────────────────────────────────────
@@ -84,7 +71,7 @@ type HotelState = {
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
-} & DiscountState;
+};
 
 function initState(l: Listing): HotelState {
   return {
@@ -110,39 +97,66 @@ function initState(l: Listing): HotelState {
     customAmenities:    ((l as any).customAmenities ?? []).map((a: any) =>
                           typeof a === "string" ? a : (a?.label ?? "")),
     customInput:        "",
-    ...initDiscountState(l as any),
   };
 }
 
 // ── Payload builder — HOTEL FIELDS ONLY ─────────────────────────────────────
 
 function buildPayload(s: HotelState): Record<string, unknown> {
+  // Normalize and sanitize values similar to ApartmentForm to avoid sending
+  // unexpected empty strings or NaN which can trip backend validation.
   const p: Record<string, unknown> = {};
-  if (s.name.trim())        p.name        = s.name.trim();
-  if (s.description.trim()) p.description = s.description.trim();
-  if (s.address.trim())     p.address     = s.address.trim();
-  if (s.lat !== null)       p.lat         = s.lat;
-  if (s.lng !== null)       p.lng         = s.lng;
-  if (s.town.trim())        p.town        = s.town.trim();
-  if (s.country.trim())     p.country     = s.country.trim();
-  // claimedStarRating intentionally excluded from payload — ratings are read-only
-  // and must only originate from traveller reviews, not from provider input.
-  const price = Number(s.pricePerNight);
-  if (price > 0)            p.pricePerNight = price;
-  if (s.currency)           p.currency    = s.currency;
-  const nights = Number(s.minStayNights);
-  if (nights >= 1)          p.minStayNights = nights;
-  if (s.checkinTime)        p.checkinTime  = s.checkinTime;
-  if (s.checkoutTime)       p.checkoutTime = s.checkoutTime;
+
+  const toNullableNumber = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const toNullableInt = (v: unknown): number | null => {
+    const n = toNullableNumber(v);
+    return n === null ? null : Math.trunc(n);
+  };
+
+  const trimOrNull = (v: string): string | null => {
+    const t = v?.trim();
+    return t ? t : null;
+  };
+
+  const countryOrNull = (v: string): string | null => {
+    const country = v?.trim().toUpperCase();
+    return country && country.length === 2 ? country : null;
+  };
+
+  p.name = s.name.trim();
+  p.description = trimOrNull(s.description);
+  p.address = trimOrNull(s.address);
+  p.lng = toNullableNumber(s.lng);
+  p.town = trimOrNull(s.town);
+  p.country = countryOrNull(s.country);
+
+  // Pricing
+  const price = toNullableNumber(s.pricePerNight);
+  if (price !== null && price > 0) p.pricePerNight = price;
+  if (s.currency) p.currency = s.currency;
+
+  const nights = toNullableInt(s.minStayNights);
+  if (nights !== null && nights >= 1) p.minStayNights = nights;
+
+  p.checkinTime = s.checkinTime || null;
+  p.checkoutTime = s.checkoutTime || null;
   if (s.cancellationPolicy) p.cancellationPolicy = s.cancellationPolicy;
+
   p.smokingAllowed = s.smokingAllowed;
-  p.petsAllowed    = s.petsAllowed;
-  if (s.roomType) p.roomType = s.roomType;
-  const units = Number(s.unitCount);
-  if (units >= 1) p.unitCount = units;
-  p.amenities       = groupAmenities(s.selectedAmenities);
-  p.customAmenities = s.customAmenities;
-  appendDiscountPayload(p, s);
+  p.petsAllowed = s.petsAllowed;
+
+  p.roomType = s.roomType || null;
+
+  const units = toNullableInt(s.unitCount);
+  p.unitCount = units !== null && units >= 1 ? units : null;
+
+  p.amenities = groupAmenities(s.selectedAmenities);
+  p.customAmenities = s.customAmenities.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean);
   return p;
 }
 
@@ -156,8 +170,6 @@ function validateStep(step: Step, s: HotelState): string[] {
       return [
         !s.name.trim()    && "Hotel name is required.",
         !s.address.trim() && "Address is required.",
-        !s.town.trim()    && "Town / City is required — geocode the address.",
-        !s.country.trim() && "Country code is required — geocode the address.",
       ].filter(Boolean) as string[];
     case "pricing":
       return [
@@ -168,7 +180,6 @@ function validateStep(step: Step, s: HotelState): string[] {
         !s.checkoutTime                && "Check-out time is required.",
         !s.cancellationPolicy          && "Cancellation policy is required.",
         // Discount validation — only blocks when discount is enabled
-        ...validateDiscount(s, s.pricePerNight),
       ].filter(Boolean) as string[];
     case "rooms":
       return [
@@ -250,13 +261,13 @@ export function HotelForm({ listingId, listing }: Props) {
 
   const submitMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/submit`),
-    onSuccess:  () => { refetch(); flash("Submitted for admin review!", "ok"); },
+    onSuccess:  () => { refetch(); flash("Submitted for admin review!", "ok"); router.push("/dashboard/listings"); },
     onError:    (e: any) => flash(apiErr(e), "err"),
   });
 
   const reactivateMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/reactivate`),
-    onSuccess:  () => { refetch(); flash("Listing reactivated.", "ok"); },
+    onSuccess:  () => { refetch(); flash("Listing reactivated.", "ok"); router.push("/dashboard/listings"); },
     onError:    (e: any) => flash(apiErr(e), "err"),
   });
 
@@ -304,54 +315,153 @@ export function HotelForm({ listingId, listing }: Props) {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5 animate-fade-in pb-16">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push("/dashboard/listings")}
-          className="w-9 h-9 rounded-xl border border-border bg-white flex items-center justify-center text-slate-600 hover:bg-surface-muted transition-all"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Hotel Listing</p>
-          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-        </div>
-        <div className="ml-auto"><Badge label={status} status={status} /></div>
-      </div>
-
-      {/* Rejection banner */}
-      {(current?.rejectionReasons?.length ?? 0) > 0 && (
-        <div className="bg-danger-50 border border-danger/20 rounded-2xl p-4 flex gap-3">
-          <ShieldAlert className="w-5 h-5 text-danger shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-bold text-danger-dark">Listing Rejected</p>
-            <p className="text-xs text-danger-dark/80 mt-0.5">
-              {current?.rejectionNote ?? "Please address the following and re-submit."}
-            </p>
-            <ul className="list-disc pl-4 mt-1 space-y-0.5">
-              {(current?.rejectionReasons ?? []).map((r: string, i: number) => (
-                <li key={i} className="text-xs text-danger-dark">{r}</li>
-              ))}
-            </ul>
+    <div className="w-full h-full flex flex-col min-h-0 overflow-hidden">
+      <div className="w-full max-w-[1600px] mx-auto flex flex-col flex-1 min-h-0">
+        {/* ── Standalone Header Card ── */}
+        <div className="bg-white border border-border rounded-2xl shadow-sm px-6 py-4 flex items-center justify-between shrink-0 mb-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/dashboard/listings")}
+              className="w-9 h-9 rounded-xl border border-[#4c6a48]/30 bg-white flex items-center justify-center text-[#4c6a48] hover:bg-[#e6ebe4] transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-[#4c6a48] uppercase tracking-widest">Hotel Listing</p>
+              <h1 className="text-lg font-bold text-slate-900 truncate leading-tight">{title}</h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge label={status} status={status} />
           </div>
         </div>
-      )}
 
-      {/* Toasts */}
-      {ok  && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
-      {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark" ><AlertCircle className="w-4 h-4 text-danger shrink-0"  />{err}</div>}
+        {/* ── Main Form Shell ── */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <FormShell
+            steps={STEPS}
+            activeStep={step}
+            status={status}
+            onStepClick={(id) => { setTried(false); setStep(id as Step); }}
+            isComplete={isComplete}
+            isLocked={isLocked}
+            footer={
+              <div className="w-full flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard/listings")}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/30 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] transition-all"
+                  >
+                    Exit
+                  </button>
+                  {step !== "property" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const idx  = STEPS.findIndex((t) => t.id === step);
+                        const prev = STEPS[idx - 1];
+                        if (prev) { setTried(false); setStep(prev.id as Step); }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-all"
+                    >
+                      ← Back
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={saveMut.isPending}
+                    onClick={handleSaveDraft}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#4c6a48]/40 text-sm font-semibold text-[#4c6a48] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Save Draft
+                  </button>
+                  {step !== "media" ? (
+                    <button
+                      type="submit"
+                      form="hotel-edit-form"
+                      disabled={saveMut.isPending}
+                      className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                    >
+                      Save &amp; Continue →
+                    </button>
+                  ) : (
+                    <>
+                      {["draft", "rejected"].includes(status) && (
+                        <button
+                          type="button"
+                          disabled={submitMut.isPending || saveMut.isPending}
+                          onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => submitMut.mutate() }); }}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          <Award className="w-3.5 h-3.5" /> Submit for Review
+                        </button>
+                      )}
+                      {status === "deactivated" && (
+                        <button
+                          type="button"
+                          disabled={reactivateMut.isPending || saveMut.isPending}
+                          onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => reactivateMut.mutate() }); }}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#4c6a48] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> Reactivate
+                        </button>
+                      )}
+                      {["active", "approved"].includes(status) && (
+                        <button
+                          type="button"
+                          disabled={deactivateMut.isPending}
+                          onClick={() => deactivateMut.mutate()}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            }
+          >
+            <form id="hotel-edit-form" onSubmit={handleNext} className="space-y-5">
+              {/* Banners nested inside scrollable area */}
+              {((current?.rejectionReasons?.length ?? 0) > 0 || ok || err) && (
+                <div className="space-y-3">
+                  {(current?.rejectionReasons?.length ?? 0) > 0 && (
+                    <div className="bg-danger-50 border border-danger/20 rounded-2xl p-4 flex gap-3">
+                      <ShieldAlert className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-bold text-danger-dark">Listing Rejected</p>
+                        <p className="text-xs text-danger-dark/80 mt-0.5">
+                          {current?.rejectionNote ?? "Please address the following and re-submit."}
+                        </p>
+                        <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                          {(current?.rejectionReasons ?? []).map((r: string, i: number) => (
+                            <li key={i} className="text-xs text-danger-dark">{r}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
 
-      <FormShell
-        steps={STEPS}
-        activeStep={step}
-        status={status}
-        onStepClick={(id) => { setTried(false); setStep(id as Step); }}
-        isComplete={isComplete}
-        isLocked={isLocked}
-      >
-        <form onSubmit={handleNext} className="space-y-5">
-          <Card className="min-h-[420px]">
+                  {ok && (
+                    <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark">
+                      <CheckCircle className="w-4 h-4 text-success shrink-0" />
+                      {ok}
+                    </div>
+                  )}
+                  {err && (
+                    <div className="flex items-center gap-2 rounded-2xl bg-danger-50 border border-danger/20 px-4 py-3 text-sm text-danger-dark">
+                      <AlertCircle className="w-4 h-4 text-danger shrink-0" />
+                      {err}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <Card className="min-h-[420px]">
 
             {/* ── Property step ── */}
             {step === "property" && (
@@ -380,8 +490,27 @@ export function HotelForm({ listingId, listing }: Props) {
                   address={s.address}
                   town={s.town}
                   country={s.country}
-                  onChange={(f, v) => set(f, f === "country" ? v.toUpperCase().slice(0, 2) : v)}
-                  onGeocoded={(r) => setS((p) => ({ ...p, lat: r.lat, lng: r.lng, town: r.town, country: r.country }))}
+                  onChange={(f, v) => {
+                    const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
+                    set(f, normalized);
+                    // Auto-populate currency when country changes
+                    if (f === "country") {
+                      const detectedCurrency = getCurrencyForCountry(normalized);
+                      if (detectedCurrency) set("currency", detectedCurrency);
+                    }
+                  }}
+                  onGeocoded={(r) => {
+                    const detectedCurrency = getCurrencyForCountry(r.country);
+                    setS((p) => ({
+                      ...p,
+                      lat: r.lat,
+                      lng: r.lng,
+                      town: r.town,
+                      country: r.country,
+                      // Auto-populate currency from geocoded country (only if a mapping exists)
+                      ...(detectedCurrency ? { currency: detectedCurrency } : {}),
+                    }));
+                  }}
                   errors={tried ? {
                     address: !s.address.trim() ? "Address is required." : undefined,
                     town:    !s.town.trim()    ? "Town is required."    : undefined,
@@ -407,11 +536,10 @@ export function HotelForm({ listingId, listing }: Props) {
                     required
                     error={tried && !(Number(s.pricePerNight) > 0) ? "Price must be greater than 0." : undefined}
                   />
-                  <Select
+                  <CurrencyCombobox
                     label="Currency"
                     value={s.currency}
-                    onChange={(e) => set("currency", e.target.value)}
-                    options={CURRENCIES}
+                    onChange={(val) => set("currency", val)}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -468,18 +596,6 @@ export function HotelForm({ listingId, listing }: Props) {
                     <span className="text-sm text-slate-700">Pets Allowed</span>
                   </label>
                 </div>
-                <DiscountSection
-                  discountEnabled={s.discountEnabled}
-                  discountType={s.discountType}
-                  discountValue={s.discountValue}
-                  discountStartDate={s.discountStartDate}
-                  discountEndDate={s.discountEndDate}
-                  basePrice={s.pricePerNight}
-                  currency={s.currency}
-                  priceLabel="night"
-                  tried={tried}
-                  onChange={(field: DiscountField, value) => set(field, value)}
-                />
               </div>
             )}
 
@@ -506,40 +622,55 @@ export function HotelForm({ listingId, listing }: Props) {
                   />
                 </div>
 
-                {/* Amenities grid */}
+                {/* Amenities grouped by category */}
                 <div>
-                  <p className="text-sm font-medium text-slate-700 mb-2">Amenities</p>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    {AMENITY_OPTIONS.map((opt) => {
-                      const active = s.selectedAmenities.includes(opt.value);
-                      return (
-                        <button
-                          type="button"
-                          key={opt.value}
-                          onClick={() => set(
-                            "selectedAmenities",
-                            active
-                              ? s.selectedAmenities.filter((k) => k !== opt.value)
-                              : [...s.selectedAmenities, opt.value],
-                          )}
-                          className={cn(
-                            "flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
-                            active
-                              ? "border-primary bg-primary-50 text-primary-700 font-semibold"
-                              : "border-border bg-white text-slate-600 hover:border-slate-300",
-                          )}
-                        >
-                          <div className={cn(
-                            "w-4 h-4 rounded flex items-center justify-center border text-xs",
-                            active ? "bg-primary border-primary text-white" : "border-slate-300",
-                          )}>
-                            {active ? "✓" : ""}
-                          </div>
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {(() => {
+                    const grouped = AMENITY_OPTIONS.reduce((acc, opt) => {
+                      const cat = CATEGORY_MAP[opt.value] ?? "Services";
+                      (acc[cat] ??= []).push(opt);
+                      return acc;
+                    }, {} as Record<string, typeof AMENITY_OPTIONS[number][]>);
+                    return Object.entries(grouped).map(([cat, opts]) => (
+                      <div key={cat} className="mb-4">
+                        <h4 className="text-sm font-medium text-slate-700 mb-1">{cat}</h4>
+                        <div className="grid grid-cols-2 gap-2.5">
+                          {opts.map((opt) => {
+                            const active = s.selectedAmenities.includes(opt.value);
+                            return (
+                              <button
+                                type="button"
+                                key={opt.value}
+                                onClick={() =>
+                                  set(
+                                    "selectedAmenities",
+                                    active
+                                      ? s.selectedAmenities.filter((k) => k !== opt.value)
+                                      : [...s.selectedAmenities, opt.value]
+                                  )
+                                }
+                                className={cn(
+                                  "flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 text-left text-sm transition-all",
+                                  active
+                                    ? "border-primary bg-primary-50 text-primary-700 font-semibold"
+                                    : "border-border bg-white text-slate-600 hover:border-slate-300"
+                                )}
+                              >
+                                <div
+                                  className={cn(
+                                    "w-4 h-4 rounded flex items-center justify-center border text-xs",
+                                    active ? "bg-primary border-primary text-white" : "border-slate-300"
+                                  )}
+                                >
+                                  {active ? "✓" : ""}
+                                </div>
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ));
+                  })()}
                 </div>
 
                 {/* Custom amenities */}
@@ -584,94 +715,23 @@ export function HotelForm({ listingId, listing }: Props) {
                   disabled={status === "pending_review"}
                 />
                 <div className="border-t border-border pt-5">
-                  <DocumentUploader
-                    listingId={listingId}
-                    category="hotel"
-                    existingDocuments={docs}
-                    onRefresh={refetch}
-                    disabled={status === "pending_review"}
-                  />
+                  <Card padding="none" className="border-0 shadow-none">
+                    <DocumentUploader
+                      listingId={listingId}
+                      category="hotel"
+                      existingDocuments={docs}
+                      onRefresh={refetch}
+                      disabled={status === "pending_review"}
+                    />
+                  </Card>
                 </div>
               </div>
             )}
-          </Card>
-
-          {/* Footer */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-border">
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => router.push("/dashboard/listings")}>
-                Exit
-              </Button>
-              {step !== "property" && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    const idx  = STEPS.findIndex((t) => t.id === step);
-                    const prev = STEPS[idx - 1];
-                    if (prev) { setTried(false); setStep(prev.id as Step); }
-                  }}
-                >
-                  ← Back
-                </Button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                loading={saveMut.isPending}
-                onClick={handleSaveDraft}
-                icon={<Save />}
-              >
-                Save Draft
-              </Button>
-
-              {step !== "media" ? (
-                <Button type="submit" variant="primary" loading={saveMut.isPending}>
-                  Save & Continue →
-                </Button>
-              ) : (
-                <>
-                  {["draft", "rejected"].includes(status) && (
-                    <Button
-                      type="button"
-                      variant="success"
-                      loading={submitMut.isPending || saveMut.isPending}
-                      onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => submitMut.mutate() }); }}
-                      icon={<Award />}
-                    >
-                      Submit for Review
-                    </Button>
-                  )}
-                  {status === "deactivated" && (
-                    <Button
-                      type="button"
-                      variant="success"
-                      loading={reactivateMut.isPending || saveMut.isPending}
-                      onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => reactivateMut.mutate() }); }}
-                      icon={<CheckCircle />}
-                    >
-                      Reactivate
-                    </Button>
-                  )}
-                  {["active", "approved"].includes(status) && (
-                    <Button
-                      type="button"
-                      variant="danger"
-                      loading={deactivateMut.isPending}
-                      onClick={() => deactivateMut.mutate()}
-                    >
-                      Deactivate
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </form>
-      </FormShell>
+              </Card>
+            </form>
+          </FormShell>
+        </div>
+      </div>
     </div>
   );
 }
