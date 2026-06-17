@@ -2,13 +2,15 @@ import sgMail from "@sendgrid/mail";
 
 sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
 
+const BOOKING_BASE_URL = (process.env["BOOKING_PUBLIC_URL"] ?? "https://kainook.com/bookings").trim().replace(/\/$/, "");
+
 export async function sendGuestEmail(
   booking: any,
   invoice: any,
   pdf: { fileName: string; pdfUrl: string; pdfBuffer: Buffer }
 ) {
   await sgMail.send({
-    to: booking.user.email ?? "ajinfg03@gmail.com", // ✅ fixed
+    to: booking.user.email ?? "[EMAIL_ADDRESS]",
     from: {
       email: process.env.SENDGRID_FROM_EMAIL!,
       name: process.env.SENDGRID_FROM_NAME ?? "ZikaBooking",
@@ -50,8 +52,23 @@ export async function sendGuestEmail(
       <h3>Host Contact</h3>
       <p>${booking.listing.hostEmail ?? "Available in booking dashboard"}</p>
 
-      <p>Your PDF voucher is attached to this email.</p>
-      <p>Thank you for choosing Zika.</p>
+      <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
+
+      <p style="text-align:center;">
+        <a href="${BOOKING_BASE_URL}/${booking.code}"
+           style="display:inline-block;background:#1e3a8a;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">
+          View Your Booking
+        </a>
+      </p>
+
+      <p style="text-align:center;margin-top:12px;">
+        <a href="${pdf.pdfUrl}" style="color:#1e3a8a;font-size:14px;">
+          📄 Download Your Voucher PDF
+        </a>
+      </p>
+
+      <p>Your PDF voucher is also attached to this email.</p>
+      <p>Thank you for choosing Kainook.</p>
     `,
     attachments: [
       {

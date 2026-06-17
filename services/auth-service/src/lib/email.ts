@@ -18,20 +18,6 @@ const FROM = {
 const WEB = (process.env["WEB_BASE_URL"] ?? "https://Kainook.com").trim().replace(/\/$/, "");
 
 // ── Send logic ─────────────────────────────────────────────────────────────
-
-// async function sendEmail(msg: sgMail.MailDataRequired): Promise<void> {
-//   try {
-//     await sgMail.send(msg);
-    
-//   } catch (err:any) {
-//     const error = err instanceof Error ? err : new Error(String(err));
-//     console.error("[Email] SendGrid send failed:", error);
-//     console.log(JSON.stringify(err.response?.body, null, 2)); //Temporary for debugging
-//     throw error;
-//   }
-// }
-
-
 async function sendEmail(msg: sgMail.MailDataRequired): Promise<void> {
   try {
     const response = await sgMail.send(msg);

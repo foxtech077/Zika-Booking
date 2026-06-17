@@ -42,7 +42,7 @@ async function build() {
           description: "Local development server",
         },
         {
-          url: "https://api.kainook.com/auth",
+          url: "https://api.kainook.com",
           description: "Production server",
         },
       ],
