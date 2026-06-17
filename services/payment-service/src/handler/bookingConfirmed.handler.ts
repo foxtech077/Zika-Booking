@@ -4,12 +4,16 @@ import { sendGuestEmail, sendAdminAlert } from "../services/email.services.js";
 import { sendHostEmail } from "../services/hostemail.service.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
+const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
 
 async function confirmBooking(bookingId: string, paymentId: string, paymentProvider: string) {
   try {
     await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}/confirm`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-service-key": INTERNAL_SERVICE_KEY,
+      },
       body: JSON.stringify({ paymentId, paymentProvider }),
     });
   } catch (err) {
@@ -39,6 +43,35 @@ async function sendEmailWithRetry(
   }
 }
 
+function normalizeBooking(booking: any) {
+  const isCar = booking.listingType === "car";
+  const checkInVal = isCar 
+    ? (booking.pickupDatetime ? new Date(booking.pickupDatetime).toISOString().slice(0, 10) : null)
+    : (booking.checkIn ? new Date(booking.checkIn).toISOString().slice(0, 10) : null);
+  const checkOutVal = isCar 
+    ? (booking.returnDatetime ? new Date(booking.returnDatetime).toISOString().slice(0, 10) : null)
+    : (booking.checkOut ? new Date(booking.checkOut).toISOString().slice(0, 10) : null);
+
+  return {
+    ...booking,
+    code: booking.reference,
+    user: {
+      name: `${booking.guestFirstName} ${booking.guestLastName}`,
+      email: booking.guestEmail,
+    },
+    checkIn: checkInVal,
+    checkOut: checkOutVal,
+    listing: {
+      ...booking.listing,
+      title: booking.listing?.name ?? "Your listing",
+      hostEmail: booking.listing?.hostEmail ?? "",
+    },
+    payoutAmount: booking.providerPayout ? Number(booking.providerPayout) : 0,
+    transactionId: booking.paymentId ?? "N/A",
+    paymentMethod: booking.paymentMethod ?? "Card",
+  };
+}
+
 export async function bookingConfirmedHandler(payment: any) {
   const bookingId = payment?.metadata?.bookingId;
 
@@ -47,18 +80,24 @@ export async function bookingConfirmedHandler(payment: any) {
   }
 
   // 1. GET BOOKING
-  const res = await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}`);
+  const res = await fetch(`${BOOKING_SERVICE_URL}/bookings/internal/${bookingId}`, {
+    headers: {
+      "x-service-key": INTERNAL_SERVICE_KEY,
+    },
+  });
 
   if (!res.ok) {
     throw new Error(`Booking service failed: ${res.status}`);
   }
 
   const json = await res.json();
-  const booking = json.data;
+  const rawBooking = json.data;
 
-  if (!booking) {
+  if (!rawBooking) {
     throw new Error("Booking not found");
   }
+
+  const booking = normalizeBooking(rawBooking);
 
   // 2. INVOICE
   const invoice = buildInvoice(booking);
@@ -78,5 +117,5 @@ export async function bookingConfirmedHandler(payment: any) {
   );
 
   // 5. CONFIRM BOOKING LAST (SAFE)
-  await confirmBooking(bookingId, payment.id, "stripe");
+  await confirmBooking(bookingId, payment.id, payment.paymentProvider || "stripe");
 }

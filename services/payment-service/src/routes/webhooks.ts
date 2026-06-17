@@ -78,9 +78,9 @@ export async function webhookRoutes(app: FastifyInstance) {
   
     console.log("Event:", event.type);
   
-    // ========================
+
     // PAYMENT SUCCESS
-    // ========================
+   
     if (event.type === "payment_intent.succeeded") {
       const intent = event.data.object as Stripe.PaymentIntent;
   
@@ -136,6 +136,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       //  emails + PDF + confirm booking — runs only once
       await bookingConfirmedHandler({
         id: payment.id,
+        paymentProvider: payment.paymentProvider,
         metadata: { bookingId: payment.bookingId },
       });
   
@@ -360,7 +361,11 @@ export async function webhookRoutes(app: FastifyInstance) {
         },
       });
 
-      await confirmBooking(payment.bookingId, payment.id, "tara");
+      await bookingConfirmedHandler({
+        id: payment.id,
+        paymentProvider: payment.paymentProvider,
+        metadata: { bookingId: payment.bookingId },
+      });
 
     } else if (body.event === "payment_failed") {
       const payment = await prisma.payment.findFirst({

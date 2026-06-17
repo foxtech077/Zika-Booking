@@ -8,7 +8,7 @@ export async function sendGuestEmail(
   pdf: { fileName: string; pdfUrl: string; pdfBuffer: Buffer }
 ) {
   await sgMail.send({
-    to: booking.user.email ?? "ajinfg03@gmail.com", // ✅ fixed
+    to: booking.user.email ?? "Zikabooking@yopmail.com", //  fixed
     from: {
       email: process.env.SENDGRID_FROM_EMAIL!,
       name: process.env.SENDGRID_FROM_NAME ?? "ZikaBooking",
@@ -92,7 +92,7 @@ export async function sendPaymentLinkEmail(
   });
 }
 
-//  ADD THIS — required by bookingConfirmedHandler.ts retry logic
+// required by bookingConfirmedHandler.ts retry logic
 export async function sendAdminAlert(context: string, error: any) {
   await sgMail.send({
     to: process.env.ADMIN_ALERT_EMAIL!,
@@ -100,7 +100,7 @@ export async function sendAdminAlert(context: string, error: any) {
       email: process.env.SENDGRID_FROM_EMAIL!,
       name: "ZikaBooking Alerts",
     },
-    subject: `🚨 Email failure: ${context}`,
+    subject: `Email failure: ${context}`,
     html: `<p>Failed after 3 attempts:</p><pre>${error.message}</pre>`,
   });
 }
