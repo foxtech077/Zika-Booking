@@ -196,8 +196,9 @@ export async function bookingRoutes(app: FastifyInstance) {
     app.log.error({ err }, "Failed to ensure booking_seq"),
   );
 
- 
-    app.get("/booking/quote",{ preHandler: [ipDetect], schema: {
+
+  app.get("/booking/quote", {
+    preHandler: [ipDetect], schema: {
       tags: ["Booking"],
       summary: "Get pricing with IP-based currency + payment routing",
 
@@ -211,22 +212,22 @@ export async function bookingRoutes(app: FastifyInstance) {
         }
       }
     }
-      },
-      async (req, reply) => {
-        const pricing = await getPricing(req, 100);
-  
-        const paymentProvider = getPaymentProvider(pricing.country);
-  
-        return reply.send({
-          success: true,
-          data: {
-            ...pricing,
-            paymentProvider,
-          },
-        });
-      }
-    );
-  
+  },
+    async (req, reply) => {
+      const pricing = await getPricing(req, 100);
+
+      const paymentProvider = getPaymentProvider(pricing.country);
+
+      return reply.send({
+        success: true,
+        data: {
+          ...pricing,
+          paymentProvider,
+        },
+      });
+    }
+  );
+
 
   // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
   app.post(
@@ -274,7 +275,7 @@ export async function bookingRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const guestId = (req as ProviderRequest).providerId;
-  
+
       const body = req.body as {
         listingId: string;
         checkIn?: string;
@@ -284,7 +285,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         deliveryRequested?: boolean;
         guests?: number;
       };
-  
+
       // ── 1. LISTING ─────────────────────────────
       const listing = await prisma.listing.findUnique({
         where: { id: body.listingId, deletedAt: null },
@@ -293,25 +294,25 @@ export async function bookingRoutes(app: FastifyInstance) {
         return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
       }
       // STEP 1: base rate
-const baseRate = Number(
-  listing.pricePerNight ?? listing.pricePerDay ?? 0
-);
+      const baseRate = Number(
+        listing.pricePerNight ?? listing.pricePerDay ?? 0
+      );
 
-// STEP 2: promotion logic (HERE, NOT in billing service)
-const promotionRate = 0;
+      // STEP 2: promotion logic (HERE, NOT in billing service)
+      const promotionRate = 0;
 
-// STEP 3: compute base amount
-const units = 1; // optional preview logic (or skip here)
-const baseAmount = baseRate * units;
+      // STEP 3: compute base amount
+      const units = 1; // optional preview logic (or skip here)
+      const baseAmount = baseRate * units;
 
-const promotionDiscount = baseAmount * promotionRate;
-  
-     
-  
+      const promotionDiscount = baseAmount * promotionRate;
+
+
+
       // ── 2. STATUS CHECK ─────────────────────────
       const validStatuses =
         listing.category === "hotel" ? ["approved"] : ["active"];
-  
+
       if (!validStatuses.includes(listing.status)) {
         return reply.status(410).send({
           success: false,
@@ -321,12 +322,12 @@ const promotionDiscount = baseAmount * promotionRate;
           },
         });
       }
-  
+
       // ── 3. SELF BOOKING CHECK ───────────────────
       if (listing.providerId === guestId) {
         return sendError(reply, 403, "FORBIDDEN", "You cannot book your own listing.");
       }
-  
+
       // ── 4. GUEST LIMIT ──────────────────────────
       if (body.guests && listing.maxGuests && body.guests > listing.maxGuests) {
         return sendError(
@@ -342,7 +343,7 @@ const promotionDiscount = baseAmount * promotionRate;
       const pendingCount = await prisma.booking.count({
         where: { guestId, status: "pending_payment", createdAt: { gt: pendingExpiry } },
       });
-  
+
       if (pendingCount >= 5) {
         return reply.status(429).send({
           success: false,
@@ -352,7 +353,7 @@ const promotionDiscount = baseAmount * promotionRate;
           },
         });
       }
-  
+
       // ── 6. AVAILABILITY CHECK ───────────────────
       if (listing.category !== "car" && body.checkIn && body.checkOut) {
         const avail = await checkAvailability(
@@ -361,7 +362,7 @@ const promotionDiscount = baseAmount * promotionRate;
           new Date(body.checkIn),
           new Date(body.checkOut)
         );
-  
+
         if (!avail.available) {
           return reply.status(409).send({
             success: false,
@@ -372,7 +373,7 @@ const promotionDiscount = baseAmount * promotionRate;
           });
         }
       }
-  
+
       if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
         const avail = await checkAvailability(
           listing.id,
@@ -380,7 +381,7 @@ const promotionDiscount = baseAmount * promotionRate;
           new Date(body.pickupDatetime),
           new Date(body.returnDatetime)
         );
-  
+
         if (!avail.available) {
           return reply.status(409).send({
             success: false,
@@ -391,18 +392,18 @@ const promotionDiscount = baseAmount * promotionRate;
           });
         }
       }
-  
+
       // ── 7. LOCK KEY ─────────────────────────────
       const lockKey =
         listing.category === "car"
           ? `rlk:${listing.id}:${body.pickupDatetime?.slice(0, 10)}:${body.returnDatetime?.slice(0, 10)}`
           : `rlk:${listing.id}:${body.checkIn}:${body.checkOut}`;
-  
+
       const lockToken = randomUUID();
       const ctxKey = `rlk:ctx:${lockToken}`;
-  
+
       const acquired = await redis.set(lockKey, lockToken, "PX", LOCK_TTL_MS, "NX");
-  
+
       if (!acquired) {
         return reply.status(409).send({
           success: false,
@@ -412,7 +413,7 @@ const promotionDiscount = baseAmount * promotionRate;
           },
         });
       }
-  
+
       // ── 8. STORE CONTEXT ─────────────────────────
       const ctx = {
         guestId,
@@ -424,45 +425,45 @@ const promotionDiscount = baseAmount * promotionRate;
         deliveryRequested: body.deliveryRequested ?? false,
         renewed: false,
       };
-  
+
       await redis.set(ctxKey, JSON.stringify(ctx), "PX", LOCK_TTL_MS);
-  
+
       // ── 9. BILLING (FIXED TYPES) ─────────────────
       const commissionRate = await getCommissionRate(listing.country ?? null);
-  
+
       const billing = calculateBilling({
         listingCategory: listing.category,
-      
+
         checkIn: body.checkIn,
         checkOut: body.checkOut,
         pickupDatetime: body.pickupDatetime,
         returnDatetime: body.returnDatetime,
-      
+
         rate: baseRate,
-      
+
         deliveryFee: Number(listing.deliveryFee ?? 0),
-      
-        promotionDiscount, 
+
+        promotionDiscount,
         voucherAmount: 0,
-      
+
         taxRate: getTaxRate(listing.country),
-      
+
         commissionRate,
       });
-  
+
       // ── 10. FIXED RESPONSE ───────────────────────
       const pricingPreview = {
         units: billing.units,
         baseAmount: billing.baseAmount,
         promotionDiscount: billing.promotionDiscount,
         voucherDiscount: billing.voucherDiscount,
-         serviceFee: billing.serviceFee,
+        serviceFee: billing.serviceFee,
         taxAmount: billing.taxAmount,
         deliveryFee: billing.deliveryFee,
         totalAmount: billing.totalAmount,
         currency: listing.currency,
       };
-  
+
       return sendSuccess(reply, 200, {
         lockToken,
         expiresAt: new Date(Date.now() + LOCK_TTL_MS).toISOString(),
@@ -583,28 +584,29 @@ const promotionDiscount = baseAmount * promotionRate;
           type: "object",
           required: ["lockToken", "listingId", "guestFirstName", "guestLastName", "guestEmail"],
           properties: {
-            lockToken:         { type: "string" },
-            listingId:         { type: "string" },
-            checkIn:           { type: "string", format: "date" },
-            checkOut:          { type: "string", format: "date" },
-            pickupDatetime:    { type: "string", format: "date-time" },
-            returnDatetime:    { type: "string", format: "date-time" },
+            lockToken: { type: "string" },
+            listingId: { type: "string" },
+            checkIn: { type: "string", format: "date" },
+            checkOut: { type: "string", format: "date" },
+            pickupDatetime: { type: "string", format: "date-time" },
+            returnDatetime: { type: "string", format: "date-time" },
             deliveryRequested: { type: "boolean", default: false },
-            deliveryAddress:   { type: "string" },
-            guestFirstName:    { type: "string", maxLength: 100 },
-            guestLastName:     { type: "string", maxLength: 100 },
-            guestEmail:        { type: "string", format: "email" },
-            guestPhone:        { type: "string", maxLength: 30 },
-            adults:            { type: "integer", minimum: 1 },
-            children:          { type: "integer", minimum: 0, default: 0 },
-            specialRequests:   { type: "string" },
-            driverFirstName:   { type: "string", maxLength: 100 },
-            driverLastName:    { type: "string", maxLength: 100 },
-            driverAge:         { type: "integer", minimum: 18 },
-            voucherCode:       { type: "string", maxLength: 30 },
+            deliveryAddress: { type: "string" },
+            guestFirstName: { type: "string", maxLength: 100 },
+            guestLastName: { type: "string", maxLength: 100 },
+            guestEmail: { type: "string", format: "email" },
+            guestPhone: { type: "string", maxLength: 30 },
+            adults: { type: "integer", minimum: 1 },
+            children: { type: "integer", minimum: 0, default: 0 },
+            specialRequests: { type: "string" },
+            driverFirstName: { type: "string", maxLength: 100 },
+            driverLastName: { type: "string", maxLength: 100 },
+            driverAge: { type: "integer", minimum: 18 },
+            voucherCode: { type: "string", maxLength: 30 },
+            redeemPoints: { type: "integer", minimum: 0 },
           },
         },
-        response: { 
+        response: {
           201: {
             type: "object",
             properties: {
@@ -612,12 +614,13 @@ const promotionDiscount = baseAmount * promotionRate;
               data: {
                 type: "object",
                 properties: {
-                  bookingId:        { type: "string" },
+                  bookingId: { type: "string" },
                   bookingReference: { type: "string" },
-                  totalAmount:      { type: "number" },
-                  currency:         { type: "string" },
-                  status:           { type: "string" },
-                  voucherDiscount:  { type: "number" },
+                  totalAmount: { type: "number" },
+                  currency: { type: "string" },
+                  status: { type: "string" },
+                  voucherDiscount: { type: "number" },
+                  pointsDiscount: { type: "number" },
                 },
                 required: ["bookingId", "bookingReference", "totalAmount", "currency", "status"],
               },
@@ -654,6 +657,7 @@ const promotionDiscount = baseAmount * promotionRate;
         driverLastName?: string;
         driverAge?: number;
         voucherCode?: string;
+        redeemPoints?: number;
       };
 
       // Validate lock
@@ -701,7 +705,7 @@ const promotionDiscount = baseAmount * promotionRate;
         listing.category === "car"
           ? Number(listing.pricePerDay ?? 0)
           : Number(listing.pricePerNight ?? 0);
-    
+
       // 1. BASE BILLING (NO VOUCHER)
 
       const baseBilling = calculateBilling({
@@ -717,28 +721,28 @@ const promotionDiscount = baseAmount * promotionRate;
         taxRate: getTaxRate(listing.country),
         commissionRate,
       });
-      
+
       let voucherDiscount = 0;
       let appliedVoucher: { id: string; code: string } | null = null;
-      
- 
+
+
       // 2. VOUCHER LOGIC
-      
+
       if (body.voucherCode) {
         const voucher = await prisma.voucher.findUnique({
           where: { code: body.voucherCode },
         });
-      
+
         if (!voucher) {
           return sendError(reply, 400, "INVALID_VOUCHER", "Voucher not found");
         }
-      
+
         if (!voucher.isActive) {
           return sendError(reply, 400, "INVALID_VOUCHER", "Voucher is not active.");
         }
-      
+
         const now = new Date();
-      
+
         if (now < voucher.validFrom || now > voucher.validUntil) {
           return sendError(
             reply,
@@ -747,7 +751,7 @@ const promotionDiscount = baseAmount * promotionRate;
             "Voucher is expired or not valid yet."
           );
         }
-      
+
         //  your requested logic kept exactly here
         if (voucher.discountType === "percentage") {
           voucherDiscount =
@@ -756,16 +760,48 @@ const promotionDiscount = baseAmount * promotionRate;
         } else {
           voucherDiscount = Number(voucher.discountValue);
         }
-      
+
         appliedVoucher = {
           id: voucher.id,
           code: voucher.code,
         };
       }
-      
+      // 2.5 POINTS REDEMPTION
+      let pointsDiscount = 0;
+      const redeemPoints = body.redeemPoints ?? 0;
+      if (redeemPoints > 0) {
+        const platformSettings = await prisma.platformSettings.findUnique({
+          where: { id: "global" }
+        });
+
+        const ratio = platformSettings?.pointsToCurrencyRatio ?? 100;
+
+        // Use voucher-specific minPointsRedemption if applicable, otherwise global
+        let minRedeem = platformSettings?.minPointsRedemption ?? 500;
+        if (appliedVoucher) {
+          const fullVoucher = await prisma.voucher.findUnique({ where: { id: appliedVoucher.id } });
+          if (fullVoucher && (fullVoucher as any).minPointsRedemption != null) {
+            minRedeem = (fullVoucher as any).minPointsRedemption as number;
+          }
+        }
+
+        if (redeemPoints < minRedeem) {
+          return sendError(reply, 400, "MIN_POINTS_NOT_MET", `Minimum redemption is ${minRedeem} points.`);
+        }
+
+        const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(`
+          SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1
+        `, guestId);
+
+        if (!userRes[0] || userRes[0].loyaltyPoints < redeemPoints) {
+          return sendError(reply, 400, "INSUFFICIENT_POINTS", "You do not have enough loyalty points.");
+        }
+
+        pointsDiscount = redeemPoints / ratio;
+      }
 
       // 3. FINAL RECALCULATION
-      
+
       const finalBilling = calculateBilling({
         listingCategory: listing.category,
         checkIn: body.checkIn,
@@ -775,26 +811,26 @@ const promotionDiscount = baseAmount * promotionRate;
         rate,
         deliveryFee: Number(listing.deliveryFee ?? 0),
         promotionDiscount: 0,
-        voucherAmount: voucherDiscount,
+        voucherAmount: voucherDiscount + pointsDiscount, // apply points as additional discount
         taxRate: getTaxRate(listing.country),
         commissionRate,
       });
-      
-    
+
+
       // 4. FINAL VALUES (USE THIS ONLY)
-      
+
       const subtotal = finalBilling.subtotal;
       const totalAmount = finalBilling.totalAmount;
       const commissionAmount = finalBilling.commissionAmount;
       const providerPayout = finalBilling.providerPayout;
       const deliveryFee = finalBilling.deliveryFee;
-      const discountAmount = finalBilling.promotionDiscount + voucherDiscount;
-      
-   
+      const discountAmount = finalBilling.promotionDiscount + voucherDiscount + pointsDiscount;
+
+
       // 5. BOOKING
-    
+
       const reference = await generateReference(listing.country ?? "XX");
-      
+
       const booking = await prisma.booking.create({
         data: {
           reference,
@@ -803,7 +839,7 @@ const promotionDiscount = baseAmount * promotionRate;
           providerId: listing.providerId,
           listingType: listing.category,
           status: "pending_payment",
-      
+
           checkIn: body.checkIn ? new Date(body.checkIn) : undefined,
           checkOut: body.checkOut ? new Date(body.checkOut) : undefined,
           pickupDatetime: body.pickupDatetime
@@ -812,43 +848,46 @@ const promotionDiscount = baseAmount * promotionRate;
           returnDatetime: body.returnDatetime
             ? new Date(body.returnDatetime)
             : undefined,
-      
+
           nightsOrDays: finalBilling.units,
-      
+
           guestFirstName: body.guestFirstName,
           guestLastName: body.guestLastName,
           guestEmail: body.guestEmail,
           guestPhone: body.guestPhone,
-      
+
           adults: body.adults,
           children: body.children ?? 0,
           specialRequests: body.specialRequests,
-      
+
           driverFirstName: body.driverFirstName,
           driverLastName: body.driverLastName,
           driverAge: body.driverAge,
-      
+
           deliveryRequested: body.deliveryRequested ?? false,
           deliveryAddress: body.deliveryAddress,
-      
+
           nightlyRate: listing.category !== "car" ? rate : undefined,
           dailyRate: listing.category === "car" ? rate : undefined,
-      
+
           subtotal,
           totalAmount,
           discountAmount,
           deliveryFee,
-      
+
           currency: listing.currency ?? "USD",
-      
+
           commissionRate,
           commissionAmount,
           providerPayout,
-      
+
           cancellationPolicy: listing.cancellationPolicy ?? "moderate",
-      
+
           voucherCode: appliedVoucher?.code,
           voucherDiscount,
+
+          redeemPoints,
+          pointsDiscount,
         },
       });
 
@@ -878,13 +917,24 @@ const promotionDiscount = baseAmount * promotionRate;
         ]);
       }
 
+      // Immediately deduct redeemed points from the user's balance to prevent double-spending
+      if (redeemPoints > 0) {
+        await prisma.$executeRawUnsafe(`
+          UPDATE auth."User"
+          SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" - $1), "updatedAt" = NOW()
+          WHERE id = $2
+        `, redeemPoints, guestId);
+      }
+
       return sendSuccess(reply, 201, {
-        bookingId:        booking.id,
+        bookingId: booking.id,
         bookingReference: booking.reference,
-        totalAmount:      Number(booking.totalAmount),
-        currency:         booking.currency,
-        status:           booking.status,
-        voucherDiscount:  voucherDiscount > 0 ? voucherDiscount : undefined,
+        totalAmount: Number(booking.totalAmount),
+        currency: booking.currency,
+        status: booking.status,
+        voucherDiscount: voucherDiscount > 0 ? voucherDiscount : undefined,
+        pointsDiscount: pointsDiscount > 0 ? pointsDiscount : undefined,
+        pointsRedeemed: redeemPoints > 0 ? redeemPoints : undefined,
       });
     },
   );
@@ -959,44 +1009,118 @@ const promotionDiscount = baseAmount * promotionRate;
         booking.guestEmail,
         `${booking.guestFirstName} ${booking.guestLastName}`,
         {
-          reference:     booking.reference,
-          listingName:   confirmedListing?.name ?? "Your listing",
-          listingType:   booking.listingType,
-          checkIn:       booking.checkIn?.toISOString(),
-          checkOut:      booking.checkOut?.toISOString(),
+          reference: booking.reference,
+          listingName: confirmedListing?.name ?? "Your listing",
+          listingType: booking.listingType,
+          checkIn: booking.checkIn?.toISOString(),
+          checkOut: booking.checkOut?.toISOString(),
           pickupDatetime: booking.pickupDatetime?.toISOString(),
           returnDatetime: booking.returnDatetime?.toISOString(),
-          nightsOrDays:  booking.nightsOrDays,
-          totalAmount:   Number(booking.totalAmount),
-          currency:      booking.currency,
+          nightsOrDays: booking.nightsOrDays,
+          totalAmount: Number(booking.totalAmount),
+          currency: booking.currency,
         },
-      ).catch(() => {});
+      ).catch(() => { });
 
       // Award loyalty points — cross-schema update to auth."User"
-      // The listing service Prisma connection uses search_path=listing, so we
-      // must use the fully-qualified auth schema name in raw SQL.
-      const points = Math.floor(Number(booking.totalAmount));
-      if (points > 0) {
-        await prisma.$executeRawUnsafe(`
-          UPDATE auth."User"
-          SET
-            "loyaltyPoints" = "loyaltyPoints" + $1,
-            "currentTier"   = (CASE
-              WHEN "loyaltyPoints" + $1 >= 15000 THEN 'diamond'
-              WHEN "loyaltyPoints" + $1 >= 5000  THEN 'gold'
-              WHEN "loyaltyPoints" + $1 >= 1000  THEN 'silver'
-              ELSE 'bronze'
-            END)::text::auth."LoyaltyTier",
-            "updatedAt" = NOW()
-          WHERE id = $2
-        `, points, booking.guestId);
+      // Earning rate: 1 point per $1 of totalAmount paid, multiplied by tier bonus
+      const basePoints = Math.floor(Number(booking.totalAmount));
+      if (basePoints > 0) {
+        // Fetch current user tier and points AFTER points were already deducted at checkout
+        const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number, currentTier: string }[]>(`
+          SELECT "loyaltyPoints", "currentTier" FROM auth."User" WHERE id = $1
+        `, booking.guestId);
+
+        const user = userRes[0];
+        if (user) {
+          // Tier multipliers per specification
+          const tierMultipliers: Record<string, number> = {
+            bronze: 1.0,
+            silver: 1.15,
+            gold: 1.25,
+            diamond: 1.40,
+          };
+          const multiplier = tierMultipliers[user.currentTier.toLowerCase()] ?? 1.0;
+          const earnedPoints = Math.floor(basePoints * multiplier);
+          const newPoints = user.loyaltyPoints + earnedPoints;
+
+          // Tier thresholds per specification
+          let newTier = 'bronze';
+          if (newPoints >= 5000) newTier = 'diamond';
+          else if (newPoints >= 2000) newTier = 'gold';
+          else if (newPoints >= 500) newTier = 'silver';
+
+          // Tier-upgrade rules: only upgrade, never downgrade
+          const tierRank: Record<string, number> = { bronze: 0, silver: 1, gold: 2, diamond: 3 };
+          const currentRank = tierRank[user.currentTier.toLowerCase()] ?? 0;
+          const newRank = tierRank[newTier] ?? 0;
+          const finalTier = newRank > currentRank ? newTier : user.currentTier.toLowerCase();
+
+          // Update user's points and tier, also record earnedPoints on the booking
+          await Promise.all([
+            prisma.$executeRawUnsafe(`
+              UPDATE auth."User"
+              SET
+                "loyaltyPoints" = $1,
+                "currentTier"   = $2::auth."LoyaltyTier",
+                "updatedAt" = NOW()
+              WHERE id = $3
+            `, newPoints, finalTier, booking.guestId),
+            prisma.booking.update({
+              where: { id },
+              data: { earnedPoints },
+            }),
+          ]);
+
+          // Tier upgrade: send push notification + auto-assign vouchers
+          if (finalTier !== user.currentTier.toLowerCase()) {
+            const tierName = finalTier.charAt(0).toUpperCase() + finalTier.slice(1);
+
+            // Find all vouchers with auto_assign=true that include the new tier
+            const autoVouchers = await prisma.voucher.findMany({
+              where: {
+                isActive: true,
+                autoAssign: true,
+                validUntil: { gte: new Date() },
+              },
+            });
+
+            const tierVouchers = autoVouchers.filter((v) => {
+              const applicableTiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
+              return applicableTiers.includes(finalTier);
+            });
+
+            // Build notification body
+            const vouchersAssigned = tierVouchers.length > 0;
+            const notificationBody = vouchersAssigned
+              ? `You've reached ${tierName}! Your exclusive voucher has been added.`
+              : `Congratulations! You've reached ${tierName} status and unlocked new benefits.`;
+
+            // Insert push notification
+            try {
+              await prisma.$executeRawUnsafe(`
+                INSERT INTO auth."Notification" (id, "userId", type, title, body, data, "createdAt")
+                VALUES (gen_random_uuid()::text, $1, 'tier_upgrade', $2, $3, $4::jsonb, NOW())
+              `, booking.guestId, `You've reached ${tierName}! 🎉`, notificationBody,
+                JSON.stringify({ tier: finalTier, vouchersAssigned: tierVouchers.map((v) => v.code) }));
+            } catch {
+              // Notification table may not have 'data' column in all envs — try without it
+              try {
+                await prisma.$executeRawUnsafe(`
+                  INSERT INTO auth."Notification" (id, "userId", type, title, body, "createdAt")
+                  VALUES (gen_random_uuid()::text, $1, 'tier_upgrade', $2, $3, NOW())
+                `, booking.guestId, `You've reached ${tierName}! 🎉`, notificationBody);
+              } catch { /* ignore */ }
+            }
+          }
+        }
       }
 
       // Release Redis lock
       const lockSuffix = booking.checkIn
         ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
         : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
-      await redis.del(`rlk:${lockSuffix}`).catch(() => {});
+      await redis.del(`rlk:${lockSuffix}`).catch(() => { });
 
       return sendSuccess(reply, 200, { message: "Booking confirmed." });
     },
@@ -1057,6 +1181,16 @@ const promotionDiscount = baseAmount * promotionRate;
         },
       });
 
+      // Refund any redeemed loyalty points back to the guest since payment failed
+      const redeemedPoints = Number(booking.redeemPoints ?? 0);
+      if (redeemedPoints > 0) {
+        await prisma.$executeRawUnsafe(`
+          UPDATE auth."User"
+          SET "loyaltyPoints" = "loyaltyPoints" + $1, "updatedAt" = NOW()
+          WHERE id = $2
+        `, redeemedPoints, booking.guestId).catch(() => {});
+      }
+
       return sendSuccess(reply, 200, { message: "Booking marked as failed." });
     },
   );
@@ -1087,8 +1221,8 @@ const promotionDiscount = baseAmount * promotionRate;
                 type: "object",
                 properties: {
                   refundAmount: { type: "number" },
-                  currency:     { type: "string" },
-                  message:      { type: "string" },
+                  currency: { type: "string" },
+                  message: { type: "string" },
                 },
                 required: ["refundAmount", "currency", "message"],
               },
@@ -1145,6 +1279,20 @@ const promotionDiscount = baseAmount * promotionRate;
         },
       });
 
+      // Loyalty points adjustments on cancellation:
+      // 1. Refund redeemed points (guest paid with points that are now voided)
+      // 2. Reverse earned points if they were awarded at confirmation
+      const redeemedPoints = Number(booking.redeemPoints ?? 0);
+      const earnedPointsToReverse = Number((booking as any).earnedPoints ?? 0);
+      const pointsDelta = redeemedPoints - earnedPointsToReverse;
+      if (pointsDelta !== 0) {
+        await prisma.$executeRawUnsafe(`
+          UPDATE auth."User"
+          SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
+          WHERE id = $2
+        `, pointsDelta, guestId).catch(() => {});
+      }
+
       const cancelledListing = await prisma.listing.findUnique({
         where: { id: booking.listingId },
       });
@@ -1152,17 +1300,19 @@ const promotionDiscount = baseAmount * promotionRate;
         booking.guestEmail,
         `${booking.guestFirstName} ${booking.guestLastName}`,
         {
-          reference:   booking.reference,
+          reference: booking.reference,
           listingName: cancelledListing?.name ?? "Your booking",
           refundAmount,
-          currency:    booking.currency,
+          currency: booking.currency,
         },
-      ).catch(() => {});
+      ).catch(() => { });
 
       return sendSuccess(reply, 200, {
         refundAmount,
         currency: booking.currency,
         message: "Booking cancelled.",
+        pointsRefunded: redeemedPoints > 0 ? redeemedPoints : undefined,
+        pointsReversed: earnedPointsToReverse > 0 ? earnedPointsToReverse : undefined,
       });
     },
   );
@@ -1197,8 +1347,8 @@ const promotionDiscount = baseAmount * promotionRate;
                 type: "object",
                 properties: {
                   refundAmount: { type: "number" },
-                  currency:     { type: "string" },
-                  message:      { type: "string" },
+                  currency: { type: "string" },
+                  message: { type: "string" },
                 },
                 required: ["refundAmount", "currency", "message"],
               },
@@ -1257,10 +1407,25 @@ const promotionDiscount = baseAmount * promotionRate;
         },
       });
 
+      // Loyalty points adjustments on provider cancellation:
+      // Refund redeemed points + reverse earned points (full refund scenario)
+      const redeemedPoints = Number(booking.redeemPoints ?? 0);
+      const earnedPointsToReverse = Number((booking as any).earnedPoints ?? 0);
+      const pointsDelta = redeemedPoints - earnedPointsToReverse;
+      if (pointsDelta !== 0) {
+        await prisma.$executeRawUnsafe(`
+          UPDATE auth."User"
+          SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
+          WHERE id = $2
+        `, pointsDelta, booking.guestId).catch(() => {});
+      }
+
       return sendSuccess(reply, 200, {
         refundAmount: Number(booking.totalAmount),
         currency: booking.currency,
         message: "Booking cancelled. Full refund will be issued.",
+        pointsRefunded: redeemedPoints > 0 ? redeemedPoints : undefined,
+        pointsReversed: earnedPointsToReverse > 0 ? earnedPointsToReverse : undefined,
       });
     },
   );
@@ -1282,7 +1447,7 @@ const promotionDiscount = baseAmount * promotionRate;
               default: "all",
             },
             cursor: { type: "string", description: "Offset cursor for pagination" },
-            q:      { type: "string", description: "Partial booking reference search" },
+            q: { type: "string", description: "Partial booking reference search" },
           },
         },
         response: {
@@ -1293,9 +1458,9 @@ const promotionDiscount = baseAmount * promotionRate;
               data: {
                 type: "object",
                 properties: {
-                  total:      { type: "integer" },
+                  total: { type: "integer" },
                   nextCursor: { type: "string", nullable: true },
-                  bookings:   { type: "array", items: { type: "object", additionalProperties: true } },
+                  bookings: { type: "array", items: { type: "object", additionalProperties: true } },
                 },
                 required: ["total", "nextCursor", "bookings"],
               },
@@ -1308,16 +1473,16 @@ const promotionDiscount = baseAmount * promotionRate;
     async (req: FastifyRequest, reply: FastifyReply) => {
       const guestId = (req as ProviderRequest).providerId;
       const q = req.query as Record<string, string>;
-      const status    = q["status"];
+      const status = q["status"];
       const searchRef = q["q"];
-      const cursor    = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
-      const limit     = 20;
+      const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
+      const limit = 20;
 
       const where: any = { guestId };
 
       if (status && status !== "all") {
         const statusMap: Record<string, string[]> = {
-          upcoming:  ["confirmed"],
+          upcoming: ["confirmed"],
           completed: ["completed"],
           cancelled: ["cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"],
         };
@@ -1350,27 +1515,27 @@ const promotionDiscount = baseAmount * promotionRate;
       ]);
 
       const hasMore = bookings.length > limit;
-      const page    = hasMore ? bookings.slice(0, limit) : bookings;
+      const page = hasMore ? bookings.slice(0, limit) : bookings;
 
       return sendSuccess(reply, 200, {
         total,
         nextCursor: hasMore ? String(cursor + limit) : null,
         bookings: page.map((b) => ({
-          id:                    b.id,
-          reference:             b.reference,
-          status:                b.status,
-          listingType:           b.listingType,
-          listingTitle:          b.listing.name,
+          id: b.id,
+          reference: b.reference,
+          status: b.status,
+          listingType: b.listingType,
+          listingTitle: b.listing.name,
           listingPrimaryPhotoUrl: b.listing.photos[0]?.cdnUrl ?? null,
-          checkIn:               b.checkIn?.toISOString().slice(0, 10) ?? null,
-          checkOut:              b.checkOut?.toISOString().slice(0, 10) ?? null,
-          pickupDatetime:        b.pickupDatetime?.toISOString() ?? null,
-          returnDatetime:        b.returnDatetime?.toISOString() ?? null,
-          nightsOrDays:          b.nightsOrDays,
-          totalAmount:           Number(b.totalAmount),
-          currency:              b.currency,
-          voucherDiscount:       Number(b.voucherDiscount),
-          createdAt:             b.createdAt,
+          checkIn: b.checkIn?.toISOString().slice(0, 10) ?? null,
+          checkOut: b.checkOut?.toISOString().slice(0, 10) ?? null,
+          pickupDatetime: b.pickupDatetime?.toISOString() ?? null,
+          returnDatetime: b.returnDatetime?.toISOString() ?? null,
+          nightsOrDays: b.nightsOrDays,
+          totalAmount: Number(b.totalAmount),
+          currency: b.currency,
+          voucherDiscount: Number(b.voucherDiscount),
+          createdAt: b.createdAt,
         })),
       });
     },
@@ -1432,42 +1597,42 @@ const promotionDiscount = baseAmount * promotionRate;
         booking.checkIn > new Date();
 
       return sendSuccess(reply, 200, {
-        id:                  booking.id,
-        reference:           booking.reference,
-        status:              booking.status,
-        listingType:         booking.listingType,
+        id: booking.id,
+        reference: booking.reference,
+        status: booking.status,
+        listingType: booking.listingType,
         listing: {
-          id:              booking.listing.id,
-          title:           booking.listing.name,
-          address:         booking.listing.address,
-          town:            booking.listing.town,
-          country:         booking.listing.country,
+          id: booking.listing.id,
+          title: booking.listing.name,
+          address: booking.listing.address,
+          town: booking.listing.town,
+          country: booking.listing.country,
           primaryPhotoUrl: booking.listing.photos[0]?.cdnUrl ?? null,
         },
-        checkIn:             booking.checkIn?.toISOString().slice(0, 10) ?? null,
-        checkOut:            booking.checkOut?.toISOString().slice(0, 10) ?? null,
-        pickupDatetime:      booking.pickupDatetime?.toISOString() ?? null,
-        returnDatetime:      booking.returnDatetime?.toISOString() ?? null,
-        nightsOrDays:        booking.nightsOrDays,
-        adults:              booking.adults,
-        children:            booking.children,
-        specialRequests:     booking.specialRequests,
-        guestFirstName:      booking.guestFirstName,
-        guestLastName:       booking.guestLastName,
-        guestEmail:          booking.guestEmail,
-        subtotal:            Number(booking.subtotal),
-        discountAmount:      Number(booking.discountAmount),
-        deliveryFee:         Number(booking.deliveryFee),
-        voucherCode:         booking.voucherCode ?? null,
-        voucherDiscount:     Number(booking.voucherDiscount),
-        totalAmount:         Number(booking.totalAmount),
-        currency:            booking.currency,
-        cancellationPolicy:  booking.cancellationPolicy,
-        refundAmount:        booking.refundAmount ? Number(booking.refundAmount) : null,
-        cancelledAt:         booking.cancelledAt?.toISOString() ?? null,
-        confirmedAt:         booking.confirmedAt?.toISOString() ?? null,
-        completedAt:         booking.completedAt?.toISOString() ?? null,
-        createdAt:           booking.createdAt,
+        checkIn: booking.checkIn?.toISOString().slice(0, 10) ?? null,
+        checkOut: booking.checkOut?.toISOString().slice(0, 10) ?? null,
+        pickupDatetime: booking.pickupDatetime?.toISOString() ?? null,
+        returnDatetime: booking.returnDatetime?.toISOString() ?? null,
+        nightsOrDays: booking.nightsOrDays,
+        adults: booking.adults,
+        children: booking.children,
+        specialRequests: booking.specialRequests,
+        guestFirstName: booking.guestFirstName,
+        guestLastName: booking.guestLastName,
+        guestEmail: booking.guestEmail,
+        subtotal: Number(booking.subtotal),
+        discountAmount: Number(booking.discountAmount),
+        deliveryFee: Number(booking.deliveryFee),
+        voucherCode: booking.voucherCode ?? null,
+        voucherDiscount: Number(booking.voucherDiscount),
+        totalAmount: Number(booking.totalAmount),
+        currency: booking.currency,
+        cancellationPolicy: booking.cancellationPolicy,
+        refundAmount: booking.refundAmount ? Number(booking.refundAmount) : null,
+        cancelledAt: booking.cancelledAt?.toISOString() ?? null,
+        confirmedAt: booking.confirmedAt?.toISOString() ?? null,
+        completedAt: booking.completedAt?.toISOString() ?? null,
+        createdAt: booking.createdAt,
         canCancel,
       });
     },

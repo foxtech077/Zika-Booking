@@ -222,6 +222,7 @@ model Listing {
   longStayMinNights     Int?                @map("long_stay_min_nights")
   longStayDiscountType  LongStayDiscountType? @map("long_stay_discount_type")
   longStayDiscountValue Decimal?            @map("long_stay_discount_value") @db.Decimal(10, 2)
+  allowPreBooking       Boolean             @default(true) @map("allow_pre_booking")
   activatedAt           DateTime?           @map("activated_at")
   carMake               String?             @map("car_make") @db.VarChar(80)
   carModel              String?             @map("car_model") @db.VarChar(80)
@@ -492,6 +493,10 @@ enum BookingStatus {
     voucherCode     String?  @map("voucher_code") @db.VarChar(30)
     voucherDiscount Decimal  @default(0) @map("voucher_discount") @db.Decimal(10, 2)
 
+    redeemPoints    Int      @default(0) @map("redeem_points")
+    pointsDiscount  Decimal  @default(0) @map("points_discount") @db.Decimal(10, 2)
+    earnedPoints    Int      @default(0) @map("earned_points")
+
     listing   Listing            @relation(fields: [listingId], references: [id])
     statusLog BookingStatusLog[]
     review    ListingReview?
@@ -550,6 +555,10 @@ model PlatformSettings {
   pendingGlobalRate           Decimal?  @map("pending_global_rate") @db.Decimal(6, 4)
   pendingGlobalEffectiveFrom  DateTime? @map("pending_global_effective_from")
   pendingGlobalReason         String?   @map("pending_global_reason") @db.VarChar(500)
+  
+  pointsToCurrencyRatio       Int       @default(100) @map("points_to_currency_ratio")
+  minPointsRedemption         Int       @default(500) @map("min_points_redemption")
+
   updatedAt                   DateTime  @updatedAt @map("updated_at")
   updatedBy                   String?   @map("updated_by") @db.VarChar(100)
 
@@ -616,6 +625,7 @@ model Voucher {
   applicableTiers    String[]            @map("applicable_tiers")
   countryScope       String?             @map("country_scope") @db.Char(2)
   autoAssign         Boolean             @default(false) @map("auto_assign")
+  minPointsRedemption Int?               @map("min_points_redemption")
   validFrom          DateTime            @map("valid_from")
   validUntil         DateTime            @map("valid_until")
   createdBy          String              @map("created_by")

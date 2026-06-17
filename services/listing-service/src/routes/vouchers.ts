@@ -148,7 +148,9 @@ export async function voucherRoutes(app: FastifyInstance) {
 
       // Tier check
       const tiers = (voucher as any).applicableTiers || [];
-      if (tiers.length > 0 && (!body.guestTier || !tiers.includes(body.guestTier)))
+      const normalizedTiers = tiers.map((t: string) => t.toLowerCase());
+      const guestTierLower = body.guestTier?.toLowerCase();
+      if (normalizedTiers.length > 0 && (!guestTierLower || !normalizedTiers.includes(guestTierLower)))
         return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not applicable for your loyalty tier.", voucher: null });
 
       if (now < voucher.validFrom || now > voucher.validUntil)
@@ -156,10 +158,9 @@ export async function voucherRoutes(app: FastifyInstance) {
       if (voucher.usageLimit !== null && voucher.usageCount >= voucher.usageLimit)
         return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher usage limit has been reached.", voucher: null });
         
-      // FIXME: Add lookup for guest usage to enforce usageLimitPerGuest
-      // const guestUsageCount = await prisma.voucherRedemption.count({ where: { voucherId: voucher.id, guestId: body.guestId } });
-      // if (guestUsageCount >= ((voucher as any).usageLimitPerGuest || 1)) 
-      //   return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Your per-guest usage limit has been reached.", voucher: null });
+      const guestUsageCount = await prisma.voucherRedemption.count({ where: { voucherId: voucher.id, guestId: body.guestId } });
+      if (guestUsageCount >= ((voucher as any).usageLimitPerGuest || 1)) 
+        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Your per-guest usage limit has been reached.", voucher: null });
 
       if (voucher.minOrderValue !== null && body.totalAmount < Number(voucher.minOrderValue))
         return sendSuccess(reply, 200, {
@@ -205,14 +206,15 @@ export async function voucherRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ["Vouchers"],
-        summary: "List applicable vouchers for the current booking context (Best Offer Wallet)",
+        summary: "List applicable vouchers for the current booking context (Best Offer Wallet). Filters by guest loyalty tier and per-guest usage limits.",
+        description: "Returns active, date-valid vouchers scoped to the authenticated guest's loyalty tier. Vouchers with empty `applicableTiers` are available to all tiers (universal). Per-guest usage limits are enforced.",
         security: [{ bearerAuth: [] }],
         querystring: {
           type: "object",
           required: ["totalAmount"],
           properties: {
-            totalAmount: { type: "number", minimum: 0 },
-            currency:    { type: "string" },
+            totalAmount: { type: "number", minimum: 0, description: "The booking total amount in the listing's currency" },
+            currency:    { type: "string", description: "ISO 4217 currency code" },
           },
         },
         response: {
@@ -254,26 +256,59 @@ export async function voucherRoutes(app: FastifyInstance) {
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
+      const guestId = (req as any).providerId as string;
       const q = req.query as { totalAmount?: string; currency?: string };
       const totalAmount = parseFloat(q.totalAmount ?? "0");
       const now = new Date();
 
-      // @ts-ignore - Assuming status overrides isActive in the future
+      // Fetch the guest's current loyalty tier from auth.User
+      let guestTier = "bronze";
+      try {
+        const userRes = await prisma.$queryRawUnsafe<{ currentTier: string }[]>(
+          `SELECT "currentTier" FROM auth."User" WHERE id = $1`,
+          guestId
+        );
+        if (userRes[0]) guestTier = userRes[0].currentTier.toLowerCase();
+      } catch {
+        // fallback to bronze if query fails
+      }
+
       const vouchers = await prisma.voucher.findMany({
         where: {
-          // status: "active", // Use status instead of isActive after DB migration
           isActive: true,
           validFrom:  { lte: now },
           validUntil: { gte: now },
         },
         orderBy: { discountValue: "desc" },
-        take: 20,
+        take: 50,
       });
 
-      const result = vouchers.map((v) => {
-        // Usage-exhausted
+      // Fetch per-guest redemption counts for all vouchers in one query
+      const voucherIds = vouchers.map((v) => v.id);
+      const redemptionCounts = voucherIds.length > 0
+        ? await prisma.voucherRedemption.groupBy({
+            by: ["voucherId"],
+            where: { voucherId: { in: voucherIds }, guestId },
+            _count: { voucherId: true },
+          })
+        : [];
+      const guestRedemptionMap = new Map<string, number>();
+      for (const r of redemptionCounts) {
+        guestRedemptionMap.set(r.voucherId, r._count.voucherId);
+      }
+
+      const result: any[] = [];
+      for (const v of vouchers) {
+        // Tier eligibility: empty applicableTiers = universal (all tiers)
+        const applicableTiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
+        if (applicableTiers.length > 0 && !applicableTiers.includes(guestTier)) {
+          // Not eligible for this tier — skip entirely
+          continue;
+        }
+
+        // Global usage limit
         if (v.usageLimit !== null && v.usageCount >= v.usageLimit) {
-          return {
+          result.push({
             code: v.code, discountType: v.discountType,
             discountValue: Number(v.discountValue),
             maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
@@ -281,13 +316,31 @@ export async function voucherRoutes(app: FastifyInstance) {
             computedDiscount: 0,
             validUntil: v.validUntil.toISOString(),
             applicable: false,
-            reason: "Usage limit reached.",
-          };
+            reason: "Voucher usage limit has been reached.",
+          });
+          continue;
         }
 
-        // Below minimum order value (show as not applicable but still surfaced)
+        // Per-guest usage limit
+        const guestUsageCount = guestRedemptionMap.get(v.id) ?? 0;
+        const perGuestLimit = (v as any).usageLimitPerGuest ?? 1;
+        if (guestUsageCount >= perGuestLimit) {
+          result.push({
+            code: v.code, discountType: v.discountType,
+            discountValue: Number(v.discountValue),
+            maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
+            minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
+            computedDiscount: 0,
+            validUntil: v.validUntil.toISOString(),
+            applicable: false,
+            reason: "Your per-guest usage limit for this voucher has been reached.",
+          });
+          continue;
+        }
+
+        // Below minimum order value
         if (v.minOrderValue !== null && totalAmount < Number(v.minOrderValue)) {
-          return {
+          result.push({
             code: v.code, discountType: v.discountType,
             discountValue: Number(v.discountValue),
             maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
@@ -296,7 +349,8 @@ export async function voucherRoutes(app: FastifyInstance) {
             validUntil: v.validUntil.toISOString(),
             applicable: false,
             reason: `Minimum order value of ${Number(v.minOrderValue)} required.`,
-          };
+          });
+          continue;
         }
 
         let computedDiscount: number;
@@ -310,7 +364,7 @@ export async function voucherRoutes(app: FastifyInstance) {
         }
         computedDiscount = Math.min(computedDiscount, totalAmount);
 
-        return {
+        result.push({
           code: v.code, discountType: v.discountType,
           discountValue: Number(v.discountValue),
           maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
@@ -319,8 +373,8 @@ export async function voucherRoutes(app: FastifyInstance) {
           validUntil: v.validUntil.toISOString(),
           applicable: true,
           reason: null,
-        };
-      });
+        });
+      }
 
       return sendSuccess(reply, 200, { vouchers: result });
     },
