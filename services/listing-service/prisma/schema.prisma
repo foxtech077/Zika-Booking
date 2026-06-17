@@ -423,6 +423,7 @@ model SearchLog {
 // ── E6 — Booking Engine ───────────────────────────────────────────────────────
 
 enum BookingStatus {
+  draft
   pending_payment
   confirmed
   completed
