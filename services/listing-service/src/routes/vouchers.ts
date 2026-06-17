@@ -642,29 +642,94 @@ export async function voucherRoutes(app: FastifyInstance) {
   );
 
   // ── GET /admin/vouchers — list all vouchers ───────────────────────────
-  app.get("/admin/vouchers", { schema: { tags: ["Admin Vouchers"] }, preHandler: [requireAdmin] }, async (_req: FastifyRequest, reply: FastifyReply) => {
-    const vouchers = await prisma.voucher.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { _count: { select: { redemptions: true } } },
-    });
+  app.get(
+    "/admin/vouchers",
+    {
+      schema: {
+        tags: ["Admin Vouchers"],
+        summary: "List all vouchers with optional isActive filter and pagination (admin)",
+        security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          properties: {
+            isActive: { type: "string", enum: ["true", "false"] },
+            page:     { type: "integer", minimum: 1, default: 1 },
+            limit:    { type: "integer", minimum: 1, maximum: 100, default: 20 },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  vouchers: { type: "array", items: { type: "object", additionalProperties: true } },
+                  pagination: {
+                    type: "object",
+                    properties: {
+                      total:       { type: "integer" },
+                      page:        { type: "integer" },
+                      limit:       { type: "integer" },
+                      totalPages:  { type: "integer" },
+                    },
+                    required: ["total", "page", "limit", "totalPages"],
+                  },
+                },
+                required: ["vouchers", "pagination"],
+              },
+            },
+          },
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const q = req.query as { isActive?: string; page?: number; limit?: number };
+      const page  = Number(q.page  ?? 1);
+      const limit = Number(q.limit ?? 20);
+      const skip  = (page - 1) * limit;
 
-    return sendSuccess(reply, 200, {
-      vouchers: vouchers.map((v) => ({
-        id: v.id,
-        code: v.code,
-        discountType: v.discountType,
-        discountValue: Number(v.discountValue),
-        minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
-        maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
-        usageLimit: v.usageLimit,
-        usageCount: v.usageCount,
-        redemptionCount: v._count.redemptions,
-        validFrom: v.validFrom.toISOString(),
-        validUntil: v.validUntil.toISOString(),
-        isActive: v.isActive,
-        createdBy: v.createdBy,
-        createdAt: v.createdAt.toISOString(),
-      })),
-    });
-  });
+      const where: any = {};
+      if (q.isActive === "true")  where.isActive = true;
+      else if (q.isActive === "false") where.isActive = false;
+
+      const [vouchers, total] = await Promise.all([
+        prisma.voucher.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: limit,
+          include: { _count: { select: { redemptions: true } } },
+        }),
+        prisma.voucher.count({ where }),
+      ]);
+
+      return sendSuccess(reply, 200, {
+        vouchers: vouchers.map((v) => ({
+          id:              v.id,
+          code:            v.code,
+          discountType:    v.discountType,
+          discountValue:   Number(v.discountValue),
+          minOrderValue:   v.minOrderValue ? Number(v.minOrderValue) : null,
+          maxDiscount:     v.maxDiscount ? Number(v.maxDiscount) : null,
+          usageLimit:      v.usageLimit,
+          usageCount:      v.usageCount,
+          redemptionCount: v._count.redemptions,
+          validFrom:       v.validFrom.toISOString(),
+          validUntil:      v.validUntil.toISOString(),
+          isActive:        v.isActive,
+          createdBy:       v.createdBy,
+          createdAt:       v.createdAt.toISOString(),
+        })),
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+    },
+  );
 }
