@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuthStore } from "@/stores/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, ShieldOff, ShieldCheck, Ban, Eye } from "lucide-react";
 import { api } from "@/lib/api";
@@ -13,7 +14,6 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import type { PlatformUser } from "@/types/admin";
-import { useAuthStore } from "@/stores/auth";
 
 const fetchUsers = (params: Record<string, string>) =>
   api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
@@ -21,9 +21,8 @@ const fetchUsers = (params: Record<string, string>) =>
 export default function UsersPage() {
   const { user, _hasHydrated } = useAuthStore();
   const isCountryManager = user?.role === "country_manager";
-  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
   const limit = 20;
-
   const qc = useQueryClient();
 
   const [page, setPage] = useState(1);
@@ -34,7 +33,7 @@ export default function UsersPage() {
   const [confirm, setConfirm] = useState<{ action: "suspend" | "reinstate" | "ban"; user: PlatformUser } | null>(null);
   const [reason, setReason] = useState("");
 
-  const params = { q, status, userType, page: String(page), limit: String(limit) };
+  const params = { q, status, userType, page: String(page), limit: "20" };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-users", page, limit, q, status, userType, scopedCountries.join(",")],
     queryFn: () => fetchUsers(params),

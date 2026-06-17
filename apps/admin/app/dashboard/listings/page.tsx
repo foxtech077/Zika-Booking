@@ -27,19 +27,18 @@ const fetchListings = (params: Record<string, string>) =>
 export default function ListingsPage() {
   const { token, user, _hasHydrated } = useAuthStore();
   const isCountryManager = user?.role === "country_manager";
-  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
-
+  const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
 
   // Sync country selection after auth store hydration
   useEffect(() => {
     if (scopedCountries.length > 0 && !country) {
-      setCountry(scopedCountries[0]?? "");
+      setCountry(scopedCountries[0] ?? "");
     }
   }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Listing | null>(null);
