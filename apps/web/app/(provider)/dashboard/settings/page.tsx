@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState, type ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
+import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
 import { cn } from "@/lib/utils";
 
 type SettingsTab =
@@ -88,14 +89,6 @@ const languageOptions = [
   { value: "hi", label: "Hindi" },
 ];
 
-const currencyOptions = [
-  { value: "USD", label: "USD" },
-  { value: "AED", label: "AED" },
-  { value: "KES", label: "KES" },
-  { value: "NGN", label: "NGN" },
-  { value: "INR", label: "INR" },
-  { value: "GBP", label: "GBP" },
-];
 
 const timezoneOptions = [
   { value: "Asia/Kolkata", label: "Asia/Kolkata" },
@@ -476,7 +469,7 @@ export default function SettingsPage() {
               <div className="grid gap-4 md:grid-cols-2">
                 <Select label="Timezone" value={accountForm.timezone} onChange={(e) => setAccountForm((f) => ({ ...f, timezone: e.target.value }))} options={timezoneOptions} />
                 <Select label="Language" value={accountForm.language} onChange={(e) => setAccountForm((f) => ({ ...f, language: e.target.value }))} options={languageOptions} />
-                <Select label="Currency" value={accountForm.currency} onChange={(e) => setAccountForm((f) => ({ ...f, currency: e.target.value }))} options={currencyOptions} />
+                <CurrencyCombobox label="Currency" value={accountForm.currency} onChange={(val) => setAccountForm((f) => ({ ...f, currency: val }))} />
                 <Select label="Date format" value={accountForm.dateFormat} onChange={(e) => setAccountForm((f) => ({ ...f, dateFormat: e.target.value }))} options={[{ value: "MM/DD/YYYY", label: "MM/DD/YYYY" }, { value: "DD/MM/YYYY", label: "DD/MM/YYYY" }, { value: "YYYY-MM-DD", label: "YYYY-MM-DD" }]} />
               </div>
               <div className="mt-4">
