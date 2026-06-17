@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle, Eye, Plus } from "lucide-react";
+import { CalendarDays, XCircle, Eye, Plus, Send } from "lucide-react";
 import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
@@ -123,6 +123,14 @@ export default function BookingsPage() {
     },
   });
 
+  // Resend payment link for draft bookings
+  const resendLinkMut = useMutation({
+    mutationFn: (id: string) => listingApi.post(`/admin/bookings/${id}/send-link`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-bookings"] });
+    },
+  });
+
   const columns: Column<Booking>[] = [
     {
       key: "ref",
@@ -201,6 +209,15 @@ export default function BookingsPage() {
               title="Cancel booking"
             >
               <XCircle className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {b.status === "draft" && (
+            <button
+              onClick={() => resendLinkMut.mutate(b.id)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
+              title="Resend payment link"
+            >
+              <Send className="h-3.5 w-3.5" />
             </button>
           )}
         </div>

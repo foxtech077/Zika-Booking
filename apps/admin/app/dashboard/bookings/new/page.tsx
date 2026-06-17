@@ -155,9 +155,9 @@ function AvailabilityCalendar({
 
   function getCellStyle(dateStr: string): string {
     const status = getDayStatus(dateStr, availability);
-    const isCheckIn  = dateStr === checkIn;
+    const isCheckIn = dateStr === checkIn;
     const isCheckOut = dateStr === checkOut;
-    const inRange    = checkIn && checkOut && dateStr > checkIn && dateStr < checkOut;
+    const inRange = checkIn && checkOut && dateStr > checkIn && dateStr < checkOut;
 
     if (status === "past") return "text-slate-300 cursor-not-allowed text-xs";
 
@@ -244,8 +244,8 @@ function AvailabilityCalendar({
                 title={
                   status === "booked" ? "Fully booked"
                     : status === "locked" ? "Reserved / Locked"
-                    : status === "past" ? "Past date"
-                    : "Available"
+                      : status === "past" ? "Past date"
+                        : "Available"
                 }
                 onClick={() => !isDisabled && handleClick(date)}
                 className={getCellStyle(ds) + getRangeClass(ds)}
@@ -348,30 +348,30 @@ export default function ManualBookingPage() {
   }
 
   // ── Section 1: Customer Info ──────────────────────────────────────────────────
-  const [firstName, setFirstName]     = useState("");
-  const [lastName, setLastName]       = useState("");
-  const [email, setEmail]             = useState("");
-  const [phone, setPhone]             = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [nationality, setNationality] = useState("");
-  const [notes, setNotes]             = useState("");
+  const [notes, setNotes] = useState("");
 
   // ── Section 2: Booking Info ───────────────────────────────────────────────────
-  const [listingType, setListingType]   = useState<ListingType>("hotel");
-  const [listingName, setListingName]   = useState("");
-  const [listingId, setListingId]       = useState("");
-  const [country, setCountry]           = useState("");
-  const [checkIn, setCheckIn]           = useState("");
-  const [checkOut, setCheckOut]         = useState("");
-  const [pickup, setPickup]             = useState("");
-  const [returnDt, setReturnDt]         = useState("");
-  const [guests, setGuests]             = useState(1);
-  const [rooms, setRooms]               = useState(1);
-  const [units, setUnits]               = useState(1);
+  const [listingType, setListingType] = useState<ListingType>("hotel");
+  const [listingName, setListingName] = useState("");
+  const [listingId, setListingId] = useState("");
+  const [country, setCountry] = useState("");
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [pickup, setPickup] = useState("");
+  const [returnDt, setReturnDt] = useState("");
+  const [guests, setGuests] = useState(1);
+  const [rooms, setRooms] = useState(1);
+  const [units, setUnits] = useState(1);
 
   // ── Section 3: Availability ───────────────────────────────────────────────────
-  const [availStatus, setAvailStatus]   = useState<AvailStatus>("idle");
+  const [availStatus, setAvailStatus] = useState<AvailStatus>("idle");
   const [availability, setAvailability] = useState<AvailabilityData | null>(null);
-  const [calLoading, setCalLoading]     = useState(false);
+  const [calLoading, setCalLoading] = useState(false);
 
   // Calendar date selection state
   const [calSelectStep, setCalSelectStep] = useState<"checkIn" | "checkOut">("checkIn");
@@ -381,10 +381,10 @@ export default function ManualBookingPage() {
 
   // ── Section 5: Payment ────────────────────────────────────────────────────────
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("stripe");
-  const [linkSent, setLinkSent]           = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
 
   // ── Shared state ──────────────────────────────────────────────────────────────
-  const [errors, setErrors]       = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
 
   const isAccommodation = listingType !== "car";
@@ -497,18 +497,18 @@ export default function ManualBookingPage() {
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (!firstName.trim()) e.firstName = "Required";
-    if (!lastName.trim())  e.lastName  = "Required";
+    if (!lastName.trim()) e.lastName = "Required";
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) e.email = "Valid email required";
-    if (!phone.trim())     e.phone     = "Required";
+    if (!phone.trim()) e.phone = "Required";
     if (!listingName.trim()) e.listingName = "Required";
-    if (!country.trim())     e.country    = "Required";
+    if (!country.trim()) e.country = "Required";
 
     if (isAccommodation) {
-      if (!checkIn)  e.checkIn  = "Required";
+      if (!checkIn) e.checkIn = "Required";
       if (!checkOut) e.checkOut = "Required";
       if (checkIn && checkOut && checkIn >= checkOut) e.checkOut = "Must be after check-in";
     } else {
-      if (!pickup)   e.pickup   = "Required";
+      if (!pickup) e.pickup = "Required";
       if (!returnDt) e.returnDt = "Required";
       if (pickup && returnDt && pickup >= returnDt) e.returnDt = "Must be after pickup";
     }
@@ -550,11 +550,11 @@ export default function ManualBookingPage() {
       if (d.available && d.pricing) {
         setPrice({
           baseAmount: d.pricing.baseAmount ?? 0,
-          discount:   d.pricing.discount   ?? 0,
+          discount: d.pricing.discount ?? 0,
           serviceFee: d.pricing.serviceFee ?? 0,
-          tax:        d.pricing.tax        ?? 0,
-          total:      d.pricing.total      ?? 0,
-          currency:   d.pricing.currency   ?? "USD",
+          tax: d.pricing.tax ?? 0,
+          total: d.pricing.total ?? 0,
+          currency: d.pricing.currency ?? "USD",
         });
         if (d.listingId) setListingId(d.listingId);
       }
@@ -571,11 +571,11 @@ export default function ManualBookingPage() {
       const base = nights * 120;
       setPrice({
         baseAmount: base,
-        discount:   0,
+        discount: 0,
         serviceFee: Math.round(base * 0.05),
-        tax:        Math.round(base * 0.10),
-        total:      Math.round(base * 1.15),
-        currency:   "USD",
+        tax: Math.round(base * 0.10),
+        total: Math.round(base * 1.15),
+        currency: "USD",
       });
       // If calendar has no data yet, ensure demo dates are visible
       if (!availability) {
@@ -706,7 +706,7 @@ export default function ManualBookingPage() {
         <div className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 mb-5">
           <AlertCircle className="h-4 w-4 text-danger flex-shrink-0 mt-0.5" />
           <p className="text-sm text-danger flex-1">{errors._api}</p>
-          <button onClick={() => setErrors((p) => { const n = {...p}; delete n._api; return n; })} className="text-danger/60 hover:text-danger">
+          <button onClick={() => setErrors((p) => { const n = { ...p }; delete n._api; return n; })} className="text-danger/60 hover:text-danger">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -802,9 +802,9 @@ export default function ManualBookingPage() {
                   value={listingType}
                   onChange={(e) => setListingType(e.target.value as ListingType)}
                   options={[
-                    { value: "hotel",     label: "Hotel" },
+                    { value: "hotel", label: "Hotel" },
                     { value: "apartment", label: "Apartment" },
-                    { value: "car",       label: "Car Rental" },
+                    { value: "car", label: "Car Rental" },
                   ]}
                 />
                 <Select
@@ -815,7 +815,7 @@ export default function ManualBookingPage() {
                   onChange={(e) => setCountry(e.target.value)}
                   options={[
                     { value: "", label: "Select country…" },
-                    ...["MT","US","GB","DE","FR","ES","IT","AE","AU","CA","JP","SG","NL","BE","SE","IN","KE","NG","ZA","GH"].map((c) => ({ value: c, label: c })),
+                    ...["MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN", "KE", "NG", "ZA", "GH"].map((c) => ({ value: c, label: c })),
                   ]}
                   error={errors.country}
                 />
@@ -1070,11 +1070,10 @@ export default function ManualBookingPage() {
                       key={m}
                       type="button"
                       onClick={() => setPaymentMethod(m)}
-                      className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 transition-all ${
-                        paymentMethod === m
+                      className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 transition-all ${paymentMethod === m
                           ? "border-primary bg-primary/5 text-primary"
                           : "border-border text-slate-500 hover:border-slate-300 hover:bg-slate-50"
-                      }`}
+                        }`}
                     >
                       <CreditCard className="h-5 w-5 flex-shrink-0" />
                       <span className="text-sm font-semibold capitalize">{m === "tara" ? "Tara" : "Stripe"}</span>
