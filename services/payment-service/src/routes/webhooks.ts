@@ -4,6 +4,7 @@ import { stripe } from "../lib/stripe.js";
 import { sendError } from "../lib/errors.js";
 import { verifyTaraWebhookSignature } from "../lib/tara.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
+
 import Stripe from "stripe";
 
 
@@ -12,18 +13,6 @@ const STRIPE_WEBHOOK_SECRET = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
 const TARA_WEBHOOK_SECRET = process.env["TARA_WEBHOOK_SECRET"] ?? "";
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
-
-async function confirmBooking(bookingId: string, paymentId: string, paymentProvider: string) {
-  try {
-    await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}/confirm`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentId, paymentProvider }),
-    });
-  } catch (err) {
-    console.error("[webhook] Failed to confirm booking", bookingId, err);
-  }
-}
 
 async function failBooking(bookingId: string) {
   try {
@@ -360,7 +349,7 @@ export async function webhookRoutes(app: FastifyInstance) {
         },
       });
 
-      await confirmBooking(payment.bookingId, payment.id, "tara");
+      await bookingConfirmedHandler({ id: payment.id, metadata: { bookingId: payment.bookingId } });
 
     } else if (body.event === "payment_failed") {
       const payment = await prisma.payment.findFirst({

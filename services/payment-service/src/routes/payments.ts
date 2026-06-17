@@ -6,6 +6,7 @@ import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type GuestRequest } from "../middleware/auth.js";
 import { initiateTaraPayment, initiateTaraReversal } from "../lib/tara.js";
 import { sendPaymentLinkEmail } from "../services/email.services.js";
+import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
@@ -576,10 +577,15 @@ export async function paymentRoutes(app: FastifyInstance) {
           idempotencyKey,
         },
       });
-  
+
+      // Confirm the booking (set status → confirmed, send emails, generate PDF)
+      bookingConfirmedHandler({ id: payment.id, metadata: { bookingId } }).catch((err) => {
+        console.error("[payments/initiate] bookingConfirmedHandler failed:", err);
+      });
+
       return sendSuccess(reply, 201, { paymentId: payment.id });
     }
-  
+
     // ── 7. Tara flow ──────────────────────────────────────────────────────
     if (paymentProvider === "tara") {
       if (!mobileNumber) {
