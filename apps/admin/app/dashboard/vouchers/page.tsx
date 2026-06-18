@@ -42,6 +42,21 @@ export default function VouchersPage() {
   const vouchers: Voucher[] = data?.vouchers ?? [];
   const total: number = data?.total ?? 0;
 
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/vouchers?${new URLSearchParams(params)}`;
+  const responseCount = data?.vouchers?.length ?? 0;
+  const renderedRows = vouchers.length;
+  console.log("VouchersPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-vouchers", params],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const createMut = useMutation({
     mutationFn: (body: any) => listingApi.post("/admin/vouchers", body),
     onSuccess: () => {

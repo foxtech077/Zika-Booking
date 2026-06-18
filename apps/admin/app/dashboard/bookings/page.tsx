@@ -142,6 +142,21 @@ export default function BookingsPage() {
     : rawBookings;
   const total: number = data?.total ?? 0;
 
+  const offset = (page - 1) * rowsPerPage;
+  const requestUrl = `/admin/bookings?${new URLSearchParams(params)}`;
+  const responseCount = data?.bookings?.length ?? 0;
+  const renderedRows = bookings.length;
+  console.log("BookingsPage Pagination Debug:", {
+    page,
+    limit: rowsPerPage,
+    offset,
+    params,
+    queryKey: ["admin-bookings", page, rowsPerPage, q, status, listingType, effectiveCountry],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const { data: detailData, isLoading: loadingDetail } = useQuery({
     queryKey: ["admin-booking-detail", selected?.id],
     queryFn: () => fetchBookingDetail(selected!.id),
@@ -278,7 +293,7 @@ export default function BookingsPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<CalendarDays className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={rowsPerPage} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Booking detail drawer */}

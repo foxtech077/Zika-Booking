@@ -51,7 +51,7 @@ export default function ListingsPage() {
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
 
-  const params = { q, status, category, country, page: String(page), limit: "20" };
+  const params = { q, status, category, country, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-listings", page, limit, q, status, category, effectiveCountry],
     queryFn: () => fetchListings(params),
@@ -66,6 +66,21 @@ export default function ListingsPage() {
       })
     : rawListings;
   const total: number = data?.total ?? 0;
+
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/listings?${new URLSearchParams(params)}`;
+  const responseCount = data?.listings?.length ?? 0;
+  const renderedRows = listings.length;
+  console.log("ListingsPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-listings", page, limit, q, status, category, effectiveCountry],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
 
   const suspendMut = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>

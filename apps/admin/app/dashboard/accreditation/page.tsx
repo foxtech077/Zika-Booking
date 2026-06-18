@@ -126,7 +126,7 @@ export default function AccreditationPage() {
     }).filter(([, v]) => v !== "")
   );
   const { data, isLoading } = useQuery({
-    queryKey: ["accreditation-queue", page, effectiveCountry],
+    queryKey: ["accreditation-queue", page, limit, effectiveCountry],
     queryFn: () => fetchQueue(params),
     // Wait for auth store to rehydrate so userCountryScope/effectiveCountry are correct
     enabled: !!token && _hasHydrated,
@@ -163,6 +163,21 @@ export default function AccreditationPage() {
       })
     : rawTasks;
   const total: number = data?.total ?? tasks.length;
+
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/listings/review-queue?${new URLSearchParams(params)}`;
+  const responseCount = data?.tasks?.length ?? 0;
+  const renderedRows = tasks.length;
+  console.log("AccreditationPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["accreditation-queue", page, limit, effectiveCountry],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ["listing-review-detail", selectedTask?.listing?.id],

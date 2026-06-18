@@ -30,6 +30,21 @@ export default function ChannelPage() {
   const feeds: (IcalFeed & { listingName?: string; listingCategory?: string; listingCountry?: string })[] = data?.feeds ?? [];
   const total: number = data?.total ?? 0;
 
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/ical-feeds?${new URLSearchParams(params)}`;
+  const responseCount = data?.feeds?.length ?? 0;
+  const renderedRows = feeds.length;
+  console.log("ChannelPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-ical-feeds", params],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const syncMut = useMutation({
     mutationFn: (id: string) => listingApi.post(`/admin/ical-feeds/${id}/sync`),
     onSuccess: (_, id) => {

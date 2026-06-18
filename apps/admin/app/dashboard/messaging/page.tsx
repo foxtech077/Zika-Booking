@@ -34,6 +34,21 @@ export default function MessagingPage() {
   const conversations: Conversation[] = data?.conversations ?? [];
   const total: number = data?.total ?? 0;
 
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/conversations?${new URLSearchParams(params)}`;
+  const responseCount = data?.conversations?.length ?? 0;
+  const renderedRows = conversations.length;
+  console.log("MessagingPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-conversations", params],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const { data: threadData, isLoading: loadingThread } = useQuery({
     queryKey: ["admin-conversation-messages", selected?.id],
     queryFn: () => fetchMessages(selected!.id),

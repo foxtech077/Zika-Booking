@@ -48,6 +48,21 @@ export default function ReviewsPage() {
   const reviews: ListingReview[] = data?.reviews ?? [];
   const total: number = data?.total ?? 0;
 
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/reviews?${new URLSearchParams(params)}`;
+  const responseCount = data?.reviews?.length ?? 0;
+  const renderedRows = reviews.length;
+  console.log("ReviewsPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-reviews", params],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const hideMut = useMutation({
     mutationFn: ({ id, hide, reason }: { id: string; hide: boolean; reason?: string }) =>
       listingApi.patch(`/reviews/${id}/hide`, { hide, reason }),

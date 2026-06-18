@@ -38,12 +38,13 @@ function buildRevenueChart(bookings: Booking[]) {
 
 export default function FinancePage() {
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [status, setStatus] = useState("confirmed");
   const [currency, setCurrency] = useState("");
 
-  const params = { status, page: String(page), limit: "20" };
+  const params = { status, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-finance-bookings", params],
+    queryKey: ["admin-finance-bookings", page, limit, status],
     queryFn: () => fetchBookings(params),
   });
 
@@ -54,6 +55,22 @@ export default function FinancePage() {
 
   const bookings: Booking[] = data?.bookings ?? [];
   const total: number = data?.total ?? 0;
+
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/bookings?${new URLSearchParams(params)}`;
+  const responseCount = data?.bookings?.length ?? 0;
+  const renderedRows = bookings.length;
+  console.log("FinancePage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-finance-bookings", page, limit, status],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const allBookings: Booking[] = allBookingsQuery.data?.bookings ?? [];
   const confirmed = allBookings.filter((b) => ["confirmed", "completed"].includes(b.status));
 
@@ -225,6 +242,8 @@ export default function FinancePage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
           actions={
             <Button
               variant="secondary"
@@ -242,7 +261,7 @@ export default function FinancePage() {
           loading={isLoading}
           emptyTitle="No transactions found"
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
     </div>
   );

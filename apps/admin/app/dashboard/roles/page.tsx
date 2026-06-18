@@ -124,6 +124,21 @@ export default function RolesPage() {
   const operators: Operator[] = data?.operators ?? [];
   const total: number = data?.total ?? 0;
 
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/operators?${new URLSearchParams(params)}`;
+  const responseCount = data?.operators?.length ?? 0;
+  const renderedRows = operators.length;
+  console.log("RolesPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-operators", params],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const createMut = useMutation({
     mutationFn: (body: any) => createOperator(body),
     onSuccess: () => {

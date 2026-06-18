@@ -81,6 +81,21 @@ export default function AuditPage() {
   const logs: AuditLog[] = data?.logs ?? [];
   const total: number = data?.total ?? 0;
 
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/audit-logs?${new URLSearchParams(params)}`;
+  const responseCount = data?.logs?.length ?? 0;
+  const renderedRows = logs.length;
+  console.log("AuditPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-audit", params],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const columns: Column<AuditLog>[] = [
     {
       key: "action",

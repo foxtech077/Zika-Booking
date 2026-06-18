@@ -60,6 +60,21 @@ export default function UsersPage() {
     : scopedUsers;
   const total: number = scopedCountries.length > 0 ? scopedUsers.length : (data?.total ?? 0);
 
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/users?${new URLSearchParams(params)}`;
+  const responseCount = data?.users?.length ?? 0;
+  const renderedRows = users.length;
+  console.log("UsersPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-users", page, limit, q, status, userType, scopedCountries.join(",")],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const mutate = useMutation({
     mutationFn: ({ action, id }: { action: string; id: string }) => {
       const needsReason = action === "ban" || action === "suspend";
