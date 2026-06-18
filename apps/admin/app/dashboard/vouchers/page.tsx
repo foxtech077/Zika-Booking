@@ -195,6 +195,7 @@ export default function VouchersPage() {
               value: isActive,
               onChange: (v) => { setIsActive(v); setPage(1); },
               options: [
+                { value: "", label: "All" },
                 { value: "true", label: "Active" },
                 { value: "false", label: "Inactive" },
               ],

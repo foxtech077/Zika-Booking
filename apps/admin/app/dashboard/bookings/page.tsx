@@ -211,7 +211,7 @@ export default function BookingsPage() {
               <XCircle className="h-3.5 w-3.5" />
             </button>
           )}
-          {b.status === "draft" && (
+          {["pending_payment", "draft"].includes(b.status) && (
             <button
               onClick={() => resendLinkMut.mutate(b.id)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"

@@ -172,6 +172,7 @@ export interface ListingDocument {
 // ── Bookings ──────────────────────────────────────────────────────────────────
 
 export type BookingStatus =
+  | "draft"
   | "pending_payment"
   | "confirmed"
   | "completed"

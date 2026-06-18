@@ -61,6 +61,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ReportsPage() {
+  const canViewFinancials = true;
   const { data: bookingsData, isLoading } = useQuery({
     queryKey: ["reports-bookings"],
     queryFn: fetchAllBookings,

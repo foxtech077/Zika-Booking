@@ -3,7 +3,7 @@
 import { useState, useEffect, useId, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft, User, Building2, CalendarDays, Phone, Mail,
   Globe, FileText, AlertCircle, CheckCircle2, Search,
@@ -397,6 +397,18 @@ export default function ManualBookingPage() {
     setCalSelectStep("checkIn");
   }, [listingType]);
 
+  // Fetch listings for dropdown
+  const { data: listingsData, isLoading: listingsLoading } = useQuery({
+    queryKey: ['listings'],
+    queryFn: async () => {
+      const res = await listingApi.get('/admin/listings');
+      return res.data?.data ?? res.data;
+    },
+  });
+
+  const listings = Array.isArray(listingsData) ? listingsData : (Array.isArray(listingsData?.listings) ? listingsData.listings : []);
+  const listingOptions = [{ value: "", label: "Select a listing" }, ...listings.map((l: any) => ({ value: l.id, label: l.title ?? l.name ?? l.id }))];
+
   // ── Derived: nights / days ────────────────────────────────────────────────────
   const nights = (() => {
     if (!isAccommodation) {
@@ -595,23 +607,32 @@ export default function ManualBookingPage() {
 
   // ── Send Payment Link ─────────────────────────────────────────────────────────
   const sendLinkMut = useMutation({
-    mutationFn: () =>
-      listingApi.post("/admin/bookings/draft", {
-        listingId, listingType, listingName,
-        guestFirstName: firstName, guestLastName: lastName,
-        guestEmail: email, guestPhone: phone, nationality,
-        country, guests,
-        checkIn: isAccommodation ? (checkIn ? new Date(checkIn).toISOString() : undefined) : (pickup ? new Date(pickup).toISOString() : undefined),
-        checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : undefined) : (returnDt ? new Date(returnDt).toISOString() : undefined),
-        ...(isAccommodation ? { rooms, units } : {}),
-        nightsOrDays: nights,
-        nightlyRate: price?.baseAmount ?? 0,
-        guestId: "",
-        paymentMethod,
-        notes,
-        agentId: user?.id,
-        agentName: user?.name,
-      }).then((r) => r.data),
+    mutationFn: async () => {
+        // Create draft booking first
+        const draft = await listingApi.post("/admin/bookings/draft", {
+          listingId, listingType, listingName,
+          guestFirstName: firstName, guestLastName: lastName,
+          guestEmail: email, guestPhone: phone, nationality,
+          country, guests,
+          checkIn: isAccommodation ? (checkIn ? new Date(checkIn).toISOString() : undefined) : (pickup ? new Date(pickup).toISOString() : undefined),
+          checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : undefined) : (returnDt ? new Date(returnDt).toISOString() : undefined),
+          ...(isAccommodation ? { rooms, units } : {}),
+          nightsOrDays: nights,
+          nightlyRate: price?.baseAmount ?? 0,
+          guestId: "",
+          notes,
+          agentId: user?.id,
+          agentName: user?.name,
+        }).then(r => r.data);
+        const bookingId = draft?.bookingId ?? draft?.id;
+        if (!bookingId) {
+          throw new Error("Failed to obtain booking ID from draft creation");
+        }
+        // Trigger payment link based on selected method
+        const endpoint = `/payments/${paymentMethod}/payment-link`;
+        await listingApi.post(endpoint, { bookingId }).then(r => r.data);
+        return;
+      },
     onSuccess: () => { setSubmitted(true); setLinkSent(true); },
     onError: (err: any) => {
       const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
@@ -683,7 +704,7 @@ export default function ManualBookingPage() {
         </div>
       </div>
     );
-  };
+  }
 
   // ── Form ──────────────────────────────────────────────────────────────────────
   return (
@@ -821,17 +842,22 @@ export default function ManualBookingPage() {
                 />
               </div>
 
-              <Input
-                id={`${uid}-listingName`}
-                label="Listing Name"
-                required
-                placeholder="e.g. Hilton Malta, Apartments at Valletta…"
-                value={listingName}
-                onChange={(e) => setListingName(e.target.value)}
-                error={errors.listingName}
-                leftIcon={<Building2 className="h-4 w-4" />}
-                hint="Enter the listing name or paste the Listing ID below."
-              />
+
+<Select
+    id={`${uid}-listing`}
+    label="Listing"
+    placeholder="Select a listing"
+    value={listingId}
+    onChange={(e) => {
+      const selected = listingOptions.find(opt => opt.value === e.target.value);
+      setListingId(e.target.value);
+      setListingName(selected?.label ?? "");
+      setAvailability(null);
+    }}
+    error={errors.listingName}
+    hint="Select the listing name from the dropdown."
+    options={listingOptions}
+  />
 
               <Input
                 id={`${uid}-listingId`}
