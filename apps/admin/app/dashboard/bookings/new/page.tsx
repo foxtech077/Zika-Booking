@@ -2,13 +2,32 @@
 
 import { useState, useEffect, useId, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
-  ArrowLeft, User, Building2, CalendarDays, Phone, Mail,
-  Globe, FileText, AlertCircle, CheckCircle2, Search,
-  CreditCard, Hash, UserCircle, MapPin, Loader2,
-  Send, Save, X, ChevronRight, Calculator,
+  CalendarDays,
+  XCircle,
+  Plus,
+  Send,
+  ArrowLeft,
+  AlertCircle,
+  CheckCircle2,
+  Search,
+  Save,
+  X,
+  CreditCard,
+  FileText,
+  Hash,
+  User, Building2,
+  UserCircle,
+  Mail,
+  Phone,
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  Info,
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { canAccess } from "@/permissions/rbac";
@@ -25,14 +44,15 @@ import { ListingSearchDropdown } from "../../../../components/ui/ListingSearchDr
 import type { SelectedListing } from "../../../../components/ui/ListingSearchDropdown";
 import { formatCurrency } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
-import Link from "next/link";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ListingType = "hotel" | "apartment" | "car";
 type CountryOption = { value: string; label: string };
+type DayStatus = "past" | "available" | "locked" | "booked";
 type AvailStatus = "idle" | "checking" | "available" | "unavailable";
 type PaymentMethod = "stripe" | "tara";
+
 interface PriceSummary {
   baseAmount: number;
   discount: number;
@@ -63,10 +83,7 @@ function isBetween(dateStr: string, start: string, end: string) {
   return dateStr >= start && dateStr <= end;
 }
 
-function getDayStatus(
-  dateStr: string,
-  availability: AvailabilityData | null,
-): DayStatus {
+function getDayStatus(dateStr: string, availability: AvailabilityData | null): DayStatus {
   const today = toYMD(new Date());
   if (dateStr < today) return "past";
   if (!availability) return "available";
@@ -80,7 +97,10 @@ function getDayStatus(
 }
 
 function SectionCard({
-  step, title, icon: Icon, children,
+  step,
+  title,
+  icon: Icon,
+  children,
 }: {
   step: number;
   title: string;
@@ -139,26 +159,30 @@ function AvailabilityCalendar({
   }, [checkIn]);
 
   const prevMonth = () => {
-    if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
-    else setViewMonth((m) => m - 1);
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else setViewMonth((m) => m - 1);
   };
   const nextMonth = () => {
-    if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); }
-    else setViewMonth((m) => m + 1);
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else setViewMonth((m) => m + 1);
   };
 
-  // Build calendar grid
   const firstDay = new Date(viewYear, viewMonth, 1);
   const lastDay = new Date(viewYear, viewMonth + 1, 0);
   const startPad = firstDay.getDay(); // 0=Sun
   const totalCells = startPad + lastDay.getDate();
-  const rows = Math.ceil(totalCells / 7);
-
-  const monthLabel = firstDay.toLocaleString("default", { month: "long", year: "numeric" });
 
   const cells: (Date | null)[] = [];
   for (let i = 0; i < startPad; i++) cells.push(null);
   for (let d = 1; d <= lastDay.getDate(); d++) cells.push(new Date(viewYear, viewMonth, d));
+
+  const monthLabel = firstDay.toLocaleString("default", { month: "long", year: "numeric" });
+
+  const todayStr = toYMD(new Date());
 
   function getCellStyle(dateStr: string): string {
     const status = getDayStatus(dateStr, availability);
@@ -169,7 +193,6 @@ function AvailabilityCalendar({
     if (status === "past") return "text-slate-300 cursor-not-allowed text-xs";
 
     let base = "relative flex items-center justify-center h-8 text-xs font-medium rounded-lg transition-all cursor-pointer select-none ";
-
     if (isCheckIn || isCheckOut) {
       base += "bg-primary text-white font-bold ring-2 ring-primary/40 z-10 ";
     } else if (inRange) {
@@ -184,7 +207,6 @@ function AvailabilityCalendar({
     return base;
   }
 
-  // Round the range ends for the visual range bar
   function getRangeClass(dateStr: string): string {
     if (!checkIn || !checkOut) return "";
     if (dateStr === checkIn) return "rounded-r-none ";
@@ -200,17 +222,13 @@ function AvailabilityCalendar({
     onSelectDate(ds);
   }
 
-  const today0 = toYMD(new Date());
-
   return (
     <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden flex flex-col">
-      {/* Header */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60">
         <CalendarDays className="h-4 w-4 text-primary" />
         <h2 className="text-sm font-semibold text-slate-900 flex-1">Availability Calendar</h2>
         {loading && <Loader2 className="h-4 w-4 text-primary animate-spin" />}
       </div>
-
       <div className="p-4 flex-1">
         {/* Month navigation */}
         <div className="flex items-center justify-between mb-4">
@@ -228,7 +246,6 @@ function AvailabilityCalendar({
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-
         {/* Day headers */}
         <div className="grid grid-cols-7 mb-1">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
@@ -237,7 +254,6 @@ function AvailabilityCalendar({
             </div>
           ))}
         </div>
-
         {/* Days grid */}
         <div className="grid grid-cols-7 gap-y-1">
           {cells.map((date, idx) => {
@@ -249,20 +265,21 @@ function AvailabilityCalendar({
               <div
                 key={ds}
                 title={
-                  status === "booked" ? "Fully booked"
-                    : status === "locked" ? "Reserved / Locked"
-                      : status === "past" ? "Past date"
-                        : "Available"
+                  status === "booked"
+                    ? "Fully booked"
+                    : status === "locked"
+                    ? "Reserved / Locked"
+                    : status === "past"
+                    ? "Past date"
+                    : "Available"
                 }
                 onClick={() => !isDisabled && handleClick(date)}
                 className={getCellStyle(ds) + getRangeClass(ds)}
               >
-                {/* Today ring */}
-                {ds === today0 && (
+                {ds === todayStr && (
                   <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />
                 )}
                 {date.getDate()}
-                {/* Locked indicator dot */}
                 {status === "locked" && (
                   <span className="absolute top-0.5 right-0.5 h-1 w-1 rounded-full bg-amber-500" />
                 )}
@@ -270,7 +287,6 @@ function AvailabilityCalendar({
             );
           })}
         </div>
-
         {/* Selected range summary */}
         {checkIn && checkOut && (
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
@@ -282,7 +298,6 @@ function AvailabilityCalendar({
             </div>
           </div>
         )}
-
         {/* Legend */}
         <div className="mt-4 border-t border-border pt-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Legend</p>
@@ -310,8 +325,7 @@ function AvailabilityCalendar({
             </div>
           </div>
         </div>
-
-        {/* Prompt when no listing */}
+        {/* Prompt when no availability */}
         {!availability && !loading && (
           <div className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 border border-border px-3 py-2.5">
             <Info className="h-3.5 w-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
@@ -333,7 +347,7 @@ export default function ManualBookingPage() {
   const role = user?.role as AdminRole | undefined;
   const uid = useId();
 
-  // ── Access guard ─────────────────────────────────────────────────────────────
+  // Access guard
   const hasAccess = canAccess(role, "manage_manual_booking");
   if (!hasAccess) {
     return (
@@ -360,37 +374,34 @@ export default function ManualBookingPage() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [nationality, setNationality] = useState("");
+  const [notes, setNotes] = useState("");
 
-// Register locale for i18n-iso-countries
-countries.registerLocale(enLocale);
+  // Register locale for i18n-iso-countries
+  countries.registerLocale(enLocale);
 
-const countryOptions: CountryOption[] = Object.entries(countries.getNames("en", { select: "official" })).map(([code, name]) => ({
-  value: code,
-  label: `${name} (${code})`,
-}));
+  const countryOptions: CountryOption[] = Object.entries(countries.getNames("en", { select: "official" })).map(([code, name]) => ({
+    value: code,
+    label: `${name} (${code})`,
+  }));
 
-
-const formatOptionLabel = ({ value, label }: CountryOption) => (
-  <div className="flex items-center gap-2">
-    <ReactCountryFlag countryCode={value} svg style={{ width: "1.2em", height: "1.2em" }} />
-    <span>{label}</span>
-  </div>
-);
-
-
-  const [notes, setNotes]             = useState("");
+  const formatOptionLabel = ({ value, label }: CountryOption) => (
+    <div className="flex items-center gap-2">
+      <ReactCountryFlag countryCode={value} svg style={{ width: "1.2em", height: "1.2em" }} />
+      <span>{label}</span>
+    </div>
+  );
 
   // ── Section 2: Booking Info ───────────────────────────────────────────────────
-  const [listingType, setListingType]   = useState<ListingType>("hotel");
+  const [listingType, setListingType] = useState<ListingType>("hotel");
   const [selectedListing, setSelectedListing] = useState<SelectedListing | null>(null);
-  const [country, setCountry]           = useState("");
-  const [checkIn, setCheckIn]           = useState("");
-  const [checkOut, setCheckOut]         = useState("");
-  const [pickup, setPickup]             = useState("");
-  const [returnDt, setReturnDt]         = useState("");
-  const [guests, setGuests]             = useState(1);
-  const [rooms, setRooms]               = useState(1);
-  const [units, setUnits]               = useState(1);
+  const [country, setCountry] = useState("");
+  const [checkIn, setCheckIn] = useState("");
+  const [checkOut, setCheckOut] = useState("");
+  const [pickup, setPickup] = useState("");
+  const [returnDt, setReturnDt] = useState("");
+  const [guests, setGuests] = useState(1);
+  const [rooms, setRooms] = useState(1);
+  const [units, setUnits] = useState(1);
 
   // ── Section 3: Availability ───────────────────────────────────────────────────
   const [availStatus, setAvailStatus] = useState<AvailStatus>("idle");
@@ -415,19 +426,24 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
   const isAccommodation = listingType !== "car";
   const bookingRef = submitted ? `MBK-${Date.now().toString(36).toUpperCase()}` : "";
 
-  // Reset conditional date fields when listing type changes
+  // Reset fields when listing type changes
   useEffect(() => {
     setSelectedListing(null);
-    setCheckIn(""); setCheckOut(""); setPickup(""); setReturnDt("");
-    setAvailStatus("idle"); setPrice(null); setAvailability(null);
+    setCheckIn("");
+    setCheckOut("");
+    setPickup("");
+    setReturnDt("");
+    setAvailStatus("idle");
+    setPrice(null);
+    setAvailability(null);
     setCalSelectStep("checkIn");
   }, [listingType]);
 
   // Fetch listings for dropdown
   const { data: listingsData, isLoading: listingsLoading } = useQuery({
-    queryKey: ['listings'],
+    queryKey: ["listings"],
     queryFn: async () => {
-      const res = await listingApi.get('/admin/listings');
+      const res = await listingApi.get("/admin/listings");
       return res.data?.data ?? res.data;
     },
   });
@@ -435,7 +451,7 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
   const listings = Array.isArray(listingsData) ? listingsData : (Array.isArray(listingsData?.listings) ? listingsData.listings : []);
   const listingOptions = [{ value: "", label: "Select a listing" }, ...listings.map((l: any) => ({ value: l.id, label: l.title ?? l.name ?? l.id }))];
 
-  // ── Derived: nights / days ────────────────────────────────────────────────────
+  // ── Derived values ────────────────────────────────────────────────────
   const nights = (() => {
     if (!isAccommodation) {
       if (!pickup || !returnDt) return 0;
@@ -447,7 +463,6 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
     return Math.max(0, Math.ceil(diff / 86400000));
   })();
 
-  // ── Derived: detailed pricing factors ─────────────────────────────────────────
   const pricePerNight = price && nights > 0 ? price.baseAmount / nights : null;
   const pricePerGuest = price && guests > 0 ? price.total / guests : null;
   const serviceFeeRate = price && price.baseAmount > 0 ? (price.serviceFee / price.baseAmount) * 100 : null;
@@ -469,16 +484,15 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
     return rate % 1 === 0 ? `${rate}%` : `${rate.toFixed(2)}%`;
   };
 
-  // ── Validate ─────────────────────────────────────────────────────────────────
+  // ── Validation ─────────────────────────────────────────────────────
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (!firstName.trim()) e.firstName = "Required";
     if (!lastName.trim()) e.lastName = "Required";
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) e.email = "Valid email required";
-    if (!phone.trim())     e.phone     = "Required";
+    if (!phone.trim()) e.phone = "Required";
     if (!selectedListing) e.listingName = "Please select a listing";
-    if (!country.trim())     e.country    = "Required";
-
+    if (!country.trim()) e.country = "Required";
     if (isAccommodation) {
       if (!checkIn) e.checkIn = "Required";
       if (!checkOut) e.checkOut = "Required";
@@ -492,7 +506,7 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
     return Object.keys(e).length === 0;
   }
 
-  // ── Check Availability ────────────────────────────────────────────────────────
+  // ── Check Availability ─────────────────────────────────────────────
   async function checkAvailability() {
     if (!selectedListing) {
       setErrors((p) => ({ ...p, listingName: "Select a listing first" }));
@@ -508,9 +522,6 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
     }
     setAvailStatus("checking");
     setPrice(null);
-
-    // Also refresh calendar availability if we have a listingId
-    if (listingId.trim()) fetchCalendarAvailability(listingId);
 
     try {
       const params: Record<string, string> = {
@@ -532,9 +543,7 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
           total: d.pricing.total ?? 0,
           currency: d.pricing.currency ?? "USD",
         });
-        // ID is already populated from the dropdown selection
       }
-      // Update calendar availability from response if present
       if (d.bookedRanges || d.lockedRanges) {
         setAvailability({
           bookedRanges: d.bookedRanges ?? [],
@@ -542,7 +551,7 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
         });
       }
     } catch {
-      // Endpoint not yet live — show mock available + estimated price
+      // Mock fallback
       setAvailStatus("available");
       const base = nights * 120;
       setPrice({
@@ -553,12 +562,13 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
         total: Math.round(base * 1.15),
         currency: "USD",
       });
-      // If calendar has no data yet, ensure demo dates are visible
       if (!availability) {
         const today = new Date();
         const rel = (startOffset: number, endOffset: number) => {
-          const s = new Date(today); s.setDate(s.getDate() + startOffset);
-          const e = new Date(today); e.setDate(e.getDate() + endOffset);
+          const s = new Date(today);
+          s.setDate(s.getDate() + startOffset);
+          const e = new Date(today);
+          e.setDate(e.getDate() + endOffset);
           return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) };
         };
         setAvailability({
@@ -569,8 +579,7 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
     }
   }
 
-  // ── Send Payment Link ─────────────────────────────────────────────────────────
-  // ── Draft creation mutation ────────────────────────────────────────
+  // ── Mutations ───────────────────────────────────────────────────────
   const createDraftMut = useMutation({
     mutationFn: async () => {
       const res = await listingApi.post("/admin/bookings/draft", {
@@ -584,9 +593,7 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
         nationality,
         country,
         guests,
-        ...(isAccommodation
-          ? { checkIn, checkOut, rooms, units }
-          : { pickupDatetime: pickup, returnDatetime: returnDt }),
+        ...(isAccommodation ? { checkIn, checkOut, rooms, units } : { pickupDatetime: pickup, returnDatetime: returnDt }),
         notes,
       });
       return res.data as { bookingId: string; draftId: string };
@@ -597,7 +604,6 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
     },
   });
 
-  // ── Payment link mutation ───────────────────────────────────────────────
   const paymentLinkMut = useMutation({
     mutationFn: async (bookingId: string) => {
       const endpoint = paymentMethod === "stripe" ? "/payments/stripe/payment-link" : "/payments/tara/payment-link";
@@ -609,10 +615,6 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
       setErrors((p) => ({ ...p, _api: msg }));
     },
   });
-
-  // ── Save Draft ────────────────────────────────────────────────────────────────
-  // The previous draft save mutation is replaced by createDraftMut logic.
-  // No separate saveDraftMut is needed as draft creation is part of the send flow.
 
   async function handleSendLink() {
     if (!validate()) return;
@@ -631,7 +633,7 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
     }
   }
 
-  // ── Success state ─────────────────────────────────────────────────────────────
+  // ── Success State ─────────────────────────────────────────────────────
   if (submitted && linkSent) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-5 text-center">
@@ -648,24 +650,47 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
           <InfoRow label="Booking Reference" value={bookingRef} />
           <InfoRow label="Guest" value={`${firstName} ${lastName}`} />
           <InfoRow label="Payment Method" value={paymentMethod === "stripe" ? "Stripe" : "Tara"} />
-          <InfoRow label="Payment Link" value={<a href={paymentLink} target="_blank" rel="noopener noreferrer" className="text-primary underline">Open Link</a>} />
+          <InfoRow
+            label="Payment Link"
+            value={
+              <a href={paymentLink} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                Open Link
+              </a>
+            }
+          />
           <InfoRow label="Created By" value={user?.name ?? "—"} />
         </div>
         <div className="flex gap-3">
           <Button
             variant="secondary"
             onClick={() => {
-              setSubmitted(false); setLinkSent(false);
-              setFirstName(""); setLastName(""); setEmail(""); setPhone("");
-              setNationality(""); setNotes(""); setSelectedListing(null);
-              setCountry(""); setCheckIn(""); setCheckOut(""); setPickup(""); setReturnDt("");
-              setGuests(1); setRooms(1); setUnits(1);
-              setAvailStatus("idle"); setPrice(null); setAvailability(null);
+              setSubmitted(false);
+              setLinkSent(false);
+              setFirstName("");
+              setLastName("");
+              setEmail("");
+              setPhone("");
+              setNationality("");
+              setNotes("");
+              setSelectedListing(null);
+              setCountry("");
+              setCheckIn("");
+              setCheckOut("");
+              setPickup("");
+              setReturnDt("");
+              setGuests(1);
+              setRooms(1);
+              setUnits(1);
+              setAvailStatus("idle");
+              setPrice(null);
+              setAvailability(null);
             }}
           >
             New Booking
           </Button>
-          <Link href="/dashboard/bookings"><Button>View Bookings</Button></Link>
+          <Link href="/dashboard/bookings">
+            <Button>View Bookings</Button>
+          </Link>
         </div>
       </div>
     );
@@ -674,20 +699,17 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
   // ── Form ──────────────────────────────────────────────────────────────────────
   return (
     <div className="pb-10">
-      {/* ── Page header ── */}
+      {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <Link href="/dashboard/bookings">
           <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>
         </Link>
-        <SectionHeader
-          title="Create Manual Booking"
-          description="Complete all sections then send a payment link to the guest."
-        />
+        <SectionHeader title="Create Manual Booking" description="Complete all sections then send a payment link to the guest." />
       </div>
 
-      {/* ── API error banner ── */}
+      {/* API error banner */}
       {errors._api && (
         <div className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 mb-5">
           <AlertCircle className="h-4 w-4 text-danger flex-shrink-0 mt-0.5" />
@@ -698,118 +720,45 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════════
-          SECTION 1 – Customer Information
-      ════════════════════════════════════════════════════════════ */}
+      {/* Section 1 – Customer Information */}
       <SectionCard step={1} title="Customer Information" icon={User}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <Input
-              id={`${uid}-firstName`}
-              label="First Name"
-              required
-              placeholder="John"
-              value={firstName}
-              onChange={(e) => setFirstName(e.target.value)}
-              error={errors.firstName}
-            />
-            <Input
-              id={`${uid}-lastName`}
-              label="Last Name"
-              required
-              placeholder="Doe"
-              value={lastName}
-              onChange={(e) => setLastName(e.target.value)}
-              error={errors.lastName}
-            />
+            <Input id={`${uid}-firstName`} label="First Name" required placeholder="John" value={firstName} onChange={(e) => setFirstName(e.target.value)} error={errors.firstName} />
+            <Input id={`${uid}-lastName`} label="Last Name" required placeholder="Doe" value={lastName} onChange={(e) => setLastName(e.target.value)} error={errors.lastName} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
-              id={`${uid}-email`}
-              label="Email Address"
-              type="email"
-              required
-              placeholder="john@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={errors.email}
-              leftIcon={<Mail className="h-4 w-4" />}
-            />
-            <Input
-              id={`${uid}-phone`}
-              label="Phone Number"
-              type="tel"
-              required
-              placeholder="+254700000000"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              error={errors.phone}
-              leftIcon={<Phone className="h-4 w-4" />}
-            />
+            <Input id={`${uid}-email`} label="Email Address" type="email" required placeholder="john@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} leftIcon={<Mail className="h-4 w-4" />} />
+            <Input id={`${uid}-phone`} label="Phone Number" type="tel" required placeholder="+254700000000" value={phone} onChange={(e) => setPhone(e.target.value)} error={errors.phone} leftIcon={<Phone className="h-4 w-4" />} />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <ReactSelect
-                inputId={`${uid}-nationality`}
-                placeholder="Select nationality…"
-                options={countryOptions}
-                value={countryOptions.find((o) => o.value === nationality) || null}
-                onChange={(selected) => setNationality(selected?.value || "")}
-                formatOptionLabel={formatOptionLabel}
-                isClearable
-                styles={{
-                  control: (provided) => ({ ...provided, borderRadius: "0.5rem" }),
-                }}
-              />
+              inputId={`${uid}-nationality`}
+              placeholder="Select nationality…"
+              options={countryOptions}
+              value={countryOptions.find((o) => o.value === nationality) || null}
+              onChange={(selected) => setNationality(selected?.value || "")}
+              formatOptionLabel={formatOptionLabel}
+              isClearable
+              styles={{ control: (provided) => ({ ...provided, borderRadius: "0.5rem" }) }}
+            />
           </div>
-          <Textarea
-            id={`${uid}-notes`}
-            label="Notes / Special Requests"
-            placeholder="Any special requests or notes for this booking…"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            hint="Visible to internal staff only."
-          />
+          <Textarea id={`${uid}-notes`} label="Notes / Special Requests" placeholder="Any special requests or notes for this booking…" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} hint="Visible to internal staff only." />
         </div>
       </SectionCard>
 
-      {/* ════════════════════════════════════════════════════════════
-          SECTION 2 – Booking Information
-      ════════════════════════════════════════════════════════════ */}
+      {/* Section 2 – Booking Information */}
       <SectionCard step={2} title="Booking Information" icon={Building2}>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <UISelect
-              id={`${uid}-listingType`}
-              label="Listing Type"
-              required
-              value={listingType}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => setListingType(e.target.value as ListingType)}
-              options={[
-                { value: "hotel",     label: "Hotel" },
-                { value: "apartment", label: "Apartment" },
-                { value: "car",       label: "Car Rental" },
-              ]}
-            />
-            <UISelect
-              id={`${uid}-country`}
-              label="Country"
-              required
-              value={country}
-              onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-                setCountry(e.target.value);
-                setSelectedListing(null);
-                setAvailStatus("idle");
-                setPrice(null);
-              }}
-              options={[
-                { value: "", label: "Select country…" },
-                ...["MT","US","GB","DE","FR","ES","IT","AE","AU","CA","JP","SG","NL","BE","SE","IN","KE","NG","ZA","GH"].map((c) => ({ value: c, label: c })),
-              ]}
-              error={errors.country}
-            />
+            <UISelect id={`${uid}-listingType`} label="Listing Type" required value={listingType} onChange={(e: ChangeEvent<HTMLSelectElement>) => setListingType(e.target.value as ListingType)} options={[{ value: "hotel", label: "Hotel" }, { value: "apartment", label: "Apartment" }, { value: "car", label: "Car Rental" }]} />
+            <UISelect id={`${uid}-country`} label="Country" required value={country} onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+              setCountry(e.target.value);
+              setSelectedListing(null);
+              setAvailStatus("idle");
+              setPrice(null);
+            }} options={[{ value: "", label: "Select country…" }, ...["MT","US","GB","DE","FR","ES","IT","AE","AU","CA","JP","SG","NL","BE","SE","IN","KE","NG","ZA","GH"].map((c) => ({ value: c, label: c }))]} error={errors.country} />
           </div>
-
           <ListingSearchDropdown
             country={country}
             listingType={listingType}
@@ -821,644 +770,43 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
             }}
             error={errors.listingName}
           />
-
-          {/* Dates — accommodation vs car */}
+          {/* Dates */}
           {isAccommodation ? (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  id={`${uid}-firstName`}
-                  label="First Name"
-                  required
-                  placeholder="John"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  error={errors.firstName}
-                />
-                <Input
-                  id={`${uid}-lastName`}
-                  label="Last Name"
-                  required
-                  placeholder="Doe"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  error={errors.lastName}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  id={`${uid}-email`}
-                  label="Email Address"
-                  type="email"
-                  required
-                  placeholder="john@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  error={errors.email}
-                  leftIcon={<Mail className="h-4 w-4" />}
-                />
-                <Input
-                  id={`${uid}-phone`}
-                  label="Phone Number"
-                  type="tel"
-                  required
-                  placeholder="+254700000000"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  error={errors.phone}
-                  leftIcon={<Phone className="h-4 w-4" />}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  id={`${uid}-nationality`}
-                  label="Nationality"
-                  placeholder="e.g. British"
-                  value={nationality}
-                  onChange={(e) => setNationality(e.target.value)}
-                  leftIcon={<Globe className="h-4 w-4" />}
-                />
-              </div>
-              <Textarea
-                id={`${uid}-notes`}
-                label="Notes / Special Requests"
-                placeholder="Any special requests or notes for this booking…"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                hint="Visible to internal staff only."
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <Input id={`${uid}-checkIn`} label="Check‑In" type="date" required value={checkIn} onChange={(e) => setCheckIn(e.target.value)} error={errors.checkIn} />
+              <Input id={`${uid}-checkOut`} label="Check‑Out" type="date" required value={checkOut} onChange={(e) => setCheckOut(e.target.value)} error={errors.checkOut} />
             </div>
-          </SectionCard>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <Input id={`${uid}-pickup`} label="Pickup" type="date" required value={pickup} onChange={(e) => setPickup(e.target.value)} error={errors.pickup} />
+              <Input id={`${uid}-return`} label="Return" type="date" required value={returnDt} onChange={(e) => setReturnDt(e.target.value)} error={errors.returnDt} />
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-4">
+            <UISelect id={`${uid}-guests`} label="Guests" required value={String(guests)} onChange={(e) => setGuests(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
+            {listingType === "hotel" && (
+              <UISelect id={`${uid}-rooms`} label="Rooms" required value={String(rooms)} onChange={(e) => setRooms(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
+            )}
+            {listingType === "apartment" && (
+              <UISelect id={`${uid}-units`} label="Units" required value={String(units)} onChange={(e) => setUnits(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
+            )}
+          </div>
+        </div>
+      </SectionCard>
 
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 2 – Booking Information
-          ════════════════════════════════════════════════════════════ */}
-          <SectionCard step={2} title="Booking Information" icon={Building2}>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Select
-                  id={`${uid}-listingType`}
-                  label="Listing Type"
-                  required
-                  value={listingType}
-                  onChange={(e) => setListingType(e.target.value as ListingType)}
-                  options={[
-                    { value: "hotel", label: "Hotel" },
-                    { value: "apartment", label: "Apartment" },
-                    { value: "car", label: "Car Rental" },
-                  ]}
-                />
-                <Select
-                  id={`${uid}-country`}
-                  label="Country"
-                  required
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  options={[
-                    { value: "", label: "Select country…" },
-                    ...["MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN", "KE", "NG", "ZA", "GH"].map((c) => ({ value: c, label: c })),
-                  ]}
-                  error={errors.country}
-                />
-              </div>
-
-
-<Select
-    id={`${uid}-listing`}
-    label="Listing"
-    placeholder="Select a listing"
-    value={listingId}
-    onChange={(e) => {
-      const selected = listingOptions.find(opt => opt.value === e.target.value);
-      setListingId(e.target.value);
-      setListingName(selected?.label ?? "");
-      setAvailability(null);
-    }}
-    error={errors.listingName}
-    hint="Select the listing name from the dropdown."
-    options={listingOptions}
-  />
-
-      {/* ════════════════════════════════════════════════════════════
-          SECTION 4 – Price Summary (read-only)
-      ════════════════════════════════════════════════════════════ */}
+      {/* Price Summary */}
       {price && (
         <SectionCard step={4} title="Price Summary" icon={FileText}>
-          <div className="space-y-6">
-            
-            {/* 1. Booking Details Summary */}
-            <div className="bg-slate-50/50 rounded-xl p-4 border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="flex items-start gap-2.5">
-                  <Building2 className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Listing Details</p>
-                    <p className="text-sm font-semibold text-slate-800 mt-0.5">
-                      {selectedListing?.name}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/10 text-primary capitalize">
-                        {listingType}
-                      </span>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 uppercase">
-                        <MapPin className="h-3 w-3 mr-1 text-slate-400" />
-                        {country}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-start gap-2.5">
-                  <CalendarDays className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Booking Period & Capacity</p>
-                    <p className="text-sm font-semibold text-slate-800 mt-0.5">
-                      {isAccommodation 
-                        ? `${formatDateLabel(checkIn)} – ${formatDateLabel(checkOut)}` 
-                        : `${formatDateLabel(pickup)} – ${formatDateLabel(returnDt)}`}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {nights} {isAccommodation ? (nights === 1 ? "night" : "nights") : (nights === 1 ? "day" : "days")}
-                      {" · "}{guests} {guests === 1 ? "guest" : "guests"}
-                      {listingType === "hotel" && ` · ${rooms} ${rooms === 1 ? "room" : "rooms"}`}
-                      {listingType === "apartment" && ` · ${units} ${units === 1 ? "unit" : "units"}`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 2 & 3. Per-Day and Per-Person pricing formulas */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Per-Day Breakdown */}
-              <div className="bg-slate-50/30 rounded-xl p-4 border border-slate-100 flex flex-col justify-between">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Per-Day Pricing</span>
-                  <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
-                    Daily Rate
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-base font-bold text-slate-800">
-                    {pricePerNight !== null 
-                      ? `${formatCurrency(pricePerNight, price.currency, { currencyDisplay: "code" })} / ${isAccommodation ? "night" : "day"}`
-                      : "—"}
-                  </p>
-                  <p className="text-xs text-slate-500 font-mono mt-0.5">
-                    {pricePerNight !== null 
-                      ? `${formatCurrency(pricePerNight, price.currency, { currencyDisplay: "code" })} × ${nights} ${nights === 1 ? (isAccommodation ? "night" : "day") : (isAccommodation ? "nights" : "days")} = ${formatCurrency(price.baseAmount, price.currency, { currencyDisplay: "code" })}`
-                      : "—"}
-                  </p>
-                </div>
-              </div>
-
-              {/* Per-Guest Breakdown */}
-              <div className="bg-slate-50/30 rounded-xl p-4 border border-slate-100 flex flex-col justify-between">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Per-Person Cost</span>
-                  <span className="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-semibold text-purple-700">
-                    Per Guest
-                  </span>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-base font-bold text-slate-800">
-                    {pricePerGuest !== null 
-                      ? `${formatCurrency(pricePerGuest, price.currency, { currencyDisplay: "code" })} / guest`
-                      : "—"}
-                  </p>
-                  <p className="text-xs text-slate-500 font-mono mt-0.5">
-                    {pricePerGuest !== null 
-                      ? `${formatCurrency(price.total, price.currency, { currencyDisplay: "code" })} total ÷ ${guests} ${guests === 1 ? "guest" : "guests"} = ${formatCurrency(pricePerGuest, price.currency, { currencyDisplay: "code" })} / guest`
-                      : "—"}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* 4. Fee breakdown (accommodation, service fee, tax, discount) */}
-            <div className="rounded-xl border border-slate-200/80 overflow-hidden bg-white">
-              <div className="px-4 py-3 bg-slate-50/50 border-b border-slate-100">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fee Breakdown</h3>
-              </div>
-              <div className="divide-y divide-slate-100">
-                <div className="flex justify-between items-center px-4 py-3">
-                  <span className="text-sm text-slate-500">Accommodation Subtotal</span>
-                  <span className="text-sm font-semibold text-slate-800">
-                    {formatCurrency(price.baseAmount, price.currency, { currencyDisplay: "code" })}
-                  </span>
-                </div>
-                
-                {price.discount > 0 && (
-                  <div className="flex justify-between items-center px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-slate-500">Discount</span>
-                      <span className="inline-flex items-center gap-1 rounded bg-green-50 px-1.5 py-0.5 text-xs font-semibold text-green-700">
-                        Promo
-                      </span>
-                    </div>
-                    <span className="text-sm font-bold text-green-600">
-                      −{formatCurrency(price.discount, price.currency, { currencyDisplay: "code" })}
-                    </span>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-500">Service Fee</span>
-                    <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">
-                      Rate: {formatRate(serviceFeeRate)}
-                    </span>
-                  </div>
-                  <span className="text-sm font-semibold text-slate-800">
-                    {formatCurrency(price.serviceFee, price.currency, { currencyDisplay: "code" })}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-500">Tax</span>
-                    <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-600">
-                      Rate: {formatRate(taxRate)}
-                    </span>
-                  </div>
-                  <span className="text-sm font-semibold text-slate-800">
-                    {formatCurrency(price.tax, price.currency, { currencyDisplay: "code" })}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center px-4 py-3.5 bg-primary/5">
-                  <span className="text-sm font-bold text-slate-800">Total Amount</span>
-                  <span className="text-lg font-extrabold text-primary">
-                    {formatCurrency(price.total, price.currency, { currencyDisplay: "code" })} total
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 5. Calculation summary card with highlighted formulas */}
-            <div className="bg-primary/[0.02] border border-primary/10 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                  <Calculator className="h-4 w-4" />
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold text-slate-700">Price Formula Breakdown</h4>
-                  <p className="text-[11px] text-slate-400">How your total booking fee is computed</p>
-                </div>
-              </div>
-              <div className="bg-white px-3 py-2 border border-slate-100 rounded-lg shadow-sm">
-                <span className="text-xs font-semibold font-mono text-slate-600">
-                  {formatCurrency(price.baseAmount, price.currency, { currencyDisplay: "code" })} (Base)
-                  {price.discount > 0 ? ` − ${formatCurrency(price.discount, price.currency, { currencyDisplay: "code" })} (Discount)` : ""}
-                  {` + ${formatCurrency(price.serviceFee, price.currency, { currencyDisplay: "code" })} (Fee)`}
-                  {` + ${formatCurrency(price.tax, price.currency, { currencyDisplay: "code" })} (Tax)`}
-                  {` = `}
-                  <span className="text-primary font-bold">{formatCurrency(price.total, price.currency, { currencyDisplay: "code" })}</span>
-                </span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400 flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
-              Pricing is auto-calculated based on rules set by management and cannot be modified.
-            </p>
-          </div>
+          {/* Display price details */}
+          <InfoRow label="Base Amount" value={formatCurrency(price.baseAmount, price.currency)} />
+          <InfoRow label="Discount" value={price.discount ? formatCurrency(price.discount, price.currency) : "—"} />
+          <InfoRow label="Service Fee" value={price.serviceFee ? formatCurrency(price.serviceFee, price.currency) : "—"} />
+          <InfoRow label="Tax" value={price.tax ? formatCurrency(price.tax, price.currency) : "—"} />
+          <InfoRow label="Total" value={formatCurrency(price.total, price.currency)} />
         </SectionCard>
       )}
 
-              {/* Dates — accommodation vs car */}
-              {isAccommodation ? (
-                <>
-                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 flex items-center gap-2">
-                    <CalendarDays className="h-3.5 w-3.5 text-primary flex-shrink-0" />
-                    <p className="text-xs text-primary">
-                      You can also click dates directly on the calendar →
-                      {" "}<strong>{calSelectStep === "checkIn" ? "Select Check-In" : "Select Check-Out"}</strong>
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input
-                      id={`${uid}-checkIn`}
-                      label="Check-In Date"
-                      type="date"
-                      required
-                      value={checkIn}
-                      onChange={(e) => { setCheckIn(e.target.value); setAvailStatus("idle"); setPrice(null); setCalSelectStep("checkOut"); }}
-                      error={errors.checkIn}
-                    />
-                    <Input
-                      id={`${uid}-checkOut`}
-                      label="Check-Out Date"
-                      type="date"
-                      required
-                      min={checkIn || undefined}
-                      value={checkOut}
-                      onChange={(e) => { setCheckOut(e.target.value); setAvailStatus("idle"); setPrice(null); setCalSelectStep("checkIn"); }}
-                      error={errors.checkOut}
-                    />
-                  </div>
-                  {nights > 0 && (
-                    <p className="text-xs text-slate-500">
-                      <CalendarDays className="inline h-3.5 w-3.5 mr-1 text-primary" />
-                      {nights} night{nights !== 1 ? "s" : ""}
-                    </p>
-                  )}
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-1">
-                      <label htmlFor={`${uid}-guests`} className="block text-sm font-medium text-slate-700">
-                        Guests <span className="text-danger">*</span>
-                      </label>
-                      <input
-                        id={`${uid}-guests`}
-                        type="number" min={1} max={50}
-                        value={guests}
-                        onChange={(e) => setGuests(Math.max(1, Number(e.target.value)))}
-                        className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
-                      />
-                    </div>
-                    {listingType === "hotel" && (
-                      <div className="space-y-1">
-                        <label htmlFor={`${uid}-rooms`} className="block text-sm font-medium text-slate-700">Rooms</label>
-                        <input
-                          id={`${uid}-rooms`}
-                          type="number" min={1} max={50}
-                          value={rooms}
-                          onChange={(e) => setRooms(Math.max(1, Number(e.target.value)))}
-                          className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
-                        />
-                      </div>
-                    )}
-                    {listingType === "apartment" && (
-                      <div className="space-y-1">
-                        <label htmlFor={`${uid}-units`} className="block text-sm font-medium text-slate-700">Units</label>
-                        <input
-                          id={`${uid}-units`}
-                          type="number" min={1} max={20}
-                          value={units}
-                          onChange={(e) => setUnits(Math.max(1, Number(e.target.value)))}
-                          className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
-                        />
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input
-                      id={`${uid}-pickup`}
-                      label="Pickup Date & Time"
-                      type="datetime-local"
-                      required
-                      value={pickup}
-                      onChange={(e) => { setPickup(e.target.value); setAvailStatus("idle"); setPrice(null); }}
-                      rightIcon={<X className="h-4 w-4 cursor-pointer" onClick={() => { setPickup(""); setAvailStatus("idle"); setPrice(null); }} />}
-                      error={errors.pickup}
-                    />
-                    <Input
-                      id={`${uid}-returnDt`}
-                      label="Return Date & Time"
-                      type="datetime-local"
-                      required
-                      min={pickup || undefined}
-                      value={returnDt}
-                      onChange={(e) => { setReturnDt(e.target.value); setAvailStatus("idle"); setPrice(null); }}
-                      rightIcon={<X className="h-4 w-4 cursor-pointer" onClick={() => { setReturnDt(""); setAvailStatus("idle"); setPrice(null); }} />}
-                      error={errors.returnDt}
-                    />
-                  </div>
-                  {nights > 0 && (
-                    <p className="text-xs text-slate-500">
-                      <CalendarDays className="inline h-3.5 w-3.5 mr-1 text-primary" />
-                      {nights} day{nights !== 1 ? "s" : ""}
-                    </p>
-                  )}
-                  <div className="space-y-1 w-1/3">
-                    <label htmlFor={`${uid}-guests-car`} className="block text-sm font-medium text-slate-700">Passengers</label>
-                    <input
-                      id={`${uid}-guests-car`}
-                      type="number" min={1} max={20}
-                      value={guests}
-                      onChange={(e) => setGuests(Math.max(1, Number(e.target.value)))}
-                      className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          </SectionCard>
-
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 3 – Availability Check
-          ════════════════════════════════════════════════════════════ */}
-          <SectionCard step={3} title="Availability Check" icon={Search}>
-            <div className="space-y-4">
-              {errors._avail && (
-                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                  <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                  <p className="text-xs text-amber-700">{errors._avail}</p>
-                </div>
-              )}
-
-              <Button
-                type="button"
-                variant={availStatus === "available" ? "secondary" : "primary"}
-                onClick={checkAvailability}
-                loading={availStatus === "checking"}
-                leftIcon={availStatus === "checking" ? undefined : <Search className="h-4 w-4" />}
-              >
-                {availStatus === "checking" ? "Checking…" : "Check Availability"}
-              </Button>
-
-              {availStatus === "available" && (
-                <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-green-800">✅ Available</p>
-                    <p className="text-xs text-green-600">
-                      This listing is available for the selected dates. Proceed to send a payment link.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {availStatus === "unavailable" && (
-                <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                  <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-red-800">❌ Not Available</p>
-                    <p className="text-xs text-red-600">
-                      This listing is booked, locked, or unavailable for the selected dates. Please choose different dates.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {availStatus === "idle" && (
-                <p className="text-xs text-slate-400">
-                  The system will verify existing bookings, reservation locks, and available inventory.
-                </p>
-              )}
-            </div>
-          </SectionCard>
-
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 4 – Price Summary (read-only)
-          ════════════════════════════════════════════════════════════ */}
-          {price && (
-            <SectionCard step={4} title="Price Summary" icon={FileText}>
-              <div className="space-y-0 rounded-lg border border-border overflow-hidden">
-                <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/60 border-b border-border">
-                  <span className="text-sm text-slate-500">Base Amount</span>
-                  <span className="text-sm font-medium text-slate-900">{formatCurrency(price.baseAmount, price.currency)}</span>
-                </div>
-                {price.discount > 0 && (
-                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border">
-                    <span className="text-sm text-slate-500">Discount</span>
-                    <span className="text-sm font-medium text-green-600">−{formatCurrency(price.discount, price.currency)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center px-4 py-2.5 border-b border-border">
-                  <span className="text-sm text-slate-500">Service Fee</span>
-                  <span className="text-sm font-medium text-slate-900">{formatCurrency(price.serviceFee, price.currency)}</span>
-                </div>
-                <div className="flex justify-between items-center px-4 py-2.5 border-b border-border">
-                  <span className="text-sm text-slate-500">Tax</span>
-                  <span className="text-sm font-medium text-slate-900">{formatCurrency(price.tax, price.currency)}</span>
-                </div>
-                <div className="flex justify-between items-center px-4 py-3 bg-primary/5">
-                  <span className="text-sm font-bold text-slate-900">Total Amount</span>
-                  <span className="text-base font-bold text-primary">{formatCurrency(price.total, price.currency)}</span>
-                </div>
-              </div>
-              <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
-                <AlertCircle className="h-3.5 w-3.5" />
-                Pricing is auto-calculated and cannot be edited by agents.
-              </p>
-            </SectionCard>
-          )}
-
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 5 – Payment
-          ════════════════════════════════════════════════════════════ */}
-          <SectionCard step={price ? 5 : 4} title="Payment" icon={CreditCard}>
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-medium text-slate-700 mb-2">Payment Method</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {(["stripe", "tara"] as PaymentMethod[]).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setPaymentMethod(m)}
-                      className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 transition-all ${paymentMethod === m
-                          ? "border-primary bg-primary/5 text-primary"
-                          : "border-border text-slate-500 hover:border-slate-300 hover:bg-slate-50"
-                        }`}
-                    >
-                      <CreditCard className="h-5 w-5 flex-shrink-0" />
-                      <span className="text-sm font-semibold capitalize">{m === "tara" ? "Tara" : "Stripe"}</span>
-                      {paymentMethod === m && (
-                        <div className="ml-auto h-2 w-2 rounded-full bg-primary" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <p className="text-xs text-slate-500">
-                A secure payment link will be sent to <strong>{email || "the guest's email"}</strong> via{" "}
-                <strong>{paymentMethod === "tara" ? "Tara" : "Stripe"}</strong>.
-              </p>
-            </div>
-          </SectionCard>
-
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 6 – Internal Information (auto-generated)
-          ════════════════════════════════════════════════════════════ */}
-          <SectionCard step={price ? 6 : 5} title="Internal Information" icon={Hash}>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-0 rounded-lg border border-border overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-xs text-slate-400 mb-0.5">Booking Reference</p>
-                <p className="text-sm font-mono font-semibold text-primary">Auto-generated on submit</p>
-              </div>
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-xs text-slate-400 mb-0.5">Created By</p>
-                <p className="text-sm font-medium text-slate-900 flex items-center gap-1.5">
-                  <UserCircle className="h-3.5 w-3.5 text-slate-400" />
-                  {user?.name ?? "—"}
-                </p>
-              </div>
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-xs text-slate-400 mb-0.5">Created Date</p>
-                <p className="text-sm font-medium text-slate-900">
-                  {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                </p>
-              </div>
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-xs text-slate-400 mb-0.5">Assigned Country</p>
-                <p className="text-sm font-medium text-slate-900 flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                  {country || "—"}
-                </p>
-              </div>
-              <div className="px-4 py-2.5">
-                <p className="text-xs text-slate-400 mb-0.5">Agent Role</p>
-                <p className="text-sm font-medium text-slate-900 capitalize">{role?.replace("_", " ") ?? "—"}</p>
-              </div>
-            </div>
-          </SectionCard>
-
-          {/* ════════════════════════════════════════════════════════════
-              Action Buttons
-          ════════════════════════════════════════════════════════════ */}
-          <div className="flex items-center justify-between gap-3 pt-2">
-            <Link href="/dashboard/bookings">
-              <Button type="button" variant="ghost" leftIcon={<X className="h-4 w-4" />}>
-                Cancel
-              </Button>
-            </Link>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                loading={saveDraftMut.isPending}
-                leftIcon={<Save className="h-4 w-4" />}
-                onClick={() => saveDraftMut.mutate()}
-              >
-                Save Draft
-              </Button>
-              <Button
-                type="button"
-                loading={sendLinkMut.isPending}
-                leftIcon={<Send className="h-4 w-4" />}
-                onClick={handleSendLink}
-                disabled={availStatus === "unavailable"}
-              >
-                Send Payment Link
-              </Button>
-            </div>
-          </div>
-
-        </div>{/* ── end left column ── */}
-
-        {/* ════ RIGHT COLUMN – AVAILABILITY CALENDAR ══════════════════════════ */}
-        <div className="sticky top-5">
-          <AvailabilityCalendar
-            checkIn={isAccommodation ? checkIn : ""}
-            checkOut={isAccommodation ? checkOut : ""}
-            availability={availability}
-            loading={calLoading}
-            onSelectDate={handleCalendarDateSelect}
-          />
-        </div>
-
-      {/* ════════════════════════════════════════════════════════════
-          Action Buttons
-      ════════════════════════════════════════════════════════════ */}
+      {/* Action Buttons */}
       <div className="flex items-center justify-between gap-3 pt-2">
         <Link href="/dashboard/bookings">
           <Button type="button" variant="ghost" leftIcon={<X className="h-4 w-4" />}>
@@ -1466,21 +814,10 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
           </Button>
         </Link>
         <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="secondary"
-            loading={createDraftMut.isPending}
-            leftIcon={<Save className="h-4 w-4" />}
-            onClick={() => createDraftMut.mutate()}
-          >
+          <Button type="button" variant="secondary" loading={createDraftMut.isPending} leftIcon={<Save className="h-4 w-4" />} onClick={() => createDraftMut.mutate()}>
             Save Draft
           </Button>
-          <Button
-            type="button"
-            loading={paymentLinkMut.isPending}
-            leftIcon={<Send className="h-4 w-4" />}
-            onClick={handleSendLink}
-          >
+          <Button type="button" loading={paymentLinkMut.isPending} leftIcon={<Send className="h-4 w-4" />} onClick={handleSendLink} disabled={availStatus === "unavailable"}>
             Send Payment Link
           </Button>
         </div>
@@ -1488,3 +825,4 @@ const formatOptionLabel = ({ value, label }: CountryOption) => (
     </div>
   );
 }
+

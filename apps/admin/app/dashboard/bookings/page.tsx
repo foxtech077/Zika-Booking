@@ -3,15 +3,16 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle, Plus } from "lucide-react";
+import { CalendarDays, XCircle, Plus, Send } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
+import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
-import { ActionModal } from "@/components/modals/Modals";
+import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
 
@@ -39,7 +40,7 @@ export default function BookingsPage() {
   const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
 
   // scopedCountries only applies to country_manager (not admin — admin sees all)
-  const scopedCountries = user?.scopedCountries ?? [];
+  const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
   
   const countryOptions = scopedCountries.length > 0
     ? scopedCountries.map((c) => ({ value: c, label: c }))
@@ -63,7 +64,7 @@ export default function BookingsPage() {
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  
 
   
 
@@ -145,16 +146,16 @@ export default function BookingsPage() {
   const bookings: Booking[] = data?.bookings ?? [];
   const total: number = data?.total ?? 0;
 
-  const offset = (page - 1) * rowsPerPage;
+  const offset = (page - 1) * limit;
   const requestUrl = `/admin/bookings?${new URLSearchParams(params)}`;
   const responseCount = data?.bookings?.length ?? 0;
   const renderedRows = bookings.length;
   console.log("BookingsPage Pagination Debug:", {
     page,
-    limit: rowsPerPage,
+    limit: limit,
     offset,
     params,
-    queryKey: ["admin-bookings", page, rowsPerPage, q, status, listingType, effectiveCountry],
+    queryKey: ["admin-bookings", page, limit, q, status, listingType, effectiveCountry],
     requestUrl,
     responseCount,
     renderedRows,
@@ -302,19 +303,19 @@ export default function BookingsPage() {
           onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
           filters={filterItems}
-          limit={rowsPerPage}
-          onLimitChange={(newL) => { setRowsPerPage(newL); setPage(1); }}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
-          data={filteredBookings}
+          data={bookings}
           loading={isLoading}
           onRowClick={(b) => setSelected(b)}
           emptyTitle="No bookings found"
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<CalendarDays className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={rowsPerPage} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Booking detail drawer */}

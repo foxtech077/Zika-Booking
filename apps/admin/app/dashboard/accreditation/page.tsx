@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
@@ -190,10 +190,16 @@ export default function AccreditationPage() {
   }, []);
 
   const prevPhoto = useCallback(() =>
-    setPhotoLightbox((s) => s && s.index > 0 ? { ...s, index: s.index - 1 } : s), []);
+    setPhotoLightbox((s) => {
+      if (!s) return s;
+      return s.index > 0 ? { ...s, index: s.index - 1 } : s;
+    }), []);
 
   const nextPhoto = useCallback(() =>
-    setPhotoLightbox((s) => s && s.index < s.photos.length - 1 ? { ...s, index: s.index + 1 } : s), []);
+    setPhotoLightbox((s) => {
+      if (!s) return s;
+      return s.index < s.photos.length - 1 ? { ...s, index: s.index + 1 } : s;
+    }), []);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   // const params = { page: String(page), limit: String(limit) };

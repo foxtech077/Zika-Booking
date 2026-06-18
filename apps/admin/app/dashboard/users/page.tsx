@@ -22,6 +22,7 @@ const fetchUsers = (params: Record<string, string>) =>
 export default function UsersPage() {
   const { user, _hasHydrated } = useAuthStore();
   const isCountryManager = user?.role === "country_manager";
+  const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
 
   const qc = useQueryClient();
 
