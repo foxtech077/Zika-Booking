@@ -122,15 +122,19 @@ export async function commissionRoutes(app: FastifyInstance) {
     },
     preHandler: [requireAdmin],
   }, async (_req: FastifyRequest, reply: FastifyReply) => {
-    const s = await getGlobalSettings();
-    return sendSuccess(reply, 200, {
-      globalCommissionRate: Number(s.globalCommissionRate),
-      pendingGlobalRate: s.pendingGlobalRate != null ? Number(s.pendingGlobalRate) : null,
-      pendingGlobalEffectiveFrom: s.pendingGlobalEffectiveFrom?.toISOString() ?? null,
-      pendingGlobalReason: s.pendingGlobalReason ?? null,
-      updatedAt: s.updatedAt.toISOString(),
-      updatedBy: s.updatedBy ?? null,
-    });
+    try {
+      const s = await getGlobalSettings();
+      return sendSuccess(reply, 200, {
+        globalCommissionRate: Number(s.globalCommissionRate),
+        pendingGlobalRate: s.pendingGlobalRate != null ? Number(s.pendingGlobalRate) : null,
+        pendingGlobalEffectiveFrom: s.pendingGlobalEffectiveFrom?.toISOString() ?? null,
+        pendingGlobalReason: s.pendingGlobalReason ?? null,
+        updatedAt: s.updatedAt.toISOString(),
+        updatedBy: s.updatedBy ?? null,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch global commission settings.");
+    }
   });
 
   // ── POST /admin/commission-rates/global (Super Admin only) ─────────────────
@@ -190,78 +194,82 @@ export async function commissionRoutes(app: FastifyInstance) {
     const dateErr = validateEffectiveFrom(body.effectiveFrom);
     if (dateErr) return sendError(reply, 422, "VALIDATION_ERROR", dateErr);
 
-    const settings = await getGlobalSettings();
+    try {
+      const settings = await getGlobalSettings();
 
-    // Duplicate-rate check
-    if (Number(settings.globalCommissionRate) === body.rate && !settings.pendingGlobalRate) {
-      return sendError(reply, 422, "DUPLICATE_RATE", "The global rate is already set to this value.");
-    }
+      // Duplicate-rate check
+      if (Number(settings.globalCommissionRate) === body.rate && !settings.pendingGlobalRate) {
+        return sendError(reply, 422, "DUPLICATE_RATE", "The global rate is already set to this value.");
+      }
 
-    const effectiveDate = new Date(body.effectiveFrom);
-    effectiveDate.setUTCHours(0, 0, 0, 0);
-    const todayUtc = new Date();
-    todayUtc.setUTCHours(0, 0, 0, 0);
-    const isImmediate = effectiveDate <= todayUtc;
-    const applyToAll = body.applyToAll ?? false;
-    const notifyProviders = body.notifyProviders ?? false;
-    const oldGlobalRate = Number(settings.globalCommissionRate);
+      const effectiveDate = new Date(body.effectiveFrom);
+      effectiveDate.setUTCHours(0, 0, 0, 0);
+      const todayUtc = new Date();
+      todayUtc.setUTCHours(0, 0, 0, 0);
+      const isImmediate = effectiveDate <= todayUtc;
+      const applyToAll = body.applyToAll ?? false;
+      const notifyProviders = body.notifyProviders ?? false;
+      const oldGlobalRate = Number(settings.globalCommissionRate);
 
-    if (isImmediate) {
-      // Apply immediately
-      await prisma.$transaction(async (tx) => {
-        await tx.platformSettings.update({
+      if (isImmediate) {
+        // Apply immediately
+        await prisma.$transaction(async (tx) => {
+          await tx.platformSettings.update({
+            where: { id: "global" },
+            data: {
+              globalCommissionRate: body.rate,
+              pendingGlobalRate: null,
+              pendingGlobalEffectiveFrom: null,
+              pendingGlobalReason: null,
+              updatedBy: admin.adminId,
+            },
+          });
+
+          if (applyToAll) {
+            await tx.commissionRate.updateMany({ data: { rate: body.rate, setBy: admin.adminId } });
+          }
+
+          await tx.commissionHistory.create({
+            data: {
+              scope: "global",
+              oldRate: oldGlobalRate,
+              newRate: body.rate,
+              effectiveFrom: effectiveDate,
+              changedBy: admin.adminId,
+              changedByRole: admin.adminRole,
+              reason: body.reason,
+              applyToAll,
+              providersNotified: notifyProviders,
+            },
+          });
+        });
+
+        if (notifyProviders) {
+          // Fire-and-forget batch email to all active providers
+          sendGlobalCommissionEmails(body.rate, oldGlobalRate, effectiveDate, body.reason).catch(() => null);
+        }
+      } else {
+        // Schedule for future
+        await prisma.platformSettings.update({
           where: { id: "global" },
           data: {
-            globalCommissionRate: body.rate,
-            pendingGlobalRate: null,
-            pendingGlobalEffectiveFrom: null,
-            pendingGlobalReason: null,
+            pendingGlobalRate: body.rate,
+            pendingGlobalEffectiveFrom: effectiveDate,
+            pendingGlobalReason: body.reason,
             updatedBy: admin.adminId,
           },
         });
-
-        if (applyToAll) {
-          await tx.commissionRate.updateMany({ data: { rate: body.rate, setBy: admin.adminId } });
-        }
-
-        await tx.commissionHistory.create({
-          data: {
-            scope: "global",
-            oldRate: oldGlobalRate,
-            newRate: body.rate,
-            effectiveFrom: effectiveDate,
-            changedBy: admin.adminId,
-            changedByRole: admin.adminRole,
-            reason: body.reason,
-            applyToAll,
-            providersNotified: notifyProviders,
-          },
-        });
-      });
-
-      if (notifyProviders) {
-        // Fire-and-forget batch email to all active providers
-        sendGlobalCommissionEmails(body.rate, oldGlobalRate, effectiveDate, body.reason).catch(() => null);
       }
-    } else {
-      // Schedule for future
-      await prisma.platformSettings.update({
-        where: { id: "global" },
-        data: {
-          pendingGlobalRate: body.rate,
-          pendingGlobalEffectiveFrom: effectiveDate,
-          pendingGlobalReason: body.reason,
-          updatedBy: admin.adminId,
-        },
-      });
-    }
 
-    return sendSuccess(reply, 200, {
-      message: isImmediate
-        ? `Global commission rate updated to ${body.rate * 100}%.`
-        : `Global commission rate change to ${body.rate * 100}% scheduled for ${body.effectiveFrom}.`,
-      applied: isImmediate,
-    });
+      return sendSuccess(reply, 200, {
+        message: isImmediate
+          ? `Global commission rate updated to ${body.rate * 100}%.`
+          : `Global commission rate change to ${body.rate * 100}% scheduled for ${body.effectiveFrom}.`,
+        applied: isImmediate,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to update global commission rate.");
+    }
   });
 
   // ── GET /admin/commission-rates — list all country rates ───────────────────
@@ -296,17 +304,21 @@ export async function commissionRoutes(app: FastifyInstance) {
       ? {} 
       : { country: { in: admin.countryScope } };
 
-    const [settings, rates] = await Promise.all([
-      getGlobalSettings(),
-      prisma.commissionRate.findMany({ where: whereClause, orderBy: { country: "asc" } }),
-    ]);
+    try {
+      const [settings, rates] = await Promise.all([
+        getGlobalSettings(),
+        prisma.commissionRate.findMany({ where: whereClause, orderBy: { country: "asc" } }),
+      ]);
 
-    return sendSuccess(reply, 200, {
-      globalRate: Number(settings.globalCommissionRate),
-      pendingGlobalRate: settings.pendingGlobalRate != null ? Number(settings.pendingGlobalRate) : null,
-      pendingGlobalEffectiveFrom: settings.pendingGlobalEffectiveFrom?.toISOString() ?? null,
-      rates: rates.map(formatRate),
-    });
+      return sendSuccess(reply, 200, {
+        globalRate: Number(settings.globalCommissionRate),
+        pendingGlobalRate: settings.pendingGlobalRate != null ? Number(settings.pendingGlobalRate) : null,
+        pendingGlobalEffectiveFrom: settings.pendingGlobalEffectiveFrom?.toISOString() ?? null,
+        rates: rates.map(formatRate),
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch commission rates.");
+    }
   });
 
   // ── POST /admin/commission-rates — upsert a single country rate ───────────
@@ -375,85 +387,89 @@ export async function commissionRoutes(app: FastifyInstance) {
       return sendError(reply, 403, "FORBIDDEN", "You do not have permission to modify this country.");
     }
 
-    const existing = await prisma.commissionRate.findUnique({ where: { country: countryCode } });
+    try {
+      const existing = await prisma.commissionRate.findUnique({ where: { country: countryCode } });
 
-    // Duplicate-rate check (PRD 15.5)
-    if (existing && Number(existing.rate) === body.rate && !existing.pendingRate) {
-      return sendError(reply, 422, "DUPLICATE_RATE", `${countryCode} already has this commission rate.`);
-    }
+      // Duplicate-rate check (PRD 15.5)
+      if (existing && Number(existing.rate) === body.rate && !existing.pendingRate) {
+        return sendError(reply, 422, "DUPLICATE_RATE", `${countryCode} already has this commission rate.`);
+      }
 
-    const globalSettings = await getGlobalSettings();
-    const oldRate = existing ? Number(existing.rate) : Number(globalSettings.globalCommissionRate);
+      const globalSettings = await getGlobalSettings();
+      const oldRate = existing ? Number(existing.rate) : Number(globalSettings.globalCommissionRate);
 
-    let savedRate;
-    if (isImmediate) {
-      savedRate = await prisma.$transaction(async (tx) => {
-        const r = await (tx.commissionRate.upsert as any)({
+      let savedRate;
+      if (isImmediate) {
+        savedRate = await prisma.$transaction(async (tx) => {
+          const r = await (tx.commissionRate.upsert as any)({
+            where: { country: countryCode },
+            update: {
+              rate: body.rate,
+              pendingRate: null,
+              pendingEffectiveFrom: null,
+              pendingReason: null,
+              setBy: admin.adminId,
+            },
+            create: {
+              country: countryCode,
+              rate: body.rate,
+              setBy: admin.adminId,
+            },
+          });
+          await tx.commissionHistory.create({
+            data: {
+              scope: "country",
+              countryCode,
+              oldRate,
+              newRate: body.rate,
+              effectiveFrom: effectiveDate,
+              changedBy: admin.adminId,
+              changedByRole: admin.adminRole,
+              reason: body.reason,
+              applyToAll: false,
+              providersNotified: notifyProviders,
+            },
+          });
+          return r;
+        });
+
+        if (notifyProviders) {
+          sendCountryCommissionEmail(countryCode, body.rate, oldRate, effectiveDate, body.reason).catch(() => null);
+        }
+      } else {
+        // Schedule — supersedes any existing pending change (PRD 15.5)
+        savedRate = await (prisma.commissionRate.upsert as any)({
           where: { country: countryCode },
           update: {
-            rate: body.rate,
-            pendingRate: null,
-            pendingEffectiveFrom: null,
-            pendingReason: null,
+            pendingRate: body.rate,
+            pendingEffectiveFrom: effectiveDate,
+            pendingReason: body.reason,
             setBy: admin.adminId,
           },
           create: {
             country: countryCode,
-            rate: body.rate,
+            rate: existing?.rate ?? globalSettings.globalCommissionRate,
+            pendingRate: body.rate,
+            pendingEffectiveFrom: effectiveDate,
+            pendingReason: body.reason,
             setBy: admin.adminId,
           },
         });
-        await tx.commissionHistory.create({
-          data: {
-            scope: "country",
-            countryCode,
-            oldRate,
-            newRate: body.rate,
-            effectiveFrom: effectiveDate,
-            changedBy: admin.adminId,
-            changedByRole: admin.adminRole,
-            reason: body.reason,
-            applyToAll: false,
-            providersNotified: notifyProviders,
-          },
-        });
-        return r;
-      });
-
-      if (notifyProviders) {
-        sendCountryCommissionEmail(countryCode, body.rate, oldRate, effectiveDate, body.reason).catch(() => null);
       }
-    } else {
-      // Schedule — supersedes any existing pending change (PRD 15.5)
-      savedRate = await (prisma.commissionRate.upsert as any)({
-        where: { country: countryCode },
-        update: {
-          pendingRate: body.rate,
-          pendingEffectiveFrom: effectiveDate,
-          pendingReason: body.reason,
-          setBy: admin.adminId,
-        },
-        create: {
-          country: countryCode,
-          rate: existing?.rate ?? globalSettings.globalCommissionRate,
-          pendingRate: body.rate,
-          pendingEffectiveFrom: effectiveDate,
-          pendingReason: body.reason,
-          setBy: admin.adminId,
-        },
+
+      let warning: string | undefined;
+      if (existing?.pendingRate != null && !isImmediate) {
+        warning = "Superseded a previously scheduled rate change";
+      }
+
+      return sendSuccess(reply, 200, {
+        ...formatRate(savedRate),
+        scheduled: !isImmediate,
+        ...(warning ? { warning } : {}),
       });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to set country commission rate.");
     }
-
-    let warning: string | undefined;
-    if (existing?.pendingRate != null && !isImmediate) {
-      warning = "Superseded a previously scheduled rate change";
-    }
-
-    return sendSuccess(reply, 200, {
-      ...formatRate(savedRate),
-      scheduled: !isImmediate,
-      ...(warning ? { warning } : {}),
-    });
   });
 
   // ── POST /admin/commission-rates/bulk — update multiple countries ──────────
@@ -516,71 +532,75 @@ export async function commissionRoutes(app: FastifyInstance) {
     const dateErr = validateEffectiveFrom(body.effectiveFrom);
     if (dateErr) return sendError(reply, 422, "VALIDATION_ERROR", dateErr);
 
-    const effectiveDate = new Date(body.effectiveFrom);
-    effectiveDate.setUTCHours(0, 0, 0, 0);
-    const todayUtc = new Date();
-    todayUtc.setUTCHours(0, 0, 0, 0);
-    const isImmediate = effectiveDate <= todayUtc;
-    const countryCodes = body.countries.map((c) => c.toUpperCase());
-    const globalSettings = await getGlobalSettings();
-    const notifyProviders = body.notifyProviders ?? false;
+    try {
+      const effectiveDate = new Date(body.effectiveFrom);
+      effectiveDate.setUTCHours(0, 0, 0, 0);
+      const todayUtc = new Date();
+      todayUtc.setUTCHours(0, 0, 0, 0);
+      const isImmediate = effectiveDate <= todayUtc;
+      const countryCodes = body.countries.map((c) => c.toUpperCase());
+      const globalSettings = await getGlobalSettings();
+      const notifyProviders = body.notifyProviders ?? false;
 
-    const existing = await prisma.commissionRate.findMany({
-      where: { country: { in: countryCodes } },
-    });
-    const existingMap = new Map(existing.map((r) => [r.country, r]));
+      const existing = await prisma.commissionRate.findMany({
+        where: { country: { in: countryCodes } },
+      });
+      const existingMap = new Map(existing.map((r) => [r.country, r]));
 
-    await prisma.$transaction(async (tx) => {
-      for (const code of countryCodes) {
-        const old = existingMap.get(code);
-        const oldRate = old ? Number(old.rate) : Number(globalSettings.globalCommissionRate);
+      await prisma.$transaction(async (tx) => {
+        for (const code of countryCodes) {
+          const old = existingMap.get(code);
+          const oldRate = old ? Number(old.rate) : Number(globalSettings.globalCommissionRate);
 
-        await (tx.commissionRate.upsert as any)({
-          where: { country: code },
-          update: isImmediate
-            ? { rate: body.rate, pendingRate: null, pendingEffectiveFrom: null, pendingReason: null, setBy: admin.adminId }
-            : { pendingRate: body.rate, pendingEffectiveFrom: effectiveDate, pendingReason: body.reason, setBy: admin.adminId },
-          create: {
-            country: code,
-            rate: isImmediate ? body.rate : (old?.rate ?? globalSettings.globalCommissionRate),
-            ...(isImmediate ? {} : { pendingRate: body.rate, pendingEffectiveFrom: effectiveDate, pendingReason: body.reason }),
-            setBy: admin.adminId,
-          },
-        });
-
-        if (isImmediate) {
-          await tx.commissionHistory.create({
-            data: {
-              scope: "country",
-              countryCode: code,
-              oldRate,
-              newRate: body.rate,
-              effectiveFrom: effectiveDate,
-              changedBy: admin.adminId,
-              changedByRole: admin.adminRole,
-              reason: body.reason,
-              applyToAll: false,
-              providersNotified: notifyProviders,
+          await (tx.commissionRate.upsert as any)({
+            where: { country: code },
+            update: isImmediate
+              ? { rate: body.rate, pendingRate: null, pendingEffectiveFrom: null, pendingReason: null, setBy: admin.adminId }
+              : { pendingRate: body.rate, pendingEffectiveFrom: effectiveDate, pendingReason: body.reason, setBy: admin.adminId },
+            create: {
+              country: code,
+              rate: isImmediate ? body.rate : (old?.rate ?? globalSettings.globalCommissionRate),
+              ...(isImmediate ? {} : { pendingRate: body.rate, pendingEffectiveFrom: effectiveDate, pendingReason: body.reason }),
+              setBy: admin.adminId,
             },
           });
+
+          if (isImmediate) {
+            await tx.commissionHistory.create({
+              data: {
+                scope: "country",
+                countryCode: code,
+                oldRate,
+                newRate: body.rate,
+                effectiveFrom: effectiveDate,
+                changedBy: admin.adminId,
+                changedByRole: admin.adminRole,
+                reason: body.reason,
+                applyToAll: false,
+                providersNotified: notifyProviders,
+              },
+            });
+          }
+        }
+      });
+
+      if (isImmediate && notifyProviders) {
+        for (const code of countryCodes) {
+          const old = existingMap.get(code);
+          const oldRate = old ? Number(old.rate) : Number(globalSettings.globalCommissionRate);
+          sendCountryCommissionEmail(code, body.rate, oldRate, effectiveDate, body.reason).catch(() => null);
         }
       }
-    });
 
-    if (isImmediate && notifyProviders) {
-      for (const code of countryCodes) {
-        const old = existingMap.get(code);
-        const oldRate = old ? Number(old.rate) : Number(globalSettings.globalCommissionRate);
-        sendCountryCommissionEmail(code, body.rate, oldRate, effectiveDate, body.reason).catch(() => null);
-      }
+      return sendSuccess(reply, 200, {
+        updated: countryCodes.length,
+        countries: countryCodes,
+        rate: body.rate,
+        scheduled: !isImmediate,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to bulk-update commission rates.");
     }
-
-    return sendSuccess(reply, 200, {
-      updated: countryCodes.length,
-      countries: countryCodes,
-      rate: body.rate,
-      scheduled: !isImmediate,
-    });
   });
 
   // ── DELETE /admin/commission-rates/:country — remove override ─────────────
@@ -622,15 +642,19 @@ export async function commissionRoutes(app: FastifyInstance) {
       return sendError(reply, 403, "FORBIDDEN", "You do not have permission to modify this country.");
     }
 
-    const existing = await prisma.commissionRate.findUnique({ where: { country: countryCode } });
-    if (!existing) return sendError(reply, 404, "NOT_FOUND", "No country-specific rate found for this country.");
+    try {
+      const existing = await prisma.commissionRate.findUnique({ where: { country: countryCode } });
+      if (!existing) return sendError(reply, 404, "NOT_FOUND", "No country-specific rate found for this country.");
 
-    const settings = await getGlobalSettings();
-    await prisma.commissionRate.delete({ where: { country: countryCode } });
+      const settings = await getGlobalSettings();
+      await prisma.commissionRate.delete({ where: { country: countryCode } });
 
-    return sendSuccess(reply, 200, {
-      message: `Override for ${countryCode} removed. Global default of ${Number(settings.globalCommissionRate) * 100}% now applies.`,
-    });
+      return sendSuccess(reply, 200, {
+        message: `Override for ${countryCode} removed. Global default of ${Number(settings.globalCommissionRate) * 100}% now applies.`,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to remove country override.");
+    }
   });
 
   // ── GET /admin/commission-rates/history ────────────────────────────────────
@@ -718,35 +742,39 @@ export async function commissionRoutes(app: FastifyInstance) {
       };
     }
 
-    const [total, rows] = await Promise.all([
-      prisma.commissionHistory.count({ where }),
-      prisma.commissionHistory.findMany({
-        where,
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-    ]);
+    try {
+      const [total, rows] = await Promise.all([
+        prisma.commissionHistory.count({ where }),
+        prisma.commissionHistory.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+          skip,
+          take: limit,
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, {
-      total,
-      page,
-      limit,
-      rows: rows.map((h) => ({
-        id: h.id,
-        scope: h.scope,
-        countryCode: h.countryCode ?? null,
-        oldRate: Number(h.oldRate),
-        newRate: Number(h.newRate),
-        effectiveFrom: h.effectiveFrom.toISOString(),
-        changedBy: h.changedBy,
-        changedByRole: h.changedByRole,
-        reason: h.reason,
-        applyToAll: h.applyToAll,
-        providersNotified: h.providersNotified,
-        createdAt: h.createdAt.toISOString(),
-      })),
-    });
+      return sendSuccess(reply, 200, {
+        total,
+        page,
+        limit,
+        rows: rows.map((h) => ({
+          id: h.id,
+          scope: h.scope,
+          countryCode: h.countryCode ?? null,
+          oldRate: Number(h.oldRate),
+          newRate: Number(h.newRate),
+          effectiveFrom: h.effectiveFrom.toISOString(),
+          changedBy: h.changedBy,
+          changedByRole: h.changedByRole,
+          reason: h.reason,
+          applyToAll: h.applyToAll,
+          providersNotified: h.providersNotified,
+          createdAt: h.createdAt.toISOString(),
+        })),
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch commission history.");
+    }
   });
 
   // ── GET /admin/commission-rates/history/export — CSV ──────────────────────
@@ -781,26 +809,30 @@ export async function commissionRoutes(app: FastifyInstance) {
       };
     }
 
-    const rows = await prisma.commissionHistory.findMany({ where, orderBy: { createdAt: "desc" } });
+    try {
+      const rows = await prisma.commissionHistory.findMany({ where, orderBy: { createdAt: "desc" } });
 
-    const header = "id,scope,country_code,old_rate,new_rate,effective_from,changed_by,changed_by_role,reason,apply_to_all,providers_notified,created_at";
-    const lines = rows.map((h) =>
-      [
-        h.id, h.scope, h.countryCode ?? "",
-        Number(h.oldRate), Number(h.newRate),
-        h.effectiveFrom.toISOString(),
-        h.changedBy, h.changedByRole,
-        `"${h.reason.replace(/"/g, '""')}"`,
-        h.applyToAll ? "true" : "false",
-        h.providersNotified ? "true" : "false",
-        h.createdAt.toISOString(),
-      ].join(",")
-    );
+      const header = "id,scope,country_code,old_rate,new_rate,effective_from,changed_by,changed_by_role,reason,apply_to_all,providers_notified,created_at";
+      const lines = rows.map((h) =>
+        [
+          h.id, h.scope, h.countryCode ?? "",
+          Number(h.oldRate), Number(h.newRate),
+          h.effectiveFrom.toISOString(),
+          h.changedBy, h.changedByRole,
+          `"${h.reason.replace(/"/g, '""')}"`,
+          h.applyToAll ? "true" : "false",
+          h.providersNotified ? "true" : "false",
+          h.createdAt.toISOString(),
+        ].join(",")
+      );
 
-    const csv = [header, ...lines].join("\n");
-    reply.header("Content-Type", "text/csv");
-    reply.header("Content-Disposition", `attachment; filename="commission_history_${Date.now()}.csv"`);
-    return reply.send(csv);
+      const csv = [header, ...lines].join("\n");
+      reply.header("Content-Type", "text/csv");
+      reply.header("Content-Disposition", `attachment; filename="commission_history_${Date.now()}.csv"`);
+      return reply.send(csv);
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to export commission history.");
+    }
   });
 
   // ── GET /commission-rates/effective/:country — public effective rate ───────
@@ -835,33 +867,37 @@ export async function commissionRoutes(app: FastifyInstance) {
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
 
-    const [rate, settings] = await Promise.all([
-      prisma.commissionRate.findUnique({ where: { country: countryCode } }),
-      getGlobalSettings(),
-    ]);
+    try {
+      const [rate, settings] = await Promise.all([
+        prisma.commissionRate.findUnique({ where: { country: countryCode } }),
+        getGlobalSettings(),
+      ]);
 
-    const now = new Date();
-    let effectiveRate: number;
-    let source: "country_override" | "global_default";
+      const now = new Date();
+      let effectiveRate: number;
+      let source: "country_override" | "global_default";
 
-    if (rate) {
-      // Use pending rate if it has become effective
-      if (rate.pendingRate != null && rate.pendingEffectiveFrom && rate.pendingEffectiveFrom <= now) {
-        effectiveRate = Number(rate.pendingRate);
+      if (rate) {
+        // Use pending rate if it has become effective
+        if (rate.pendingRate != null && rate.pendingEffectiveFrom && rate.pendingEffectiveFrom <= now) {
+          effectiveRate = Number(rate.pendingRate);
+        } else {
+          effectiveRate = Number(rate.rate);
+        }
+        source = "country_override";
       } else {
-        effectiveRate = Number(rate.rate);
+        if (settings.pendingGlobalRate != null && settings.pendingGlobalEffectiveFrom && settings.pendingGlobalEffectiveFrom <= now) {
+          effectiveRate = Number(settings.pendingGlobalRate);
+        } else {
+          effectiveRate = Number(settings.globalCommissionRate);
+        }
+        source = "global_default";
       }
-      source = "country_override";
-    } else {
-      if (settings.pendingGlobalRate != null && settings.pendingGlobalEffectiveFrom && settings.pendingGlobalEffectiveFrom <= now) {
-        effectiveRate = Number(settings.pendingGlobalRate);
-      } else {
-        effectiveRate = Number(settings.globalCommissionRate);
-      }
-      source = "global_default";
+
+      return sendSuccess(reply, 200, { country: countryCode, effectiveRate, source });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch effective commission rate.");
     }
-
-    return sendSuccess(reply, 200, { country: countryCode, effectiveRate, source });
   });
 }
 

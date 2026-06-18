@@ -66,10 +66,12 @@ function formatMethod(m: {
 export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── GET /guests/me/payment-methods ───────────────────────────────────────
-  app.get("/payments/guests/me/payment-methods", { preHandler: [requireUser], schema: {
-    tags: ["Payment Methods"],
-    summary: "List saved payment methods",
-  }, }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/payments/guests/me/payment-methods", {
+    preHandler: [requireUser], schema: {
+      tags: ["Payment Methods"],
+      summary: "List saved payment methods",
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req as GuestRequest;
 
     const methods = await prisma.paymentMethod.findMany({
@@ -94,89 +96,93 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── POST /guests/me/payment-methods/stripe/setup ─────────────────────────
   app.post(
-    "/payments/guests/me/payment-methods/stripe/setup", { preHandler: [requireUser], schema: {
-      tags: ["Payment Methods"],
-      summary: "Create Stripe SetupIntent",
-    }, }, async (req: FastifyRequest, reply: FastifyReply) => {
-      const { userId } = req as GuestRequest;
+    "/payments/guests/me/payment-methods/stripe/setup", {
+      preHandler: [requireUser], schema: {
+        tags: ["Payment Methods"],
+        summary: "Create Stripe SetupIntent",
+      },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { userId } = req as GuestRequest;
 
-      try {
-        // 1. Get or create Stripe customer
-        let customerAccount = await prisma.customerAccount.findUnique({
-          where: {
-            userId_paymentProvider: {
-              userId,
-              paymentProvider: "stripe",
-            },
+    try {
+      // 1. Get or create Stripe customer
+      let customerAccount = await prisma.customerAccount.findUnique({
+        where: {
+          userId_paymentProvider: {
+            userId,
+            paymentProvider: "stripe",
           },
+        },
+      });
+
+      let stripeCustomerId: string; //  declared only once now
+
+      if (!customerAccount) {
+        const customer = await stripe.customers.create({
+          metadata: { userId },
         });
 
-        let stripeCustomerId: string; //  declared only once now
-
-        if (!customerAccount) {
-          const customer = await stripe.customers.create({
-            metadata: { userId },
-          });
-
-          customerAccount = await prisma.customerAccount.create({
-            data: {
-              userId,
-              paymentProvider: "stripe",
-              providerCustomerId: customer.id,
-            },
-          });
-
-          stripeCustomerId = customer.id;
-        } else {
-          stripeCustomerId = customerAccount.providerCustomerId;
-        }
-
-        // 2. Create SetupIntent (PRODUCTION SAFE)
-        const setupIntent = await stripe.setupIntents.create(
-          {
-            customer: stripeCustomerId,
-            payment_method_types: ["card"],
-            automatic_payment_methods: { enabled: false },
-            usage: "off_session",
-          },
-          {
-            idempotencyKey: `setup_${userId}_${Date.now()}`, //  unique per request
-          }
-        );
-
-        // 3. Return response
-        return reply.code(200).send({
-          success: true,
+        customerAccount = await prisma.customerAccount.create({
           data: {
-            setupIntentId: setupIntent.id,
-            clientSecret: setupIntent.client_secret,
+            userId,
+            paymentProvider: "stripe",
+            providerCustomerId: customer.id,
           },
         });
-      } catch (err) {
-        return sendError(
-          reply,
-          500,
-          "SETUP_INTENT_FAILED",
-          (err as Error).message
-        );
+
+        stripeCustomerId = customer.id;
+      } else {
+        stripeCustomerId = customerAccount.providerCustomerId;
       }
+
+      // 2. Create SetupIntent (PRODUCTION SAFE)
+      const setupIntent = await stripe.setupIntents.create(
+        {
+          customer: stripeCustomerId,
+          payment_method_types: ["card"],
+          automatic_payment_methods: { enabled: false },
+          usage: "off_session",
+        },
+        {
+          idempotencyKey: `setup_${userId}_${Date.now()}`, //  unique per request
+        }
+      );
+
+      // 3. Return response
+      return reply.code(200).send({
+        success: true,
+        data: {
+          setupIntentId: setupIntent.id,
+          clientSecret: setupIntent.client_secret,
+        },
+      });
+    } catch (err) {
+      return sendError(
+        reply,
+        500,
+        "SETUP_INTENT_FAILED",
+        (err as Error).message
+      );
     }
+  }
   );
 
   // ── POST /guests/me/payment-methods/stripe/confirm ───────────────────────
-  app.post("/payments/guests/me/payment-methods/stripe/confirm", { preHandler: [requireUser], schema: {
-    tags: ["Payment Methods"],
-    summary: "Save Stripe payment method",
-    body: {
-      type: "object",
-      required: ["paymentMethodId"],
-      properties: {
-        paymentMethodId: {
-          type: "string",
+  app.post("/payments/guests/me/payment-methods/stripe/confirm", {
+    preHandler: [requireUser], schema: {
+      tags: ["Payment Methods"],
+      summary: "Save Stripe payment method",
+      body: {
+        type: "object",
+        required: ["paymentMethodId"],
+        properties: {
+          paymentMethodId: {
+            type: "string",
+          },
         },
       },
     },
-  }, }, async (req: FastifyRequest, reply: FastifyReply) => {
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req as GuestRequest;
 
     const parsed = confirmStripeSchema.safeParse(req.body);
@@ -287,19 +293,21 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── POST /guests/me/payment-methods/tara ─────────────────────────────────
-  app.post("/payments/guests/me/payment-methods/tara", { preHandler: [requireUser], schema: {
-    tags: ["Payment Methods"],
-    summary: "Add Tara mobile money account",
-    body: {
-      type: "object",
-      required: ["mobileNumber"],
-      properties: {
-        mobileNumber: {
-          type: "string"
+  app.post("/payments/guests/me/payment-methods/tara", {
+    preHandler: [requireUser], schema: {
+      tags: ["Payment Methods"],
+      summary: "Add Tara mobile money account",
+      body: {
+        type: "object",
+        required: ["mobileNumber"],
+        properties: {
+          mobileNumber: {
+            type: "string"
+          },
         },
       },
     },
-  }, },
+  },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { userId } = req as GuestRequest;
 
@@ -333,7 +341,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
     },
   );
 
-// ── POST /payments/tara ─────────────────────────────────
+  // ── POST /payments/tara ─────────────────────────────────
   app.post(
     "/payments/tara",
     { preHandler: [requireUser] },
@@ -393,31 +401,33 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   // ── PATCH /guests/me/payment-methods/:id ─────────────────────────────────
   app.patch(
     "/payments/guests/me/payment-methods/:id",
-    { preHandler: [requireUser], schema: {
-      tags: ["Payment Methods"],
-      summary: "Update payment method",
+    {
+      preHandler: [requireUser], schema: {
+        tags: ["Payment Methods"],
+        summary: "Update payment method",
 
-      params: {
-        type: "object",
-        required: ["id"],
-        properties: {
-          id: {
-            type: "string",
-            description: "Payment Method ID",
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: {
+            id: {
+              type: "string",
+              description: "Payment Method ID",
+            },
+          },
+        },
+
+        body: {
+          type: "object",
+          properties: {
+            isDefault: {
+              type: "boolean",
+              description: "Set as default payment method",
+            },
           },
         },
       },
-
-      body: {
-        type: "object",
-        properties: {
-          isDefault: {
-            type: "boolean",
-            description: "Set as default payment method",
-          },
-        },
-      },
-    }, },
+    },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { userId } = req as GuestRequest;
       const { id } = req.params as { id: string };
@@ -458,19 +468,21 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── DELETE /guests/me/payment-methods/:id ────────────────────────────────
-  app.delete("/payments/guests/me/payment-methods/:id", { preHandler: [requireUser], schema: {
-    tags: ["Payment Methods"],
-    summary: "Delete payment method",
-    params: {
-      type: "object",
-      required: ["id"],
-      properties: {
-        id: {
-          type: "string",
+  app.delete("/payments/guests/me/payment-methods/:id", {
+    preHandler: [requireUser], schema: {
+      tags: ["Payment Methods"],
+      summary: "Delete payment method",
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: {
+            type: "string",
+          },
         },
       },
     },
-  }, },
+  },
     async (req: FastifyRequest, reply: FastifyReply) => {
       const { userId } = req as GuestRequest;
       const { id } = req.params as { id: string };
