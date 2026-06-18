@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 
 const REGION = process.env["AWS_REGION"] ?? "af-south-1";
 const BUCKET = process.env["S3_BUCKET_NAME"] ?? "zika-storage";
@@ -25,6 +25,20 @@ export async function uploadBuffer(
       ContentType: contentType,
     }),
   );
+}
+
+export async function downloadBuffer(s3Key: string): Promise<Buffer> {
+  const res = await s3.send(
+    new GetObjectCommand({
+      Bucket: BUCKET,
+      Key: s3Key,
+    }),
+  );
+  if (!res.Body) {
+    throw new Error(`S3 GetObject returned empty body for key: ${s3Key}`);
+  }
+  const bytes = await res.Body.transformToByteArray();
+  return Buffer.from(bytes);
 }
 
 export function cdnUrl(s3Key: string): string {
