@@ -146,10 +146,11 @@ interface PaginationProps {
   limit: number;
   total: number;
   onPageChange: (page: number) => void;
+  onLimitChange?: (limit: number) => void;
 }
 
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
-export function Pagination({ page, limit, total, onPageChange }: PaginationProps) {
+export function Pagination({ page, limit, total, onPageChange, onLimitChange }: PaginationProps) {
   const totalPages = Math.ceil(total / limit);
   const from = (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
@@ -164,7 +165,7 @@ export function Pagination({ page, limit, total, onPageChange }: PaginationProps
           <span className="font-medium">{total.toLocaleString()}</span> results
         </p>
       </div>
-      <div className="flex gap-1">
+      <div className="flex gap-1 items-center">
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
@@ -206,6 +207,18 @@ export function Pagination({ page, limit, total, onPageChange }: PaginationProps
           ›
         </button>
       </div>
+{onLimitChange && (
+  <select
+    value={limit}
+    onChange={(e) => onLimitChange(Number(e.target.value))}
+    className="ml-2 rounded border border-border bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25"
+  >
+    <option value={10}>10 / page</option>
+    <option value={20}>20 / page</option>
+    <option value={50}>50 / page</option>
+    <option value={100}>100 / page</option>
+  </select>
+)}
     </div>
   );
 }
@@ -235,7 +248,14 @@ interface FilterBarProps {
 }
 
 export function FilterBar({
-  search, onSearchChange, searchPlaceholder = "Search…", filters, actions, children, limit, onLimitChange
+  search,
+  onSearchChange,
+  searchPlaceholder = "Search…",
+  filters,
+  actions,
+  children,
+  limit,
+  onLimitChange,
 }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">

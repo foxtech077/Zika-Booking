@@ -12,8 +12,8 @@ import { Card, CardHeader, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
 import { canAccess } from "@/permissions/rbac";
+import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
-import { formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
@@ -113,7 +113,7 @@ export default function DashboardPage() {
     queryFn: () => fetchListings(listingsParams),
     enabled: scopedQueriesEnabled,
   });
-  const role = useAuthStore(state => state.user?.role);
+  const role = user?.role;
   const { data: queueData, isLoading: loadingQueue } = useQuery({
     queryKey: ["admin-queue-dash", queueParams],
     queryFn: () => fetchReviewQueue(queueParams),
@@ -201,47 +201,7 @@ export default function DashboardPage() {
             loading={loadingQueue}
           />
         )}
-        <StatCard
-          title="Total Revenue"
-          value={totalRevenue}
-          currency="USD"
-          change={7.2}
-          icon={<DollarSign className="h-4 w-4 text-success" />}
-          iconBg="bg-success/10"
-          loading={loadingBookings}
-        />
-        <StatCard
-          title="Platform Commission"
-          value={totalCommission}
-          currency="USD"
-          change={5.1}
-          icon={<TrendingUp className="h-4 w-4 text-info" />}
-          iconBg="bg-info/10"
-          loading={loadingBookings}
-        />
-        <StatCard
-          title="Total Users"
-          value={usersTotal}
-          change={12.8}
-          icon={<Users className="h-4 w-4 text-purple-600" />}
-          iconBg="bg-purple-100"
-          loading={loadingUsers}
-        />
-        <StatCard
-          title="Total Listings"
-          value={listingsData?.total ?? 0}
-          change={2.1}
-          icon={<Building2 className="h-4 w-4 text-teal-600" />}
-          iconBg="bg-teal-100"
-          loading={loadingListings}
-        />
-        <StatCard
-          title="Pending Accreditation"
-          value={queueData?.total ?? 0}
-          icon={<BadgeCheck className="h-4 w-4 text-warning" />}
-          iconBg="bg-warning/10"
-          loading={loadingQueue}
-        />
+
         <StatCard
           title="Confirmed Bookings"
           value={confirmedBookings.length}

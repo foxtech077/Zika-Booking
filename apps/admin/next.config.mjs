@@ -1,5 +1,6 @@
 const authApiUrl = process.env.ADMIN_API_URL ?? "http://localhost:3001";
 
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
 	basePath: "/admin",

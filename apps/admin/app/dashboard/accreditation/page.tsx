@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X } from "lucide-react";
+import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { api } from "@/lib/api";
@@ -26,7 +26,7 @@ const REJECTION_REASONS = [
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 const fetchQueue = (params: Record<string, string>) =>
-  listingApi.get("/admin/listings/review-queue", { params }).then((r) => r.data.data ?? r.data);
+  listingApi.get(`/admin/listings/review-queue?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 const fetchDetail = (id: string) =>
   listingApi.get(`/admin/listings/${id}/review`).then((r) => r.data.data ?? r.data);
@@ -72,12 +72,106 @@ function DocViewer({ url, fileType, label, onClose }: { url: string; fileType: s
   );
 }
 
+// ── Photo gallery lightbox ────────────────────────────────────────────────────
+function PhotoLightbox({
+  photos,
+  currentIndex,
+  onClose,
+  onPrev,
+  onNext,
+  onJump,
+}: {
+  photos: any[];
+  currentIndex: number;
+  onClose: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onJump: (index: number) => void;
+}) {
+  const photo = photos[currentIndex];
+  const total = photos.length;
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") onPrev();
+      if (e.key === "ArrowRight") onNext();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose, onPrev, onNext]);
+
+  if (!photo) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-black/95" onClick={onClose}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3 bg-black/60 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <p className="text-white/70 text-sm">
+          Photo <span className="text-white font-semibold">{currentIndex + 1}</span> of <span className="text-white font-semibold">{total}</span>
+        </p>
+        <button onClick={onClose} className="text-white/70 hover:text-white transition p-1 rounded-lg hover:bg-white/10">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Image */}
+      <div className="flex-1 flex items-center justify-center relative p-4" onClick={(e) => e.stopPropagation()}>
+        {/* Prev */}
+        {currentIndex > 0 && (
+          <button
+            onClick={onPrev}
+            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center h-10 w-10 rounded-full bg-black/50 text-white hover:bg-black/80 transition border border-white/20"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
+
+        <img
+          src={photo.cdnUrl}
+          alt={`Photo ${currentIndex + 1}`}
+          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+        />
+
+        {/* Next */}
+        {currentIndex < total - 1 && (
+          <button
+            onClick={onNext}
+            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center h-10 w-10 rounded-full bg-black/50 text-white hover:bg-black/80 transition border border-white/20"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Thumbnail strip */}
+      <div className="flex-shrink-0 px-4 pb-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex gap-1.5 overflow-x-auto py-2 scrollbar-hide justify-center flex-wrap max-h-[90px]">
+          {photos.map((p, i) => (
+            <button
+              key={p.id ?? i}
+              onClick={() => onJump(i)}
+              className={`flex-shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition ${
+                i === currentIndex ? "border-white opacity-100" : "border-transparent opacity-50 hover:opacity-80"
+              }`}
+              title={`Photo ${i + 1}`}
+            >
+              <img src={p.cdnUrl} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function AccreditationPage() {
   const { token, user, _hasHydrated } = useAuthStore();
   const isCountryManager = user?.role === "country_manager";
   const userCountryScope = user?.countryScope ?? [];
   const qc = useQueryClient();
+  
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [selectedTask, setSelectedTask] = useState<ListingReviewTask | null>(null);
@@ -89,6 +183,17 @@ export default function AccreditationPage() {
   const [providerNote, setProviderNote] = useState("");
   const [docViewer, setDocViewer] = useState<{ url: string; fileType: string; label: string } | null>(null);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
+  const [photoLightbox, setPhotoLightbox] = useState<{ photos: any[]; index: number } | null>(null);
+
+  const openPhoto = useCallback((photos: any[], index: number) => {
+    setPhotoLightbox({ photos, index });
+  }, []);
+
+  const prevPhoto = useCallback(() =>
+    setPhotoLightbox((s) => s && s.index > 0 ? { ...s, index: s.index - 1 } : s), []);
+
+  const nextPhoto = useCallback(() =>
+    setPhotoLightbox((s) => s && s.index < s.photos.length - 1 ? { ...s, index: s.index + 1 } : s), []);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   // const params = { page: String(page), limit: String(limit) };
@@ -135,10 +240,10 @@ export default function AccreditationPage() {
   const { data: providersData } = useQuery({
     queryKey: ["admin-providers-list"],
     queryFn: () =>
-      api
+      listingApi
         .get("/admin/users", { params: { userType: "provider", limit: "1000" } })
         .then((r) => r.data.data ?? r.data),
-    enabled: !!token && _hasHydrated,
+    enabled: !!token,
   });
 
   const providers: PlatformUser[] = providersData?.users ?? [];
@@ -153,14 +258,14 @@ export default function AccreditationPage() {
 
   const tasks = isCountryManager && userCountryScope.length > 0
     ? rawTasks.filter((t) => {
-        const listingCountry = t.listing?.country?.toUpperCase();
-        const selectedCountry = country?.toUpperCase();
-        const inScope = listingCountry
-          ? userCountryScope.some((sc) => sc.toUpperCase() === listingCountry)
-          : false;
+      const listingCountry = t.listing?.country?.toUpperCase();
+      const selectedCountry = country?.toUpperCase();
+      const inScope = listingCountry
+        ? userCountryScope.some((sc) => sc.toUpperCase() === listingCountry)
+        : false;
 
-        return inScope && (!selectedCountry || selectedCountry === listingCountry);
-      })
+      return inScope && (!selectedCountry || selectedCountry === listingCountry);
+    })
     : rawTasks;
   const total: number = data?.total ?? tasks.length;
 
@@ -244,9 +349,14 @@ export default function AccreditationPage() {
     {
       key: "provider",
       label: "Provider",
-      render: (t) => (
-        <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
-      ),
+      render: (t) => {
+        const name = providerMap.get(t.listing.providerId);
+        return name ? (
+          <span className="text-xs text-slate-700 font-medium">{name}</span>
+        ) : (
+          <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
+        );
+      },
     },
     {
       key: "stars",
@@ -276,6 +386,18 @@ export default function AccreditationPage() {
       {/* Document lightbox */}
       {docViewer && (
         <DocViewer url={docViewer.url} fileType={docViewer.fileType} label={docViewer.label} onClose={() => setDocViewer(null)} />
+      )}
+
+      {/* Photo lightbox */}
+      {photoLightbox && (
+        <PhotoLightbox
+          photos={photoLightbox.photos}
+          currentIndex={photoLightbox.index}
+          onClose={() => setPhotoLightbox(null)}
+          onPrev={prevPhoto}
+          onNext={nextPhoto}
+          onJump={(i) => setPhotoLightbox((s) => s ? { ...s, index: i } : null)}
+        />
       )}
 
       <SectionHeader
@@ -347,7 +469,7 @@ export default function AccreditationPage() {
             {/* Submission summary */}
             <dl className="grid grid-cols-2 gap-3 text-sm">
               {[
-                ["Provider", selectedTask?.listing?.providerId ?? "—"],
+                ["Provider", selectedTask?.listing?.providerId ? (providerMap.get(selectedTask.listing.providerId) ?? selectedTask.listing.providerId) : "—"],
                 ["Submission Date", selectedTask?.listing?.submittedAt ? formatRelativeTime(selectedTask.listing.submittedAt) : "—"],
                 ["Claimed Stars", selectedTask?.listing?.claimedStarRating
                   ? `${"★".repeat(selectedTask.listing.claimedStarRating)} (${selectedTask.listing.claimedStarRating}★)`
@@ -411,11 +533,19 @@ export default function AccreditationPage() {
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
                   Listing Photos ({detail.photos.length})
                 </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {detail.photos.slice(0, 6).map((p: any) => (
-                    <div key={p.id} className="aspect-video bg-slate-100 rounded-lg overflow-hidden">
-                      <img src={p.cdnUrl} alt="" className="w-full h-full object-cover" />
-                    </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {detail.photos.map((p: any, i: number) => (
+                    <button
+                      key={p.id ?? i}
+                      onClick={() => openPhoto(detail.photos, i)}
+                      className="aspect-square bg-slate-100 rounded-lg overflow-hidden group relative focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      title={`View photo ${i + 1}`}
+                    >
+                      <img src={p.cdnUrl} alt={`Photo ${i + 1}`} className="w-full h-full object-cover transition group-hover:scale-105 duration-200" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
+                        <Eye className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                      </div>
+                    </button>
                   ))}
                 </div>
               </div>

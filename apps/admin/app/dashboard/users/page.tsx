@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuthStore } from "@/stores/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, ShieldOff, ShieldCheck, Ban, Eye } from "lucide-react";
 import { api } from "@/lib/api";
@@ -13,19 +14,19 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import type { PlatformUser } from "@/types/admin";
-import { useAuthStore } from "@/stores/auth";
+// import { useAuthStore } from "@/stores/auth";
 
 const fetchUsers = (params: Record<string, string>) =>
   api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
 
 export default function UsersPage() {
   const { user, _hasHydrated } = useAuthStore();
+  const isCountryManager = user?.role === "country_manager";
+
   const qc = useQueryClient();
 
   // If this admin has a country scope, restrict the user list to those countries
-  const scopedCountries: string[] = user?.role === "country_manager"
-    ? (user?.countryScope ?? [])
-    : [];
+
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -48,7 +49,7 @@ export default function UsersPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-users", page, limit, q, status, userType, scopedCountries.join(",")],
     queryFn: () => fetchUsers(params),
-    enabled: _hasHydrated && (user?.role !== "country_manager" || scopedCountries.length > 0),
+    enabled: _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
   });
 
   const rawUsers: PlatformUser[] = data?.users ?? [];

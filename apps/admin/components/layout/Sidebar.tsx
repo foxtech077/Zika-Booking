@@ -8,6 +8,7 @@ import {
   Star, MessageSquare, Cable, DollarSign, Percent, Ticket,
   ShieldCheck, ClipboardList, BarChart3, Settings,
   ChevronLeft, ChevronRight, LogOut,
+  CreditCard, Coins, RotateCcw, History,
 } from "lucide-react";
 import { cn, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -20,15 +21,16 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, Users, BadgeCheck, Building2, CalendarDays,
   Star, MessageSquare, Cable, DollarSign, Percent, Ticket,
   ShieldCheck, ClipboardList, BarChart3, Settings,
+  CreditCard, Coins, RotateCcw, History,
 };
 
 const ROLE_BADGE_COLORS: Record<AdminRole, string> = {
-  super_admin:     "bg-purple-100 text-purple-700",
-  admin:           "bg-blue-100 text-blue-700",
+  super_admin: "bg-purple-100 text-purple-700",
+  admin: "bg-blue-100 text-blue-700",
   country_manager: "bg-teal-100 text-teal-700",
-  sales:           "bg-green-100 text-green-700",
-  support:         "bg-orange-100 text-orange-700",
-  finance:         "bg-indigo-100 text-indigo-700",
+  sales: "bg-green-100 text-green-700",
+  support: "bg-orange-100 text-orange-700",
+  finance: "bg-indigo-100 text-indigo-700",
 };
 
 export function Sidebar() {
@@ -53,7 +55,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "relative flex flex-col bg-zika-navy border-r border-white/10",
+        "relative flex flex-col sidebar-bg border-r border-white/10",
         "transition-[width] duration-300 ease-in-out flex-shrink-0",
         "h-screen sticky top-0",
         collapsed ? "w-[68px]" : "w-[260px]"
@@ -86,16 +88,13 @@ export function Sidebar() {
           return (
             <div key={group.group} className={cn("mb-1", !collapsed && "mb-2")}>
               {!collapsed && (
-                <p className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-white/30">
+                <p className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-widest header-green">
                   {group.group}
                 </p>
               )}
               {visibleItems.map((item) => {
                 const Icon = ICON_MAP[item.icon];
-                const isActive =
-                  item.href === "/dashboard"
-                    ? pathname === "/dashboard"
-                    : pathname.startsWith(item.href);
+                const isActive = pathname === item.href;
 
                 return (
                   <Link
@@ -103,19 +102,19 @@ export function Sidebar() {
                     href={item.href}
                     title={collapsed ? item.label : undefined}
                     className={cn(
-                      "flex items-center gap-3 transition-colors duration-150 group",
+                      "flex items-center gap-3 font-medium transition-colors duration-150 group",
                       collapsed
                         ? "justify-center mx-2 px-0 py-2.5 rounded-lg"
                         : "mx-2 px-3 py-2 rounded-lg",
                       isActive
-                        ? "bg-primary text-white shadow-sm"
-                        : "text-white/60 hover:text-white hover:bg-white/8"
+                        ? "nav-active"
+                        : "text-white hover:text-white hover:bg-white/12"
                     )}
                   >
                     {Icon && (
                       <Icon
                         className={cn(
-                          "flex-shrink-0",
+                          "flex-shrink-0 icon-green",
                           collapsed ? "h-5 w-5" : "h-4 w-4",
                           isActive ? "text-white" : "text-white/60 group-hover:text-white"
                         )}
@@ -135,7 +134,7 @@ export function Sidebar() {
 
       {/* User info + logout */}
       <div className={cn(
-        "flex-shrink-0 border-t border-white/10 py-3",
+        "flex-shrink-0 border-t border-white/10 py-3 bg-[#064e3b]",
         collapsed ? "px-2" : "px-3"
       )}>
         {user && !collapsed && (
@@ -157,7 +156,7 @@ export function Sidebar() {
           title="Logout"
           className={cn(
             "flex items-center gap-2 w-full rounded-lg px-3 py-2 text-sm",
-            "text-white/50 hover:text-white hover:bg-white/8 transition-colors",
+            "text-secondary hover:text-white hover:bg-white/12 transition-colors",
             collapsed && "justify-center px-0"
           )}
         >
@@ -172,7 +171,7 @@ export function Sidebar() {
         className={cn(
           "absolute -right-3 top-[72px] z-10",
           "flex h-6 w-6 items-center justify-center rounded-full",
-          "bg-zika-navy border border-white/20 text-white/60",
+          "bg-sidebar-bg border border-white/20 text-white/60",
           "hover:text-white hover:border-white/40 transition-colors shadow-sm"
         )}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}

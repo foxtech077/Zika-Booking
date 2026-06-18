@@ -53,9 +53,9 @@ export default function ListingsPage() {
 
   const params = { q, status, category, country, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-listings", page, limit, q, status, category, effectiveCountry],
+    queryKey: ["admin-listings", page, "20", q, status, category, effectiveCountry],
     queryFn: () => fetchListings(params),
-    enabled: !!token,
+    enabled: !!token && _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
   });
 
   const rawListings: Listing[] = data?.listings ?? [];

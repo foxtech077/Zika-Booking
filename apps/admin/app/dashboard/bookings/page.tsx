@@ -11,54 +11,61 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
-import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
+import { ActionModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
+import type { Booking } from "@/types/admin";
+
 import { canAccess } from "@/permissions/rbac";
-import type { AdminRole, Booking } from "@/types/admin";
-import Link from "next/link";
+import type { AdminRole } from "@/types/admin";
+
+const COUNTRY_OPTIONS = [
+  "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
+].map((c) => ({ value: c, label: c }));
 
 const fetchBookings = (params: Record<string, string>) =>
-  listingApi.get("/admin/bookings", { params }).then((r) => r.data.data ?? r.data);
+  listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 const fetchBookingDetail = (id: string) =>
   listingApi.get(`/admin/bookings/${id}`).then((r) => r.data.data ?? r.data);
 
 export default function BookingsPage() {
   const qc = useQueryClient();
+  const { token, user, _hasHydrated } = useAuthStore();
+  const role = user?.role as AdminRole | undefined;
+  const isAdminOrSuperAdmin = user?.role === "super_admin" || user?.role === "admin";
+  const isCountryManager = user?.role === "country_manager";
+  const canManualBook = canAccess(role, "manage_manual_booking");
+  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+
+  // scopedCountries only applies to country_manager (not admin — admin sees all)
+  const scopedCountries = user?.scopedCountries ?? [];
+  
+  const countryOptions = scopedCountries.length > 0
+    ? scopedCountries.map((c) => ({ value: c, label: c }))
+    : COUNTRY_OPTIONS;
+
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [listingType, setListingType] = useState("");
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  const { user, _hasHydrated } = useAuthStore();
-
-  const isCountryManager = user?.role === "country_manager";
-
-  const scopedCountries = useMemo(() => {
-    return isCountryManager ? (user?.countryScope ?? []) : [];
-  }, [isCountryManager, user?.countryScope]);
-
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
-  const countryOptions = [
-    "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
-  ].map((c) => ({ value: c, label: c }));
-
+  // Sync country selection after auth store hydration
   useEffect(() => {
-    if (!_hasHydrated) return;
     if (scopedCountries.length > 0 && !country) {
       setCountry(scopedCountries[0] ?? "");
     }
-  }, [_hasHydrated, scopedCountries, country]);
-
+  }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  const role = useAuthStore((state) => state.user?.role);
+  
 
   // Set default status for Sales role
   useEffect(() => {
@@ -114,6 +121,7 @@ export default function BookingsPage() {
       : []),
   ];
 
+  // For country managers, always enforce their scoped country
   const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
   const params = Object.fromEntries(
     Object.entries({
@@ -122,24 +130,19 @@ export default function BookingsPage() {
       listingType,
       country: effectiveCountry,
       page: String(page),
-      limit: String(rowsPerPage),
+      limit: String(limit),
     }).filter(([, v]) => v !== "")
   );
 
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-bookings", page, rowsPerPage, q, status, listingType, effectiveCountry],
+    queryKey: ["admin-bookings", params],
     queryFn: () => fetchBookings(params),
-    enabled: _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
+    // Wait for auth store to rehydrate so scopedCountries/effectiveCountry are correct
+    enabled: !!token && _hasHydrated,
   });
 
-  const rawBookings: Booking[] = data?.bookings ?? [];
-  const bookings = isCountryManager && scopedCountries.length > 0
-    ? rawBookings.filter((b) => {
-        const listingCountry = b.listing?.country?.toUpperCase();
-        return listingCountry ? scopedCountries.some((sc) => sc.toUpperCase() === listingCountry) : false;
-      })
-    : rawBookings;
+  const bookings: Booking[] = data?.bookings ?? [];
   const total: number = data?.total ?? 0;
 
   const offset = (page - 1) * rowsPerPage;
@@ -171,6 +174,14 @@ export default function BookingsPage() {
       qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
       setCancelModal(null);
       setCancelReason("");
+    },
+  });
+
+  // Resend payment link for draft bookings
+  const resendLinkMut = useMutation({
+    mutationFn: (id: string) => listingApi.post(`/admin/bookings/${id}/send-link`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-bookings"] });
     },
   });
 
@@ -254,6 +265,15 @@ export default function BookingsPage() {
               <XCircle className="h-3.5 w-3.5" />
             </button>
           )}
+          {["pending_payment", "draft"].includes(b.status) && (
+            <button
+              onClick={() => resendLinkMut.mutate(b.id)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
+              title="Resend payment link"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -265,10 +285,10 @@ export default function BookingsPage() {
         title="Bookings"
         description={`${total.toLocaleString()} total bookings`}
         action={
-          canCreateManualBooking ? (
+          canManualBook ? (
             <Link href="/dashboard/bookings/new">
               <Button leftIcon={<Plus className="h-4 w-4" />}>
-                Create Booking
+                Manual Booking
               </Button>
             </Link>
           ) : undefined
@@ -276,7 +296,8 @@ export default function BookingsPage() {
       />
 
       <Card padding="none">
-        <FilterBar
+        <FilterBar 
+        
           search={q}
           onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
@@ -286,7 +307,7 @@ export default function BookingsPage() {
         />
         <DataTable
           columns={columns}
-          data={bookings}
+          data={filteredBookings}
           loading={isLoading}
           onRowClick={(b) => setSelected(b)}
           emptyTitle="No bookings found"
