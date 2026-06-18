@@ -90,7 +90,7 @@ export default function RegisterPage() {
           <p className="text-gray-500 mb-2">We've sent a verification link to</p>
           <p className="font-semibold text-gray-800 mb-6">{form.email}</p>
           <p className="text-sm text-gray-400 mb-6">Click the link in your email to activate your account. It expires in 24 hours.</p>
-          <Link href="/auth/auth/login" className="text-primary font-semibold">Back to Sign In</Link>
+          <Link href="/auth/login" className="text-primary font-semibold">Back to Sign In</Link>
         </div>
       </div>
     );
@@ -156,7 +156,7 @@ export default function RegisterPage() {
 
         <p className="text-center text-sm text-gray-500 mt-6">
           Already have an account?{" "}
-          <Link href="/auth/auth/login" className="text-primary font-semibold">Sign In</Link>
+          <Link href="/auth/login" className="text-primary font-semibold">Sign In</Link>
         </p>
       </div>
     </div>

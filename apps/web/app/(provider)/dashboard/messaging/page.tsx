@@ -484,7 +484,7 @@ export default function MessagingPage() {
                         className={cn(
                           "w-full px-4 py-3.5 text-left transition-all duration-200",
                           isActive ? "bg-slate-950 text-white shadow-inner" : "hover:bg-slate-50",
-                          conversation.unreadCount > 0 && !isActive && "bg-blue-50/60"
+                          conversation.unreadCount > 0 && !isActive && "bg-green-50/60"
                         )}
                       >
                         <div className="flex gap-3">

@@ -451,7 +451,7 @@ export default function EarningsPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard label="Total Earnings" value={formatCurrency(data.allTime.payout)} icon={<Wallet />} trend={payoutTrend} loading={isLoading} tone="bg-emerald-50 text-emerald-700" />
-        <StatCard label="This Month Earnings" value={formatCurrency(chartData.at(-1)?.payout ?? 0)} icon={<CalendarDays />} trend={payoutTrend} loading={isLoading} tone="bg-blue-50 text-blue-700" />
+        <StatCard label="This Month Earnings" value={formatCurrency(chartData.at(-1)?.payout ?? 0)} icon={<CalendarDays />} trend={payoutTrend} loading={isLoading} tone="bg-green-50 text-green-700" />
         <StatCard label="Pending Payouts" value={formatCurrency(data.allTime.pendingPayouts)} icon={<CreditCard />} trend={0} loading={isLoading} tone="bg-amber-50 text-amber-700" />
         <StatCard label="Completed Payouts" value={formatCurrency(data.allTime.completedPayouts)} icon={<Banknote />} trend={payoutTrend} loading={isLoading} tone="bg-teal-50 text-teal-700" />
         <StatCard label="Total Bookings Revenue" value={formatCurrency(data.allTime.bookingsRevenue)} icon={<ReceiptText />} trend={revenueTrend} loading={isLoading} tone="bg-indigo-50 text-indigo-700" />
@@ -466,7 +466,7 @@ export default function EarningsPage() {
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              <Area type="monotone" dataKey="revenue" stroke="#0ea5e9" fill="#bae6fd" name="Revenue" />
+              <Area type="monotone" dataKey="revenue" stroke="#16a34a" fill="#bbf7d0" name="Revenue" />
               <Area type="monotone" dataKey="payout" stroke="#10b981" fill="#bbf7d0" name="Payout" />
             </AreaChart>
           </ResponsiveContainer>
@@ -479,7 +479,7 @@ export default function EarningsPage() {
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              <Bar dataKey="revenue" fill="#0284c7" radius={[6, 6, 0, 0]} name="Revenue" />
+              <Bar dataKey="revenue" fill="#16a34a" radius={[6, 6, 0, 0]} name="Revenue" />
             </BarChart>
           </ResponsiveContainer>
         </ChartShell>
@@ -503,7 +503,7 @@ export default function EarningsPage() {
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              <Bar dataKey="revenue" fill="#38bdf8" radius={[6, 6, 0, 0]} name="Earnings" />
+              <Bar dataKey="revenue" fill="#16a34a" radius={[6, 6, 0, 0]} name="Earnings" />
               <Bar dataKey="payout" fill="#34d399" radius={[6, 6, 0, 0]} name="Payouts" />
             </BarChart>
           </ResponsiveContainer>

@@ -383,7 +383,7 @@ export default function ReviewsPage() {
         <StatCard label="Total Reviews" value={stats.total} icon={<MessageSquare />} tone="bg-slate-100 text-slate-700" />
         <StatCard label="Average Rating" value={stats.average ? `${stats.average}/5` : "-"} icon={<Star />} tone="bg-amber-50 text-amber-600" />
         <StatCard label="5-star Reviews" value={stats.fiveStar} icon={<Star />} tone="bg-emerald-50 text-emerald-700" />
-        <StatCard label="Pending Replies" value={stats.pendingReplies} icon={<Clock3 />} tone="bg-blue-50 text-blue-700" />
+        <StatCard label="Pending Replies" value={stats.pendingReplies} icon={<Clock3 />} tone="bg-green-50 text-green-700" />
       </div>
 
       <Card>
