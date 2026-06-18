@@ -98,6 +98,12 @@ function fmtDate(d?: string) {
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+function toIsoDatetime(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  if (dateStr.includes("T")) return dateStr;
+  return new Date(dateStr + "T00:00:00Z").toISOString();
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function BookingReviewPage() {
@@ -269,8 +275,8 @@ export default function BookingReviewPage() {
         body.checkIn = ctx.checkIn;
         body.checkOut = ctx.checkOut;
       } else {
-        body.pickupDatetime = ctx.pickupDatetime;
-        body.returnDatetime = ctx.returnDatetime;
+        body.pickupDatetime = toIsoDatetime(ctx.pickupDatetime);
+        body.returnDatetime = toIsoDatetime(ctx.returnDatetime);
         body.driverFirstName = ctx.driverFirstName ?? ctx.firstName;
         body.driverLastName = ctx.driverLastName ?? ctx.lastName;
         body.driverAge = ctx.driverAge;
@@ -291,21 +297,19 @@ export default function BookingReviewPage() {
       setBookingRef(bRef);
 
       // Step 2: Initiate payment
-      const payBody: Record<string, any> = { bookingId: bId, paymentProvider: provider };
-      if (provider === "tara") {
-        if (!mobileNumber.trim()) { setPayError("Please enter your mobile number."); return; }
-        payBody.mobileNumber = mobileNumber.trim();
-      }
-      const payRes = await paymentApi.post<any>("/payments/initiate", payBody);
-      if (!payRes.data.success) {
-        setPayError(payRes.data?.error?.message ?? "Payment initiation failed.");
-        return;
-      }
-      const pmId = payRes.data.data.paymentId as string;
-      setPaymentId(pmId);
-
+      let pmId: string;
       if (provider === "stripe") {
-        const { clientSecret, publishableKey } = payRes.data.data as { clientSecret: string; publishableKey: string };
+        const intentRes = await paymentApi.post<any>("/payments/create-intent", { bookingId: bId });
+        if (!intentRes.data.success) {
+          setPayError(intentRes.data?.error?.message ?? "Payment initiation failed.");
+          return;
+        }
+        pmId = intentRes.data.data.paymentId as string;
+        const clientSecret = intentRes.data.data.clientSecret as string;
+        const publishableKey =
+          (intentRes.data.data.publishableKey as string) ||
+          process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!;
+        setPaymentId(pmId);
         setStripeClientSecret(clientSecret);
         const { loadStripe } = await import("@stripe/stripe-js");
         const stripe = await loadStripe(publishableKey);
@@ -313,6 +317,18 @@ export default function BookingReviewPage() {
         setStep("stripe_card");
       } else {
         // Tara M-Pesa
+        if (!mobileNumber.trim()) { setPayError("Please enter your mobile number."); return; }
+        const payRes = await paymentApi.post<any>("/payments/initiate", {
+          bookingId: bId,
+          paymentProvider: "tara",
+          mobileNumber: mobileNumber.trim(),
+        });
+        if (!payRes.data.success) {
+          setPayError(payRes.data?.error?.message ?? "Payment initiation failed.");
+          return;
+        }
+        pmId = payRes.data.data.paymentId as string;
+        setPaymentId(pmId);
         setStep("polling");
         startPolling(pmId, bRef, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money");
       }

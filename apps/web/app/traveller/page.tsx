@@ -87,6 +87,12 @@ const POPULAR_DESTINATIONS = [
   { name: "Kampala", country: "Uganda", icon: "🦁", from: "from-yellow-400", to: "to-amber-700" },
 ] as const;
 
+function toIsoDatetime(dateStr: string | null | undefined): string {
+  if (!dateStr) return "";
+  if (dateStr.includes("T")) return dateStr;
+  return new Date(dateStr + "T00:00:00Z").toISOString();
+}
+
 // ── Styled date input — universally compatible, zero dependencies ──
 // Uses the REAL <input type="date"> (always clickable, always opens native picker).
 // When empty: text is transparent so browser's "dd-mm-yyyy" is invisible;
@@ -158,6 +164,11 @@ export default function TravellerDashboard() {
   const [searchCheckOut, setSearchCheckOut] = useState<string>("");
   const [searchPickupDate, setSearchPickupDate] = useState<string>("");
   const [searchReturnDate, setSearchReturnDate] = useState<string>("");
+  // Separate date state for the listing detail panel (independent of the search bar)
+  const [detailCheckIn, setDetailCheckIn] = useState<string>("");
+  const [detailCheckOut, setDetailCheckOut] = useState<string>("");
+  const [detailPickupDate, setDetailPickupDate] = useState<string>("");
+  const [detailReturnDate, setDetailReturnDate] = useState<string>("");
   const [searchAdults, setSearchAdults] = useState(1);
   const [searchChildren, setSearchChildren] = useState(0);
   const [searchRooms, setSearchRooms] = useState(1);
@@ -678,6 +689,10 @@ export default function TravellerDashboard() {
     setVoucherApplied(false);
     setVoucherDiscount(0);
     setVoucherCode("");
+    setDetailCheckIn("");
+    setDetailCheckOut("");
+    setDetailPickupDate("");
+    setDetailReturnDate("");
 
     try {
       const res = await listingApi.get<any>(`/listings/${id}/public`);
@@ -737,8 +752,8 @@ export default function TravellerDashboard() {
 
   // 4b. Availability check — GET /{id}/availability
   async function checkAvailability(listingId: string, category: string) {
-    const start = category === "car" ? searchPickupDate : searchCheckIn;
-    const end = category === "car" ? searchReturnDate : searchCheckOut;
+    const start = category === "car" ? detailPickupDate : detailCheckIn;
+    const end = category === "car" ? detailReturnDate : detailCheckOut;
     if (!start || !end || !listingId) { setAvailabilityStatus(null); return; }
 
     setAvailabilityStatus("checking");
@@ -770,7 +785,7 @@ export default function TravellerDashboard() {
   useEffect(() => {
     if (!detailListing || lockToken) return;
     checkAvailability(detailListing.id, detailListing.category);
-  }, [searchCheckIn, searchCheckOut, searchPickupDate, searchReturnDate, detailListing?.id]);
+  }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
 
   // Helper: calculate nights/days between two date strings
   function calcDays(start: string, end: string): number {
@@ -791,21 +806,21 @@ export default function TravellerDashboard() {
     };
 
     if (detailListing.category !== "car") {
-      if (!searchCheckIn || !searchCheckOut) {
+      if (!detailCheckIn || !detailCheckOut) {
         setBookingError("Please select check-in and check-out dates.");
         setLockingListing(false);
         return;
       }
-      body.checkIn = searchCheckIn;
-      body.checkOut = searchCheckOut;
+      body.checkIn = detailCheckIn;
+      body.checkOut = detailCheckOut;
     } else {
-      if (!searchPickupDate || !searchReturnDate) {
+      if (!detailPickupDate || !detailReturnDate) {
         setBookingError("Please select pickup and return dates.");
         setLockingListing(false);
         return;
       }
-      body.pickupDatetime = searchPickupDate;
-      body.returnDatetime = searchReturnDate;
+      body.pickupDatetime = toIsoDatetime(detailPickupDate);
+      body.returnDatetime = toIsoDatetime(detailReturnDate);
     }
 
     try {
@@ -914,11 +929,11 @@ export default function TravellerDashboard() {
     };
 
     if (detailListing.category !== "car") {
-      body.checkIn = searchCheckIn;
-      body.checkOut = searchCheckOut;
+      body.checkIn = detailCheckIn;
+      body.checkOut = detailCheckOut;
     } else {
-      body.pickupDatetime = searchPickupDate;
-      body.returnDatetime = searchReturnDate;
+      body.pickupDatetime = toIsoDatetime(detailPickupDate);
+      body.returnDatetime = toIsoDatetime(detailReturnDate);
       body.driverFirstName = driverFirstName || firstName;
       body.driverLastName = driverLastName || lastName;
       body.driverAge = driverAge;
@@ -936,39 +951,63 @@ export default function TravellerDashboard() {
       }
       const bookingId = bookingRes.data.data.bookingId;
       const bookingRef = bookingRes.data.data.bookingReference as string;
-      const total = Number(bookingRes.data.data.totalAmount);
+      const total = Number(bookingRes.data.data.totalAmount) || 0;
       setPendingBookingRef(bookingRef);
       setPendingBookingAmount(total);
 
       // Step 2: Initiate payment via payment service
-      const paymentBody: Record<string, any> = { bookingId, paymentProvider };
-      if (selectedMethodId) paymentBody.paymentMethodId = selectedMethodId;
-      if (paymentProvider === "tara") {
-        if (!mobileNumber) { setBookingError("Please enter your mobile number for M-Pesa payment."); return; }
-        paymentBody.mobileNumber = mobileNumber;
-      }
-      const paymentRes = await paymentApi.post<any>("/payments/initiate", paymentBody);
-      if (!paymentRes.data.success) {
-        setBookingError(paymentRes.data?.error?.message ?? "Payment initiation failed.");
-        return;
-      }
-      const pmId = paymentRes.data.data.paymentId as string;
-      setPaymentId(pmId);
-
-      // Step 3a: Stripe — load Stripe.js and show card form
-      if (paymentProvider === "stripe") {
-        const { clientSecret, publishableKey } = paymentRes.data.data as { clientSecret: string; publishableKey: string };
+      let pmId: string;
+      if (paymentProvider === "stripe" && !selectedMethodId) {
+        // New card — create PaymentIntent first
+        const intentRes = await paymentApi.post<any>("/payments/create-intent", { bookingId });
+        if (!intentRes.data.success) {
+          setBookingError(intentRes.data?.error?.message ?? "Payment initiation failed.");
+          return;
+        }
+        pmId = intentRes.data.data.paymentId as string;
+        const clientSecret = intentRes.data.data.clientSecret as string;
+        const publishableKey =
+          (intentRes.data.data.publishableKey as string) ||
+          process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!;
+        setPaymentId(pmId);
         setStripeClientSecret(clientSecret);
         const { loadStripe } = await import("@stripe/stripe-js");
         const stripe = await loadStripe(publishableKey);
         setStripeInstance(stripe);
         setCheckoutStep("stripe_card");
-      }
+      } else {
+        // Saved card (Stripe off-session) or Tara
+        const paymentBody: Record<string, any> = { bookingId, paymentProvider };
+        if (selectedMethodId) paymentBody.paymentMethodId = selectedMethodId;
+        if (paymentProvider === "tara") {
+          if (!mobileNumber) { setBookingError("Please enter your mobile number for M-Pesa payment."); return; }
+          paymentBody.mobileNumber = mobileNumber;
+        }
+        const paymentRes = await paymentApi.post<any>("/payments/initiate", paymentBody);
+        if (!paymentRes.data.success) {
+          setBookingError(paymentRes.data?.error?.message ?? "Payment initiation failed.");
+          return;
+        }
+        pmId = paymentRes.data.data.paymentId as string;
+        setPaymentId(pmId);
 
-      // Step 3b: Tara — show polling screen, webhook will confirm booking
-      if (paymentProvider === "tara") {
-        setCheckoutStep("polling");
-        startPaymentPolling(pmId, bookingRef, total);
+        if (paymentProvider === "stripe") {
+          // Saved card — backend may return clientSecret for 3DS auth
+          const { clientSecret, publishableKey } = paymentRes.data.data as { clientSecret?: string; publishableKey?: string };
+          if (clientSecret) {
+            setStripeClientSecret(clientSecret);
+            const { loadStripe } = await import("@stripe/stripe-js");
+            const stripe = await loadStripe(publishableKey || process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+            setStripeInstance(stripe);
+            setCheckoutStep("stripe_card");
+          } else {
+            setCheckoutStep("polling");
+            startPaymentPolling(pmId, bookingRef, total);
+          }
+        } else if (paymentProvider === "tara") {
+          setCheckoutStep("polling");
+          startPaymentPolling(pmId, bookingRef, total);
+        }
       }
     } catch (err: any) {
       const msg =
@@ -1015,24 +1054,27 @@ export default function TravellerDashboard() {
       const raw: any[] = res.data?.data?.bookings ?? res.data?.data ?? (Array.isArray(res.data) ? res.data : []);
       console.log("[fetchGuestBookings] raw bookings array:", raw);
       setBookingsList(
-        raw.map((b: any) => ({
-          ...b,
-          listingTitle:
-            b.listingTitle ?? b.listingName ?? b.listing_title ?? b.listing_name ??
-            b.listing?.name ?? b.listing?.title ?? "",
-          listingCategory:
-            b.listingCategory ?? b.listingType ?? b.listing_type ?? b.listing?.category ?? "hotel",
-          primaryPhotoUrl:
-            b.primaryPhotoUrl ?? b.listingPrimaryPhotoUrl ?? b.listing_primary_photo_url ??
-            b.listing?.primaryPhotoUrl ?? b.listing?.photos?.[0]?.cdnUrl ?? null,
-          checkIn: b.checkIn ?? b.check_in ?? null,
-          checkOut: b.checkOut ?? b.check_out ?? null,
-          pickupDatetime: b.pickupDatetime ?? b.pickup_datetime ?? null,
-          returnDatetime: b.returnDatetime ?? b.return_datetime ?? null,
-          totalAmount: b.totalAmount ?? b.total_amount ?? 0,
-          nightsOrDays: b.nightsOrDays ?? b.nights_or_days ?? 1,
-          canCancel: b.status === "confirmed",
-        }))
+        raw.map((b: any) => {
+          const mapped = {
+            ...b,
+            listingTitle:
+              b.listingTitle ?? b.listingName ?? b.listing_title ?? b.listing_name ??
+              b.listing?.name ?? b.listing?.title ?? "",
+            listingCategory:
+              b.listingCategory ?? b.listingType ?? b.listing_type ?? b.listing?.category ?? "hotel",
+            primaryPhotoUrl:
+              b.primaryPhotoUrl ?? b.listingPrimaryPhotoUrl ?? b.listing_primary_photo_url ??
+              b.listing?.primaryPhotoUrl ?? b.listing?.photos?.[0]?.cdnUrl ?? null,
+            checkIn: b.checkIn ?? b.check_in ?? null,
+            checkOut: b.checkOut ?? b.check_out ?? null,
+            pickupDatetime: b.pickupDatetime ?? b.pickup_datetime ?? null,
+            returnDatetime: b.returnDatetime ?? b.return_datetime ?? null,
+            totalAmount: b.totalAmount ?? b.total_amount ?? 0,
+            nightsOrDays: b.nightsOrDays ?? b.nights_or_days ?? 1,
+            canCancel: b.status === "confirmed",
+          };
+          return mapped;
+        })
       );
     } catch (err: any) {
       console.error("[fetchGuestBookings] error:", err?.response?.data ?? err?.message ?? err);
@@ -1059,11 +1101,11 @@ export default function TravellerDashboard() {
       listingCountry: detailListing.country,
       pricePerNight: detailListing.pricePerNight,
       currency: detailListing.currency,
-      checkIn: !isCar ? searchCheckIn : undefined,
-      checkOut: !isCar ? searchCheckOut : undefined,
-      pickupDatetime: isCar ? searchPickupDate : undefined,
-      returnDatetime: isCar ? searchReturnDate : undefined,
-      nightsOrDays: calcDays(isCar ? searchPickupDate : searchCheckIn, isCar ? searchReturnDate : searchCheckOut),
+      checkIn: !isCar ? detailCheckIn : undefined,
+      checkOut: !isCar ? detailCheckOut : undefined,
+      pickupDatetime: isCar ? toIsoDatetime(detailPickupDate) : undefined,
+      returnDatetime: isCar ? toIsoDatetime(detailReturnDate) : undefined,
+      nightsOrDays: calcDays(isCar ? detailPickupDate : detailCheckIn, isCar ? detailReturnDate : detailCheckOut),
       adults: searchAdults,
       children: searchChildren,
       lockToken,
@@ -1529,8 +1571,8 @@ export default function TravellerDashboard() {
 
                     {!lockToken ? (() => {
                       const isCar = detailListing.category === "car";
-                      const start = isCar ? searchPickupDate : searchCheckIn;
-                      const end = isCar ? searchReturnDate : searchCheckOut;
+                      const start = isCar ? detailPickupDate : detailCheckIn;
+                      const end = isCar ? detailReturnDate : detailCheckOut;
                       const days = calcDays(start, end);
                       const baseTotal = detailListing.pricePerNight * days;
                       const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
@@ -1543,20 +1585,23 @@ export default function TravellerDashboard() {
                             {isCar ? (
                               <div className="grid grid-cols-2 divide-x divide-slate-300">
                                 {([
-                                  { label: "Pickup", val: searchPickupDate, set: setSearchPickupDate, minVal: getTodayString() },
-                                  { label: "Return", val: searchReturnDate, set: setSearchReturnDate, minVal: searchPickupDate || getTodayString() },
-                                ] as const).map(({ label, val, set, minVal }) => {
+                                  { label: "Pickup", id: "dp-pickup", val: detailPickupDate, set: setDetailPickupDate, minVal: getTodayString() },
+                                  { label: "Return", id: "dp-return", val: detailReturnDate, set: setDetailReturnDate, minVal: detailPickupDate || getTodayString() },
+                                ] as const).map(({ label, id, val, set, minVal }) => {
                                   const fmt = val ? new Date(val + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
                                   return (
-                                    <div key={label} className="p-3 relative">
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pointer-events-none">{label}</p>
-                                      <p className={`text-sm font-semibold mt-0.5 pointer-events-none select-none ${fmt ? "text-slate-800" : "text-slate-400 font-normal"}`}>
+                                    <div key={label} className="p-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                                      onClick={() => {
+                                        const inp = document.getElementById(id) as HTMLInputElement | null;
+                                        if (!inp) return;
+                                        try { (inp as any).showPicker?.(); } catch { inp.focus(); }
+                                      }}>
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+                                      <p className={`text-sm font-semibold mt-0.5 ${fmt ? "text-slate-800" : "text-slate-400 font-normal"}`}>
                                         {fmt ?? "Add date"}
                                       </p>
-                                      {/* Always date-empty so native "dd/mm/yyyy" is NEVER visible */}
-                                      <input type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
-                                        className="date-styled date-empty absolute inset-0 w-full h-full border-none outline-none bg-transparent cursor-pointer"
-                                        style={{ opacity: 0.001 }} />
+                                      <input id={id} type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
+                                        className="sr-only" />
                                     </div>
                                   );
                                 })}
@@ -1565,19 +1610,23 @@ export default function TravellerDashboard() {
                               <>
                                 <div className="grid grid-cols-2 divide-x divide-slate-300">
                                   {([
-                                    { label: "Check-in", val: searchCheckIn, set: setSearchCheckIn, minVal: getTodayString() },
-                                    { label: "Check-out", val: searchCheckOut, set: setSearchCheckOut, minVal: searchCheckIn || getTodayString() },
-                                  ] as const).map(({ label, val, set, minVal }) => {
+                                    { label: "Check-in", id: "dp-checkin", val: detailCheckIn, set: setDetailCheckIn, minVal: getTodayString() },
+                                    { label: "Check-out", id: "dp-checkout", val: detailCheckOut, set: setDetailCheckOut, minVal: detailCheckIn || getTodayString() },
+                                  ] as const).map(({ label, id, val, set, minVal }) => {
                                     const fmt = val ? new Date(val + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
                                     return (
-                                      <div key={label} className="p-3 relative">
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pointer-events-none">{label}</p>
-                                        <p className={`text-sm font-semibold mt-0.5 pointer-events-none select-none ${fmt ? "text-slate-800" : "text-slate-400 font-normal"}`}>
+                                      <div key={label} className="p-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                                        onClick={() => {
+                                          const inp = document.getElementById(id) as HTMLInputElement | null;
+                                          if (!inp) return;
+                                          try { (inp as any).showPicker?.(); } catch { inp.focus(); }
+                                        }}>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
+                                        <p className={`text-sm font-semibold mt-0.5 ${fmt ? "text-slate-800" : "text-slate-400 font-normal"}`}>
                                           {fmt ?? "Add date"}
                                         </p>
-                                        <input type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
-                                          className="date-styled date-empty absolute inset-0 w-full h-full border-none outline-none bg-transparent cursor-pointer"
-                                          style={{ opacity: 0.001 }} />
+                                        <input id={id} type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
+                                          className="sr-only" />
                                       </div>
                                     );
                                   })}
@@ -1727,8 +1776,8 @@ export default function TravellerDashboard() {
                         {/* ── STEP 0: Booking Review ── */}
                         {checkoutStep === "review" && (() => {
                           const isCar = detailListing.category === "car";
-                          const start = isCar ? searchPickupDate : searchCheckIn;
-                          const end = isCar ? searchReturnDate : searchCheckOut;
+                          const start = isCar ? detailPickupDate : detailCheckIn;
+                          const end = isCar ? detailReturnDate : detailCheckOut;
                           const days = calcDays(start, end);
                           const base = detailListing.pricePerNight * days;
                           const serviceFee = Math.ceil(base * 0.05);
@@ -1757,11 +1806,11 @@ export default function TravellerDashboard() {
                               <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200 text-xs">
                                 <div className="flex justify-between items-center px-3 py-2.5">
                                   <span className="text-slate-500 font-semibold uppercase tracking-wider">{isCar ? "Pickup" : "Check-in"}</span>
-                                  <span className="font-bold text-slate-900">{isCar ? fmt(searchPickupDate) : fmt(searchCheckIn)}</span>
+                                  <span className="font-bold text-slate-900">{isCar ? fmt(detailPickupDate) : fmt(detailCheckIn)}</span>
                                 </div>
                                 <div className="flex justify-between items-center px-3 py-2.5">
                                   <span className="text-slate-500 font-semibold uppercase tracking-wider">{isCar ? "Return" : "Check-out"}</span>
-                                  <span className="font-bold text-slate-900">{isCar ? fmt(searchReturnDate) : fmt(searchCheckOut)}</span>
+                                  <span className="font-bold text-slate-900">{isCar ? fmt(detailReturnDate) : fmt(detailCheckOut)}</span>
                                 </div>
                                 <div className="flex justify-between items-center px-3 py-2.5">
                                   <span className="text-slate-500 font-semibold uppercase tracking-wider">Duration</span>
@@ -1957,8 +2006,8 @@ export default function TravellerDashboard() {
                           {/* Price summary */}
                           {(() => {
                             const isCar = detailListing.category === "car";
-                            const start = isCar ? searchPickupDate : searchCheckIn;
-                            const end = isCar ? searchReturnDate : searchCheckOut;
+                            const start = isCar ? detailPickupDate : detailCheckIn;
+                            const end = isCar ? detailReturnDate : detailCheckOut;
                             const days = calcDays(start, end);
                             const baseTotal = detailListing.pricePerNight * days;
                             const serviceFee = Math.ceil(baseTotal * 0.05);
