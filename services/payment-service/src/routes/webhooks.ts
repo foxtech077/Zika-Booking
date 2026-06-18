@@ -14,14 +14,15 @@ const TARA_WEBHOOK_SECRET = process.env["TARA_WEBHOOK_SECRET"] ?? "";
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 async function confirmBooking(bookingId: string, paymentId: string, paymentProvider: string) {
-  try {
-    await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}/confirm`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentId, paymentProvider }),
-    });
-  } catch (err) {
-    console.error("[webhook] Failed to confirm booking", bookingId, err);
+  const response = await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}/confirm`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paymentId, paymentProvider }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`Failed to confirm booking ${bookingId}: status ${response.status}. Response: ${errorText}`);
   }
 }
 
@@ -105,40 +106,43 @@ export async function webhookRoutes(app: FastifyInstance) {
         return reply.send({ received: true });
       }
   
-      //  IDEMPOTENCY CHECK — must be FIRST, before any side effects
-      if (payment.status === "captured") {
-        console.log("Already captured, skipping duplicate webhook");
-        return reply.send({ received: true });
+      try {
+        if (payment.status !== "captured") {
+          const chargeId = intent.latest_charge as string | null;
+          let cardDetails = null;
+          let pmType = null;
+      
+          if (chargeId) {
+            const charge = await stripe.charges.retrieve(chargeId);
+            cardDetails = charge.payment_method_details?.card ?? null;
+            pmType = charge.payment_method_details?.type ?? null;
+          }
+      
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: "captured",
+              capturedAt: new Date(),
+              paymentMethodType: pmType,
+              cardBrand: cardDetails?.brand ?? null,
+              cardLast4: cardDetails?.last4 ?? null,
+            },
+          });
+        }
+    
+        //  emails + PDF + confirm booking
+        await bookingConfirmedHandler({
+          id: payment.id,
+          paymentProvider: payment.paymentProvider,
+          metadata: { bookingId: payment.bookingId },
+        });
+      } catch (err: any) {
+        console.error(`[stripe-webhook] Error processing successful payment: ${err.message}`, err);
+        return reply.status(500).send({
+          error: "Internal Server Error",
+          message: err.message,
+        });
       }
-  
-      const chargeId = intent.latest_charge as string | null;
-  
-      let cardDetails = null;
-      let pmType = null;
-  
-      if (chargeId) {
-        const charge = await stripe.charges.retrieve(chargeId);
-        cardDetails = charge.payment_method_details?.card ?? null;
-        pmType = charge.payment_method_details?.type ?? null;
-      }
-  
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "captured",
-          capturedAt: new Date(),
-          paymentMethodType: pmType,
-          cardBrand: cardDetails?.brand ?? null,
-          cardLast4: cardDetails?.last4 ?? null,
-        },
-      });
-  
-      //  emails + PDF + confirm booking — runs only once
-      await bookingConfirmedHandler({
-        id: payment.id,
-        paymentProvider: payment.paymentProvider,
-        metadata: { bookingId: payment.bookingId },
-      });
   
       return reply.send({ received: true });
     }
@@ -348,24 +352,30 @@ export async function webhookRoutes(app: FastifyInstance) {
         return reply.status(200).send({ received: true });
       }
 
-      if (payment.status === "captured") {
-        return reply.status(200).send({ received: true });
+      try {
+        if (payment.status !== "captured") {
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: "captured",
+              capturedAt: new Date(),
+              paymentMethodType: "mobile_money",
+            },
+          });
+        }
+  
+        await bookingConfirmedHandler({
+          id: payment.id,
+          paymentProvider: payment.paymentProvider,
+          metadata: { bookingId: payment.bookingId },
+        });
+      } catch (err: any) {
+        app.log.error(`[tara-webhook] Error processing successful payment: ${err.message}`, err);
+        return reply.status(500).send({
+          error: "Internal Server Error",
+          message: err.message,
+        });
       }
-
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "captured",
-          capturedAt: new Date(),
-          paymentMethodType: "mobile_money",
-        },
-      });
-
-      await bookingConfirmedHandler({
-        id: payment.id,
-        paymentProvider: payment.paymentProvider,
-        metadata: { bookingId: payment.bookingId },
-      });
 
     } else if (body.event === "payment_failed") {
       const payment = await prisma.payment.findFirst({
