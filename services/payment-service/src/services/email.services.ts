@@ -10,7 +10,7 @@ export async function sendGuestEmail(
   pdf: { fileName: string; pdfUrl: string; pdfBuffer: Buffer }
 ) {
   await sgMail.send({
-    to: booking.user.email ?? "[EMAIL_ADDRESS]",
+    to: booking.user.email ?? "shamiradarson@gmail.com",
     from: {
       email: process.env.SENDGRID_FROM_EMAIL!,
       name: process.env.SENDGRID_FROM_NAME ?? "ZikaBooking",

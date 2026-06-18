@@ -237,69 +237,74 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
       listingFilter.claimedStarRating = parsedRating;
     }
-    const tasks = await prisma.listingReviewTask.findMany({
-      where: {
-        status: taskStatus
-          ? (taskStatus as ReviewTaskStatus)
-          : { in: ["open", "escalated"] },
-        AND: [
-          slaFilter,
-          {
-            listing: {
-              is: listingFilter,
+
+    try {
+      const tasks = await prisma.listingReviewTask.findMany({
+        where: {
+          status: taskStatus
+            ? (taskStatus as ReviewTaskStatus)
+            : { in: ["open", "escalated"] },
+          AND: [
+            slaFilter,
+            {
+              listing: {
+                is: listingFilter,
+              },
             },
-          },
-        ],
-      },
-      skip,
-      take,
-      orderBy: sortBy === "submitted_at"
-        ? { listing: { submittedAt: "desc" } }
-        : { slaDeadline: "asc" },
-      include: {
-        listing: {
-          include: {
-            photos: {
-              where: { deletedAt: null },
-              orderBy: { position: "asc" },
+          ],
+        },
+        skip,
+        take,
+        orderBy: sortBy === "submitted_at"
+          ? { listing: { submittedAt: "desc" } }
+          : { slaDeadline: "asc" },
+        include: {
+          listing: {
+            include: {
+              photos: {
+                where: { deletedAt: null },
+                orderBy: { position: "asc" },
+              },
             },
           },
         },
-      },
-    });
+      });
 
-    const total = await prisma.listingReviewTask.count({
-      where: {
-        status: taskStatus
-          ? (taskStatus as ReviewTaskStatus)
-          : { in: ["open", "escalated"] },
-        AND: [
-          slaFilter,
-          {
-            listing: {
-              is: listingFilter,
+      const total = await prisma.listingReviewTask.count({
+        where: {
+          status: taskStatus
+            ? (taskStatus as ReviewTaskStatus)
+            : { in: ["open", "escalated"] },
+          AND: [
+            slaFilter,
+            {
+              listing: {
+                is: listingFilter,
+              },
             },
-          },
-        ],
-      },
-    });
-
-    const signedTasks = await Promise.all(
-      tasks.map(async (t) => ({
-        ...t,
-        listing: {
-          ...t.listing,
-          photos: await withSignedPhotos(t.listing.photos),
+          ],
         },
-      })),
-    );
+      });
 
-    return sendSuccess(reply, 200, {
-      tasks: signedTasks,
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
+      const signedTasks = await Promise.all(
+        tasks.map(async (t) => ({
+          ...t,
+          listing: {
+            ...t.listing,
+            photos: await withSignedPhotos(t.listing.photos),
+          },
+        })),
+      );
+
+      return sendSuccess(reply, 200, {
+        tasks: signedTasks,
+        total,
+        page: parseInt(page, 10),
+        limit: take,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch review queue.");
+    }
   });
 
 
@@ -961,67 +966,71 @@ export async function adminListingRoutes(app: FastifyInstance) {
         `Cannot approve: the following required document(s) are missing: ${missingDocs.join(", ")}.`);
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.listing.updateMany({
-        where: { id, status: "pending_review" },
-        data: { status: "approved", starRating, approvedAt: new Date(), approvedBy: admin.adminId },
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const updated = await tx.listing.updateMany({
+          where: { id, status: "pending_review" },
+          data: { status: "approved", starRating, approvedAt: new Date(), approvedBy: admin.adminId },
+        });
+
+        if (updated.count === 0) return { actioned: false };
+
+        if (task) {
+          await tx.listingReviewTask.update({
+            where: { id: task.id },
+            data: { status: "resolved", outcome: "approved", adminNote: adminNote ?? null, resolvedAt: new Date() },
+          });
+        }
+
+        await tx.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "approved",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              starRating,
+              claimedStarRating: listing.claimedStarRating,
+              adminNote: adminNote ?? null,
+              taskId: task?.id ?? null,
+              submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+              ipAddress: req.ip,
+            },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "listing_approved",
+            targetType: "listing",
+            targetId: id,
+            oldValue: JSON.stringify({
+              status: listing.status,
+              claimedStarRating: listing.claimedStarRating,
+            }),
+            newValue: JSON.stringify({
+              status: "approved",
+              starRating,
+            }),
+            ipAddress: req.ip,
+          },
+        });
+
+        return { actioned: true };
       });
 
-      if (updated.count === 0) return { actioned: false };
-
-      if (task) {
-        await tx.listingReviewTask.update({
-          where: { id: task.id },
-          data: { status: "resolved", outcome: "approved", adminNote: adminNote ?? null, resolvedAt: new Date() },
-        });
+      if (!result.actioned) {
+        return sendError(reply, 409, "INVALID_STATUS",
+          "Listing is not pending review — it may have already been actioned by another admin.");
       }
 
-      await tx.listingModerationLog.create({
-  data: {
-    listingId: id,
-    action: "approved",
-    actorId: admin.adminId,
-    actorRole: admin.adminRole,
-    metadata: {
-      starRating,
-      claimedStarRating: listing.claimedStarRating,
-      adminNote: adminNote ?? null,
-      taskId: task?.id ?? null,
-      submissionNumber: task?.submissionNumber ?? listing.submissionCount,
-      ipAddress: req.ip,
-    },
-  },
-});
-
-      await tx.auditLog.create({
-        data: {
-          adminId: admin.adminId,
-          role: admin.adminRole,
-          action: "listing_approved",
-          targetType: "listing",
-          targetId: id,
-          oldValue: JSON.stringify({
-            status: listing.status,
-            claimedStarRating: listing.claimedStarRating,
-          }),
-          newValue: JSON.stringify({
-            status: "approved",
-            starRating,
-          }),
-          ipAddress: req.ip,
-        },
-      });
-
-return { actioned: true };
-});
-    if (!result.actioned) {
-      return sendError(reply, 409, "INVALID_STATUS",
-        "Listing is not pending review — it may have already been actioned by another admin.");
+      sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
+      return sendSuccess(reply, 200, { message: "Listing approved and published." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to approve listing.");
     }
-
-
-    sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
-    return sendSuccess(reply, 200, { message: "Listing approved and published." });
   });
 
   // ── POST /admin/listings/:id/reject (UC-2.10) ─────────────────────────────
@@ -1274,43 +1283,47 @@ return { actioned: true };
 
     const oldRating = listing.starRating ?? 0;
 
-    await prisma.$transaction([
-  prisma.listing.update({
-    where: { id },
-    data: { starRating },
-  }),
+    try {
+      await prisma.$transaction([
+        prisma.listing.update({
+          where: { id },
+          data: { starRating },
+        }),
 
-  prisma.listingModerationLog.create({
-    data: {
-      listingId: id,
-      action: "star_rating_updated",
-      actorId: admin.adminId,
-      actorRole: admin.adminRole,
-      metadata: {
-        oldRating,
-        newRating: starRating,
-        reason,
-        ipAddress: req.ip,
-      },
-    },
-  }),
+        prisma.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "star_rating_updated",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              oldRating,
+              newRating: starRating,
+              reason,
+              ipAddress: req.ip,
+            },
+          },
+        }),
 
-  prisma.auditLog.create({
-    data: {
-      adminId: admin.adminId,
-      role: admin.adminRole,
-      action: "star_rating_updated",
-      targetType: "listing",
-      targetId: id,
-      oldValue: String(oldRating),
-      newValue: String(starRating),
-      ipAddress: req.ip,
-    },
-  }),
-]);
+        prisma.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "star_rating_updated",
+            targetType: "listing",
+            targetId: id,
+            oldValue: String(oldRating),
+            newValue: String(starRating),
+            ipAddress: req.ip,
+          },
+        }),
+      ]);
 
-    sendStarRatingUpdatedEmail(listing.providerId, listing.name ?? id, oldRating, starRating, reason).catch(() => null);
-    return sendSuccess(reply, 200, { message: "Star rating updated." });
+      sendStarRatingUpdatedEmail(listing.providerId, listing.name ?? id, oldRating, starRating, reason).catch(() => null);
+      return sendSuccess(reply, 200, { message: "Star rating updated." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to update star rating.");
+    }
   });
 
   // ── POST /admin/listings/:id/suspend (UC-2.14) ────────────────────────────
@@ -1387,51 +1400,55 @@ return { actioned: true };
       return sendError(reply, 409, "INVALID_STATUS", "Only live listings can be suspended.");
     }
 
-    await prisma.$transaction([
-  prisma.listing.update({
-    where: { id },
-    data: {
-      status: "suspended",
-      suspendedAt: new Date(),
-      suspendedBy: admin.adminId,
-      suspensionReason: reason,
-    },
-  }),
+    try {
+      await prisma.$transaction([
+        prisma.listing.update({
+          where: { id },
+          data: {
+            status: "suspended",
+            suspendedAt: new Date(),
+            suspendedBy: admin.adminId,
+            suspensionReason: reason,
+          },
+        }),
 
-  prisma.listingModerationLog.create({
-    data: {
-      listingId: id,
-      action: "suspended",
-      actorId: admin.adminId,
-      actorRole: admin.adminRole,
-      metadata: {
-        reason,
-        previousStatus: listing.status,
-        notifyProvider,
-        ipAddress: req.ip,
-      },
-    },
-  }),
+        prisma.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "suspended",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              reason,
+              previousStatus: listing.status,
+              notifyProvider,
+              ipAddress: req.ip,
+            },
+          },
+        }),
 
-  prisma.auditLog.create({
-    data: {
-      adminId: admin.adminId,
-      role: admin.adminRole,
-      action: "listing_suspended",
-      targetType: "listing",
-      targetId: id,
-      oldValue: listing.status,
-      newValue: "suspended",
-      ipAddress: req.ip,
-    },
-  }),
-]);
+        prisma.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "listing_suspended",
+            targetType: "listing",
+            targetId: id,
+            oldValue: listing.status,
+            newValue: "suspended",
+            ipAddress: req.ip,
+          },
+        }),
+      ]);
 
-    if (notifyProvider) {
-      sendListingSuspendedEmail(listing.providerId, listing.name ?? id).catch(() => null);
+      if (notifyProvider) {
+        sendListingSuspendedEmail(listing.providerId, listing.name ?? id).catch(() => null);
+      }
+
+      return sendSuccess(reply, 200, { message: "Listing suspended." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to suspend listing.");
     }
-
-    return sendSuccess(reply, 200, { message: "Listing suspended." });
   });
 
   // ── POST /admin/listings/:id/reinstate (UC-2.14 A1) ───────────────────────
@@ -1498,40 +1515,44 @@ return { actioned: true };
 
     const restoreStatus = (listing.category === "apartment" || listing.category === "car") ? "active" : "approved";
 
-    await prisma.$transaction([
-      prisma.listing.update({ where: { id }, data: { status: restoreStatus } }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action: "reinstated",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: {
-            restoredStatus: restoreStatus,
-            reason: reason ?? null,
-            suspendedAt: listing.suspendedAt?.toISOString() ?? null,
-            suspendedBy: listing.suspendedBy ?? null,
-            suspensionReason: listing.suspensionReason ?? null,
+    try {
+      await prisma.$transaction([
+        prisma.listing.update({ where: { id }, data: { status: restoreStatus } }),
+        prisma.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "reinstated",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              restoredStatus: restoreStatus,
+              reason: reason ?? null,
+              suspendedAt: listing.suspendedAt?.toISOString() ?? null,
+              suspendedBy: listing.suspendedBy ?? null,
+              suspensionReason: listing.suspensionReason ?? null,
+              ipAddress: req.ip,
+            },
+          },
+        }),
+        prisma.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "listing_reinstated",
+            targetType: "listing",
+            targetId: id,
+            oldValue: listing.status,
+            newValue: restoreStatus,
             ipAddress: req.ip,
           },
-        },
-      }),
-      prisma.auditLog.create({
-        data: {
-          adminId: admin.adminId,
-          role: admin.adminRole,
-          action: "listing_reinstated",
-          targetType: "listing",
-          targetId: id,
-          oldValue: listing.status,
-          newValue: restoreStatus,
-          ipAddress: req.ip,
-        },
-      }),
-    ]);
+        }),
+      ]);
 
-    sendListingReinstatedEmail(listing.providerId, listing.name ?? id).catch(() => null);
-    return sendSuccess(reply, 200, { message: "Listing reinstated and live again." });
+      sendListingReinstatedEmail(listing.providerId, listing.name ?? id).catch(() => null);
+      return sendSuccess(reply, 200, { message: "Listing reinstated and live again." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to reinstate listing.");
+    }
   });
 
   // ── GET /admin/listings/:id/review-tasks ──────────────────────────────────
@@ -1834,37 +1855,41 @@ return { actioned: true };
       ],
     };
 
-    const [total, listings] = await Promise.all([
-      prisma.listing.count({ where }),
-      prisma.listing.findMany({
-        where, skip, take,
-        select: {
-          id: true,
-          name: true,
-          category: true,
-          status: true,
-          starRating: true,
-          country: true,
-          town: true,
-          pricePerNight: true,
-          currency: true,
-          submissionCount: true,
-          providerId: true,
-          approvedAt: true,
-          photos: {
-            where: { deletedAt: null },
-            orderBy: { position: "asc" },
-            select: { id: true, s3Key: true, cdnUrl: true, position: true },
+    try {
+      const [total, listings] = await Promise.all([
+        prisma.listing.count({ where }),
+        prisma.listing.findMany({
+          where, skip, take,
+          select: {
+            id: true,
+            name: true,
+            category: true,
+            status: true,
+            starRating: true,
+            country: true,
+            town: true,
+            pricePerNight: true,
+            currency: true,
+            submissionCount: true,
+            providerId: true,
+            approvedAt: true,
+            photos: {
+              where: { deletedAt: null },
+              orderBy: { position: "asc" },
+              select: { id: true, s3Key: true, cdnUrl: true, position: true },
+            },
           },
-        },
-        orderBy: { updatedAt: "desc" },
-      }),
-    ]);
+          orderBy: { updatedAt: "desc" },
+        }),
+      ]);
 
-    const signedListings = await Promise.all(
-      listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
-    );
-    return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
+      const signedListings = await Promise.all(
+        listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
+      );
+      return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch listings.");
+    }
   });
 
   // ── POST /admin/bookings/draft ───────────────────────────────────────────────
@@ -1914,69 +1939,81 @@ return { actioned: true };
     if (!checkAdminRole(req, reply)) return;
 
     const body = req.body as any;
-    const listing = await prisma.listing.findUnique({ where: { id: body.listingId } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-    const rate = body.nightlyRate ?? Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
-    const commissionRate = await getCommissionRate(listing.country ?? null);
+    if (!body.checkIn || !body.checkOut) {
+      return sendError(reply, 400, "BAD_REQUEST", "checkIn and checkOut are required.");
+    }
+    if (new Date(body.checkIn) >= new Date(body.checkOut)) {
+      return sendError(reply, 400, "BAD_REQUEST", "checkOut must be after checkIn.");
+    }
 
-    const billing = calculateBilling({
-      listingCategory: listing.category,
-      checkIn: body.checkIn,
-      checkOut: body.checkOut,
-      rate,
-      deliveryFee: 0,
-      promotionDiscount: 0,
-      voucherAmount: 0,
-      taxRate: getTaxRate(listing.country),
-      commissionRate,
-    });
+    try {
+      const listing = await prisma.listing.findUnique({ where: { id: body.listingId } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-    const reference = await generateReference(listing.country ?? "XX");
+      const rate = body.nightlyRate ?? Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+      const commissionRate = await getCommissionRate(listing.country ?? null);
 
-    const booking = await prisma.booking.create({
-      data: {
-        reference,
-        listingId: listing.id,
-        guestId: body.guestId ?? "manual-guest",
-        providerId: listing.providerId,
-        listingType: listing.category,
-        status: "draft",
-
-        checkIn: new Date(body.checkIn),
-        checkOut: new Date(body.checkOut),
-        nightsOrDays: billing.units || body.nightsOrDays || 1,
-
-        guestFirstName: body.guestFirstName,
-        guestLastName: body.guestLastName,
-        guestEmail: body.guestEmail,
-        guestPhone: body.guestPhone,
-
-        nightlyRate: listing.category !== "car" ? rate : undefined,
-        dailyRate: listing.category === "car" ? rate : undefined,
-
-        subtotal: billing.subtotal,
-        totalAmount: billing.totalAmount,
-        discountAmount: 0,
+      const billing = calculateBilling({
+        listingCategory: listing.category,
+        checkIn: body.checkIn,
+        checkOut: body.checkOut,
+        rate,
         deliveryFee: 0,
-
-        currency: listing.currency ?? "USD",
-
+        promotionDiscount: 0,
+        voucherAmount: 0,
+        taxRate: getTaxRate(listing.country),
         commissionRate,
-        commissionAmount: billing.commissionAmount,
-        providerPayout: billing.providerPayout,
+      });
 
-        cancellationPolicy: listing.cancellationPolicy ?? "moderate",
-      },
-    });
+      const reference = await generateReference(listing.country ?? "XX");
 
-    return sendSuccess(reply, 201, {
-      bookingId: booking.id,
-      bookingReference: booking.reference,
-      status: booking.status,
-      totalAmount: Number(booking.totalAmount),
-      currency: booking.currency,
-    });
+      const booking = await prisma.booking.create({
+        data: {
+          reference,
+          listingId: listing.id,
+          guestId: body.guestId ?? "manual-guest",
+          providerId: listing.providerId,
+          listingType: listing.category,
+          status: "draft",
+
+          checkIn: new Date(body.checkIn),
+          checkOut: new Date(body.checkOut),
+          nightsOrDays: billing.units || body.nightsOrDays || 1,
+
+          guestFirstName: body.guestFirstName,
+          guestLastName: body.guestLastName,
+          guestEmail: body.guestEmail,
+          guestPhone: body.guestPhone,
+
+          nightlyRate: listing.category !== "car" ? rate : undefined,
+          dailyRate: listing.category === "car" ? rate : undefined,
+
+          subtotal: billing.subtotal,
+          totalAmount: billing.totalAmount,
+          discountAmount: 0,
+          deliveryFee: 0,
+
+          currency: listing.currency ?? "USD",
+
+          commissionRate,
+          commissionAmount: billing.commissionAmount,
+          providerPayout: billing.providerPayout,
+
+          cancellationPolicy: listing.cancellationPolicy ?? "moderate",
+        },
+      });
+
+      return sendSuccess(reply, 201, {
+        bookingId: booking.id,
+        bookingReference: booking.reference,
+        status: booking.status,
+        totalAmount: Number(booking.totalAmount),
+        currency: booking.currency,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to create draft booking.");
+    }
   });
 
   // ── GET /admin/bookings ───────────────────────────────────────────────────
@@ -2078,25 +2115,29 @@ return { actioned: true };
       ],
     };
 
-    const [total, bookings] = await Promise.all([
-      prisma.booking.count({ where }),
-      prisma.booking.findMany({
-        where, skip, take,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true, reference: true, listingId: true, guestId: true, providerId: true,
-          listingType: true, status: true, checkIn: true, checkOut: true,
-          pickupDatetime: true, returnDatetime: true, nightsOrDays: true,
-          guestFirstName: true, guestLastName: true, guestEmail: true,
-          totalAmount: true, currency: true, commissionAmount: true,
-          providerPayout: true, voucherDiscount: true,
-          cancelledAt: true, confirmedAt: true, createdAt: true,
-          listing: { select: { name: true } },
-        },
-      }),
-    ]);
+    try {
+      const [total, bookings] = await Promise.all([
+        prisma.booking.count({ where }),
+        prisma.booking.findMany({
+          where, skip, take,
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true, reference: true, listingId: true, guestId: true, providerId: true,
+            listingType: true, status: true, checkIn: true, checkOut: true,
+            pickupDatetime: true, returnDatetime: true, nightsOrDays: true,
+            guestFirstName: true, guestLastName: true, guestEmail: true,
+            totalAmount: true, currency: true, commissionAmount: true,
+            providerPayout: true, voucherDiscount: true,
+            cancelledAt: true, confirmedAt: true, createdAt: true,
+            listing: { select: { name: true } },
+          },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, { bookings, total, page: parseInt(page, 10), limit: take });
+      return sendSuccess(reply, 200, { bookings, total, page: parseInt(page, 10), limit: take });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch bookings.");
+    }
   });
 
   // ── GET /admin/bookings/:id ───────────────────────────────────────────────
@@ -2146,18 +2187,23 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { id } = req.params as { id: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: {
-        statusLog: { orderBy: { createdAt: "asc" } },
-        listing: { select: { name: true, country: true, category: true } },
-      },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: {
+          statusLog: { orderBy: { createdAt: "asc" } },
+          listing: { select: { name: true, country: true, category: true } },
+        },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
 
-    return sendSuccess(reply, 200, booking);
+      return sendSuccess(reply, 200, booking);
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch booking.");
+    }
   });
 
   // ── POST /admin/bookings/:id/cancel ───────────────────────────────────────
@@ -2195,54 +2241,59 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reason } = req.body as { reason: string };
 
-    if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Cancellation reason is required.");
+    if (!reason?.trim()) return sendError(reply, 400, "BAD_REQUEST", "Cancellation reason is required.");
 
-    const booking = await prisma.booking.findUnique({ where: { id } });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    if (!["pending_payment", "confirmed"].includes(booking.status)) {
-      return sendError(reply, 409, "INVALID_STATUS", `Cannot cancel booking in status: ${booking.status}`);
+    try {
+      const booking = await prisma.booking.findUnique({ where: { id } });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      if (!["pending_payment", "confirmed"].includes(booking.status)) {
+        return sendError(reply, 409, "INVALID_STATUS", `Cannot cancel a booking with status: ${booking.status}. Only pending_payment or confirmed bookings can be cancelled.`);
+      }
+
+      await prisma.booking.update({
+        where: { id },
+        data: {
+          status:             "cancelled_by_system",
+          cancelledAt:        new Date(),
+          cancelledBy:        "admin",
+          cancellationReason: reason,
+          refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
+        },
+      });
+
+      await prisma.bookingStatusLog.create({
+        data: {
+          bookingId: id,
+          fromStatus: booking.status,
+          toStatus: "cancelled_by_system",
+          actorType: "admin",
+          changedBy: admin.adminId,
+          reason,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId,
+          role: admin.adminRole,
+          action: "booking_cancelled",
+          targetType: "booking",
+          targetId: id,
+          oldValue: booking.status,
+          newValue: "cancelled_by_system",
+          ipAddress: req.ip,
+        },
+      });
+
+      return sendSuccess(reply, 200, { message: "Booking cancelled by admin." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to cancel booking.");
     }
-
-    await prisma.booking.update({
-      where: { id },
-      data: {
-        status:             "cancelled_by_system",
-        cancelledAt:        new Date(),
-        cancelledBy:        "admin",
-        cancellationReason: reason,
-        refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
-      },
-    });
-
-    await prisma.bookingStatusLog.create({
-      data: {
-        bookingId: id,
-        fromStatus: booking.status,
-        toStatus: "cancelled_by_system",
-        actorType: "admin",
-        changedBy: admin.adminId,
-        reason,
-      },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId,
-        role: admin.adminRole,
-        action: "booking_cancelled",
-        targetType: "booking",
-        targetId: id,
-        oldValue: booking.status,
-        newValue: "cancelled_by_system",
-        ipAddress: req.ip,
-      },
-    });
-
-    return sendSuccess(reply, 200, { message: "Booking cancelled by admin." });
   });
 
   // ── GET /admin/conversations ───────────────────────────────────────────────
@@ -2301,6 +2352,7 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -2312,39 +2364,43 @@ return { actioned: true };
       ],
     };
 
-    const [total, conversations] = await Promise.all([
-      prisma.conversation.count({ where }),
-      prisma.conversation.findMany({
-        where, skip, take,
-        orderBy: { updatedAt: "desc" },
-        include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
-      }),
-    ]);
+    try {
+      const [total, conversations] = await Promise.all([
+        prisma.conversation.count({ where }),
+        prisma.conversation.findMany({
+          where, skip, take,
+          orderBy: { updatedAt: "desc" },
+          include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, {
-      conversations: conversations.map((c) => ({
-        id: c.id,
-        listingId: c.listingId,
-        bookingId: c.bookingId,
-        guestId: c.guestId,
-        providerId: c.providerId,
-        status: c.status,
-        lastMessage: c.messages[0]
-          ? {
-            body: c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
-            senderId: c.messages[0].senderId,
-            senderType: c.messages[0].senderType,
-            isFiltered: c.messages[0].isFiltered,
-            createdAt: c.messages[0].createdAt.toISOString(),
-          }
-          : null,
-        updatedAt: c.updatedAt.toISOString(),
-        createdAt: c.createdAt.toISOString(),
-      })),
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
+      return sendSuccess(reply, 200, {
+        conversations: conversations.map((c) => ({
+          id: c.id,
+          listingId: c.listingId,
+          bookingId: c.bookingId,
+          guestId: c.guestId,
+          providerId: c.providerId,
+          status: c.status,
+          lastMessage: c.messages[0]
+            ? {
+              body: c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
+              senderId: c.messages[0].senderId,
+              senderType: c.messages[0].senderType,
+              isFiltered: c.messages[0].isFiltered,
+              createdAt: c.messages[0].createdAt.toISOString(),
+            }
+            : null,
+          updatedAt: c.updatedAt.toISOString(),
+          createdAt: c.createdAt.toISOString(),
+        })),
+        total,
+        page: parseInt(page, 10),
+        limit: take,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch conversations.");
+    }
   });
 
   // ── GET /admin/conversations/:id/messages ─────────────────────────────────
@@ -2399,35 +2455,40 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { id } = req.params as { id: string };
 
-    const convo = await prisma.conversation.findUnique({ where: { id } });
-    if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
+    try {
+      const convo = await prisma.conversation.findUnique({ where: { id } });
+      if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
 
-    const messages = await prisma.message.findMany({
-      where: { conversationId: id },
-      orderBy: { createdAt: "asc" },
-    });
+      const messages = await prisma.message.findMany({
+        where: { conversationId: id },
+        orderBy: { createdAt: "asc" },
+      });
 
-    return sendSuccess(reply, 200, {
-      conversation: {
-        id: convo.id,
-        listingId: convo.listingId,
-        bookingId: convo.bookingId,
-        guestId: convo.guestId,
-        providerId: convo.providerId,
-        status: convo.status,
-      },
-      messages: messages.map((m) => ({
-        id: m.id,
-        senderId: m.senderId,
-        senderType: m.senderType,
-        body: m.body,
-        isFiltered: m.isFiltered,
-        readAt: m.readAt?.toISOString() ?? null,
-        createdAt: m.createdAt.toISOString(),
-      })),
-    });
+      return sendSuccess(reply, 200, {
+        conversation: {
+          id: convo.id,
+          listingId: convo.listingId,
+          bookingId: convo.bookingId,
+          guestId: convo.guestId,
+          providerId: convo.providerId,
+          status: convo.status,
+        },
+        messages: messages.map((m) => ({
+          id: m.id,
+          senderId: m.senderId,
+          senderType: m.senderType,
+          body: m.body,
+          isFiltered: m.isFiltered,
+          readAt: m.readAt?.toISOString() ?? null,
+          createdAt: m.createdAt.toISOString(),
+        })),
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch conversation messages.");
+    }
   });
 
   // ── GET /admin/ical-feeds ─────────────────────────────────────────────────
@@ -2478,6 +2539,7 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { page = "1", limit = "20", isActive } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -2486,34 +2548,38 @@ return { actioned: true };
       ...(isActive !== undefined ? { isActive: isActive === "true" } : {}),
     };
 
-    const [total, feeds] = await Promise.all([
-      prisma.icalFeed.count({ where }),
-      prisma.icalFeed.findMany({
-        where, skip, take,
-        orderBy: { updatedAt: "desc" },
-        include: { listing: { select: { name: true, category: true, country: true } } },
-      }),
-    ]);
+    try {
+      const [total, feeds] = await Promise.all([
+        prisma.icalFeed.count({ where }),
+        prisma.icalFeed.findMany({
+          where, skip, take,
+          orderBy: { updatedAt: "desc" },
+          include: { listing: { select: { name: true, category: true, country: true } } },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, {
-      feeds: feeds.map((f) => ({
-        id: f.id,
-        listingId: f.listingId,
-        listingName: f.listing.name,
-        listingCategory: f.listing.category,
-        listingCountry: f.listing.country,
-        platform: f.platform,
-        feedUrl: f.feedUrl,
-        isActive: f.isActive,
-        lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
-        lastError: f.lastError,
-        createdAt: f.createdAt.toISOString(),
-        updatedAt: f.updatedAt.toISOString(),
-      })),
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
+      return sendSuccess(reply, 200, {
+        feeds: feeds.map((f) => ({
+          id: f.id,
+          listingId: f.listingId,
+          listingName: f.listing.name,
+          listingCategory: f.listing.category,
+          listingCountry: f.listing.country,
+          platform: f.platform,
+          feedUrl: f.feedUrl,
+          isActive: f.isActive,
+          lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
+          lastError: f.lastError,
+          createdAt: f.createdAt.toISOString(),
+          updatedAt: f.updatedAt.toISOString(),
+        })),
+        total,
+        page: parseInt(page, 10),
+        limit: take,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch iCal feeds.");
+    }
   });
 
   // ── POST /admin/ical-feeds/:id/sync ───────────────────────────────────────
@@ -2545,18 +2611,23 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { id } = req.params as { id: string };
 
-    const feed = await prisma.icalFeed.findUnique({ where: { id } });
-    if (!feed) return sendError(reply, 404, "NOT_FOUND", "iCal feed not found.");
+    try {
+      const feed = await prisma.icalFeed.findUnique({ where: { id } });
+      if (!feed) return sendError(reply, 404, "NOT_FOUND", "iCal feed not found.");
 
-    const { syncFeed } = await import("./ical.js");
-    const result = await syncFeed(id);
+      const { syncFeed } = await import("./ical.js");
+      const result = await syncFeed(id);
 
-    if (result.error) {
-      return sendSuccess(reply, 200, { synced: 0, error: result.error, message: "Sync failed." });
+      if (result.error) {
+        return sendSuccess(reply, 200, { synced: 0, error: result.error, message: "Sync failed." });
+      }
+      return sendSuccess(reply, 200, { synced: result.synced, message: `Synced ${result.synced} events.` });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to sync iCal feed.");
     }
-    return sendSuccess(reply, 200, { synced: result.synced, message: `Synced ${result.synced} events.` });
   });
 
   // ── GET /admin/reviews ────────────────────────────────────────────────────
@@ -2612,9 +2683,17 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { q = "", isHidden, rating, listingId, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
+
+    if (rating) {
+      const parsedRating = parseInt(rating, 10);
+      if (isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+        return sendError(reply, 400, "BAD_REQUEST", `Invalid rating filter: ${rating}. Must be between 1 and 5.`);
+      }
+    }
 
     const where: any = {
       AND: [
@@ -2631,36 +2710,40 @@ return { actioned: true };
       ],
     };
 
-    const [total, reviews] = await Promise.all([
-      prisma.listingReview.count({ where }),
-      prisma.listingReview.findMany({
-        where, skip, take,
-        orderBy: { createdAt: "desc" },
-        include: { listing: { select: { name: true } } },
-      }),
-    ]);
+    try {
+      const [total, reviews] = await Promise.all([
+        prisma.listingReview.count({ where }),
+        prisma.listingReview.findMany({
+          where, skip, take,
+          orderBy: { createdAt: "desc" },
+          include: { listing: { select: { name: true } } },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, {
-      reviews: reviews.map((r) => ({
-        id: r.id,
-        bookingId: r.bookingId,
-        listingId: r.listingId,
-        listingName: r.listing.name,
-        guestId: r.guestId,
-        rating: r.rating,
-        title: r.title,
-        body: r.body,
-        providerReply: r.providerReply,
-        isHidden: r.isHidden,
-        hiddenBy: r.hiddenBy,
-        hiddenAt: r.hiddenAt?.toISOString() ?? null,
-        hiddenReason: r.hiddenReason,
-        createdAt: r.createdAt.toISOString(),
-      })),
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
+      return sendSuccess(reply, 200, {
+        reviews: reviews.map((r) => ({
+          id: r.id,
+          bookingId: r.bookingId,
+          listingId: r.listingId,
+          listingName: r.listing.name,
+          guestId: r.guestId,
+          rating: r.rating,
+          title: r.title,
+          body: r.body,
+          providerReply: r.providerReply,
+          isHidden: r.isHidden,
+          hiddenBy: r.hiddenBy,
+          hiddenAt: r.hiddenAt?.toISOString() ?? null,
+          hiddenReason: r.hiddenReason,
+          createdAt: r.createdAt.toISOString(),
+        })),
+        total,
+        page: parseInt(page, 10),
+        limit: take,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch reviews.");
+    }
   });
 
   // ── GET /admin/booking-requests/pending ──────────────────────────────────
@@ -2727,20 +2810,24 @@ return { actioned: true };
       },
     };
 
-    const [total, requests] = await Promise.all([
-      prisma.booking.count({ where }),
-      prisma.booking.findMany({
-        where, skip, take,
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true, reference: true, guestFirstName: true, guestLastName: true,
-          totalAmount: true, currency: true, createdAt: true,
-          listing: { select: { name: true, country: true } }
-        }
-      }),
-    ]);
+    try {
+      const [total, requests] = await Promise.all([
+        prisma.booking.count({ where }),
+        prisma.booking.findMany({
+          where, skip, take,
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true, reference: true, guestFirstName: true, guestLastName: true,
+            totalAmount: true, currency: true, createdAt: true,
+            listing: { select: { name: true, country: true } }
+          }
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, { requests, total, page: parseInt(page, 10), limit: take });
+      return sendSuccess(reply, 200, { requests, total, page: parseInt(page, 10), limit: take });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch pending booking requests.");
+    }
   });
 
   // ── POST /admin/booking-requests/:id/approve ─────────────────────────────
@@ -2767,57 +2854,61 @@ return { actioned: true };
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: { listing: true },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    if (booking.status !== "pending_payment") {
-      return sendError(reply, 409, "INVALID_STATUS", "Booking is not pending.");
-    }
-    
-    if (["country_manager", "sales"].includes(admin.adminRole)) {
-      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
-         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      if (booking.status !== "pending_payment") {
+        return sendError(reply, 409, "INVALID_STATUS", `Cannot approve booking with status: ${booking.status}. Only pending_payment bookings can be approved.`);
       }
-    }
 
-    await prisma.booking.update({
-      where: { id },
-      data: { status: "confirmed", confirmedAt: new Date() },
-    });
-
-    await prisma.bookingStatusLog.create({
-      data: { bookingId: id, fromStatus: "pending_payment", toStatus: "confirmed", actorType: "admin", changedBy: admin.adminId },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_approved",
-        targetType: "booking", targetId: id,
-        oldValue: "pending_payment", newValue: "confirmed", ipAddress: req.ip,
-      },
-    });
-
-    const { sendBookingConfirmationEmail } = await import("../lib/email.js");
-    sendBookingConfirmationEmail(
-      booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
-      {
-        reference: booking.reference, listingName: booking.listing.name ?? "Your listing",
-        listingType: booking.listingType, checkIn: booking.checkIn?.toISOString(),
-        checkOut: booking.checkOut?.toISOString(), pickupDatetime: booking.pickupDatetime?.toISOString(),
-        returnDatetime: booking.returnDatetime?.toISOString(), nightsOrDays: booking.nightsOrDays,
-        totalAmount: Number(booking.totalAmount), currency: booking.currency,
+      if (["country_manager", "sales"].includes(admin.adminRole)) {
+        if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+          return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+        }
       }
-    ).catch(() => {});
 
-    const { getRedis } = await import("../lib/redis.js");
-    const lockSuffix = booking.checkIn
-      ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
-      : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
-    await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+      await prisma.booking.update({
+        where: { id },
+        data: { status: "confirmed", confirmedAt: new Date() },
+      });
 
-    return sendSuccess(reply, 200, { message: "Booking request approved." });
+      await prisma.bookingStatusLog.create({
+        data: { bookingId: id, fromStatus: "pending_payment", toStatus: "confirmed", actorType: "admin", changedBy: admin.adminId },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId, role: admin.adminRole, action: "booking_request_approved",
+          targetType: "booking", targetId: id,
+          oldValue: "pending_payment", newValue: "confirmed", ipAddress: req.ip,
+        },
+      });
+
+      const { sendBookingConfirmationEmail } = await import("../lib/email.js");
+      sendBookingConfirmationEmail(
+        booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
+        {
+          reference: booking.reference, listingName: booking.listing.name ?? "Your listing",
+          listingType: booking.listingType, checkIn: booking.checkIn?.toISOString(),
+          checkOut: booking.checkOut?.toISOString(), pickupDatetime: booking.pickupDatetime?.toISOString(),
+          returnDatetime: booking.returnDatetime?.toISOString(), nightsOrDays: booking.nightsOrDays,
+          totalAmount: Number(booking.totalAmount), currency: booking.currency,
+        }
+      ).catch(() => {});
+
+      const { getRedis } = await import("../lib/redis.js");
+      const lockSuffix = booking.checkIn
+        ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
+        : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
+      await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+
+      return sendSuccess(reply, 200, { message: "Booking request approved." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to approve booking request.");
+    }
   });
 
   // ── POST /admin/booking-requests/:id/decline ─────────────────────────────
@@ -2850,57 +2941,65 @@ return { actioned: true };
     const { id } = req.params as { id: string };
     const { reason } = req.body as { reason: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: { listing: true },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    if (booking.status !== "pending_payment") {
-      return sendError(reply, 409, "INVALID_STATUS", "Booking is not pending.");
-    }
-    
-    if (["country_manager", "sales"].includes(admin.adminRole)) {
-      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
-         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
-      }
+    if (!reason?.trim()) {
+      return sendError(reply, 400, "BAD_REQUEST", "Decline reason is required.");
     }
 
-    await prisma.booking.update({
-      where: { id },
-      data: { status: "cancelled_by_system", cancelledAt: new Date(), cancelledBy: "admin", cancellationReason: reason },
-    });
-
-    await prisma.bookingStatusLog.create({
-      data: { bookingId: id, fromStatus: "pending_payment", toStatus: "cancelled_by_system", actorType: "admin", changedBy: admin.adminId, reason },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_declined",
-        targetType: "booking", targetId: id,
-        oldValue: "pending_payment", newValue: "cancelled_by_system", ipAddress: req.ip,
-      },
-    });
-
-    const { sendBookingCancellationEmail } = await import("../lib/email.js");
-    sendBookingCancellationEmail(
-      booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
-      { 
-        reference: booking.reference, 
-        reason,
-        listingName: booking.listing.name ?? "Your listing",
-        refundAmount: 0,
-        currency: booking.currency
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      if (booking.status !== "pending_payment") {
+        return sendError(reply, 409, "INVALID_STATUS", `Cannot decline booking with status: ${booking.status}. Only pending_payment bookings can be declined.`);
       }
-    ).catch(() => {});
 
-    const { getRedis } = await import("../lib/redis.js");
-    const lockSuffix = booking.checkIn
-      ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
-      : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
-    await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+      if (["country_manager", "sales"].includes(admin.adminRole)) {
+        if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+          return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+        }
+      }
 
-    return sendSuccess(reply, 200, { message: "Booking request declined." });
+      await prisma.booking.update({
+        where: { id },
+        data: { status: "cancelled_by_system", cancelledAt: new Date(), cancelledBy: "admin", cancellationReason: reason },
+      });
+
+      await prisma.bookingStatusLog.create({
+        data: { bookingId: id, fromStatus: "pending_payment", toStatus: "cancelled_by_system", actorType: "admin", changedBy: admin.adminId, reason },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId, role: admin.adminRole, action: "booking_request_declined",
+          targetType: "booking", targetId: id,
+          oldValue: "pending_payment", newValue: "cancelled_by_system", ipAddress: req.ip,
+        },
+      });
+
+      const { sendBookingCancellationEmail } = await import("../lib/email.js");
+      sendBookingCancellationEmail(
+        booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
+        {
+          reference: booking.reference,
+          reason,
+          listingName: booking.listing.name ?? "Your listing",
+          refundAmount: 0,
+          currency: booking.currency
+        }
+      ).catch(() => {});
+
+      const { getRedis } = await import("../lib/redis.js");
+      const lockSuffix = booking.checkIn
+        ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
+        : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
+      await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+
+      return sendSuccess(reply, 200, { message: "Booking request declined." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to decline booking request.");
+    }
   });
 
   // ── POST /admin/booking-requests/:id/request-info ────────────────────────
@@ -2932,50 +3031,58 @@ return { actioned: true };
     const { id } = req.params as { id: string };
     const { message } = req.body as { message: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: { listing: true },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    
-    if (["country_manager", "sales"].includes(admin.adminRole)) {
-      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
-         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
-      }
+    if (!message?.trim()) {
+      return sendError(reply, 400, "BAD_REQUEST", "Message body is required.");
     }
 
-    let conversation = await prisma.conversation.findUnique({
-      where: { bookingId: id },
-    });
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
 
-    if (!conversation) {
-      conversation = await prisma.conversation.create({
+      if (["country_manager", "sales"].includes(admin.adminRole)) {
+        if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+          return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+        }
+      }
+
+      let conversation = await prisma.conversation.findUnique({
+        where: { bookingId: id },
+      });
+
+      if (!conversation) {
+        conversation = await prisma.conversation.create({
+          data: {
+            bookingId: id,
+            listingId: booking.listingId,
+            guestId: booking.guestId,
+            providerId: booking.providerId,
+          },
+        });
+      }
+
+      await prisma.message.create({
         data: {
-          bookingId: id,
-          listingId: booking.listingId,
-          guestId: booking.guestId,
-          providerId: booking.providerId,
+          conversationId: conversation.id,
+          senderId: admin.adminId,
+          senderType: "admin",
+          body: message,
         },
       });
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId, role: admin.adminRole, action: "booking_request_info_asked",
+          targetType: "booking", targetId: id, ipAddress: req.ip,
+        },
+      });
+
+      return sendSuccess(reply, 200, { message: "Message sent to guest." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to send message to guest.");
     }
-
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        senderId: admin.adminId,
-        senderType: "admin",
-        body: message,
-      },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_info_asked",
-        targetType: "booking", targetId: id, ipAddress: req.ip,
-      },
-    });
-
-    return sendSuccess(reply, 200, { message: "Message sent to guest." });
   });
 
   // ── POST /admin/booking-requests/:id/escalate ────────────────────────────
@@ -3001,25 +3108,29 @@ return { actioned: true };
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: { listing: true },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    
-    if (["country_manager", "sales"].includes(admin.adminRole)) {
-      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
-         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+
+      if (["country_manager", "sales"].includes(admin.adminRole)) {
+        if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+          return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+        }
       }
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId, role: admin.adminRole, action: "booking_request_escalated",
+          targetType: "booking", targetId: id, ipAddress: req.ip,
+        },
+      });
+
+      return sendSuccess(reply, 200, { message: "Request escalated to host." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to escalate booking request.");
     }
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_escalated",
-        targetType: "booking", targetId: id, ipAddress: req.ip,
-      },
-    });
-
-    return sendSuccess(reply, 200, { message: "Request escalated to host." });
   });
 }
