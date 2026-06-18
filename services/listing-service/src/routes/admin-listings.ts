@@ -1,5 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
+import { generateReference, getCommissionRate } from "./bookings.js";
+import { getTaxRate } from "../services/getTaxRate.services.js";
+import { calculateBilling } from "../services/billing.service.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
@@ -1864,6 +1867,118 @@ return { actioned: true };
     return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
   });
 
+  // ── POST /admin/bookings/draft ───────────────────────────────────────────────
+  app.post("/admin/bookings/draft", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Bookings"],
+      summary: "Create a draft booking manually (admin)",
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        required: ["listingId", "guestFirstName", "guestLastName", "guestEmail", "guestPhone", "checkIn", "checkOut"],
+        properties: {
+          listingId: { type: "string" },
+          guestFirstName: { type: "string" },
+          guestLastName: { type: "string" },
+          guestEmail: { type: "string", format: "email" },
+          guestPhone: { type: "string" },
+          checkIn: { type: "string", format: "date-time" },
+          checkOut: { type: "string", format: "date-time" },
+          nightsOrDays: { type: "integer", minimum: 1 },
+          nightlyRate: { type: "number" },
+          guestId: { type: "string" },
+        },
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                bookingId: { type: "string" },
+                bookingReference: { type: "string" },
+                status: { type: "string" },
+                totalAmount: { type: "number" },
+                currency: { type: "string" },
+              },
+            },
+          },
+        },
+        404: ErrorResponse,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+
+    const body = req.body as any;
+    const listing = await prisma.listing.findUnique({ where: { id: body.listingId } });
+    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+    const rate = body.nightlyRate ?? Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+    const commissionRate = await getCommissionRate(listing.country ?? null);
+
+    const billing = calculateBilling({
+      listingCategory: listing.category,
+      checkIn: body.checkIn,
+      checkOut: body.checkOut,
+      rate,
+      deliveryFee: 0,
+      promotionDiscount: 0,
+      voucherAmount: 0,
+      taxRate: getTaxRate(listing.country),
+      commissionRate,
+    });
+
+    const reference = await generateReference(listing.country ?? "XX");
+
+    const booking = await prisma.booking.create({
+      data: {
+        reference,
+        listingId: listing.id,
+        guestId: body.guestId ?? "manual-guest",
+        providerId: listing.providerId,
+        listingType: listing.category,
+        status: "draft",
+
+        checkIn: new Date(body.checkIn),
+        checkOut: new Date(body.checkOut),
+        nightsOrDays: billing.units || body.nightsOrDays || 1,
+
+        guestFirstName: body.guestFirstName,
+        guestLastName: body.guestLastName,
+        guestEmail: body.guestEmail,
+        guestPhone: body.guestPhone,
+
+        nightlyRate: listing.category !== "car" ? rate : undefined,
+        dailyRate: listing.category === "car" ? rate : undefined,
+
+        subtotal: billing.subtotal,
+        totalAmount: billing.totalAmount,
+        discountAmount: 0,
+        deliveryFee: 0,
+
+        currency: listing.currency ?? "USD",
+
+        commissionRate,
+        commissionAmount: billing.commissionAmount,
+        providerPayout: billing.providerPayout,
+
+        cancellationPolicy: listing.cancellationPolicy ?? "moderate",
+      },
+    });
+
+    return sendSuccess(reply, 201, {
+      bookingId: booking.id,
+      bookingReference: booking.reference,
+      status: booking.status,
+      totalAmount: Number(booking.totalAmount),
+      currency: booking.currency,
+    });
+  });
+
   // ── GET /admin/bookings ───────────────────────────────────────────────────
   app.get("/admin/bookings", {
     preHandler: [requireAdmin],
@@ -2186,12 +2301,17 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const admin = req.admin as AdminRequest;
     const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const isCountryManager = admin.adminRole === "country_manager";
+    const listingFilter = isCountryManager ? { country: { in: admin.countryScope } } : {};
+    
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
 
-    const where: any = {
+    const where = {
       AND: [
+        listingFilter,
         status ? { status } : {},
         q ? { OR: [{ guestId: { contains: q } }, { bookingId: { contains: q } }] } : {},
       ],
@@ -2200,9 +2320,11 @@ return { actioned: true };
     const [total, conversations] = await Promise.all([
       prisma.conversation.count({ where }),
       prisma.conversation.findMany({
-        where, skip, take,
+        where,
+        skip,
+        take,
         orderBy: { updatedAt: "desc" },
-        include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+        include: { messages: { orderBy: { createdAt: "desc" }, take: 1 }, listing: { select: { country: true } } },
       }),
     ]);
 
@@ -2285,15 +2407,22 @@ return { actioned: true };
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
-
-    const convo = await prisma.conversation.findUnique({ where: { id } });
+    const admin = req.admin as AdminRequest;
+    const convo = await prisma.conversation.findUnique({
+      where: { id },
+      include: { listing: { select: { country: true } } },
+    });
     if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
-
+    if (admin.adminRole === "country_manager") {
+      const country = convo.listing?.country;
+      if (!country || !admin.countryScope.includes(country)) {
+        return sendError(reply, 403, "FORBIDDEN", "Conversation out of scope.");
+      }
+    }
     const messages = await prisma.message.findMany({
       where: { conversationId: id },
       orderBy: { createdAt: "asc" },
     });
-
     return sendSuccess(reply, 200, {
       conversation: {
         id: convo.id,
@@ -2313,6 +2442,8 @@ return { actioned: true };
         createdAt: m.createdAt.toISOString(),
       })),
     });
+
+
   });
 
   // ── GET /admin/ical-feeds ─────────────────────────────────────────────────

@@ -65,8 +65,8 @@ const rateSchema = {
     id: { type: "string" },
     country: { type: "string" },
     rate: { type: "number" },
-    pendingRate: { type: "number", nullable: true },
-    pendingEffectiveFrom: { type: "string", nullable: true },
+    pendingRate: { type: ["number", "null"] },
+    pendingEffectiveFrom: { type: ["string", "null"] },
     setBy: { type: "string" },
     createdAt: { type: "string", format: "date-time" },
     updatedAt: { type: "string", format: "date-time" },
@@ -109,11 +109,11 @@ export async function commissionRoutes(app: FastifyInstance) {
               type: "object",
               properties: {
                 globalCommissionRate: { type: "number" },
-                pendingGlobalRate: { type: "number", nullable: true },
-                pendingGlobalEffectiveFrom: { type: "string", nullable: true },
-                pendingGlobalReason: { type: "string", nullable: true },
+                pendingGlobalRate: { type: ["number", "null"] },
+                pendingGlobalEffectiveFrom: { type: ["string", "null"] },
+                pendingGlobalReason: { type: ["string", "null"] },
                 updatedAt: { type: "string", format: "date-time" },
-                updatedBy: { type: "string", nullable: true },
+                updatedBy: { type: ["string", "null"] },
               },
             },
           },
@@ -153,6 +153,23 @@ export async function commissionRoutes(app: FastifyInstance) {
           notifyProviders: { type: "boolean", description: "Send email to all active providers" },
           reason: { type: "string", maxLength: 500, description: "Required reason logged to audit trail" },
         },
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                message: { type: "string" },
+                applied: { type: "boolean" },
+              },
+            },
+          },
+        },
+        403: errSchema,
+        422: errSchema,
       },
     },
     preHandler: [requireAdmin],
@@ -262,8 +279,8 @@ export async function commissionRoutes(app: FastifyInstance) {
               type: "object",
               properties: {
                 globalRate: { type: "number" },
-                pendingGlobalRate: { type: "number", nullable: true },
-                pendingGlobalEffectiveFrom: { type: "string", nullable: true },
+                pendingGlobalRate: { type: ["number", "null"] },
+                pendingGlobalEffectiveFrom: { type: ["string", "null"] },
                 rates: { type: "array", items: rateSchema },
               },
             },
@@ -272,10 +289,16 @@ export async function commissionRoutes(app: FastifyInstance) {
       },
     },
     preHandler: [requireAdmin],
-  }, async (_req: FastifyRequest, reply: FastifyReply) => {
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const admin = req as AdminRequest;
+    
+    const whereClause = isSuperAdmin(admin.adminRole) || admin.adminRole === "finance_agent" 
+      ? {} 
+      : { country: { in: admin.countryScope } };
+
     const [settings, rates] = await Promise.all([
       getGlobalSettings(),
-      prisma.commissionRate.findMany({ orderBy: { country: "asc" } }),
+      prisma.commissionRate.findMany({ where: whereClause, orderBy: { country: "asc" } }),
     ]);
 
     return sendSuccess(reply, 200, {
@@ -303,6 +326,24 @@ export async function commissionRoutes(app: FastifyInstance) {
           reason: { type: "string", maxLength: 500, description: "Required reason logged to audit trail" },
         },
       },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                ...rateSchema.properties,
+                scheduled: { type: "boolean" },
+                warning: { type: "string" },
+              },
+            },
+          },
+        },
+        403: errSchema,
+        422: errSchema,
+      },
     },
     preHandler: [requireAdmin],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -329,6 +370,10 @@ export async function commissionRoutes(app: FastifyInstance) {
     todayUtc.setUTCHours(0, 0, 0, 0);
     const isImmediate = effectiveDate <= todayUtc;
     const notifyProviders = body.notifyProviders ?? false;
+
+    if (!isSuperAdmin(admin.adminRole) && !admin.countryScope.includes(countryCode)) {
+      return sendError(reply, 403, "FORBIDDEN", "You do not have permission to modify this country.");
+    }
 
     const existing = await prisma.commissionRate.findUnique({ where: { country: countryCode } });
 
@@ -399,9 +444,15 @@ export async function commissionRoutes(app: FastifyInstance) {
       });
     }
 
+    let warning: string | undefined;
+    if (existing?.pendingRate != null && !isImmediate) {
+      warning = "Superseded a previously scheduled rate change";
+    }
+
     return sendSuccess(reply, 200, {
       ...formatRate(savedRate),
       scheduled: !isImmediate,
+      ...(warning ? { warning } : {}),
     });
   });
 
@@ -427,12 +478,31 @@ export async function commissionRoutes(app: FastifyInstance) {
           reason: { type: "string", maxLength: 500 },
         },
       },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                updated: { type: "number" },
+                countries: { type: "array", items: { type: "string" } },
+                rate: { type: "number" },
+                scheduled: { type: "boolean" },
+              },
+            },
+          },
+        },
+        403: errSchema,
+        422: errSchema,
+      },
     },
     preHandler: [requireAdmin],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
-    if (!canWriteCommission(admin.adminRole)) {
-      return sendError(reply, 403, "FORBIDDEN", "Insufficient role to modify commission rates.");
+    if (!isSuperAdmin(admin.adminRole)) {
+      return sendError(reply, 403, "FORBIDDEN", "Only Super Admins can bulk-update commission rates.");
     }
 
     const body = req.body as {
@@ -524,6 +594,20 @@ export async function commissionRoutes(app: FastifyInstance) {
         required: ["country"],
         properties: { country: { type: "string", minLength: 2, maxLength: 2 } },
       },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: { message: { type: "string" } },
+            },
+          },
+        },
+        403: errSchema,
+        404: errSchema,
+      },
     },
     preHandler: [requireAdmin],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -533,6 +617,10 @@ export async function commissionRoutes(app: FastifyInstance) {
     }
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
+
+    if (!isSuperAdmin(admin.adminRole) && !admin.countryScope.includes(countryCode)) {
+      return sendError(reply, 403, "FORBIDDEN", "You do not have permission to modify this country.");
+    }
 
     const existing = await prisma.commissionRate.findUnique({ where: { country: countryCode } });
     if (!existing) return sendError(reply, 404, "NOT_FOUND", "No country-specific rate found for this country.");
@@ -579,7 +667,7 @@ export async function commissionRoutes(app: FastifyInstance) {
                     properties: {
                       id: { type: "string" },
                       scope: { type: "string" },
-                      countryCode: { type: "string", nullable: true },
+                      countryCode: { type: ["string", "null"] },
                       oldRate: { type: "number" },
                       newRate: { type: "number" },
                       effectiveFrom: { type: "string", format: "date-time" },
@@ -600,13 +688,29 @@ export async function commissionRoutes(app: FastifyInstance) {
     },
     preHandler: [requireAdmin],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const admin = req as AdminRequest;
     const q = req.query as { country?: string; from?: string; to?: string; page?: number; limit?: number };
     const page = q.page ?? 1;
     const limit = q.limit ?? 50;
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {};
-    if (q.country) where["countryCode"] = q.country.toUpperCase();
+
+    if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "finance_agent") {
+      where["OR"] = [
+        { scope: "global" },
+        { countryCode: { in: admin.countryScope } }
+      ];
+    }
+
+    if (q.country) {
+      const c = q.country.toUpperCase();
+      if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "finance_agent" && !admin.countryScope.includes(c)) {
+        return sendError(reply, 403, "FORBIDDEN", "You do not have permission to view this country.");
+      }
+      where["countryCode"] = c;
+    }
+    
     if (q.from || q.to) {
       where["createdAt"] = {
         ...(q.from ? { gte: new Date(q.from) } : {}),
@@ -708,6 +812,23 @@ export async function commissionRoutes(app: FastifyInstance) {
         type: "object",
         required: ["country"],
         properties: { country: { type: "string", minLength: 2, maxLength: 2 } },
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                country: { type: "string" },
+                effectiveRate: { type: "number" },
+                source: { type: "string" },
+              },
+            },
+          },
+        },
+        400: errSchema,
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {

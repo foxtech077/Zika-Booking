@@ -5,8 +5,33 @@ import { stripe } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, type GuestRequest } from "../middleware/auth.js";
 import { initiateTaraPayment, initiateTaraReversal } from "../lib/tara.js";
+import { sendPaymentLinkEmail } from "../services/email.services.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
+const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
+
+function internalHeaders(): Record<string, string> {
+  return { "Content-Type": "application/json", "x-service-key": INTERNAL_SERVICE_KEY };
+}
+
+async function fetchBookingInternal(bookingId: string) {
+  const res = await fetch(`${BOOKING_SERVICE_URL}/bookings/internal/${bookingId}`, {
+    headers: internalHeaders(),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { success: boolean; data?: Record<string, unknown> };
+  if (!json.success || !json.data) return null;
+  return json.data;
+}
+
+async function updateBookingStatus(bookingId: string, status: string): Promise<boolean> {
+  const res = await fetch(`${BOOKING_SERVICE_URL}/bookings/internal/${bookingId}/status`, {
+    method: "PATCH",
+    headers: internalHeaders(),
+    body: JSON.stringify({ status }),
+  });
+  return res.ok;
+}
 
 // ── Zod schemas ───────────────────────────────────────────────────────────────
 
@@ -35,9 +60,215 @@ async function fetchBooking(bookingId: string, authHeader: string) {
   return json.data;
 }
 
+async function bindCommission(bookingId: string, authHeader: string) {
+  const res = await fetch(`${BOOKING_SERVICE_URL}/guests/me/bookings/${bookingId}/bind-commission`, {
+    method: "PATCH",
+    headers: { Authorization: authHeader },
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as { success: boolean; data?: Record<string, unknown> };
+  if (!json.success || !json.data) return null;
+  return json.data;
+}
+
 // ── Route plugin ──────────────────────────────────────────────────────────────
 
 export async function paymentRoutes(app: FastifyInstance) {
+
+  // ── POST /payments/stripe/payment-link ─────────────────────────────────────
+  app.post("/payments/stripe/payment-link", {
+    schema: {
+      tags: ["Payments"],
+      summary: "Generate a Stripe payment link for a draft booking and email it",
+      body: {
+        type: "object",
+        required: ["bookingId"],
+        properties: { bookingId: { type: "string", format: "uuid" } },
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: { success: { type: "boolean" }, data: { type: "object", properties: { paymentUrl: { type: "string" } } } },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const { bookingId } = req.body as { bookingId: string };
+    const booking = await fetchBookingInternal(bookingId);
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    if (booking["status"] !== "draft") return sendError(reply, 409, "INVALID_STATUS", "Booking is not in DRAFT status.");
+
+    const amount = Number(booking["totalAmount"]);
+    const currency = (booking["currency"] as string).toLowerCase();
+
+    // Step 1: Create Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency,
+            product_data: { name: `Booking ${booking["reference"]}` },
+            unit_amount: Math.round(amount * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      success_url: "https://zikabooking.com/success",
+      cancel_url: "https://zikabooking.com/cancel",
+      payment_intent_data: { metadata: { bookingId } },
+    });
+
+    // Step 2: Validate session URL
+    if (!session.url) {
+      return sendError(reply, 502, "STRIPE_ERROR", "Stripe did not return a payment URL.");
+    }
+
+    // Step 3: Create payment record
+    await prisma.payment.create({
+      data: {
+        bookingId,
+        paymentProvider: "stripe",
+        status: "initiated",
+        amount,
+        currency,
+        idempotencyKey: `sess-${bookingId}-${Date.now()}`,
+        providerPaymentId: null,
+      },
+    });
+
+    // Step 4: Send email
+    await sendPaymentLinkEmail(
+      booking["guestEmail"] as string,
+      booking["guestFirstName"] as string,
+      amount,
+      currency,
+      session.url,
+      booking["reference"] as string
+    );
+
+    // Step 5: Only after all steps succeed, update status to pending_payment
+    await updateBookingStatus(bookingId, "pending_payment");
+
+    return sendSuccess(reply, 200, { paymentUrl: session.url });
+  });
+
+  // ── POST /payments/tara/payment-link ───────────────────────────────────────
+  app.post("/payments/tara/payment-link", {
+    schema: {
+      tags: ["Payments"],
+      summary: "Generate a Tara backend trigger URL for a draft booking and email it",
+      body: {
+        type: "object",
+        required: ["bookingId"],
+        properties: { bookingId: { type: "string", format: "uuid" } },
+      },
+      response: {
+        200: {
+          type: "object",
+          properties: { success: { type: "boolean" }, data: { type: "object", properties: { paymentUrl: { type: "string" } } } },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const { bookingId } = req.body as { bookingId: string };
+    const booking = await fetchBookingInternal(bookingId);
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    if (booking["status"] !== "draft") return sendError(reply, 409, "INVALID_STATUS", "Booking is not in DRAFT status.");
+
+    const amount = Number(booking["totalAmount"]);
+    const currency = (booking["currency"] as string).toLowerCase();
+
+    // Step 1: Create payment record
+    await prisma.payment.create({
+      data: {
+        bookingId,
+        paymentProvider: "tara",
+        status: "initiated",
+        amount,
+        currency,
+        idempotencyKey: `tara-link-${bookingId}-${Date.now()}`,
+      },
+    });
+
+    // Step 2: Build trigger URL and send email
+    const host = req.headers.host ?? "api.zikabooking.com";
+    const protocol = req.headers["x-forwarded-proto"] ?? "https";
+    const triggerUrl = `${protocol}://${host}/payments/tara/trigger/${bookingId}`;
+
+    await sendPaymentLinkEmail(
+      booking["guestEmail"] as string,
+      booking["guestFirstName"] as string,
+      amount,
+      currency,
+      triggerUrl,
+      booking["reference"] as string
+    );
+
+    // Step 3: Only after all steps succeed, update status to pending_payment
+    await updateBookingStatus(bookingId, "pending_payment");
+
+    return sendSuccess(reply, 200, { paymentUrl: triggerUrl });
+  });
+
+  // ── GET /payments/tara/trigger/:bookingId ──────────────────────────────────
+  app.get("/payments/tara/trigger/:bookingId", {
+    schema: {
+      tags: ["Payments"],
+      summary: "Trigger STK push for Tara payment link",
+    },
+  }, async (req, reply) => {
+    const { bookingId } = req.params as { bookingId: string };
+    const booking = await fetchBookingInternal(bookingId);
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+
+    if (booking["status"] !== "pending_payment") {
+      return sendError(reply, 409, "INVALID_STATUS", "Booking is not awaiting payment.");
+    }
+
+    if (!booking["guestPhone"]) {
+      return sendError(reply, 400, "MISSING_PHONE", "Guest phone number is required for Tara STK push.");
+    }
+
+    // Find the existing initiated payment record (created by /payments/tara/payment-link)
+    const existingPayment = await prisma.payment.findFirst({
+      where: { bookingId, paymentProvider: "tara" },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!existingPayment) {
+      return sendError(reply, 404, "NO_PAYMENT", "No payment record found for this booking.");
+    }
+
+    // Idempotency: if already pending or captured, don't trigger again
+    if (existingPayment.status === "captured") {
+      return reply.type("text/html").send("<h2>Payment already completed.</h2>");
+    }
+    if (existingPayment.status === "pending") {
+      return reply.type("text/html").send("<h2>A payment request was already sent to your phone. Please check your phone.</h2>");
+    }
+
+    const taraResult = await initiateTaraPayment({
+      amount: Number(booking["totalAmount"]),
+      currency: booking["currency"] as string,
+      mobileNumber: booking["guestPhone"] as string,
+      reference: booking["reference"] as string,
+      description: `Booking ${booking["reference"]}`,
+      attemptNumber: 1,
+    });
+
+    // Update the existing payment record instead of creating a duplicate
+    await prisma.payment.update({
+      where: { id: existingPayment.id },
+      data: {
+        status: "pending",
+        providerPaymentId: taraResult.taraReference,
+      },
+    });
+
+    return reply.type("text/html").send("<h2>A payment request has been sent to your phone. Please enter your PIN to confirm.</h2>");
+  });
 
   app.post("/payments/create-intent", { preHandler: [requireUser], schema: {
     tags: ["Payments"],
@@ -54,8 +285,8 @@ export async function paymentRoutes(app: FastifyInstance) {
     const { bookingId } = req.body as { bookingId: string };
     const authHeader = req.headers.authorization ?? "";
   
-    // ── 1. Fetch booking ────────────────────────────────────────────────────
-    const booking = await fetchBooking(bookingId, authHeader);
+    // ── 1. Bind commission rate and update billing at payment step ──────────
+    const booking = await bindCommission(bookingId, authHeader);
     if (!booking) {
       return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
     }
@@ -229,9 +460,9 @@ export async function paymentRoutes(app: FastifyInstance) {
   
     const { bookingId, paymentProvider, paymentMethodId, mobileNumber } = parsed.data;
   
-    // ── 2. Fetch booking ──────────────────────────────────────────────────
+    // ── 2. Bind commission rate and update billing at payment step ──────────
     const authHeader = req.headers.authorization ?? "";
-    const booking = await fetchBooking(bookingId, authHeader);
+    const booking = await bindCommission(bookingId, authHeader);
     if (!booking) {
       return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
     }

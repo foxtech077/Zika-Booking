@@ -5,6 +5,7 @@ import { MapPin } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { cn } from "@/lib/utils";
 
 export interface GeoResult {
   lat: number;
@@ -46,22 +47,26 @@ export function GeocodedAddressFields({
             placeholder="Enter full street address"
             leftIcon={<MapPin />}
             error={errors?.address}
+            className="focus:ring-[#4c6a48] focus:border-[#4c6a48]"
           />
         </div>
         <Button
           type="button"
-          variant="secondary"
+          variant="outline"
           size="sm"
           loading={geo.isPending}
           disabled={!address.trim()}
           onClick={() => geo.mutate(address)}
-          className="mb-0.5"
+          className={cn(
+            "mb-0.5 transition-all duration-200 border-slate-200 text-slate-700 hover:bg-slate-50 focus:ring-[#4c6a48] bg-white",
+            geo.isSuccess && "bg-[#e6ebe4]/60 text-[#3d533a] border-[#4c6a48]/30 hover:bg-[#e6ebe4]/80"
+          )}
         >
           {geo.isSuccess ? "✓ Located" : "Geocode"}
         </Button>
       </div>
       <p className="text-xs text-slate-400">
-        Click Geocode to auto-fill lat/lng, town and country — required before saving.
+        Click Geocode to auto-fill lat/lng, town and country — optional, but helpful for map accuracy.
       </p>
       <div className="grid grid-cols-2 gap-3">
         <Input
@@ -70,6 +75,7 @@ export function GeocodedAddressFields({
           onChange={(e) => onChange("town", e.target.value)}
           placeholder="Auto-filled on geocode"
           error={errors?.town}
+          className="focus:ring-[#4c6a48] focus:border-[#4c6a48]"
         />
         <Input
           label="Country Code"
@@ -78,6 +84,7 @@ export function GeocodedAddressFields({
           placeholder="E.g., ZA, US"
           maxLength={2}
           error={errors?.country}
+          className="focus:ring-[#4c6a48] focus:border-[#4c6a48]"
         />
       </div>
     </div>

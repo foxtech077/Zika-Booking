@@ -24,12 +24,14 @@ async function ensureBookingSequence(): Promise<void> {
 
 // ── Reference generator ───────────────────────────────────────────────────────
 
-async function generateReference(countryCode: string): Promise<string> {
+export async function generateReference(countryCode: string): Promise<string> {
   const result = await prisma.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('booking_seq') AS nextval`;
   const seq = Number(result[0]!.nextval);
   const padded = String(seq).padStart(6, "0");
   return `ZIKA-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
 }
+
+import { getEffectiveCommissionRate } from "../services/commission.service.js";
 
 // ── Commission helper ─────────────────────────────────────────────────────────
 
@@ -46,7 +48,7 @@ async function getGlobalCommissionRate(): Promise<number> {
   return Number(settings.globalCommissionRate);
 }
 
-async function getCommissionRate(country: string | null): Promise<number> {
+export async function getCommissionRate(country: string | null): Promise<number> {
   if (!country) return getGlobalCommissionRate();
   const rate = await prisma.commissionRate.findUnique({ where: { country } });
   if (!rate) return getGlobalCommissionRate();
@@ -196,12 +198,34 @@ export async function bookingRoutes(app: FastifyInstance) {
     app.log.error({ err }, "Failed to ensure booking_seq"),
   );
 
+  // ── Internal service auth ──────────────────────────────────────────────────
+  const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
+
+  function validateServiceToken(req: FastifyRequest, reply: FastifyReply): boolean {
+    if (!INTERNAL_SERVICE_KEY) {
+      sendError(reply, 503, "SERVICE_UNAVAILABLE", "Internal service key not configured.");
+      return false;
+    }
+    const token = req.headers["x-service-key"];
+    if (!token || token !== INTERNAL_SERVICE_KEY) {
+      sendError(reply, 401, "UNAUTHORIZED", "Invalid or missing service token.");
+      return false;
+    }
+    return true;
+  }
 
   app.get("/booking/quote", {
     preHandler: [ipDetect], schema: {
       tags: ["Booking"],
       summary: "Get pricing with IP-based currency + payment routing",
-
+      querystring: {
+        type: "object",
+        required: ["listingId"],
+        properties: {
+          listingId: { type: "string" },
+          currency: { type: "string" }
+        }
+      },
       headers: {
         type: "object",
         properties: {
@@ -214,20 +238,106 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
   },
     async (req, reply) => {
-      const pricing = await getPricing(req, 100);
+      const query = req.query as { listingId: string; currency?: string };
+      const listing = await prisma.listing.findUnique({
+        where: { id: query.listingId }
+      });
 
-      const paymentProvider = getPaymentProvider(pricing.country);
+      if (!listing) {
+        return sendError(reply, 404, "NOT_FOUND", "Listing not found");
+      }
+
+      const basePrice = Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+      const baseCurrency = listing.currency ?? "USD";
+      const country = req.location?.country || "IN";
+
+      let targetCurrency = query.currency;
+      if (!targetCurrency) {
+        if (country === "IN") targetCurrency = "INR";
+        else if (country === "NG") targetCurrency = "NGN";
+        else if (country === "KE") targetCurrency = "KES";
+        else if (country === "ZA") targetCurrency = "ZAR";
+        else targetCurrency = "USD";
+      }
+
+      const pricing = await getPricing(basePrice, baseCurrency, targetCurrency);
+      const paymentProvider = getPaymentProvider(country);
 
       return reply.send({
         success: true,
         data: {
           ...pricing,
+          country,
           paymentProvider,
         },
       });
     }
   );
 
+
+  // ── GET /bookings/internal/:id ─────────────────────────────────────────────
+  app.get("/bookings/internal/:id", {
+    schema: {
+      tags: ["Bookings"],
+      summary: "Internal: fetch booking details (service-to-service only)",
+      params: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!validateServiceToken(req, reply)) return;
+
+    const booking = await prisma.booking.findUnique({
+      where: { id: req.params.id },
+      include: { listing: true },
+    });
+
+    if (!booking) {
+      return sendError(reply, 404, "NOT_FOUND", "Booking not found");
+    }
+
+    return sendSuccess(reply, 200, booking);
+  });
+
+  // ── PATCH /bookings/internal/:id/status ────────────────────────────────────
+  app.patch("/bookings/internal/:id/status", {
+    schema: {
+      tags: ["Bookings"],
+      summary: "Internal: update booking status (service-to-service only)",
+      params: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+      body: {
+        type: "object",
+        required: ["status"],
+        properties: { status: { type: "string" } },
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!validateServiceToken(req, reply)) return;
+
+    const { id } = req.params;
+    const { status } = req.body as { status: string };
+
+    const booking = await prisma.booking.findUnique({ where: { id } });
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+
+    // Only allow draft → pending_payment transition via this endpoint
+    if (booking.status !== "draft" || status !== "pending_payment") {
+      return sendError(reply, 409, "INVALID_TRANSITION", `Cannot transition from ${booking.status} to ${status}.`);
+    }
+
+    await prisma.booking.update({ where: { id }, data: { status: "pending_payment" } });
+    await prisma.bookingStatusLog.create({
+      data: { bookingId: id, fromStatus: "draft", toStatus: "pending_payment", actorType: "system" },
+    });
+
+    return sendSuccess(reply, 200, { message: "Status updated to pending_payment." });
+  });
 
   // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
   app.post(
@@ -603,7 +713,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             driverLastName: { type: "string", maxLength: 100 },
             driverAge: { type: "integer", minimum: 18 },
             voucherCode: { type: "string", maxLength: 30 },
-            redeemPoints: { type: "integer", minimum: 0 },
+            redeemPoints: { type: "integer", minimum: 0, description: "Amount of loyalty points to redeem" },
           },
         },
         response: {
@@ -766,39 +876,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           code: voucher.code,
         };
       }
-      // 2.5 POINTS REDEMPTION
-      let pointsDiscount = 0;
-      const redeemPoints = body.redeemPoints ?? 0;
-      if (redeemPoints > 0) {
-        const platformSettings = await prisma.platformSettings.findUnique({
-          where: { id: "global" }
-        });
-
-        const ratio = platformSettings?.pointsToCurrencyRatio ?? 100;
-
-        // Use voucher-specific minPointsRedemption if applicable, otherwise global
-        let minRedeem = platformSettings?.minPointsRedemption ?? 500;
-        if (appliedVoucher) {
-          const fullVoucher = await prisma.voucher.findUnique({ where: { id: appliedVoucher.id } });
-          if (fullVoucher && (fullVoucher as any).minPointsRedemption != null) {
-            minRedeem = (fullVoucher as any).minPointsRedemption as number;
-          }
-        }
-
-        if (redeemPoints < minRedeem) {
-          return sendError(reply, 400, "MIN_POINTS_NOT_MET", `Minimum redemption is ${minRedeem} points.`);
-        }
-
-        const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(`
-          SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1
-        `, guestId);
-
-        if (!userRes[0] || userRes[0].loyaltyPoints < redeemPoints) {
-          return sendError(reply, 400, "INSUFFICIENT_POINTS", "You do not have enough loyalty points.");
-        }
-
-        pointsDiscount = redeemPoints / ratio;
-      }
 
       // 3. FINAL RECALCULATION
 
@@ -824,7 +901,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       const commissionAmount = finalBilling.commissionAmount;
       const providerPayout = finalBilling.providerPayout;
       const deliveryFee = finalBilling.deliveryFee;
-      const discountAmount = finalBilling.promotionDiscount + voucherDiscount + pointsDiscount;
+      const discountAmount = finalBilling.promotionDiscount + voucherDiscount;
 
 
       // 5. BOOKING
@@ -933,8 +1010,6 @@ export async function bookingRoutes(app: FastifyInstance) {
         currency: booking.currency,
         status: booking.status,
         voucherDiscount: voucherDiscount > 0 ? voucherDiscount : undefined,
-        pointsDiscount: pointsDiscount > 0 ? pointsDiscount : undefined,
-        pointsRedeemed: redeemPoints > 0 ? redeemPoints : undefined,
       });
     },
   );
@@ -1535,6 +1610,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           totalAmount: Number(b.totalAmount),
           currency: b.currency,
           voucherDiscount: Number(b.voucherDiscount),
+          pointsDiscount: b.pointsDiscount ? Number(b.pointsDiscount) : undefined,
+          earnedPoints: b.earnedPoints ? Number(b.earnedPoints) : undefined,
+          redeemPoints: b.redeemPoints ? Number(b.redeemPoints) : undefined,
           createdAt: b.createdAt,
         })),
       });
@@ -1636,6 +1714,85 @@ export async function bookingRoutes(app: FastifyInstance) {
         canCancel,
       });
     },
+  );
+
+  // ── PATCH /guests/me/bookings/:id/bind-commission — bind commission at payment step ───────────
+  app.patch(
+    "/guests/me/bookings/:id/bind-commission",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "Bind active commission rate to booking (Payment Step)",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const guestId = (req as ProviderRequest).providerId;
+      const { id } = req.params as { id: string };
+
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      if (booking.guestId !== guestId) {
+        return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
+      }
+
+      if (booking.status !== "pending_payment") {
+        // Already bound/paid
+        return sendSuccess(reply, 200, {
+          id: booking.id,
+          totalAmount: Number(booking.totalAmount),
+          currency: booking.currency,
+          commissionRate: Number(booking.commissionRate),
+        });
+      }
+
+      // 1. Resolve current active commission rate
+      const rate = await getEffectiveCommissionRate(booking.listing.country);
+
+      // 2. Recalculate billing
+      const billing = calculateBilling({
+        listingCategory: booking.listingType,
+        checkIn: booking.checkIn?.toISOString().slice(0, 10),
+        checkOut: booking.checkOut?.toISOString().slice(0, 10),
+        pickupDatetime: booking.pickupDatetime?.toISOString(),
+        returnDatetime: booking.returnDatetime?.toISOString(),
+        rate: booking.nightlyRate ? Number(booking.nightlyRate) : (booking.dailyRate ? Number(booking.dailyRate) : 0),
+        deliveryFee: Number(booking.deliveryFee),
+        promotionDiscount: Number(booking.discountAmount) - Number(booking.voucherDiscount),
+        voucherAmount: Number(booking.voucherDiscount),
+        taxRate: getTaxRate(booking.listing.country),
+        commissionRate: rate,
+      });
+
+      // 3. Update the booking record
+      const updated = await prisma.booking.update({
+        where: { id },
+        data: {
+          commissionRate: rate,
+          commissionAmount: billing.commissionAmount,
+          providerPayout: billing.providerPayout,
+          totalAmount: billing.totalAmount,
+          subtotal: billing.subtotal,
+        },
+      });
+
+      return sendSuccess(reply, 200, {
+        id: updated.id,
+        totalAmount: Number(updated.totalAmount),
+        currency: updated.currency,
+        commissionRate: Number(updated.commissionRate),
+      });
+    }
   );
 
   // Note: GET /provider/bookings is in provider.ts (full pagination + status filter)

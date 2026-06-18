@@ -16,10 +16,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import type { Listing } from "@/types/provider";
+import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
 import { FormShell, type FormStep } from "./shared/FormShell";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
+import { getCurrencyForCountry } from "./shared/countryCurrencyMap";
 
 // ── Enums (values must match backend Zod enum exactly) ───────────────────────
 
@@ -62,18 +64,18 @@ const MILEAGE_POLICY_OPTIONS = [
 
 const FUEL_POLICY_OPTIONS = [
   { value: "full_to_full", label: "Full to Full" },
-  { value: "same_to_same", label: "Same to Same" },
-  { value: "free_tank", label: "Free Tank" },
+  // { value: "same_to_same", label: "Same to Same" },
+  // { value: "free_tank", label: "Free Tank" },
   { value: "full_to_empty", label: "Full to Empty" },
   { value: "pre_purchase", label: "Pre-purchase" },
 ];
 
 const INSURANCE_TYPE_OPTIONS = [
-  { value: "basic", label: "Basic" },
-  { value: "standard", label: "Standard" },
-  { value: "premium", label: "Premium" },
-  { value: "comprehensive", label: "Comprehensive" },
+  // { value: "basic", label: "Basic" },
+  // { value: "standard", label: "Standard" },
+  // { value: "premium", label: "Premium" },
   { value: "basic_third_party", label: "Basic Third Party" },
+  { value: "comprehensive", label: "Comprehensive" },
   { value: "premium_zero_excess", label: "Premium Zero Excess" },
 ];
 
@@ -81,13 +83,6 @@ const CANCELLATION_POLICIES = [
   { value: "flexible", label: "Flexible – free cancellation up to 24 h" },
   { value: "moderate", label: "Moderate – free cancellation up to 5 days" },
   { value: "strict", label: "Strict – no refund within 14 days" },
-];
-
-const CURRENCIES = [
-  { value: "USD", label: "USD ($)" },
-  { value: "EUR", label: "EUR (€)" },
-  { value: "GBP", label: "GBP (£)" },
-  { value: "ZAR", label: "ZAR (R)" },
 ];
 
 const CAR_CATEGORY_VALUES = new Set(CAR_CATEGORIES.map((x) => x.value));
@@ -110,6 +105,9 @@ type CarState = {
   licencePlate: string;
   odometerReading: string;
   unitCount: string;
+  colour: string;
+  engineSize: string;
+  minimumRentalDays: string;
   address: string;
   lat: number | null;
   lng: number | null;
@@ -131,6 +129,8 @@ type CarState = {
   insuranceType: string;
   minimumDriverAge: string;
   securityDeposit: string;
+  pickupHoursFrom: string;
+  pickupHoursTo: string;
   deliveryEnabled: boolean;
   deliveryRadiusKm: string;
   deliveryFee: string;
@@ -202,6 +202,9 @@ function initState(l: Listing): CarState {
     licencePlate: a.licencePlate ?? "",
     odometerReading: a.odometerReading != null ? String(a.odometerReading) : "",
     unitCount: l.unitCount ? String(l.unitCount) : "1",
+    colour: a.colour ?? "",
+    engineSize: a.engineSize ?? "",
+    minimumRentalDays: a.minimumRentalDays != null ? String(a.minimumRentalDays) : "1",
     address: l.address ?? "",
     lat: toNullableNumber(a.lat),
     lng: toNullableNumber(a.lng),
@@ -215,6 +218,8 @@ function initState(l: Listing): CarState {
     airConditioning: a.airConditioning ?? true,
     pricePerDay: l.pricePerDay ? String(l.pricePerDay) : "",
     currency: l.currency ?? "USD",
+    pickupHoursFrom: a.pickupHoursFrom ?? "",
+    pickupHoursTo: a.pickupHoursTo ?? "",
     cancellationPolicy: normalizeSelectValue(l.cancellationPolicy, CANCELLATION_POLICY_VALUES, "flexible"),
     mileagePolicy: normalizeSelectValue(l.mileagePolicy, MILEAGE_POLICY_VALUES, "unlimited"),
     mileageLimitKm: l.mileageLimitKm != null ? String(l.mileageLimitKm) : "",
@@ -256,6 +261,11 @@ function buildPayload(s: CarState): Record<string, unknown> {
   p.lng = toNullableNumber(s.lng);
   p.town = trimOrNull(s.town);
   p.country = countryOrNull(s.country);
+
+  p.colour = trimOrNull(s.colour);
+  p.engineSize = trimOrNull(s.engineSize);
+  const minRentalDays = toNullableInt(s.minimumRentalDays);
+  p.minimumRentalDays = minRentalDays !== null && minRentalDays >= 1 ? minRentalDays : null;
 
   p.transmission = normalizeTransmission(s.transmission);
   p.fuelType = normalizeFuelType(s.fuelType);
@@ -309,6 +319,8 @@ function buildPayload(s: CarState): Record<string, unknown> {
   p.crossBorderAllowed = s.crossBorderAllowed;
   p.airportPickup = s.airportPickup;
   p.returnSameLocation = s.returnSameLocation;
+  p.pickupHoursFrom = s.pickupHoursFrom || null;
+  p.pickupHoursTo = s.pickupHoursTo || null;
 
   return p;
 }
@@ -331,8 +343,6 @@ function validateStep(step: Step, s: CarState): string[] {
         !s.licencePlate.trim() && "Licence plate is required.",
         s.odometerReading === "" && "Odometer reading is required.",
         !s.address.trim() && "Pickup address is required.",
-        !s.town.trim() && "Town is required — geocode the address.",
-        !s.country.trim() && "Country is required — geocode the address.",
       ].filter(Boolean) as string[];
     case "specs":
       return [
@@ -346,12 +356,14 @@ function validateStep(step: Step, s: CarState): string[] {
       return [
         !(Number(s.pricePerDay) > 0) && "Daily rate must be greater than 0.",
         !s.currency && "Currency is required.",
+        s.minimumRentalDays !== "" && Number(s.minimumRentalDays) < 1 && "Minimum rental days must be at least 1.",
         !s.cancellationPolicy && "Cancellation policy is required.",
         !s.mileagePolicy && "Mileage policy is required.",
         s.mileagePolicy === "limited" && !s.mileageLimitKm && "Mileage limit is required for limited mileage.",
         !s.fuelPolicy && "Fuel policy is required.",
         !s.insuranceType && "Insurance type is required.",
         s.deliveryEnabled && !s.deliveryRadiusKm && "Delivery radius is required when delivery is enabled.",
+        s.pickupHoursFrom && s.pickupHoursTo && s.pickupHoursFrom >= s.pickupHoursTo && "Pickup hours must be valid and end after start.",
       ].filter(Boolean) as string[];
     default:
       return [];
@@ -359,10 +371,10 @@ function validateStep(step: Step, s: CarState): string[] {
 }
 
 const STEPS: FormStep[] = [
-  { id: "vehicle", label: "Vehicle Info", sublabel: "Make, model, location & ID" },
-  { id: "specs", label: "Specifications", sublabel: "Engine, transmission & features" },
-  { id: "pricing", label: "Pricing & Policy", sublabel: "Daily rate, mileage & extras" },
-  { id: "media", label: "Media & Documents", sublabel: "Photos & vehicle documents" },
+  { id: "vehicle", label: "Identity & classification", sublabel: "Basic Info" },
+  { id: "specs", label: "Technical specs", sublabel: "Features" },
+  { id: "pricing", label: "Rental terms & insurance", sublabel: "Pricing" },
+  { id: "media", label: "Media & Documents", sublabel: "Uploads" },
 ];
 
 const apiErr = (e: any) => {
@@ -424,7 +436,7 @@ export function CarForm({ listingId, listing }: Props) {
 
   const activateMut = useMutation({
     mutationFn: () => listingApi.post(`/listings/${listingId}/activate`),
-    onSuccess: (r: any) => { refetch(); flash(r.data?.data?.message ?? "Car rental is now live!", "ok"); },
+    onSuccess: (r: any) => { refetch(); flash(r.data?.data?.message ?? "Car rental is now live!", "ok"); router.push("/dashboard/listings"); },
     onError: (e: any) => flash(apiErr(e), "err"),
   });
 
@@ -454,35 +466,126 @@ export function CarForm({ listingId, listing }: Props) {
   const title = current?.name ?? listing.name ?? "Untitled Vehicle";
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5 animate-fade-in pb-16">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => router.push("/dashboard/listings")}
-          className="w-9 h-9 rounded-xl border border-border bg-white flex items-center justify-center text-slate-600 hover:bg-surface-muted transition-all"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
-        <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Car Rental Listing</p>
-          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+    <div className="w-full h-full flex flex-col min-h-0 overflow-hidden">
+      <div className="w-full max-w-[1600px] mx-auto flex flex-col flex-1 min-h-0">
+        {/* ── Standalone Header Card ── */}
+        <div className="bg-white border border-border rounded-2xl shadow-sm px-6 py-4 flex items-center justify-between shrink-0 mb-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push("/dashboard/listings")}
+              className="w-9 h-9 rounded-xl border border-[#556B2F]/30 bg-white flex items-center justify-center text-[#556B2F] hover:bg-[#e6ebe4] transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold text-[#556B2F] uppercase tracking-widest">Car Rental Listing</p>
+              <h1 className="text-lg font-bold text-slate-900 truncate leading-tight">{title}</h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge label={status} status={status} />
+          </div>
         </div>
-        <div className="ml-auto"><Badge label={status} status={status} /></div>
-      </div>
 
-      {ok && <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark"><CheckCircle className="w-4 h-4 text-success shrink-0" />{ok}</div>}
-      {err && <div className="flex items-center gap-2 rounded-2xl bg-danger-50  border border-danger/20  px-4 py-3 text-sm text-danger-dark" ><AlertCircle className="w-4 h-4 text-danger shrink-0" />{err}</div>}
-
-      <FormShell
-        steps={STEPS}
-        activeStep={step}
-        status={status}
-        onStepClick={(id) => { setTried(false); setStep(id as Step); }}
-        isComplete={isComplete}
-        isLocked={isLocked}
-      >
-        <form onSubmit={handleNext} className="space-y-5">
-          <Card className="min-h-[420px]">
+        {/* ── Main Form Shell ── */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <FormShell
+            steps={STEPS}
+            activeStep={step}
+            status={status}
+            onStepClick={(id) => { setTried(false); setStep(id as Step); }}
+            isComplete={isComplete}
+            isLocked={isLocked}
+            footer={
+              <div className="w-full flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => router.push("/dashboard/listings")}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#556B2F]/30 text-sm font-semibold text-[#556B2F] bg-white hover:bg-[#e6ebe4] transition-all"
+                  >
+                    Exit
+                  </button>
+                  {step !== "vehicle" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const idx = STEPS.findIndex((t) => t.id === step);
+                        const prev = STEPS[idx - 1];
+                        if (prev) { setTried(false); setStep(prev.id as Step); }
+                      }}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 transition-all"
+                    >
+                      ← Back
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={saveMut.isPending}
+                    onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#556B2F]/40 text-sm font-semibold text-[#556B2F] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Save Draft
+                  </button>
+                  {step !== "media" ? (
+                    <button
+                      type="submit"
+                      form="car-edit-form"
+                      disabled={saveMut.isPending}
+                      className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#556B2F] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                    >
+                      Save &amp; Continue →
+                    </button>
+                  ) : (
+                    <>
+                      {["draft", "deactivated"].includes(status) && (
+                        <button
+                          type="button"
+                          disabled={activateMut.isPending || saveMut.isPending}
+                          onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-[#556B2F] hover:bg-[#3d533a] disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
+                        </button>
+                      )}
+                      {status === "active" && (
+                        <button
+                          type="button"
+                          disabled={deactivateMut.isPending}
+                          onClick={() => deactivateMut.mutate()}
+                          className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-sm font-bold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all shadow-sm"
+                        >
+                          Deactivate
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            }
+          >
+            <form id="car-edit-form" onSubmit={handleNext} className="space-y-5">
+              {/* Banners nested inside scrollable area */}
+              {(ok || err) && (
+                <div className="space-y-3">
+                  {ok && (
+                    <div className="flex items-center gap-2 rounded-2xl bg-success-50 border border-success/20 px-4 py-3 text-sm text-success-dark">
+                      <CheckCircle className="w-4 h-4 text-success shrink-0" />
+                      {ok}
+                    </div>
+                  )}
+                  {err && (
+                    <div className="flex items-center gap-2 rounded-2xl bg-danger-50 border border-danger/20 px-4 py-3 text-sm text-danger-dark">
+                      <AlertCircle className="w-4 h-4 text-danger shrink-0" />
+                      {err}
+                    </div>
+                  )}
+                </div>
+              )}
+              <Card className="min-h-[420px]">
 
             {/* ── Vehicle step ── */}
             {step === "vehicle" && (
@@ -557,6 +660,22 @@ export function CarForm({ listingId, listing }: Props) {
                     value={s.unitCount}
                     onChange={(e) => set("unitCount", e.target.value)}
                   />
+                  <Input
+                    label="Colour"
+                    value={s.colour}
+                    onChange={(e) => set("colour", e.target.value)}
+                    placeholder="E.g., White, Black, Silver"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Engine Size (cc)"
+                    type="number"
+                    min="0"
+                    value={s.engineSize}
+                    onChange={(e) => set("engineSize", e.target.value)}
+                    placeholder="E.g., 1500"
+                  />
                 </div>
                 <Textarea
                   label="Description (optional)"
@@ -573,12 +692,29 @@ export function CarForm({ listingId, listing }: Props) {
                     town={s.town}
                     country={s.country}
                     addressLabel="Pickup Address"
-                    onChange={(f, v) => set(f, f === "country" ? v.toUpperCase().slice(0, 2) : v)}
-                    onGeocoded={(r) => setS((p) => ({ ...p, lat: r.lat, lng: r.lng, town: r.town, country: r.country }))}
+                    onChange={(f, v) => {
+                      const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
+                      set(f, normalized);
+                      // Auto-populate currency when country changes
+                      if (f === "country") {
+                        const detectedCurrency = getCurrencyForCountry(normalized);
+                        if (detectedCurrency) set("currency", detectedCurrency);
+                      }
+                    }}
+                    onGeocoded={(r) => {
+                      const detectedCurrency = getCurrencyForCountry(r.country);
+                      setS((p) => ({
+                        ...p,
+                        lat: r.lat,
+                        lng: r.lng,
+                        town: r.town,
+                        country: r.country,
+                        // Auto-populate currency from geocoded country (only if a mapping exists)
+                        ...(detectedCurrency ? { currency: detectedCurrency } : {}),
+                      }));
+                    }}
                     errors={tried ? {
                       address: !s.address.trim() ? "Pickup address is required." : undefined,
-                      town: !s.town.trim() ? "Town is required." : undefined,
-                      country: !s.country.trim() ? "Country is required." : undefined,
                     } : undefined}
                   />
                 </div>
@@ -672,7 +808,7 @@ export function CarForm({ listingId, listing }: Props) {
                     required
                     error={tried && !(Number(s.pricePerDay) > 0) ? "Daily rate must be > 0." : undefined}
                   />
-                  <Select label="Currency" value={s.currency} onChange={(e) => set("currency", e.target.value)} options={CURRENCIES} />
+                  <CurrencyCombobox label="Currency" value={s.currency} onChange={(val) => set("currency", val)} />
                 </div>
                 <Select
                   label="Cancellation Policy"
@@ -681,13 +817,23 @@ export function CarForm({ listingId, listing }: Props) {
                   options={CANCELLATION_POLICIES}
                 />
                 <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Minimum Rental Days"
+                    type="number"
+                    min="1"
+                    value={s.minimumRentalDays}
+                    onChange={(e) => set("minimumRentalDays", e.target.value)}
+                    placeholder="1"
+                  />
                   <Select
                     label="Mileage Policy"
                     value={s.mileagePolicy}
                     onChange={(e) => set("mileagePolicy", e.target.value)}
                     options={MILEAGE_POLICY_OPTIONS}
                   />
-                  {s.mileagePolicy === "limited" && (
+                </div>
+                {s.mileagePolicy === "limited" && (
+                  <div className="grid grid-cols-2 gap-4">
                     <Input
                       label="Daily Km Limit"
                       type="number" min="1"
@@ -696,8 +842,8 @@ export function CarForm({ listingId, listing }: Props) {
                       required
                       error={tried && !s.mileageLimitKm ? "Required." : undefined}
                     />
-                  )}
-                </div>
+                  </div>
+                )}
                 {s.mileagePolicy === "limited" && (
                   <Input
                     label="Extra Km Rate"
@@ -710,6 +856,20 @@ export function CarForm({ listingId, listing }: Props) {
                 <div className="grid grid-cols-2 gap-4">
                   <Select label="Fuel Policy" value={s.fuelPolicy} onChange={(e) => set("fuelPolicy", e.target.value)} options={FUEL_POLICY_OPTIONS} />
                   <Select label="Insurance Type" value={s.insuranceType} onChange={(e) => set("insuranceType", e.target.value)} options={INSURANCE_TYPE_OPTIONS} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Pickup Hours From"
+                    type="time"
+                    value={s.pickupHoursFrom}
+                    onChange={(e) => set("pickupHoursFrom", e.target.value)}
+                  />
+                  <Input
+                    label="Pickup Hours To"
+                    type="time"
+                    value={s.pickupHoursTo}
+                    onChange={(e) => set("pickupHoursTo", e.target.value)}
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Input label="Min Driver Age" type="number" min="16" max="100" value={s.minimumDriverAge} onChange={(e) => set("minimumDriverAge", e.target.value)} />
@@ -774,44 +934,11 @@ export function CarForm({ listingId, listing }: Props) {
                 </div>
               </div>
             )}
-          </Card>
-
-          {/* Footer */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-border">
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => router.push("/dashboard/listings")}>Exit</Button>
-              {step !== "vehicle" && (
-                <Button type="button" variant="secondary" onClick={() => {
-                  const idx = STEPS.findIndex((t) => t.id === step);
-                  const prev = STEPS[idx - 1];
-                  if (prev) { setTried(false); setStep(prev.id as Step); }
-                }}>← Back</Button>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" loading={saveMut.isPending} onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }} icon={<Save />}>
-                Save Draft
-              </Button>
-              {step !== "media" ? (
-                <Button type="submit" variant="primary" loading={saveMut.isPending}>Save & Continue →</Button>
-              ) : (
-                <>
-                  {["draft", "deactivated"].includes(status) && (
-                    <Button type="button" variant="success" loading={activateMut.isPending || saveMut.isPending} onClick={() => { setErr(""); saveMut.mutate(undefined, { onSuccess: () => activateMut.mutate() }); }} icon={<CheckCircle />}>
-                      {status === "deactivated" ? "Reactivate Live" : "Activate Live"}
-                    </Button>
-                  )}
-                  {status === "active" && (
-                    <Button type="button" variant="danger" loading={deactivateMut.isPending} onClick={() => deactivateMut.mutate()}>
-                      Deactivate
-                    </Button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </form>
-      </FormShell>
+              </Card>
+            </form>
+          </FormShell>
+        </div>
+      </div>
     </div>
   );
 }
