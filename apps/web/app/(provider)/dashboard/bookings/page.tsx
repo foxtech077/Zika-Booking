@@ -334,7 +334,7 @@ const CustomSelect = ({
                 aria-haspopup="listbox"
                 aria-expanded={isOpen}
                 onClick={() => setIsOpen((open) => !open)}
-                className="flex h-12 w-full items-center justify-between gap-3 rounded-[14px] border border-slate-200 bg-white px-4 text-left text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                className="flex h-12 w-full items-center justify-between gap-3 rounded-[14px] border border-slate-200 bg-white px-4 text-left text-sm font-medium text-slate-800 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-green-100"
             >
                 <span className="truncate">{selectedOption?.label}</span>
                 <ChevronDown className={`h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
@@ -364,12 +364,12 @@ const CustomSelect = ({
                                             setIsOpen(false);
                                         }}
                                         className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${isSelected
-                                                ? "bg-blue-50 text-blue-700"
+                                                ? "bg-green-50 text-green-700"
                                                 : "text-slate-700 hover:bg-slate-50"
                                             }`}
                                     >
                                         <span className="font-medium">{option.label}</span>
-                                        {isSelected && <Check className="h-4 w-4 text-blue-600" />}
+                                        {isSelected && <Check className="h-4 w-4 text-green-600" />}
                                     </button>
                                 );
                             })}
@@ -1056,7 +1056,7 @@ export default function BookingsPage() {
                                 placeholder="Search by booking ID, name, or email"
                                 value={searchInput}
                                 onChange={(e) => { setError(null); setSearchInput(e.target.value); }}
-                                className="h-12 w-full rounded-[14px] border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-800 shadow-sm transition placeholder:text-slate-400 hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-blue-100"
+                                className="h-12 w-full rounded-[14px] border border-slate-200 bg-white pl-11 pr-4 text-sm font-medium text-slate-800 shadow-sm transition placeholder:text-slate-400 hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-green-100"
                             />
                         </div>
 
@@ -1136,7 +1136,7 @@ export default function BookingsPage() {
                         {(search || bookingStatus || paymentStatus || dateFilter) && (
                             <button
                                 onClick={clearFilters}
-                                className="text-xs font-medium text-blue-600 hover:text-blue-800"
+                                className="text-xs font-medium text-green-600 hover:text-green-800"
                             >
                                 Reset filters
                             </button>
@@ -1193,7 +1193,7 @@ export default function BookingsPage() {
                             {(search || bookingStatus || paymentStatus || dateFilter) && (
                                 <button
                                     onClick={clearFilters}
-                                    className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                                    className="px-4 py-2 text-sm font-medium text-green-600 bg-green-50 rounded-lg hover:bg-green-100 transition-colors"
                                 >
                                     Clear filters
                                 </button>
@@ -1362,7 +1362,7 @@ export default function BookingsPage() {
                                     </div>
 
                                     {/* Payment Section */}
-                                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-100">
+                                    <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border border-green-100">
                                         <h3 className="text-xs font-bold text-gray-600 uppercase tracking-widest mb-4">Payment Information</h3>
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between">
@@ -1375,9 +1375,9 @@ export default function BookingsPage() {
                                                     <span className="text-sm font-semibold text-gray-900">{selectedBooking.paymentMethod}</span>
                                                 </div>
                                             )}
-                                            <div className="border-t border-blue-200 pt-3 flex items-center justify-between">
+                                            <div className="border-t border-green-200 pt-3 flex items-center justify-between">
                                                 <span className="text-sm font-bold text-gray-900">Total Amount</span>
-                                                <span className="text-lg font-bold text-blue-600">
+                                                <span className="text-lg font-bold text-green-600">
                                                     {formatCurrency(selectedBooking.totalAmount, selectedBooking.currency)}
                                                 </span>
                                             </div>

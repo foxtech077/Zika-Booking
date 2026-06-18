@@ -99,7 +99,7 @@ const unwrapListingId = (payload: any): string | null =>
   null;
 
 function CategoryIcon({ category }: { category: ListingCategory }) {
-  if (category === "hotel")     return <Hotel className="w-4 h-4 text-blue-500" />;
+  if (category === "hotel")     return <Hotel className="w-4 h-4 text-green-500" />;
   if (category === "car")       return <Car className="w-4 h-4 text-amber-500" />;
   return <Home className="w-4 h-4 text-emerald-500" />;
 }

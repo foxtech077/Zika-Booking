@@ -248,7 +248,7 @@ function isValidUrl(url: string) {
 
 function statusTone(status: SyncStatus) {
   if (status === "connected") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (status === "syncing") return "border-blue-200 bg-blue-50 text-blue-800";
+  if (status === "syncing") return "border-green-200 bg-green-50 text-green-800";
   if (status === "warning") return "border-amber-200 bg-amber-50 text-amber-800";
   if (status === "failed") return "border-red-200 bg-red-50 text-red-800";
   return "border-slate-200 bg-slate-50 text-slate-600";
@@ -464,7 +464,7 @@ export default function ChannelPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Connected Feeds" value={stats.total} icon={<Globe2 />} tone="bg-blue-50 text-blue-700" />
+        <StatCard label="Connected Feeds" value={stats.total} icon={<Globe2 />} tone="bg-green-50 text-green-700" />
         <StatCard label="Active Feeds" value={channelStatus?.activeFeeds ?? stats.active} icon={<ShieldCheck />} tone="bg-emerald-50 text-emerald-700" />
         <StatCard label="Failed Syncs" value={channelStatus?.failedFeeds ?? stats.failed} icon={<XCircle />} tone="bg-red-50 text-red-700" />
         <StatCard label="Pending Syncs" value={channelStatus?.pendingSyncs ?? stats.pending} icon={<Clock3 />} tone="bg-amber-50 text-amber-700" />
