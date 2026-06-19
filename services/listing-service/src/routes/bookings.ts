@@ -1161,19 +1161,110 @@ export async function bookingRoutes(app: FastifyInstance) {
           });
         }
 
-        await prisma.booking.update({
-          where: { id },
-          data: { status: "confirmed", confirmedAt: new Date(), paymentId },
-        });
+        // Confirm inside a transaction with a listing-level row lock so concurrent
+        // payment webhooks cannot both confirm overlapping bookings simultaneously.
+        const confirmedAt = new Date();
+        try {
+          await prisma.$transaction(async (tx) => {
+            // Lock the listing row — serialises all confirmations for this listing.
+            await tx.$queryRawUnsafe(
+              `SELECT id FROM listing.listings WHERE id = $1 FOR UPDATE`,
+              booking.listingId,
+            );
 
-        await prisma.bookingStatusLog.create({
-          data: {
-            bookingId: id,
-            fromStatus: "pending_payment",
-            toStatus: "confirmed",
-            actorType: "system",
-          },
-        });
+            // Re-read booking status inside the TX to catch any concurrent confirm.
+            const fresh = await tx.$queryRawUnsafe<{ status: string }[]>(
+              `SELECT status FROM listing.bookings WHERE id = $1 FOR UPDATE`,
+              id,
+            );
+            if (!fresh[0] || fresh[0].status !== "pending_payment") {
+              throw Object.assign(new Error("Already processed"), { code: "ALREADY_PROCESSED" });
+            }
+
+            // Re-validate that no other confirmed booking occupies these dates.
+            const startDate = booking.checkIn ?? booking.pickupDatetime;
+            const endDate   = booking.checkOut ?? booking.returnDatetime;
+            if (startDate && endDate) {
+              const listing  = await tx.listing.findUnique({ where: { id: booking.listingId } });
+              const unitCount = listing?.unitCount ?? 1;
+
+              const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
+                SELECT id FROM listing.bookings
+                WHERE listing_id = $1
+                  AND status = 'confirmed'
+                  AND id != $2
+                  AND (
+                    (check_in IS NOT NULL AND check_in < $4 AND check_out > $3)
+                    OR (pickup_datetime IS NOT NULL AND pickup_datetime < $4 AND return_datetime > $3)
+                  )
+              `, booking.listingId, id, startDate, endDate);
+
+              if (conflicts.length >= unitCount) {
+                throw Object.assign(new Error("Dates taken"), { code: "DATES_TAKEN" });
+              }
+            }
+
+            await tx.booking.update({
+              where: { id },
+              data: { status: "confirmed", confirmedAt, paymentId },
+            });
+
+            await tx.bookingStatusLog.create({
+              data: {
+                bookingId: id,
+                fromStatus: "pending_payment",
+                toStatus: "confirmed",
+                actorType: "system",
+              },
+            });
+          });
+        } catch (txErr: any) {
+          if (txErr.code === "ALREADY_PROCESSED") {
+            return reply.status(409).send({
+              success: false,
+              error: { code: "INVALID_STATUS", message: "Booking was already processed." },
+            });
+          }
+
+          if (txErr.code === "DATES_TAKEN") {
+            // Another booking confirmed these dates first — auto-cancel and refund points.
+            await prisma.booking.update({
+              where: { id },
+              data: {
+                status: "cancelled_by_system",
+                cancellationReason: "Booking dates became unavailable before payment could be confirmed.",
+                cancelledAt: new Date(),
+                cancelledBy: "system",
+              },
+            }).catch(() => {});
+            await prisma.bookingStatusLog.create({
+              data: {
+                bookingId: id,
+                fromStatus: "pending_payment",
+                toStatus: "cancelled_by_system",
+                actorType: "system",
+                reason: "Dates taken by a concurrent booking.",
+              },
+            }).catch(() => {});
+            const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
+            if (redeemedPoints > 0) {
+              await prisma.$executeRawUnsafe(`
+                UPDATE auth."User"
+                SET "loyaltyPoints" = "loyaltyPoints" + $1, "updatedAt" = NOW()
+                WHERE id = $2
+              `, redeemedPoints, booking.guestId).catch(() => {});
+            }
+            return reply.status(409).send({
+              success: false,
+              error: {
+                code: "DATES_UNAVAILABLE",
+                message: "These dates are no longer available. Your payment will be refunded.",
+              },
+            });
+          }
+
+          throw txErr;
+        }
 
         // Send confirmation email (non-blocking)
         const confirmedListing = await prisma.listing.findUnique({
