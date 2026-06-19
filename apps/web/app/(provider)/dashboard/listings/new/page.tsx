@@ -84,7 +84,7 @@ const CATEGORIES: Array<{
     label: "Hotel / Lodge",
     description: "Register a hotel, resort, lodge or B&B with room inventory management.",
     icon: <Building2 className="w-8 h-8" />,
-    color: "from-blue-500 to-indigo-600",
+    color: "from-green-500 to-emerald-600",
     features: ["Room management", "Review-based ratings", "Admin review required", "Document uploads"],
   },
   {

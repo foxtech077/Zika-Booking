@@ -8,10 +8,13 @@ export const listingApi = axios.create({
   timeout: 30_000,
 });
 
-// Attach token on every request
+// Attach token on every request — check sessionStorage first (fast path),
+// then fall back to localStorage which persists across hard refresh / new tabs.
 listingApi.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = sessionStorage.getItem(TOKEN_KEY);
+    const token =
+      sessionStorage.getItem(TOKEN_KEY) ??
+      localStorage.getItem(TOKEN_KEY);
     if (token) config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
@@ -41,6 +44,7 @@ listingApi.interceptors.response.use(
 
         if (newToken) {
           sessionStorage.setItem(TOKEN_KEY, newToken);
+          localStorage.setItem(TOKEN_KEY, newToken);
           // Update Zustand store so the UI reflects the new session
           const { useAuthStore } = await import("@/stores/auth");
           const user = useAuthStore.getState().user;

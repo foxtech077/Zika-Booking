@@ -28,7 +28,7 @@ export async function generateReference(countryCode: string): Promise<string> {
   const result = await prisma.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('booking_seq') AS nextval`;
   const seq = Number(result[0]!.nextval);
   const padded = String(seq).padStart(6, "0");
-  return `ZIKA-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
+  return `KAINOOK-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
 }
 
 import { getEffectiveCommissionRate } from "../services/commission.service.js";
@@ -849,50 +849,49 @@ export async function bookingRoutes(app: FastifyInstance) {
         });
         if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-        const validStatuses = listing.category === "hotel" ? ["approved"] : ["active"];
-        if (!validStatuses.includes(listing.status)) {
-          return reply.status(410).send({
-            success: false,
-            error: { code: "LISTING_INACTIVE", message: "This listing is no longer available." },
-          });
-        }
-
-        // Car: require driver details & enforce minimum age
-        if (listing.category === "car") {
-          if (!body.driverFirstName || !body.driverLastName)
-            return sendError(reply, 400, "VALIDATION_ERROR", "Driver first and last name are required for car rentals.");
-          if (listing.minimumDriverAge && body.driverAge && body.driverAge < listing.minimumDriverAge)
-            return sendError(
-              reply, 400, "DRIVER_AGE_RESTRICTION",
-              `Driver must be at least ${listing.minimumDriverAge} years old.`,
-            );
-        }
-        const commissionRate = await getCommissionRate(listing.country ?? null);
-
-        const rate =
-          listing.category === "car"
-            ? Number(listing.pricePerDay ?? 0)
-            : Number(listing.pricePerNight ?? 0);
-
-        // 1. BASE BILLING (NO VOUCHER)
-
-        const baseBilling = calculateBilling({
-          listingCategory: listing.category,
-          checkIn: body.checkIn,
-          checkOut: body.checkOut,
-          pickupDatetime: body.pickupDatetime,
-          returnDatetime: body.returnDatetime,
-          rate,
-          deliveryFee: Number(listing.deliveryFee ?? 0),
-          promotionDiscount: 0,
-          voucherAmount: 0,
-          taxRate: getTaxRate(listing.country),
-          commissionRate,
+      const validStatuses = listing.category === "hotel" ? ["approved"] : ["active"];
+      if (!validStatuses.includes(listing.status)) {
+        return reply.status(410).send({
+          success: false,
+          error: { code: "LISTING_INACTIVE", message: "This listing is no longer available." },
         });
+      }
+
+      // Car: require driver details & enforce minimum age
+      if (listing.category === "car") {
+        if (!body.driverFirstName || !body.driverLastName)
+          return sendError(reply, 400, "VALIDATION_ERROR", "Driver first and last name are required for car rentals.");
+        if (listing.minimumDriverAge && body.driverAge && body.driverAge < listing.minimumDriverAge)
+          return sendError(
+            reply, 400, "DRIVER_AGE_RESTRICTION",
+            `Driver must be at least ${listing.minimumDriverAge} years old.`,
+          );
+      }
+      const commissionRate = await getCommissionRate(listing.country ?? null);
+
+      const rate =
+        listing.category === "car"
+          ? Number(listing.pricePerDay ?? 0)
+          : Number(listing.pricePerNight ?? 0);
+
+      // 1. BASE BILLING (NO VOUCHER)
+
+      const baseBilling = calculateBilling({
+        listingCategory: listing.category,
+        checkIn: body.checkIn,
+        checkOut: body.checkOut,
+        pickupDatetime: body.pickupDatetime,
+        returnDatetime: body.returnDatetime,
+        rate,
+        deliveryFee: Number(listing.deliveryFee ?? 0),
+        promotionDiscount: 0,
+        voucherAmount: 0,
+        taxRate: getTaxRate(listing.country),
+        commissionRate,
+      });
 
         let voucherDiscount = 0;
         let appliedVoucher: { id: string; code: string } | null = null;
-
 
         // 2. VOUCHER LOGIC
 
@@ -920,7 +919,6 @@ export async function bookingRoutes(app: FastifyInstance) {
             );
           }
 
-          //  your requested logic kept exactly here
           if (voucher.discountType === "percentage") {
             voucherDiscount =
               baseBilling.subtotal *

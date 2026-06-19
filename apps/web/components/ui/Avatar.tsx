@@ -16,7 +16,7 @@ const SIZES = {
 };
 
 const COLORS = [
-  "bg-blue-500",
+  "bg-green-500",
   "bg-violet-500",
   "bg-emerald-500",
   "bg-amber-500",
