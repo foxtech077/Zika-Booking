@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
@@ -57,9 +57,13 @@ app.post(
 
     const listing = await prisma.listing.findFirst({
       where: { id: body.listingId, deletedAt: null },
-      select: { id: true, providerId: true },
+      select: { id: true, providerId: true, allowPreBooking: true },
     });
     if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+    if (!body.bookingId && !listing.allowPreBooking) {
+      return sendError(reply, 403, "FORBIDDEN", "This listing does not allow pre-booking enquiries.");
+    }
 
     const guestId = user.providerId;
     const providerId = listing.providerId;

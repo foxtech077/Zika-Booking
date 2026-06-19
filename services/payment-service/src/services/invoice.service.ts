@@ -1,11 +1,11 @@
 export function buildInvoice(booking: any) {
-    const baseAmount = booking.amount;
-    const discount = booking.discount || 0;
-    const serviceFee = booking.serviceFee || 0;
-    const tax = booking.tax || 0;
-  
-    const subtotal = baseAmount - discount;
-    const total = subtotal + serviceFee + tax;
-  
-    return { baseAmount, discount, subtotal, serviceFee, tax, total };
-  }
+  const baseAmount = Number(booking.subtotal) + Number(booking.deliveryFee || 0);
+  const discount = Number(booking.discountAmount || 0);
+  const serviceFee = Number(booking.serviceFee || 0);
+  const tax = Number(booking.taxAmount || 0);
+
+  const subtotal = baseAmount - discount;
+  const total = Number(booking.totalAmount);
+
+  return { baseAmount, discount, subtotal, serviceFee, tax, total };
+}
