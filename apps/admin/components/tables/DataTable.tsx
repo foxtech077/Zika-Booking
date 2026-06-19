@@ -207,18 +207,6 @@ export function Pagination({ page, limit, total, onPageChange, onLimitChange }: 
           ›
         </button>
       </div>
-{onLimitChange && (
-  <select
-    value={limit}
-    onChange={(e) => onLimitChange(Number(e.target.value))}
-    className="ml-2 rounded border border-border bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25"
-  >
-    <option value={10}>10 / page</option>
-    <option value={20}>20 / page</option>
-    <option value={50}>50 / page</option>
-    <option value={100}>100 / page</option>
-  </select>
-)}
     </div>
   );
 }

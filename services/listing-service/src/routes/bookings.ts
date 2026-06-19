@@ -715,6 +715,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             driverLastName: { type: "string", maxLength: 100 },
             driverAge: { type: "integer", minimum: 18 },
             voucherCode: { type: "string", maxLength: 30 },
+            redeemPoints: { type: "integer", minimum: 0, description: "Amount of loyalty points to redeem" },
           },
         },
         response: {
@@ -731,6 +732,7 @@ export async function bookingRoutes(app: FastifyInstance) {
                   currency: { type: "string" },
                   status: { type: "string" },
                   voucherDiscount: { type: "number" },
+                  pointsDiscount: { type: "number" },
                 },
                 required: ["bookingId", "bookingReference", "totalAmount", "currency", "status"],
               },
@@ -767,6 +769,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         driverLastName?: string;
         driverAge?: number;
         voucherCode?: string;
+        redeemPoints?: number;
       };
 
       // Validate lock
@@ -876,7 +879,6 @@ export async function bookingRoutes(app: FastifyInstance) {
         };
       }
 
-
       // 3. FINAL RECALCULATION
 
       const finalBilling = calculateBilling({
@@ -888,7 +890,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         rate,
         deliveryFee: Number(listing.deliveryFee ?? 0),
         promotionDiscount: 0,
-        voucherAmount: voucherDiscount,
+        voucherAmount: voucherDiscount + pointsDiscount, // apply points as additional discount
         taxRate: getTaxRate(listing.country),
         commissionRate,
       });
@@ -962,6 +964,9 @@ export async function bookingRoutes(app: FastifyInstance) {
 
           voucherCode: appliedVoucher?.code,
           voucherDiscount,
+
+          redeemPoints,
+          pointsDiscount,
         },
       });
 
@@ -989,6 +994,15 @@ export async function bookingRoutes(app: FastifyInstance) {
             },
           }),
         ]);
+      }
+
+      // Immediately deduct redeemed points from the user's balance to prevent double-spending
+      if (redeemPoints > 0) {
+        await prisma.$executeRawUnsafe(`
+          UPDATE auth."User"
+          SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" - $1), "updatedAt" = NOW()
+          WHERE id = $2
+        `, redeemPoints, guestId);
       }
 
       return sendSuccess(reply, 201, {
@@ -1086,23 +1100,97 @@ export async function bookingRoutes(app: FastifyInstance) {
       ).catch(() => { });
 
       // Award loyalty points — cross-schema update to auth."User"
-      // The listing service Prisma connection uses search_path=listing, so we
-      // must use the fully-qualified auth schema name in raw SQL.
-      const points = Math.floor(Number(booking.totalAmount));
-      if (points > 0) {
-        await prisma.$executeRawUnsafe(`
-          UPDATE auth."User"
-          SET
-            "loyaltyPoints" = "loyaltyPoints" + $1,
-            "currentTier"   = (CASE
-              WHEN "loyaltyPoints" + $1 >= 15000 THEN 'diamond'
-              WHEN "loyaltyPoints" + $1 >= 5000  THEN 'gold'
-              WHEN "loyaltyPoints" + $1 >= 1000  THEN 'silver'
-              ELSE 'bronze'
-            END)::text::auth."LoyaltyTier",
-            "updatedAt" = NOW()
-          WHERE id = $2
-        `, points, booking.guestId);
+      // Earning rate: 1 point per $1 of totalAmount paid, multiplied by tier bonus
+      const basePoints = Math.floor(Number(booking.totalAmount));
+      if (basePoints > 0) {
+        // Fetch current user tier and points AFTER points were already deducted at checkout
+        const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number, currentTier: string }[]>(`
+          SELECT "loyaltyPoints", "currentTier" FROM auth."User" WHERE id = $1
+        `, booking.guestId);
+
+        const user = userRes[0];
+        if (user) {
+          // Tier multipliers per specification
+          const tierMultipliers: Record<string, number> = {
+            bronze: 1.0,
+            silver: 1.15,
+            gold: 1.25,
+            diamond: 1.40,
+          };
+          const multiplier = tierMultipliers[user.currentTier.toLowerCase()] ?? 1.0;
+          const earnedPoints = Math.floor(basePoints * multiplier);
+          const newPoints = user.loyaltyPoints + earnedPoints;
+
+          // Tier thresholds per specification
+          let newTier = 'bronze';
+          if (newPoints >= 5000) newTier = 'diamond';
+          else if (newPoints >= 2000) newTier = 'gold';
+          else if (newPoints >= 500) newTier = 'silver';
+
+          // Tier-upgrade rules: only upgrade, never downgrade
+          const tierRank: Record<string, number> = { bronze: 0, silver: 1, gold: 2, diamond: 3 };
+          const currentRank = tierRank[user.currentTier.toLowerCase()] ?? 0;
+          const newRank = tierRank[newTier] ?? 0;
+          const finalTier = newRank > currentRank ? newTier : user.currentTier.toLowerCase();
+
+          // Update user's points and tier, also record earnedPoints on the booking
+          await Promise.all([
+            prisma.$executeRawUnsafe(`
+              UPDATE auth."User"
+              SET
+                "loyaltyPoints" = $1,
+                "currentTier"   = $2::auth."LoyaltyTier",
+                "updatedAt" = NOW()
+              WHERE id = $3
+            `, newPoints, finalTier, booking.guestId),
+            prisma.booking.update({
+              where: { id },
+              data: { earnedPoints },
+            }),
+          ]);
+
+          // Tier upgrade: send push notification + auto-assign vouchers
+          if (finalTier !== user.currentTier.toLowerCase()) {
+            const tierName = finalTier.charAt(0).toUpperCase() + finalTier.slice(1);
+
+            // Find all vouchers with auto_assign=true that include the new tier
+            const autoVouchers = await prisma.voucher.findMany({
+              where: {
+                isActive: true,
+                autoAssign: true,
+                validUntil: { gte: new Date() },
+              },
+            });
+
+            const tierVouchers = autoVouchers.filter((v) => {
+              const applicableTiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
+              return applicableTiers.includes(finalTier);
+            });
+
+            // Build notification body
+            const vouchersAssigned = tierVouchers.length > 0;
+            const notificationBody = vouchersAssigned
+              ? `You've reached ${tierName}! Your exclusive voucher has been added.`
+              : `Congratulations! You've reached ${tierName} status and unlocked new benefits.`;
+
+            // Insert push notification
+            try {
+              await prisma.$executeRawUnsafe(`
+                INSERT INTO auth."Notification" (id, "userId", type, title, body, data, "createdAt")
+                VALUES (gen_random_uuid()::text, $1, 'tier_upgrade', $2, $3, $4::jsonb, NOW())
+              `, booking.guestId, `You've reached ${tierName}! 🎉`, notificationBody,
+                JSON.stringify({ tier: finalTier, vouchersAssigned: tierVouchers.map((v) => v.code) }));
+            } catch {
+              // Notification table may not have 'data' column in all envs — try without it
+              try {
+                await prisma.$executeRawUnsafe(`
+                  INSERT INTO auth."Notification" (id, "userId", type, title, body, "createdAt")
+                  VALUES (gen_random_uuid()::text, $1, 'tier_upgrade', $2, $3, NOW())
+                `, booking.guestId, `You've reached ${tierName}! 🎉`, notificationBody);
+              } catch { /* ignore */ }
+            }
+          }
+        }
       }
 
       // Release Redis lock
@@ -1169,6 +1257,16 @@ export async function bookingRoutes(app: FastifyInstance) {
           reason: failureReason,
         },
       });
+
+      // Refund any redeemed loyalty points back to the guest since payment failed
+      const redeemedPoints = Number(booking.redeemPoints ?? 0);
+      if (redeemedPoints > 0) {
+        await prisma.$executeRawUnsafe(`
+          UPDATE auth."User"
+          SET "loyaltyPoints" = "loyaltyPoints" + $1, "updatedAt" = NOW()
+          WHERE id = $2
+        `, redeemedPoints, booking.guestId).catch(() => {});
+      }
 
       return sendSuccess(reply, 200, { message: "Booking marked as failed." });
     },
@@ -1258,6 +1356,20 @@ export async function bookingRoutes(app: FastifyInstance) {
         },
       });
 
+      // Loyalty points adjustments on cancellation:
+      // 1. Refund redeemed points (guest paid with points that are now voided)
+      // 2. Reverse earned points if they were awarded at confirmation
+      const redeemedPoints = Number(booking.redeemPoints ?? 0);
+      const earnedPointsToReverse = Number((booking as any).earnedPoints ?? 0);
+      const pointsDelta = redeemedPoints - earnedPointsToReverse;
+      if (pointsDelta !== 0) {
+        await prisma.$executeRawUnsafe(`
+          UPDATE auth."User"
+          SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
+          WHERE id = $2
+        `, pointsDelta, guestId).catch(() => {});
+      }
+
       const cancelledListing = await prisma.listing.findUnique({
         where: { id: booking.listingId },
       });
@@ -1276,6 +1388,8 @@ export async function bookingRoutes(app: FastifyInstance) {
         refundAmount,
         currency: booking.currency,
         message: "Booking cancelled.",
+        pointsRefunded: redeemedPoints > 0 ? redeemedPoints : undefined,
+        pointsReversed: earnedPointsToReverse > 0 ? earnedPointsToReverse : undefined,
       });
     },
   );
@@ -1370,10 +1484,25 @@ export async function bookingRoutes(app: FastifyInstance) {
         },
       });
 
+      // Loyalty points adjustments on provider cancellation:
+      // Refund redeemed points + reverse earned points (full refund scenario)
+      const redeemedPoints = Number(booking.redeemPoints ?? 0);
+      const earnedPointsToReverse = Number((booking as any).earnedPoints ?? 0);
+      const pointsDelta = redeemedPoints - earnedPointsToReverse;
+      if (pointsDelta !== 0) {
+        await prisma.$executeRawUnsafe(`
+          UPDATE auth."User"
+          SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
+          WHERE id = $2
+        `, pointsDelta, booking.guestId).catch(() => {});
+      }
+
       return sendSuccess(reply, 200, {
         refundAmount: Number(booking.totalAmount),
         currency: booking.currency,
         message: "Booking cancelled. Full refund will be issued.",
+        pointsRefunded: redeemedPoints > 0 ? redeemedPoints : undefined,
+        pointsReversed: earnedPointsToReverse > 0 ? earnedPointsToReverse : undefined,
       });
     },
   );
@@ -1483,6 +1612,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           totalAmount: Number(b.totalAmount),
           currency: b.currency,
           voucherDiscount: Number(b.voucherDiscount),
+          pointsDiscount: b.pointsDiscount ? Number(b.pointsDiscount) : undefined,
+          earnedPoints: b.earnedPoints ? Number(b.earnedPoints) : undefined,
+          redeemPoints: b.redeemPoints ? Number(b.redeemPoints) : undefined,
           createdAt: b.createdAt,
         })),
       });
