@@ -121,15 +121,39 @@ model User {
   updatedAt       DateTime      @updatedAt
 
   // Relations
-  verificationTokens VerificationToken[]
-  sessions           Session[]
-  emailLogs          EmailLog[]
-  accreditation      Accreditation?
-  notifications      Notification[]
+  verificationTokens   VerificationToken[]
+  sessions             Session[]
+  emailLogs            EmailLog[]
+  accreditation        Accreditation?
+  notifications        Notification[]
+  loyaltyTransactions  LoyaltyTransaction[]
 
   @@unique([oauthProvider, oauthSub])
   @@index([email])
   @@index([status])
+  @@schema("auth")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Loyalty transaction ledger
+// ─────────────────────────────────────────────────────────────────────────────
+
+model LoyaltyTransaction {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  // earned | redeemed | reversed_earned | refunded_redeemed | admin_adjustment
+  type        String   @db.VarChar(30)
+  points      Int
+  balanceAfter Int     @map("balance_after")
+  bookingId   String?  @map("booking_id") @db.VarChar(255)
+  description String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([bookingId])
+  @@map("loyalty_transactions")
   @@schema("auth")
 }
 
