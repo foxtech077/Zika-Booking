@@ -1,17 +1,17 @@
 export const K = {
   colors: {
     // Core brand
-    darkGreen: "#0D3D2B",
-    darkGreenDeep: "#092B1E",
-    darkGreenMid: "#144D38",
-    accent: "#00A86B",
-    accentLight: "#00C07B",
-    accentDim: "#00A86B26",
+    darkGreen: "#024622",
+    darkGreenDeep: "#012015",
+    darkGreenMid: "#015428",
+    accent: "#1D8D2B",
+    accentLight: "#58B430",
+    accentDim: "#1D8D2B26",
 
     // Content backgrounds
     bgLight: "#F8FAF9",
     bgCard: "#FFFFFF",
-    bgCardDark: "#1A5C42",
+    bgCardDark: "#015428",
 
     // Glassmorphism on dark
     glassBg: "rgba(255,255,255,0.08)",
@@ -20,15 +20,15 @@ export const K = {
     glassInputBorder: "rgba(255,255,255,0.20)",
 
     // Text
-    textDark: "#0F1F17",
-    textMid: "#3D5A4C",
-    textMuted: "#6B8A7A",
+    textDark: "#111827",
+    textMid: "#374151",
+    textMuted: "#6B7280",
     textLight: "#FFFFFF",
-    textLightMuted: "rgba(255,255,255,0.65)",
+    textLightMuted: "rgba(255,255,255,0.75)",
     textLightDim: "rgba(255,255,255,0.45)",
 
     // Status
-    success: "#00A86B",
+    success: "#1D8D2B",
     warning: "#F59E0B",
     error: "#EF4444",
     info: "#3B82F6",
@@ -43,11 +43,11 @@ export const K = {
     // Tab bar
     tabBarBg: "#FFFFFF",
     tabBarBorder: "#E5E7EB",
-    tabActive: "#00A86B",
+    tabActive: "#024622",
     tabInactive: "#9CA3AF",
 
     // Separator
-    border: "#E8F0EC",
+    border: "#E5E7EB",
     borderDark: "rgba(255,255,255,0.12)",
   },
 
@@ -62,21 +62,21 @@ export const K = {
 
   shadow: {
     sm: {
-      shadowColor: "#0D3D2B",
+      shadowColor: "#024622",
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.06,
       shadowRadius: 8,
       elevation: 2,
     },
     md: {
-      shadowColor: "#0D3D2B",
+      shadowColor: "#024622",
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.10,
       shadowRadius: 16,
       elevation: 4,
     },
     lg: {
-      shadowColor: "#0D3D2B",
+      shadowColor: "#024622",
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.14,
       shadowRadius: 24,

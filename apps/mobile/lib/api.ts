@@ -2,9 +2,9 @@ import axios from "axios";
 import { useAuthStore } from "../store/auth";
 
 const getBaseUrl = () => {
-  const envUrl = process.env["EXPO_PUBLIC_AUTH_API_URL"];
-  if (envUrl) return envUrl;
-  return "https://api.kainook.com";
+  const envUrl = process.env["EXPO_PUBLIC_API_URL"];
+  const base = envUrl ?? "https://api.kainook.com/auth";
+  return base.endsWith("/") ? base : `${base}/`;
 };
 
 const BASE_URL = getBaseUrl();
@@ -48,7 +48,7 @@ api.interceptors.response.use(
       if (!refreshing) {
         refreshing = (async () => {
           try {
-            const res = await axios.post(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true });
+            const res = await axios.post(`${BASE_URL}auth/refresh`, {}, { withCredentials: true });
             const token = (res.data as { data: { tokens: { accessToken: string } } }).data.tokens.accessToken;
             const { user } = useAuthStore.getState();
             if (user) await useAuthStore.getState().setAuth(user, token);
