@@ -2502,7 +2502,6 @@ export async function adminListingRoutes(app: FastifyInstance) {
         where: { conversationId: id },
         orderBy: { createdAt: "asc" },
       });
-
       return sendSuccess(reply, 200, {
         conversation: {
           id: convo.id,
