@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -80,7 +80,7 @@ const AMENITY_LABELS: Record<string, string> = {
 
 const POPULAR_DESTINATIONS = [
   { name: "Nairobi", country: "Kenya", icon: "🏙️", from: "from-emerald-500", to: "to-teal-700" },
-  { name: "Mombasa", country: "Kenya", icon: "🏖️", from: "from-blue-400", to: "to-cyan-600" },
+  { name: "Mombasa", country: "Kenya", icon: "🏖️", from: "from-green-400", to: "to-teal-600" },
   { name: "Dubai", country: "UAE", icon: "🌇", from: "from-amber-400", to: "to-orange-600" },
   { name: "Cape Town", country: "South Africa", icon: "🏔️", from: "from-slate-500", to: "to-slate-800" },
   { name: "Zanzibar", country: "Tanzania", icon: "🌴", from: "from-teal-400", to: "to-emerald-700" },
@@ -2086,7 +2086,7 @@ export default function TravellerDashboard() {
                               <p className="font-bold text-slate-800">Check your phone!</p>
                               <p className="text-xs text-slate-500">A payment prompt has been sent to your M-Pesa number. Please approve it to complete your booking.</p>
                             </>) : (<>
-                              <div className="w-14 h-14 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto">
+                              <div className="w-14 h-14 rounded-full bg-green-50 border border-green-200 flex items-center justify-center mx-auto">
                                 <div className="w-6 h-6 border-3 border-[#635BFF] border-t-transparent rounded-full animate-spin" />
                               </div>
                               <p className="font-bold text-slate-800">Processing payment…</p>
@@ -2579,7 +2579,7 @@ export default function TravellerDashboard() {
                   <div>
                     <span className="bg-[#E31C5F] text-white text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">Promo</span>
                     <h3 className="text-xl font-serif font-bold mt-3 leading-tight">Up to 20% off<br />Hotel Stays</h3>
-                    <p className="text-blue-200 text-xs mt-1.5">Limited availability · Book now</p>
+                    <p className="text-green-200 text-xs mt-1.5">Limited availability · Book now</p>
                   </div>
                   <button className="self-start mt-4 bg-white/15 hover:bg-white/25 text-white text-xs font-bold px-4 py-2 rounded-xl transition">
                     Explore Hotels →
@@ -2646,7 +2646,7 @@ export default function TravellerDashboard() {
             {/* ── WHY CHOOSE US ── */}
             <section className="bg-[#0B1E3F] py-16">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center">
-                <p className="text-xs font-bold text-blue-300 uppercase tracking-widest mb-2">Why Kainook </p>
+                <p className="text-xs font-bold text-green-300 uppercase tracking-widest mb-2">Why Kainook </p>
                 <h2 className="text-3xl font-serif font-bold text-white mb-12">The smarter way to travel</h2>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
                   {[
@@ -2658,7 +2658,7 @@ export default function TravellerDashboard() {
                     <div key={item.title} className="flex flex-col items-center gap-3 text-center">
                       <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center text-2xl">{item.icon}</div>
                       <p className="text-white font-bold text-sm">{item.title}</p>
-                      <p className="text-blue-200 text-xs leading-relaxed">{item.desc}</p>
+                      <p className="text-green-200 text-xs leading-relaxed">{item.desc}</p>
                     </div>
                   ))}
                 </div>
@@ -3485,7 +3485,7 @@ export default function TravellerDashboard() {
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-300">
           <div className="bg-gradient-to-br from-[#0B1E3F] via-[#0E1E38] to-[#040D1D] border border-white/10 rounded-3xl max-w-md w-full p-8 shadow-2xl space-y-6 text-center animate-scale-in relative overflow-hidden">
             <div className="absolute right-4 bottom-4 text-9xl text-white/5 font-bold uppercase select-none pointer-events-none font-serif">ZIKA</div>
-            <div className="absolute -top-12 -left-12 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+            <div className="absolute -top-12 -left-12 w-32 h-32 bg-green-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
             <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-200 to-slate-100 text-[#0B1E3F] flex items-center justify-center text-3xl mx-auto shadow-xl shadow-yellow-500/10 font-bold border border-white/20">
               ✦

@@ -11,21 +11,23 @@ import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Chart
 import { Card, CardHeader, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
+import { canAccess } from "@/permissions/rbac";
 import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
+import { useAuthStore } from "@/stores/auth";
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────────
 
-const fetchUsers = () =>
-  api.get("/admin/users?limit=1").then((r) => r.data.data ?? r.data);
+const fetchUsers = (params: Record<string, string>) =>
+  api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
 
-const fetchBookings = () =>
-  listingApi.get("/admin/bookings?limit=100").then((r) => r.data.data ?? r.data);
+const fetchBookings = (params: Record<string, string>) =>
+  listingApi.get("/admin/bookings", { params }).then((r) => r.data.data ?? r.data);
 
-const fetchListings = () =>
-  listingApi.get("/admin/listings?limit=1").then((r) => r.data.data ?? r.data);
+const fetchListings = (params: Record<string, string>) =>
+  listingApi.get("/admin/listings", { params }).then((r) => r.data.data ?? r.data);
 
-const fetchReviewQueue = () =>
-  listingApi.get("/admin/listings/review-queue?limit=1").then((r) => r.data.data ?? r.data);
+const fetchReviewQueue = (params: Record<string, string>) =>
+  listingApi.get("/admin/listings/review-queue", { params }).then((r) => r.data.data ?? r.data);
 
 const fetchAuditLogs = () =>
   api.get("/admin/audit-logs?limit=8").then((r) => r.data.data ?? r.data);
@@ -82,12 +84,47 @@ function buildStatusDonut(bookings: any[]) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { data: usersData, isLoading: loadingUsers } = useQuery({ queryKey: ["admin-users-count"], queryFn: fetchUsers });
-  const { data: bookingsData, isLoading: loadingBookings } = useQuery({ queryKey: ["admin-bookings-dash"], queryFn: fetchBookings });
-  const { data: listingsData, isLoading: loadingListings } = useQuery({ queryKey: ["admin-listings-dash"], queryFn: fetchListings });
-  const { data: queueData, isLoading: loadingQueue } = useQuery({ queryKey: ["admin-queue-dash"], queryFn: fetchReviewQueue });
-  const { data: auditData, isLoading: loadingAudit } = useQuery({ queryKey: ["admin-audit-dash"], queryFn: fetchAuditLogs });
+  const { user, _hasHydrated } = useAuthStore();
+  const isCountryManager = user?.role === "country_manager";
+  const userCountryScope = user?.countryScope ?? [];
+  const defaultCountry = isCountryManager && userCountryScope.length > 0 ? userCountryScope[0] : "";
+  const canViewUsers = canAccess(user?.role, "view_users");
+  const canViewAudit = canAccess(user?.role, "view_audit");
 
+  const scopedCountryParam: Record<string, string> = defaultCountry ? { country: defaultCountry } : {};
+  const queueParams = { limit: "100", ...scopedCountryParam };
+  const usersParams = { limit: isCountryManager ? "1000" : "1", ...scopedCountryParam };
+  const bookingsParams = { limit: "100", ...scopedCountryParam };
+  const listingsParams = { limit: "1", ...scopedCountryParam };
+  const scopedQueriesEnabled = _hasHydrated && (!isCountryManager || Boolean(defaultCountry));
+
+  const { data: usersData, isLoading: loadingUsers } = useQuery({
+    queryKey: ["admin-users-count", defaultCountry],
+    queryFn: () => fetchUsers(usersParams),
+    enabled: scopedQueriesEnabled && canViewUsers,
+  });
+  const { data: bookingsData, isLoading: loadingBookings } = useQuery({
+    queryKey: ["admin-bookings-dash", defaultCountry],
+    queryFn: () => fetchBookings(bookingsParams),
+    enabled: scopedQueriesEnabled,
+  });
+  const { data: listingsData, isLoading: loadingListings } = useQuery({
+    queryKey: ["admin-listings-dash", defaultCountry],
+    queryFn: () => fetchListings(listingsParams),
+    enabled: scopedQueriesEnabled,
+  });
+  const role = user?.role;
+  const { data: queueData, isLoading: loadingQueue } = useQuery({
+    queryKey: ["admin-queue-dash", queueParams],
+    queryFn: () => fetchReviewQueue(queueParams),
+    enabled: scopedQueriesEnabled,
+  });
+  const { data: auditData, isLoading: loadingAudit } = useQuery({ queryKey: ["admin-audit-dash"], queryFn: fetchAuditLogs, enabled: scopedQueriesEnabled && canViewAudit });
+  const rawUsers: any[] = usersData?.users ?? [];
+  const scopedUsers = isCountryManager && defaultCountry
+    ? rawUsers.filter((u) => u.country?.toUpperCase() === defaultCountry.toUpperCase())
+    : rawUsers;
+  const usersTotal = isCountryManager ? scopedUsers.length : (usersData?.total ?? 0);
   const bookings: any[] = bookingsData?.bookings ?? [];
   const confirmedBookings = bookings.filter((b) => ["confirmed", "completed"].includes(b.status));
   const totalRevenue = confirmedBookings.reduce((s, b) => s + Number(b.totalAmount ?? 0), 0);
@@ -113,47 +150,57 @@ export default function DashboardPage() {
           iconBg="bg-primary/10"
           loading={loadingBookings}
         />
-        <StatCard
-          title="Total Revenue"
-          value={totalRevenue}
-          currency="USD"
-          change={7.2}
-          icon={<DollarSign className="h-4 w-4 text-success" />}
-          iconBg="bg-success/10"
-          loading={loadingBookings}
-        />
-        <StatCard
-          title="Platform Commission"
-          value={totalCommission}
-          currency="USD"
-          change={5.1}
-          icon={<TrendingUp className="h-4 w-4 text-info" />}
-          iconBg="bg-info/10"
-          loading={loadingBookings}
-        />
-        <StatCard
-          title="Total Users"
-          value={usersData?.total ?? 0}
-          change={12.8}
-          icon={<Users className="h-4 w-4 text-purple-600" />}
-          iconBg="bg-purple-100"
-          loading={loadingUsers}
-        />
-        <StatCard
-          title="Total Listings"
-          value={listingsData?.total ?? 0}
-          change={2.1}
-          icon={<Building2 className="h-4 w-4 text-teal-600" />}
-          iconBg="bg-teal-100"
-          loading={loadingListings}
-        />
-        <StatCard
-          title="Pending Accreditation"
-          value={queueData?.total ?? 0}
-          icon={<BadgeCheck className="h-4 w-4 text-warning" />}
-          iconBg="bg-warning/10"
-          loading={loadingQueue}
-        />
+        {role !== "sales" && (
+          <StatCard
+            title="Total Revenue"
+            value={totalRevenue}
+            currency="USD"
+            change={7.2}
+            icon={<DollarSign className="h-4 w-4 text-success" />}
+            iconBg="bg-success/10"
+            loading={loadingBookings}
+          />
+        )}
+        {role !== "sales" && (
+          <StatCard
+            title="Platform Commission"
+            value={totalCommission}
+            currency="USD"
+            change={5.1}
+            icon={<TrendingUp className="h-4 w-4 text-info" />}
+            iconBg="bg-info/10"
+            loading={loadingBookings}
+          />
+        )}
+        {role !== "sales" && (
+          <StatCard
+            title="Total Users"
+            value={usersTotal}
+            change={12.8}
+            icon={<Users className="h-4 w-4 text-purple-600" />}
+            iconBg="bg-purple-100"
+            loading={loadingUsers}
+          />
+        )}
+        {role !== "sales" && (
+          <StatCard
+            title="Total Listings"
+            value={listingsData?.total ?? 0}
+            change={2.1}
+            icon={<Building2 className="h-4 w-4 text-teal-600" />}
+            iconBg="bg-teal-100"
+            loading={loadingListings}
+          />
+        )}
+        {role !== "sales" && (
+          <StatCard
+            title="Pending Accreditation"
+            value={queueData?.total ?? 0}
+            icon={<BadgeCheck className="h-4 w-4 text-warning" />}
+            iconBg="bg-warning/10"
+            loading={loadingQueue}
+          />
+        )}
         <StatCard
           title="Confirmed Bookings"
           value={confirmedBookings.length}

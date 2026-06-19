@@ -1,26 +1,17 @@
 // services/pricing.service.ts
 import { convertCurrency } from "./ fx.services";
 
-export async function getPricing(req: any, basePriceUSD: number) {
-  const country = req.location?.country || "IN";
+export async function getPricing(basePrice: number, baseCurrency: string, targetCurrency: string) {
+  let displayPrice = basePrice;
 
-  let currency = "USD";
-  let price = basePriceUSD;
-
-  if (country === "IN") {
-    currency = "INR";
-    price = await convertCurrency(basePriceUSD, "USD", "INR");
-  }
-
-  if (country === "NG") {
-    currency = "NGN";
-    price = await convertCurrency(basePriceUSD, "USD", "NGN");
+  if (baseCurrency !== targetCurrency) {
+    displayPrice = await convertCurrency(basePrice, baseCurrency, targetCurrency);
   }
 
   return {
-    basePriceUSD,
-    displayPrice: Math.round(price),
-    currency,
-    country,
+    basePrice,
+    baseCurrency,
+    displayPrice: Math.round(displayPrice),
+    currency: targetCurrency,
   };
 }

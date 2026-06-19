@@ -1,4 +1,4 @@
-﻿import sgMail from "@sendgrid/mail";
+import sgMail from "@sendgrid/mail";
 
 const rawKey = process.env["SENDGRID_API_KEY"] ?? "";
 const cleanKey = rawKey.replace(/^["']|["']$/g, "");
@@ -18,29 +18,45 @@ const FROM = {
 const WEB = (process.env["WEB_BASE_URL"] ?? "https://Kainook.com").trim().replace(/\/$/, "");
 
 // ── Send logic ─────────────────────────────────────────────────────────────
-
 async function sendEmail(msg: sgMail.MailDataRequired): Promise<void> {
   try {
-    await sgMail.send(msg);
-  } catch (err:any) {
-    const error = err instanceof Error ? err : new Error(String(err));
-    console.error("[Email] SendGrid send failed:", error);
-    console.log(JSON.stringify(err.response?.body, null, 2)); //Temporary for debugging
-    throw error;
+    const response = await sgMail.send(msg);
+
+    console.log("[SendGrid] Success");
+    console.log("[SendGrid] Response:", response);
+
+  } catch (err: any) {
+    console.error("[Email] SendGrid send failed:", err);
+
+    if (err.response) {
+      console.log(
+        "[SendGrid Error Body]",
+        JSON.stringify(err.response.body, null, 2)
+      );
+    }
+
+    throw err;
   }
 }
 
 async function sendWithRetry(msg: sgMail.MailDataRequired, attempt = 1): Promise<void> {
-  try {
-    if (!cleanKey || process.env["NODE_ENV"] !== "production") {
-      console.log("\n" + "=".repeat(60));
-      console.log("📧 [Email Sandbox] Email request prepared");
-      console.log(`To: ${Array.isArray(msg.to) ? msg.to.join(", ") : msg.to}`);
-      console.log(`Subject: ${msg.subject}`);
-      console.log("=".repeat(60) + "\n");
-      return;
-    }
+  const isProd = process.env["NODE_ENV"] === "production";
 
+  if (isProd) {
+    if (!cleanKey) {
+      throw new Error("[Email] SENDGRID_API_KEY is not configured in the production environment.");
+    }
+  } else {
+    // Sandbox mode for non-production environments
+    console.log("\n" + "=".repeat(60));
+    console.log("📧 [Email Sandbox] Email request prepared");
+    console.log(`To: ${Array.isArray(msg.to) ? msg.to.join(", ") : msg.to}`);
+    console.log(`Subject: ${msg.subject}`);
+    console.log("=".repeat(60) + "\n");
+    return;
+  }
+
+  try {
     await sendEmail(msg);
   } catch (err) {
     if (attempt < 3) {

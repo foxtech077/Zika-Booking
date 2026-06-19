@@ -1,5 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
+import { generateReference, getCommissionRate } from "./bookings.js";
+import { getTaxRate } from "../services/getTaxRate.services.js";
+import { calculateBilling } from "../services/billing.service.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
@@ -234,69 +237,74 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
       listingFilter.claimedStarRating = parsedRating;
     }
-    const tasks = await prisma.listingReviewTask.findMany({
-      where: {
-        status: taskStatus
-          ? (taskStatus as ReviewTaskStatus)
-          : { in: ["open", "escalated"] },
-        AND: [
-          slaFilter,
-          {
-            listing: {
-              is: listingFilter,
+
+    try {
+      const tasks = await prisma.listingReviewTask.findMany({
+        where: {
+          status: taskStatus
+            ? (taskStatus as ReviewTaskStatus)
+            : { in: ["open", "escalated"] },
+          AND: [
+            slaFilter,
+            {
+              listing: {
+                is: listingFilter,
+              },
             },
-          },
-        ],
-      },
-      skip,
-      take,
-      orderBy: sortBy === "submitted_at"
-        ? { listing: { submittedAt: "desc" } }
-        : { slaDeadline: "asc" },
-      include: {
-        listing: {
-          include: {
-            photos: {
-              where: { deletedAt: null },
-              orderBy: { position: "asc" },
+          ],
+        },
+        skip,
+        take,
+        orderBy: sortBy === "submitted_at"
+          ? { listing: { submittedAt: "desc" } }
+          : { slaDeadline: "asc" },
+        include: {
+          listing: {
+            include: {
+              photos: {
+                where: { deletedAt: null },
+                orderBy: { position: "asc" },
+              },
             },
           },
         },
-      },
-    });
+      });
 
-    const total = await prisma.listingReviewTask.count({
-      where: {
-        status: taskStatus
-          ? (taskStatus as ReviewTaskStatus)
-          : { in: ["open", "escalated"] },
-        AND: [
-          slaFilter,
-          {
-            listing: {
-              is: listingFilter,
+      const total = await prisma.listingReviewTask.count({
+        where: {
+          status: taskStatus
+            ? (taskStatus as ReviewTaskStatus)
+            : { in: ["open", "escalated"] },
+          AND: [
+            slaFilter,
+            {
+              listing: {
+                is: listingFilter,
+              },
             },
-          },
-        ],
-      },
-    });
-
-    const signedTasks = await Promise.all(
-      tasks.map(async (t) => ({
-        ...t,
-        listing: {
-          ...t.listing,
-          photos: await withSignedPhotos(t.listing.photos),
+          ],
         },
-      })),
-    );
+      });
 
-    return sendSuccess(reply, 200, {
-      tasks: signedTasks,
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
+      const signedTasks = await Promise.all(
+        tasks.map(async (t) => ({
+          ...t,
+          listing: {
+            ...t.listing,
+            photos: await withSignedPhotos(t.listing.photos),
+          },
+        })),
+      );
+
+      return sendSuccess(reply, 200, {
+        tasks: signedTasks,
+        total,
+        page: parseInt(page, 10),
+        limit: take,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch review queue.");
+    }
   });
 
 
@@ -378,75 +386,79 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
+        throw error;
+      }
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        include: {
+          photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
+          documents: { where: { replacedAt: null } },
+          amenities: true,
+          customAmenities: true,
+          reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
+        },
+      });
+
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      const legacyAmenityCategoryMap: Record<string, string> = {
+        wifi: "Connectivity", high_speed_wifi: "Connectivity", ethernet: "Connectivity",
+        pool: "Wellness", spa: "Wellness", gym: "Wellness", sauna: "Wellness", massage: "Wellness", hot_tub: "Wellness",
+        restaurant: "Food & Drink", bar: "Food & Drink", room_service: "Food & Drink", mini_bar: "Food & Drink", breakfast: "Food & Drink", kitchen: "Food & Drink",
+        air_conditioning: "Comfort", heating: "Comfort", fireplace: "Comfort", balcony: "Comfort",
+        concierge: "Services", parking: "Services", security: "Services", laundry: "Services",
+        dry_cleaning: "Services", housekeeping: "Services", luggage_storage: "Services",
+        airport_shuttle: "Services", tv: "Services", workspace: "Services", washing_machine: "Services", garden: "Services",
+      };
+
+      const groupedAmenities: Record<string, string[]> = {
+        Connectivity: [], "Food & Drink": [], Wellness: [], Comfort: [], Services: [],
+      };
+      for (const item of listing.amenities) {
+        const key = item.amenityKey;
+        if (key.includes(":")) {
+          const [cat = "Services", val = ""] = key.split(":");
+          (groupedAmenities[cat] ??= []).push(val);
+        } else {
+          const cat = legacyAmenityCategoryMap[key] || "Services";
+          (groupedAmenities[cat] ??= []).push(key);
         }
       }
 
-      throw error;
+      const presentDocTypes = listing.documents.map((d) => d.documentType as string);
+      const docChecklist = HOTEL_REQUIRED_DOC_GROUPS.map((group) => ({
+        label: group.label,
+        satisfied: group.types.some((t) => presentDocTypes.includes(t)),
+        uploadedTypes: group.types.filter((t) => presentDocTypes.includes(t)),
+      }));
+
+      return sendSuccess(reply, 200, {
+        ...listing,
+        amenities: groupedAmenities,
+        photos: await withSignedPhotos(listing.photos),
+        docChecklist,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "GET_REVIEW_FAILED", "Failed to retrieve listing for review. Please try again.");
     }
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      include: {
-        photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
-        documents: { where: { replacedAt: null } },
-        amenities: true,
-        customAmenities: true,
-        reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
-      },
-    });
-
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    const legacyAmenityCategoryMap: Record<string, string> = {
-      wifi: "Connectivity", high_speed_wifi: "Connectivity", ethernet: "Connectivity",
-      pool: "Wellness", spa: "Wellness", gym: "Wellness", sauna: "Wellness", massage: "Wellness", hot_tub: "Wellness",
-      restaurant: "Food & Drink", bar: "Food & Drink", room_service: "Food & Drink", mini_bar: "Food & Drink", breakfast: "Food & Drink", kitchen: "Food & Drink",
-      air_conditioning: "Comfort", heating: "Comfort", fireplace: "Comfort", balcony: "Comfort",
-      concierge: "Services", parking: "Services", security: "Services", laundry: "Services",
-      dry_cleaning: "Services", housekeeping: "Services", luggage_storage: "Services",
-      airport_shuttle: "Services", tv: "Services", workspace: "Services", washing_machine: "Services", garden: "Services",
-    };
-
-    const groupedAmenities: Record<string, string[]> = {
-      Connectivity: [], "Food & Drink": [], Wellness: [], Comfort: [], Services: [],
-    };
-    for (const item of listing.amenities) {
-      const key = item.amenityKey;
-      if (key.includes(":")) {
-        const [cat = "Services", val = ""] = key.split(":");
-        (groupedAmenities[cat] ??= []).push(val);
-      } else {
-        const cat = legacyAmenityCategoryMap[key] || "Services";
-        (groupedAmenities[cat] ??= []).push(key);
-      }
-    }
-
-    const presentDocTypes = listing.documents.map((d) => d.documentType as string);
-    const docChecklist = HOTEL_REQUIRED_DOC_GROUPS.map((group) => ({
-      label: group.label,
-      satisfied: group.types.some((t) => presentDocTypes.includes(t)),
-      uploadedTypes: group.types.filter((t) => presentDocTypes.includes(t)),
-    }));
-
-    return sendSuccess(reply, 200, {
-      ...listing,
-      amenities: groupedAmenities,
-      photos: await withSignedPhotos(listing.photos),
-      docChecklist,
-    });
   });
 
   // ── GET /admin/listings/:id/documents/:docId ──────────────────────────────
@@ -482,36 +494,40 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const admin = req as AdminRequest;
     const { id, docId } = req.params as { id: string; docId: string };
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(
-            reply,
-            404,
-            "NOT_FOUND",
-            "Listing not found."
-          );
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(
+              reply,
+              404,
+              "NOT_FOUND",
+              "Listing not found."
+            );
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
 
-      throw error;
+      const doc = await prisma.listingDocument.findFirst({ where: { id: docId, listingId: id } });
+      if (!doc) return sendError(reply, 404, "NOT_FOUND", "Document not found.");
+
+      const url = await createPresignedDownloadUrl(doc.s3Key, 900);
+      return sendSuccess(reply, 200, { url, fileType: doc.fileType });
+    } catch (err: any) {
+      return sendError(reply, 400, "GET_DOCUMENT_FAILED", "Failed to retrieve listing document. Please try again.");
     }
-
-    const doc = await prisma.listingDocument.findFirst({ where: { id: docId, listingId: id } });
-    if (!doc) return sendError(reply, 404, "NOT_FOUND", "Document not found.");
-
-    const url = await createPresignedDownloadUrl(doc.s3Key, 900);
-    return sendSuccess(reply, 200, { url, fileType: doc.fileType });
   });
 
   // ── PATCH /admin/listings/review-tasks/:taskId/assign (UC-2.8 A3) ─────────
@@ -541,50 +557,54 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({
-      where: { id: taskId }, include: {
-        listing: {
-          select: {
-            id: true,
+    try {
+      const task = await prisma.listingReviewTask.findUnique({
+        where: { id: taskId }, include: {
+          listing: {
+            select: {
+              id: true,
+            },
           },
         },
-      },
-    });
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
-    try {
-      await verifyListingScope(admin, task.listing.id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(
-            reply,
-            404,
-            "NOT_FOUND",
-            "Listing not found."
-          );
+      });
+      if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+      try {
+        await verifyListingScope(admin, task.listing.id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(
+              reply,
+              404,
+              "NOT_FOUND",
+              "Listing not found."
+            );
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This review task is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This review task is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      if (!["open", "escalated"].includes(task.status)) {
+        return sendError(reply, 409, "TASK_RESOLVED", "Cannot assign a resolved task.");
+      }
+      if (task.assignedTo && task.assignedTo !== admin.adminId) {
+        return sendError(reply, 409, "ALREADY_ASSIGNED", "This listing is already assigned to another reviewer.");
       }
 
-      throw error;
+      await prisma.listingReviewTask.update({ where: { id: taskId }, data: { assignedTo: admin.adminId } });
+      return sendSuccess(reply, 200, { message: "Assigned to you." });
+    } catch (err: any) {
+      return sendError(reply, 400, "ASSIGN_TASK_FAILED", "Failed to assign review task. Please try again.");
     }
-    if (!["open", "escalated"].includes(task.status)) {
-      return sendError(reply, 409, "TASK_RESOLVED", "Cannot assign a resolved task.");
-    }
-    if (task.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 409, "ALREADY_ASSIGNED", "This listing is already assigned to another reviewer.");
-    }
-
-    await prisma.listingReviewTask.update({ where: { id: taskId }, data: { assignedTo: admin.adminId } });
-    return sendSuccess(reply, 200, { message: "Assigned to you." });
   });
 
   // ── PATCH /admin/listings/review-tasks/:taskId/unassign ───────────────────
@@ -613,50 +633,54 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({
-      where: { id: taskId }, include: {
-        listing: {
-          select: {
-            id: true,
-          },
-        },
-      }
-    });
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
     try {
-      await verifyListingScope(admin, task.listing.id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(
-            reply,
-            404,
-            "NOT_FOUND",
-            "Listing not found."
-          );
+      const task = await prisma.listingReviewTask.findUnique({
+        where: { id: taskId }, include: {
+          listing: {
+            select: {
+              id: true,
+            },
+          },
+        }
+      });
+      if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+      try {
+        await verifyListingScope(admin, task.listing.id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(
+              reply,
+              404,
+              "NOT_FOUND",
+              "Listing not found."
+            );
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This review task is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This review task is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      if (!["open", "escalated"].includes(task.status)) {
+        return sendError(reply, 409, "TASK_RESOLVED", "Cannot unassign a resolved task.");
+      }
+      if (task.assignedTo && task.assignedTo !== admin.adminId && admin.adminRole !== "super_admin") {
+        return sendError(reply, 403, "FORBIDDEN", "Only the assigned reviewer or a super admin can unassign this task.");
       }
 
-      throw error;
+      await prisma.listingReviewTask.update({ where: { id: taskId }, data: { assignedTo: null } });
+      return sendSuccess(reply, 200, { message: "Task unassigned." });
+    } catch (err: any) {
+      return sendError(reply, 400, "UNASSIGN_TASK_FAILED", "Failed to unassign review task. Please try again.");
     }
-    if (!["open", "escalated"].includes(task.status)) {
-      return sendError(reply, 409, "TASK_RESOLVED", "Cannot unassign a resolved task.");
-    }
-    if (task.assignedTo && task.assignedTo !== admin.adminId && admin.adminRole !== "super_admin") {
-      return sendError(reply, 403, "FORBIDDEN", "Only the assigned reviewer or a super admin can unassign this task.");
-    }
-
-    await prisma.listingReviewTask.update({ where: { id: taskId }, data: { assignedTo: null } });
-    return sendSuccess(reply, 200, { message: "Task unassigned." });
   });
 
   // ── PATCH /admin/listings/review-tasks/:taskId/escalate ───────────────────
@@ -693,59 +717,63 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { taskId } = req.params as { taskId: string };
     const { reason } = req.body as { reason?: string };
 
-    const task = await prisma.listingReviewTask.findUnique({
-      where: { id: taskId }, include: {
-        listing: {
-          select: {
-            id: true,
+    try {
+      const task = await prisma.listingReviewTask.findUnique({
+        where: { id: taskId }, include: {
+          listing: {
+            select: {
+              id: true,
+            },
           },
         },
-      },
-    });
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
-    try {
-      await verifyListingScope(admin, task.listing.id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(
-            reply,
-            404,
-            "NOT_FOUND",
-            "Listing not found."
-          );
+      });
+      if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+      try {
+        await verifyListingScope(admin, task.listing.id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(
+              reply,
+              404,
+              "NOT_FOUND",
+              "Listing not found."
+            );
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This review task is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This review task is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      if (!["open", "awaiting_provider_response"].includes(task.status)) {
+        return sendError(reply, 409, "INVALID_STATUS", "Only open or awaiting-provider-response tasks can be escalated.");
       }
 
-      throw error;
-    }
-    if (!["open", "awaiting_provider_response"].includes(task.status)) {
-      return sendError(reply, 409, "INVALID_STATUS", "Only open or awaiting-provider-response tasks can be escalated.");
-    }
+      await prisma.$transaction([
+        prisma.listingReviewTask.update({ where: { id: taskId }, data: { status: "escalated" } }),
+        prisma.listingModerationLog.create({
+          data: {
+            listingId: task.listingId,
+            action: "escalated",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: { taskId, reason: reason ?? null, slaDeadline: task.slaDeadline.toISOString(), ipAddress: req.ip },
+          },
+        }),
+      ]);
 
-    await prisma.$transaction([
-      prisma.listingReviewTask.update({ where: { id: taskId }, data: { status: "escalated" } }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: task.listingId,
-          action: "escalated",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: { taskId, reason: reason ?? null, slaDeadline: task.slaDeadline.toISOString(), ipAddress: req.ip },
-        },
-      }),
-    ]);
-
-    return sendSuccess(reply, 200, { message: "Review task escalated." });
+      return sendSuccess(reply, 200, { message: "Review task escalated." });
+    } catch (err: any) {
+      return sendError(reply, 400, "ESCALATE_TASK_FAILED", "Failed to escalate review task. Please try again.");
+    }
   });
 
   // ── POST /admin/listings/review-tasks/:taskId/resolve (Agent Unblock Process) ──
@@ -786,98 +814,102 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { taskId } = req.params as { taskId: string };
     const { decision, adminNote } = req.body as { decision: string; adminNote?: string };
 
-    const task = await prisma.listingReviewTask.findUnique({
-      where: { id: taskId },
-      include: { listing: true },
-    });
+    try {
+      const task = await prisma.listingReviewTask.findUnique({
+        where: { id: taskId },
+        include: { listing: true },
+      });
 
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
-    if (!["open", "escalated"].includes(task.status)) {
-      return sendError(reply, 409, "TASK_RESOLVED", "This task is already resolved or in a different state.");
-    }
-
-    if (task.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 403, "FORBIDDEN", "This task is assigned to someone else.");
-    }
-
-    if (decision === "unblock_no_warning" && !adminNote) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Internal note is mandatory when unblocking without a warning.");
-    }
-
-    if (decision === "ban" && !["admin", "super_admin"].includes(admin.adminRole)) {
-      return sendError(reply, 403, "FORBIDDEN", "Only Admin or Super Admin can permanently ban a listing.");
-    }
-
-    await prisma.$transaction(async (tx) => {
-      let nextStatus = "resolved";
-      let listingStatusUpdate: string | undefined = undefined;
-      let resetConsecutiveNegative = false;
-
-      switch (decision) {
-        case "unblock_warning":
-          // TODO: Send formal warning email to provider
-          listingStatusUpdate = "active";
-          resetConsecutiveNegative = true;
-          break;
-        case "unblock_no_warning":
-          listingStatusUpdate = "active";
-          resetConsecutiveNegative = true;
-          break;
-        case "keep_suspended":
-          nextStatus = "awaiting_provider_response";
-          // TODO: Send message to provider
-          break;
-        case "ban":
-          listingStatusUpdate = "permanently_banned";
-          // TODO: Notify provider of ban
-          break;
+      if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+      if (!["open", "escalated"].includes(task.status)) {
+        return sendError(reply, 409, "TASK_RESOLVED", "This task is already resolved or in a different state.");
       }
 
-      if (listingStatusUpdate) {
-        await tx.listing.update({
-          where: { id: task.listingId },
+      if (task.assignedTo && task.assignedTo !== admin.adminId) {
+        return sendError(reply, 403, "FORBIDDEN", "This task is assigned to someone else.");
+      }
+
+      if (decision === "unblock_no_warning" && !adminNote) {
+        return sendError(reply, 400, "VALIDATION_ERROR", "Internal note is mandatory when unblocking without a warning.");
+      }
+
+      if (decision === "ban" && !["admin", "super_admin"].includes(admin.adminRole)) {
+        return sendError(reply, 403, "FORBIDDEN", "Only Admin or Super Admin can permanently ban a listing.");
+      }
+
+      await prisma.$transaction(async (tx) => {
+        let nextStatus = "resolved";
+        let listingStatusUpdate: string | undefined = undefined;
+        let resetConsecutiveNegative = false;
+
+        switch (decision) {
+          case "unblock_warning":
+            // TODO: Send formal warning email to provider
+            listingStatusUpdate = "active";
+            resetConsecutiveNegative = true;
+            break;
+          case "unblock_no_warning":
+            listingStatusUpdate = "active";
+            resetConsecutiveNegative = true;
+            break;
+          case "keep_suspended":
+            nextStatus = "awaiting_provider_response";
+            // TODO: Send message to provider
+            break;
+          case "ban":
+            listingStatusUpdate = "permanently_banned";
+            // TODO: Notify provider of ban
+            break;
+        }
+
+        if (listingStatusUpdate) {
+          await tx.listing.update({
+            where: { id: task.listingId },
+            data: {
+              status: listingStatusUpdate as any,
+              ...(resetConsecutiveNegative ? { consecutiveNegative: 0 } : {}),
+            },
+          });
+        }
+
+        await tx.listingReviewTask.update({
+          where: { id: taskId },
           data: {
-            status: listingStatusUpdate as any,
-            ...(resetConsecutiveNegative ? { consecutiveNegative: 0 } : {}),
+            status: nextStatus as any,
+            outcome: decision,
+            adminNote: adminNote ?? null,
+            ...(nextStatus === "resolved" ? { resolvedAt: new Date() } : {}),
           },
         });
-      }
 
-      await tx.listingReviewTask.update({
-        where: { id: taskId },
-        data: {
-          status: nextStatus as any,
-          outcome: decision,
-          adminNote: adminNote ?? null,
-          ...(nextStatus === "resolved" ? { resolvedAt: new Date() } : {}),
-        },
+        await tx.listingModerationLog.create({
+          data: {
+            listingId: task.listingId,
+            action: "review_task_resolved",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: { taskId, decision, adminNote: adminNote ?? null },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "review_task_resolved",
+            targetType: "listing",
+            targetId: task.listingId,
+            oldValue: task.status,
+            newValue: JSON.stringify({ decision, outcome: nextStatus }),
+            ipAddress: req.ip,
+          },
+        });
       });
 
-      await tx.listingModerationLog.create({
-        data: {
-          listingId: task.listingId,
-          action: "review_task_resolved",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: { taskId, decision, adminNote: adminNote ?? null },
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          adminId: admin.adminId,
-          role: admin.adminRole,
-          action: "review_task_resolved",
-          targetType: "listing",
-          targetId: task.listingId,
-          oldValue: task.status,
-          newValue: JSON.stringify({ decision, outcome: nextStatus }),
-          ipAddress: req.ip,
-        },
-      });
-    });
-
-    return sendSuccess(reply, 200, { message: `Task resolved with decision: ${decision}.` });
+      return sendSuccess(reply, 200, { message: `Task resolved with decision: ${decision}.` });
+    } catch (err: any) {
+      return sendError(reply, 400, "RESOLVE_TASK_FAILED", "Failed to resolve review task. Please try again.");
+    }
   });
 
   // POST /admin/listings/:id/approve — Approve listing (UC-2.9)
@@ -907,118 +939,122 @@ export async function adminListingRoutes(app: FastifyInstance) {
     }
     const { id } = req.params as { id: string };
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
+
+      if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "A verified star rating (1–5, integer) is required to approve a hotel listing.");
       }
 
-      throw error;
-    }
-    const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
-
-    if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "A verified star rating (1–5, integer) is required to approve a hotel listing.");
-    }
-
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      include: {
-        reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
-        documents: { where: { replacedAt: null } },
-      },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
-
-    const task = listing.reviewTasks[0] ?? null;
-
-    if (task?.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
-        "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
-    }
-
-    const presentDocTypes = listing.documents.map((d) => d.documentType as string);
-    const missingDocs = HOTEL_REQUIRED_DOC_GROUPS
-      .filter((g) => !g.types.some((t) => presentDocTypes.includes(t)))
-      .map((g) => g.label);
-    if (missingDocs.length > 0) {
-      return sendError(reply, 422, "MISSING_DOCUMENTS",
-        `Cannot approve: the following required document(s) are missing: ${missingDocs.join(", ")}.`);
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.listing.updateMany({
-        where: { id, status: "pending_review" },
-        data: { status: "approved", starRating, approvedAt: new Date(), approvedBy: admin.adminId },
-      });
-
-      if (updated.count === 0) return { actioned: false };
-
-      if (task) {
-        await tx.listingReviewTask.update({
-          where: { id: task.id },
-          data: { status: "resolved", outcome: "approved", adminNote: adminNote ?? null, resolvedAt: new Date() },
-        });
-      }
-
-      await tx.listingModerationLog.create({
-  data: {
-    listingId: id,
-    action: "approved",
-    actorId: admin.adminId,
-    actorRole: admin.adminRole,
-    metadata: {
-      starRating,
-      claimedStarRating: listing.claimedStarRating,
-      adminNote: adminNote ?? null,
-      taskId: task?.id ?? null,
-      submissionNumber: task?.submissionNumber ?? listing.submissionCount,
-      ipAddress: req.ip,
-    },
-  },
-});
-
-      await tx.auditLog.create({
-        data: {
-          adminId: admin.adminId,
-          role: admin.adminRole,
-          action: "listing_approved",
-          targetType: "listing",
-          targetId: id,
-          oldValue: JSON.stringify({
-            status: listing.status,
-            claimedStarRating: listing.claimedStarRating,
-          }),
-          newValue: JSON.stringify({
-            status: "approved",
-            starRating,
-          }),
-          ipAddress: req.ip,
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        include: {
+          reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
+          documents: { where: { replacedAt: null } },
         },
       });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
 
-return { actioned: true };
-});
-    if (!result.actioned) {
-      return sendError(reply, 409, "INVALID_STATUS",
-        "Listing is not pending review — it may have already been actioned by another admin.");
+      const task = listing.reviewTasks[0] ?? null;
+
+      if (task?.assignedTo && task.assignedTo !== admin.adminId) {
+        return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
+          "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
+      }
+
+      const presentDocTypes = listing.documents.map((d) => d.documentType as string);
+      const missingDocs = HOTEL_REQUIRED_DOC_GROUPS
+        .filter((g) => !g.types.some((t) => presentDocTypes.includes(t)))
+        .map((g) => g.label);
+      if (missingDocs.length > 0) {
+        return sendError(reply, 422, "MISSING_DOCUMENTS",
+          `Cannot approve: the following required document(s) are missing: ${missingDocs.join(", ")}.`);
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const updated = await tx.listing.updateMany({
+          where: { id, status: "pending_review" },
+          data: { status: "approved", starRating, approvedAt: new Date(), approvedBy: admin.adminId },
+        });
+
+        if (updated.count === 0) return { actioned: false };
+
+        if (task) {
+          await tx.listingReviewTask.update({
+            where: { id: task.id },
+            data: { status: "resolved", outcome: "approved", adminNote: adminNote ?? null, resolvedAt: new Date() },
+          });
+        }
+
+        await tx.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "approved",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              starRating,
+              claimedStarRating: listing.claimedStarRating,
+              adminNote: adminNote ?? null,
+              taskId: task?.id ?? null,
+              submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+              ipAddress: req.ip,
+            },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "listing_approved",
+            targetType: "listing",
+            targetId: id,
+            oldValue: JSON.stringify({
+              status: listing.status,
+              claimedStarRating: listing.claimedStarRating,
+            }),
+            newValue: JSON.stringify({
+              status: "approved",
+              starRating,
+            }),
+            ipAddress: req.ip,
+          },
+        });
+
+        return { actioned: true };
+      });
+
+      if (!result.actioned) {
+        return sendError(reply, 409, "INVALID_STATUS",
+          "Listing is not pending review — it may have already been actioned by another admin.");
+      }
+
+      sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
+      return sendSuccess(reply, 200, { message: "Listing approved and published." });
+    } catch (err: any) {
+      return sendError(reply, 400, "APPROVE_LISTING_FAILED", "Failed to approve listing. Please try again.");
     }
-
-
-    sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
-    return sendSuccess(reply, 200, { message: "Listing approved and published." });
   });
 
   // ── POST /admin/listings/:id/reject (UC-2.10) ─────────────────────────────
@@ -1080,117 +1116,121 @@ return { actioned: true };
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      const { reasons, providerNote, adminNote } = req.body as {
+        reasons: string[];
+        providerNote?: string;
+        adminNote?: string;
+      };
+
+      if (!reasons?.length) return sendError(reply, 422, "VALIDATION_ERROR", "At least one rejection reason is required.");
+      for (const r of reasons) {
+        if (!REJECTION_REASONS.has(r)) return sendError(reply, 422, "INVALID_REASON", `Invalid rejection reason: ${r}`);
+      }
+      if (reasons.includes("Other") && !providerNote?.trim()) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "Please describe the reason when selecting 'Other'.");
       }
 
-      throw error;
-    }
-    const { reasons, providerNote, adminNote } = req.body as {
-      reasons: string[];
-      providerNote?: string;
-      adminNote?: string;
-    };
-
-    if (!reasons?.length) return sendError(reply, 422, "VALIDATION_ERROR", "At least one rejection reason is required.");
-    for (const r of reasons) {
-      if (!REJECTION_REASONS.has(r)) return sendError(reply, 422, "INVALID_REASON", `Invalid rejection reason: ${r}`);
-    }
-    if (reasons.includes("Other") && !providerNote?.trim()) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "Please describe the reason when selecting 'Other'.");
-    }
-
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      include: { reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } } },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
-
-    const task = listing.reviewTasks[0] ?? null;
-
-    if (task?.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
-        "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.listing.updateMany({
-        where: { id, status: "pending_review" },
-        data: {
-          status: "rejected",
-          rejectedAt: new Date(),
-          rejectedBy: admin.adminId,
-          rejectionReasons: reasons,
-          rejectionNote: providerNote ?? null,
-        },
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        include: { reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } } },
       });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
 
-      if (updated.count === 0) return { actioned: false };
+      const task = listing.reviewTasks[0] ?? null;
 
-      if (task) {
-        await tx.listingReviewTask.update({
-          where: { id: task.id },
-          data: { status: "resolved", outcome: "rejected", adminNote: adminNote ?? null, resolvedAt: new Date() },
-        });
+      if (task?.assignedTo && task.assignedTo !== admin.adminId) {
+        return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
+          "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
       }
 
-      await tx.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action: "rejected",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: {
-            reasons,
-            providerNote: providerNote ?? null,
-            adminNote: adminNote ?? null,
-            taskId: task?.id ?? null,
-            submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+      const result = await prisma.$transaction(async (tx) => {
+        const updated = await tx.listing.updateMany({
+          where: { id, status: "pending_review" },
+          data: {
+            status: "rejected",
+            rejectedAt: new Date(),
+            rejectedBy: admin.adminId,
+            rejectionReasons: reasons,
+            rejectionNote: providerNote ?? null,
+          },
+        });
+
+        if (updated.count === 0) return { actioned: false };
+
+        if (task) {
+          await tx.listingReviewTask.update({
+            where: { id: task.id },
+            data: { status: "resolved", outcome: "rejected", adminNote: adminNote ?? null, resolvedAt: new Date() },
+          });
+        }
+
+        await tx.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "rejected",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              reasons,
+              providerNote: providerNote ?? null,
+              adminNote: adminNote ?? null,
+              taskId: task?.id ?? null,
+              submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+              ipAddress: req.ip,
+            },
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "listing_rejected",
+            targetType: "listing",
+            targetId: id,
+            oldValue: JSON.stringify({
+              status: listing.status,
+            }),
+            newValue: JSON.stringify({
+              status: "rejected",
+              reasons,
+            }),
             ipAddress: req.ip,
           },
-        },
+        });
+        return { actioned: true };
       });
-      await tx.auditLog.create({
-        data: {
-          adminId: admin.adminId,
-          role: admin.adminRole,
-          action: "listing_rejected",
-          targetType: "listing",
-          targetId: id,
-          oldValue: JSON.stringify({
-            status: listing.status,
-          }),
-          newValue: JSON.stringify({
-            status: "rejected",
-            reasons,
-          }),
-          ipAddress: req.ip,
-        },
-      });
-      return { actioned: true };
-    });
 
-    if (!result.actioned) {
-      return sendError(reply, 409, "INVALID_STATUS",
-        "Listing is not pending review — it may have already been actioned by another admin.");
+      if (!result.actioned) {
+        return sendError(reply, 409, "INVALID_STATUS",
+          "Listing is not pending review — it may have already been actioned by another admin.");
+      }
+
+      sendListingRejectedEmail(listing.providerId, listing.name ?? id, reasons, providerNote ?? null).catch(() => null);
+      return sendSuccess(reply, 200, { message: "Listing rejected. Provider has been notified." });
+    } catch (err: any) {
+      return sendError(reply, 400, "REJECT_LISTING_FAILED", "Failed to reject listing. Please try again.");
     }
-
-    sendListingRejectedEmail(listing.providerId, listing.name ?? id, reasons, providerNote ?? null).catch(() => null);
-    return sendSuccess(reply, 200, { message: "Listing rejected. Provider has been notified." });
   });
 
   // ── PATCH /admin/listings/:id/star-rating (UC-2.12) ───────────────────────
@@ -1239,75 +1279,79 @@ return { actioned: true };
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
+      const { starRating, reason } = req.body as { starRating: number; reason: string };
 
-      throw error;
+      if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "Star rating must be a whole number between 1 and 5.");
+      }
+      if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "A reason for the rating change is required.");
+
+      const listing = await prisma.listing.findUnique({ where: { id } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (listing.status !== "approved") return sendError(reply, 409, "INVALID_STATUS", "Star rating can only be updated on approved listings.");
+
+      const oldRating = listing.starRating ?? 0;
+
+      await prisma.$transaction([
+        prisma.listing.update({
+          where: { id },
+          data: { starRating },
+        }),
+
+        prisma.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "star_rating_updated",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              oldRating,
+              newRating: starRating,
+              reason,
+              ipAddress: req.ip,
+            },
+          },
+        }),
+
+        prisma.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "star_rating_updated",
+            targetType: "listing",
+            targetId: id,
+            oldValue: String(oldRating),
+            newValue: String(starRating),
+            ipAddress: req.ip,
+          },
+        }),
+      ]);
+
+      sendStarRatingUpdatedEmail(listing.providerId, listing.name ?? id, oldRating, starRating, reason).catch(() => null);
+      return sendSuccess(reply, 200, { message: "Star rating updated." });
+    } catch (err: any) {
+      return sendError(reply, 400, "UPDATE_RATING_FAILED", "Failed to update star rating. Please try again.");
     }
-    const { starRating, reason } = req.body as { starRating: number; reason: string };
-
-    if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "Star rating must be a whole number between 1 and 5.");
-    }
-    if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "A reason for the rating change is required.");
-
-    const listing = await prisma.listing.findUnique({ where: { id } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (listing.status !== "approved") return sendError(reply, 409, "INVALID_STATUS", "Star rating can only be updated on approved listings.");
-
-    const oldRating = listing.starRating ?? 0;
-
-    await prisma.$transaction([
-  prisma.listing.update({
-    where: { id },
-    data: { starRating },
-  }),
-
-  prisma.listingModerationLog.create({
-    data: {
-      listingId: id,
-      action: "star_rating_updated",
-      actorId: admin.adminId,
-      actorRole: admin.adminRole,
-      metadata: {
-        oldRating,
-        newRating: starRating,
-        reason,
-        ipAddress: req.ip,
-      },
-    },
-  }),
-
-  prisma.auditLog.create({
-    data: {
-      adminId: admin.adminId,
-      role: admin.adminRole,
-      action: "star_rating_updated",
-      targetType: "listing",
-      targetId: id,
-      oldValue: String(oldRating),
-      newValue: String(starRating),
-      ipAddress: req.ip,
-    },
-  }),
-]);
-
-    sendStarRatingUpdatedEmail(listing.providerId, listing.name ?? id, oldRating, starRating, reason).catch(() => null);
-    return sendSuccess(reply, 200, { message: "Star rating updated." });
   });
 
   // ── POST /admin/listings/:id/suspend (UC-2.14) ────────────────────────────
@@ -1355,80 +1399,84 @@ return { actioned: true };
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };
+
+      if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Suspension reason is required.");
+
+      const listing = await prisma.listing.findUnique({ where: { id } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (!["approved", "active"].includes(listing.status)) {
+        return sendError(reply, 409, "INVALID_STATUS", "Only live listings can be suspended.");
       }
 
-      throw error;
+      await prisma.$transaction([
+        prisma.listing.update({
+          where: { id },
+          data: {
+            status: "suspended",
+            suspendedAt: new Date(),
+            suspendedBy: admin.adminId,
+            suspensionReason: reason,
+          },
+        }),
+
+        prisma.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "suspended",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              reason,
+              previousStatus: listing.status,
+              notifyProvider,
+              ipAddress: req.ip,
+            },
+          },
+        }),
+
+        prisma.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "listing_suspended",
+            targetType: "listing",
+            targetId: id,
+            oldValue: listing.status,
+            newValue: "suspended",
+            ipAddress: req.ip,
+          },
+        }),
+      ]);
+
+      if (notifyProvider) {
+        sendListingSuspendedEmail(listing.providerId, listing.name ?? id).catch(() => null);
+      }
+
+      return sendSuccess(reply, 200, { message: "Listing suspended." });
+    } catch (err: any) {
+      return sendError(reply, 400, "SUSPEND_LISTING_FAILED", "Failed to suspend listing. Please try again.");
     }
-    const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };
-
-    if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Suspension reason is required.");
-
-    const listing = await prisma.listing.findUnique({ where: { id } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (!["approved", "active"].includes(listing.status)) {
-      return sendError(reply, 409, "INVALID_STATUS", "Only live listings can be suspended.");
-    }
-
-    await prisma.$transaction([
-  prisma.listing.update({
-    where: { id },
-    data: {
-      status: "suspended",
-      suspendedAt: new Date(),
-      suspendedBy: admin.adminId,
-      suspensionReason: reason,
-    },
-  }),
-
-  prisma.listingModerationLog.create({
-    data: {
-      listingId: id,
-      action: "suspended",
-      actorId: admin.adminId,
-      actorRole: admin.adminRole,
-      metadata: {
-        reason,
-        previousStatus: listing.status,
-        notifyProvider,
-        ipAddress: req.ip,
-      },
-    },
-  }),
-
-  prisma.auditLog.create({
-    data: {
-      adminId: admin.adminId,
-      role: admin.adminRole,
-      action: "listing_suspended",
-      targetType: "listing",
-      targetId: id,
-      oldValue: listing.status,
-      newValue: "suspended",
-      ipAddress: req.ip,
-    },
-  }),
-]);
-
-    if (notifyProvider) {
-      sendListingSuspendedEmail(listing.providerId, listing.name ?? id).catch(() => null);
-    }
-
-    return sendSuccess(reply, 200, { message: "Listing suspended." });
   });
 
   // ── POST /admin/listings/:id/reinstate (UC-2.14 A1) ───────────────────────
@@ -1468,67 +1516,71 @@ return { actioned: true };
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
+      const { reason } = req.body as { reason?: string };
 
-      throw error;
-    }
-    const { reason } = req.body as { reason?: string };
+      const listing = await prisma.listing.findUnique({ where: { id } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (listing.status !== "suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
 
-    const listing = await prisma.listing.findUnique({ where: { id } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (listing.status !== "suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
+      const restoreStatus = (listing.category === "apartment" || listing.category === "car") ? "active" : "approved";
 
-    const restoreStatus = (listing.category === "apartment" || listing.category === "car") ? "active" : "approved";
-
-    await prisma.$transaction([
-      prisma.listing.update({ where: { id }, data: { status: restoreStatus } }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action: "reinstated",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: {
-            restoredStatus: restoreStatus,
-            reason: reason ?? null,
-            suspendedAt: listing.suspendedAt?.toISOString() ?? null,
-            suspendedBy: listing.suspendedBy ?? null,
-            suspensionReason: listing.suspensionReason ?? null,
+      await prisma.$transaction([
+        prisma.listing.update({ where: { id }, data: { status: restoreStatus } }),
+        prisma.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "reinstated",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              restoredStatus: restoreStatus,
+              reason: reason ?? null,
+              suspendedAt: listing.suspendedAt?.toISOString() ?? null,
+              suspendedBy: listing.suspendedBy ?? null,
+              suspensionReason: listing.suspensionReason ?? null,
+              ipAddress: req.ip,
+            },
+          },
+        }),
+        prisma.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "listing_reinstated",
+            targetType: "listing",
+            targetId: id,
+            oldValue: listing.status,
+            newValue: restoreStatus,
             ipAddress: req.ip,
           },
-        },
-      }),
-      prisma.auditLog.create({
-        data: {
-          adminId: admin.adminId,
-          role: admin.adminRole,
-          action: "listing_reinstated",
-          targetType: "listing",
-          targetId: id,
-          oldValue: listing.status,
-          newValue: restoreStatus,
-          ipAddress: req.ip,
-        },
-      }),
-    ]);
+        }),
+      ]);
 
-    sendListingReinstatedEmail(listing.providerId, listing.name ?? id).catch(() => null);
-    return sendSuccess(reply, 200, { message: "Listing reinstated and live again." });
+      sendListingReinstatedEmail(listing.providerId, listing.name ?? id).catch(() => null);
+      return sendSuccess(reply, 200, { message: "Listing reinstated and live again." });
+    } catch (err: any) {
+      return sendError(reply, 400, "REINSTATE_LISTING_FAILED", "Failed to reinstate listing. Please try again.");
+    }
   });
 
   // ── GET /admin/listings/:id/review-tasks ──────────────────────────────────
@@ -1590,49 +1642,53 @@ return { actioned: true };
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
 
-      throw error;
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        select: { id: true, name: true, status: true, category: true, submissionCount: true },
+      });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      const tasks = await prisma.listingReviewTask.findMany({
+        where: { listingId: id },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          submissionNumber: true,
+          assignedTo: true,
+          status: true,
+          outcome: true,
+          adminNote: true,
+          slaDeadline: true,
+          createdAt: true,
+          resolvedAt: true,
+        },
+      });
+
+      return sendSuccess(reply, 200, { listing, tasks, total: tasks.length });
+    } catch (err: any) {
+      return sendError(reply, 400, "GET_TASKS_FAILED", "Failed to fetch review tasks history. Please try again.");
     }
-
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      select: { id: true, name: true, status: true, category: true, submissionCount: true },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    const tasks = await prisma.listingReviewTask.findMany({
-      where: { listingId: id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        submissionNumber: true,
-        assignedTo: true,
-        status: true,
-        outcome: true,
-        adminNote: true,
-        slaDeadline: true,
-        createdAt: true,
-        resolvedAt: true,
-      },
-    });
-
-    return sendSuccess(reply, 200, { listing, tasks, total: tasks.length });
   });
 
   // ── GET /admin/listings/:id/moderation-history ────────────────────────────
@@ -1701,51 +1757,55 @@ return { actioned: true };
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
 
-      throw error;
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        select: {
+          id: true, name: true, status: true, category: true,
+          starRating: true, claimedStarRating: true, submissionCount: true,
+          approvedAt: true, approvedBy: true,
+          rejectedAt: true, rejectedBy: true, rejectionReasons: true, rejectionNote: true,
+          suspendedAt: true, suspendedBy: true, suspensionReason: true,
+        },
+      });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      const history = await prisma.listingModerationLog.findMany({
+        where: { listingId: id },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          action: true,
+          actorRole: true,
+          metadata: true,
+          createdAt: true,
+        },
+      });
+
+      return sendSuccess(reply, 200, { listing, history, total: history.length });
+    } catch (err: any) {
+      return sendError(reply, 400, "GET_MODERATION_HISTORY_FAILED", "Failed to fetch moderation history. Please try again.");
     }
-
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      select: {
-        id: true, name: true, status: true, category: true,
-        starRating: true, claimedStarRating: true, submissionCount: true,
-        approvedAt: true, approvedBy: true,
-        rejectedAt: true, rejectedBy: true, rejectionReasons: true, rejectionNote: true,
-        suspendedAt: true, suspendedBy: true, suspensionReason: true,
-      },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    const history = await prisma.listingModerationLog.findMany({
-      where: { listingId: id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        action: true,
-        actorRole: true,
-        metadata: true,
-        createdAt: true,
-      },
-    });
-
-    return sendSuccess(reply, 200, { listing, history, total: history.length });
   });
 
   // ── GET /admin/listings ───────────────────────────────────────────────────
@@ -1831,37 +1891,165 @@ return { actioned: true };
       ],
     };
 
-    const [total, listings] = await Promise.all([
-      prisma.listing.count({ where }),
-      prisma.listing.findMany({
-        where, skip, take,
-        select: {
-          id: true,
-          name: true,
-          category: true,
-          status: true,
-          starRating: true,
-          country: true,
-          town: true,
-          pricePerNight: true,
-          currency: true,
-          submissionCount: true,
-          providerId: true,
-          approvedAt: true,
-          photos: {
-            where: { deletedAt: null },
-            orderBy: { position: "asc" },
-            select: { id: true, s3Key: true, cdnUrl: true, position: true },
+    try {
+      const [total, listings] = await Promise.all([
+        prisma.listing.count({ where }),
+        prisma.listing.findMany({
+          where, skip, take,
+          select: {
+            id: true,
+            name: true,
+            category: true,
+            status: true,
+            starRating: true,
+            country: true,
+            town: true,
+            pricePerNight: true,
+            currency: true,
+            submissionCount: true,
+            providerId: true,
+            approvedAt: true,
+            photos: {
+              where: { deletedAt: null },
+              orderBy: { position: "asc" },
+              select: { id: true, s3Key: true, cdnUrl: true, position: true },
+            },
+          },
+          orderBy: { updatedAt: "desc" },
+        }),
+      ]);
+
+      const signedListings = await Promise.all(
+        listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
+      );
+      return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch listings.");
+    }
+  });
+
+  // ── POST /admin/bookings/draft ───────────────────────────────────────────────
+  app.post("/admin/bookings/draft", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Bookings"],
+      summary: "Create a draft booking manually (admin)",
+      security: [{ bearerAuth: [] }],
+      body: {
+        type: "object",
+        required: ["listingId", "guestFirstName", "guestLastName", "guestEmail", "guestPhone", "checkIn", "checkOut"],
+        properties: {
+          listingId: { type: "string" },
+          guestFirstName: { type: "string" },
+          guestLastName: { type: "string" },
+          guestEmail: { type: "string", format: "email" },
+          guestPhone: { type: "string" },
+          checkIn: { type: "string", format: "date-time" },
+          checkOut: { type: "string", format: "date-time" },
+          nightsOrDays: { type: "integer", minimum: 1 },
+          nightlyRate: { type: "number" },
+          guestId: { type: "string" },
+        },
+      },
+      response: {
+        201: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                bookingId: { type: "string" },
+                bookingReference: { type: "string" },
+                status: { type: "string" },
+                totalAmount: { type: "number" },
+                currency: { type: "string" },
+              },
+            },
           },
         },
-        orderBy: { updatedAt: "desc" },
-      }),
-    ]);
+        404: ErrorResponse,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
 
-    const signedListings = await Promise.all(
-      listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
-    );
-    return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
+    const body = req.body as any;
+
+    if (!body.checkIn || !body.checkOut) {
+      return sendError(reply, 400, "BAD_REQUEST", "checkIn and checkOut are required.");
+    }
+    if (new Date(body.checkIn) >= new Date(body.checkOut)) {
+      return sendError(reply, 400, "BAD_REQUEST", "checkOut must be after checkIn.");
+    }
+
+    try {
+      const listing = await prisma.listing.findUnique({ where: { id: body.listingId } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      const rate = body.nightlyRate ?? Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+      const commissionRate = await getCommissionRate(listing.country ?? null);
+
+      const billing = calculateBilling({
+        listingCategory: listing.category,
+        checkIn: body.checkIn,
+        checkOut: body.checkOut,
+        rate,
+        deliveryFee: 0,
+        promotionDiscount: 0,
+        voucherAmount: 0,
+        taxRate: getTaxRate(listing.country),
+        commissionRate,
+      });
+
+      const reference = await generateReference(listing.country ?? "XX");
+
+      const booking = await prisma.booking.create({
+        data: {
+          reference,
+          listingId: listing.id,
+          guestId: body.guestId ?? "manual-guest",
+          providerId: listing.providerId,
+          listingType: listing.category,
+          status: "draft",
+
+          checkIn: new Date(body.checkIn),
+          checkOut: new Date(body.checkOut),
+          nightsOrDays: billing.units || body.nightsOrDays || 1,
+
+          guestFirstName: body.guestFirstName,
+          guestLastName: body.guestLastName,
+          guestEmail: body.guestEmail,
+          guestPhone: body.guestPhone,
+
+          nightlyRate: listing.category !== "car" ? rate : undefined,
+          dailyRate: listing.category === "car" ? rate : undefined,
+
+          subtotal: billing.subtotal,
+          totalAmount: billing.totalAmount,
+          discountAmount: 0,
+          deliveryFee: 0,
+
+          currency: listing.currency ?? "USD",
+
+          commissionRate,
+          commissionAmount: billing.commissionAmount,
+          providerPayout: billing.providerPayout,
+
+          cancellationPolicy: listing.cancellationPolicy ?? "moderate",
+        },
+      });
+
+      return sendSuccess(reply, 201, {
+        bookingId: booking.id,
+        bookingReference: booking.reference,
+        status: booking.status,
+        totalAmount: Number(booking.totalAmount),
+        currency: booking.currency,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to create draft booking.");
+    }
   });
 
   // ── GET /admin/bookings ───────────────────────────────────────────────────
@@ -1963,25 +2151,29 @@ return { actioned: true };
       ],
     };
 
-    const [total, bookings] = await Promise.all([
-      prisma.booking.count({ where }),
-      prisma.booking.findMany({
-        where, skip, take,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true, reference: true, listingId: true, guestId: true, providerId: true,
-          listingType: true, status: true, checkIn: true, checkOut: true,
-          pickupDatetime: true, returnDatetime: true, nightsOrDays: true,
-          guestFirstName: true, guestLastName: true, guestEmail: true,
-          totalAmount: true, currency: true, commissionAmount: true,
-          providerPayout: true, voucherDiscount: true,
-          cancelledAt: true, confirmedAt: true, createdAt: true,
-          listing: { select: { name: true } },
-        },
-      }),
-    ]);
+    try {
+      const [total, bookings] = await Promise.all([
+        prisma.booking.count({ where }),
+        prisma.booking.findMany({
+          where, skip, take,
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true, reference: true, listingId: true, guestId: true, providerId: true,
+            listingType: true, status: true, checkIn: true, checkOut: true,
+            pickupDatetime: true, returnDatetime: true, nightsOrDays: true,
+            guestFirstName: true, guestLastName: true, guestEmail: true,
+            totalAmount: true, currency: true, commissionAmount: true,
+            providerPayout: true, voucherDiscount: true,
+            cancelledAt: true, confirmedAt: true, createdAt: true,
+            listing: { select: { name: true } },
+          },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, { bookings, total, page: parseInt(page, 10), limit: take });
+      return sendSuccess(reply, 200, { bookings, total, page: parseInt(page, 10), limit: take });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch bookings.");
+    }
   });
 
   // ── GET /admin/bookings/:id ───────────────────────────────────────────────
@@ -2031,18 +2223,23 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { id } = req.params as { id: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: {
-        statusLog: { orderBy: { createdAt: "asc" } },
-        listing: { select: { name: true, country: true, category: true } },
-      },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: {
+          statusLog: { orderBy: { createdAt: "asc" } },
+          listing: { select: { name: true, country: true, category: true } },
+        },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
 
-    return sendSuccess(reply, 200, booking);
+      return sendSuccess(reply, 200, booking);
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch booking.");
+    }
   });
 
   // ── POST /admin/bookings/:id/cancel ───────────────────────────────────────
@@ -2080,54 +2277,59 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reason } = req.body as { reason: string };
 
-    if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Cancellation reason is required.");
+    if (!reason?.trim()) return sendError(reply, 400, "BAD_REQUEST", "Cancellation reason is required.");
 
-    const booking = await prisma.booking.findUnique({ where: { id } });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    if (!["pending_payment", "confirmed"].includes(booking.status)) {
-      return sendError(reply, 409, "INVALID_STATUS", `Cannot cancel booking in status: ${booking.status}`);
+    try {
+      const booking = await prisma.booking.findUnique({ where: { id } });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      if (!["pending_payment", "confirmed"].includes(booking.status)) {
+        return sendError(reply, 409, "INVALID_STATUS", `Cannot cancel a booking with status: ${booking.status}. Only pending_payment or confirmed bookings can be cancelled.`);
+      }
+
+      await prisma.booking.update({
+        where: { id },
+        data: {
+          status:             "cancelled_by_system",
+          cancelledAt:        new Date(),
+          cancelledBy:        "admin",
+          cancellationReason: reason,
+          refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
+        },
+      });
+
+      await prisma.bookingStatusLog.create({
+        data: {
+          bookingId: id,
+          fromStatus: booking.status,
+          toStatus: "cancelled_by_system",
+          actorType: "admin",
+          changedBy: admin.adminId,
+          reason,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId,
+          role: admin.adminRole,
+          action: "booking_cancelled",
+          targetType: "booking",
+          targetId: id,
+          oldValue: booking.status,
+          newValue: "cancelled_by_system",
+          ipAddress: req.ip,
+        },
+      });
+
+      return sendSuccess(reply, 200, { message: "Booking cancelled by admin." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to cancel booking.");
     }
-
-    await prisma.booking.update({
-      where: { id },
-      data: {
-        status:             "cancelled_by_system",
-        cancelledAt:        new Date(),
-        cancelledBy:        "admin",
-        cancellationReason: reason,
-        refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
-      },
-    });
-
-    await prisma.bookingStatusLog.create({
-      data: {
-        bookingId: id,
-        fromStatus: booking.status,
-        toStatus: "cancelled_by_system",
-        actorType: "admin",
-        changedBy: admin.adminId,
-        reason,
-      },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId,
-        role: admin.adminRole,
-        action: "booking_cancelled",
-        targetType: "booking",
-        targetId: id,
-        oldValue: booking.status,
-        newValue: "cancelled_by_system",
-        ipAddress: req.ip,
-      },
-    });
-
-    return sendSuccess(reply, 200, { message: "Booking cancelled by admin." });
   });
 
   // ── GET /admin/conversations ───────────────────────────────────────────────
@@ -2186,6 +2388,7 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -2197,39 +2400,43 @@ return { actioned: true };
       ],
     };
 
-    const [total, conversations] = await Promise.all([
-      prisma.conversation.count({ where }),
-      prisma.conversation.findMany({
-        where, skip, take,
-        orderBy: { updatedAt: "desc" },
-        include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
-      }),
-    ]);
+    try {
+      const [total, conversations] = await Promise.all([
+        prisma.conversation.count({ where }),
+        prisma.conversation.findMany({
+          where, skip, take,
+          orderBy: { updatedAt: "desc" },
+          include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, {
-      conversations: conversations.map((c) => ({
-        id: c.id,
-        listingId: c.listingId,
-        bookingId: c.bookingId,
-        guestId: c.guestId,
-        providerId: c.providerId,
-        status: c.status,
-        lastMessage: c.messages[0]
-          ? {
-            body: c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
-            senderId: c.messages[0].senderId,
-            senderType: c.messages[0].senderType,
-            isFiltered: c.messages[0].isFiltered,
-            createdAt: c.messages[0].createdAt.toISOString(),
-          }
-          : null,
-        updatedAt: c.updatedAt.toISOString(),
-        createdAt: c.createdAt.toISOString(),
-      })),
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
+      return sendSuccess(reply, 200, {
+        conversations: conversations.map((c) => ({
+          id: c.id,
+          listingId: c.listingId,
+          bookingId: c.bookingId,
+          guestId: c.guestId,
+          providerId: c.providerId,
+          status: c.status,
+          lastMessage: c.messages[0]
+            ? {
+              body: c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
+              senderId: c.messages[0].senderId,
+              senderType: c.messages[0].senderType,
+              isFiltered: c.messages[0].isFiltered,
+              createdAt: c.messages[0].createdAt.toISOString(),
+            }
+            : null,
+          updatedAt: c.updatedAt.toISOString(),
+          createdAt: c.createdAt.toISOString(),
+        })),
+        total,
+        page: parseInt(page, 10),
+        limit: take,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch conversations.");
+    }
   });
 
   // ── GET /admin/conversations/:id/messages ─────────────────────────────────
@@ -2284,35 +2491,39 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { id } = req.params as { id: string };
 
-    const convo = await prisma.conversation.findUnique({ where: { id } });
-    if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
+    try {
+      const convo = await prisma.conversation.findUnique({ where: { id } });
+      if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
 
-    const messages = await prisma.message.findMany({
-      where: { conversationId: id },
-      orderBy: { createdAt: "asc" },
-    });
-
-    return sendSuccess(reply, 200, {
-      conversation: {
-        id: convo.id,
-        listingId: convo.listingId,
-        bookingId: convo.bookingId,
-        guestId: convo.guestId,
-        providerId: convo.providerId,
-        status: convo.status,
-      },
-      messages: messages.map((m) => ({
-        id: m.id,
-        senderId: m.senderId,
-        senderType: m.senderType,
-        body: m.body,
-        isFiltered: m.isFiltered,
-        readAt: m.readAt?.toISOString() ?? null,
-        createdAt: m.createdAt.toISOString(),
-      })),
-    });
+      const messages = await prisma.message.findMany({
+        where: { conversationId: id },
+        orderBy: { createdAt: "asc" },
+      });
+      return sendSuccess(reply, 200, {
+        conversation: {
+          id: convo.id,
+          listingId: convo.listingId,
+          bookingId: convo.bookingId,
+          guestId: convo.guestId,
+          providerId: convo.providerId,
+          status: convo.status,
+        },
+        messages: messages.map((m) => ({
+          id: m.id,
+          senderId: m.senderId,
+          senderType: m.senderType,
+          body: m.body,
+          isFiltered: m.isFiltered,
+          readAt: m.readAt?.toISOString() ?? null,
+          createdAt: m.createdAt.toISOString(),
+        })),
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch conversation messages.");
+    }
   });
 
   // ── GET /admin/ical-feeds ─────────────────────────────────────────────────
@@ -2363,6 +2574,7 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { page = "1", limit = "20", isActive } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -2371,34 +2583,38 @@ return { actioned: true };
       ...(isActive !== undefined ? { isActive: isActive === "true" } : {}),
     };
 
-    const [total, feeds] = await Promise.all([
-      prisma.icalFeed.count({ where }),
-      prisma.icalFeed.findMany({
-        where, skip, take,
-        orderBy: { updatedAt: "desc" },
-        include: { listing: { select: { name: true, category: true, country: true } } },
-      }),
-    ]);
+    try {
+      const [total, feeds] = await Promise.all([
+        prisma.icalFeed.count({ where }),
+        prisma.icalFeed.findMany({
+          where, skip, take,
+          orderBy: { updatedAt: "desc" },
+          include: { listing: { select: { name: true, category: true, country: true } } },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, {
-      feeds: feeds.map((f) => ({
-        id: f.id,
-        listingId: f.listingId,
-        listingName: f.listing.name,
-        listingCategory: f.listing.category,
-        listingCountry: f.listing.country,
-        platform: f.platform,
-        feedUrl: f.feedUrl,
-        isActive: f.isActive,
-        lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
-        lastError: f.lastError,
-        createdAt: f.createdAt.toISOString(),
-        updatedAt: f.updatedAt.toISOString(),
-      })),
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
+      return sendSuccess(reply, 200, {
+        feeds: feeds.map((f) => ({
+          id: f.id,
+          listingId: f.listingId,
+          listingName: f.listing.name,
+          listingCategory: f.listing.category,
+          listingCountry: f.listing.country,
+          platform: f.platform,
+          feedUrl: f.feedUrl,
+          isActive: f.isActive,
+          lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
+          lastError: f.lastError,
+          createdAt: f.createdAt.toISOString(),
+          updatedAt: f.updatedAt.toISOString(),
+        })),
+        total,
+        page: parseInt(page, 10),
+        limit: take,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch iCal feeds.");
+    }
   });
 
   // ── POST /admin/ical-feeds/:id/sync ───────────────────────────────────────
@@ -2430,18 +2646,23 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { id } = req.params as { id: string };
 
-    const feed = await prisma.icalFeed.findUnique({ where: { id } });
-    if (!feed) return sendError(reply, 404, "NOT_FOUND", "iCal feed not found.");
+    try {
+      const feed = await prisma.icalFeed.findUnique({ where: { id } });
+      if (!feed) return sendError(reply, 404, "NOT_FOUND", "iCal feed not found.");
 
-    const { syncFeed } = await import("./ical.js");
-    const result = await syncFeed(id);
+      const { syncFeed } = await import("./ical.js");
+      const result = await syncFeed(id);
 
-    if (result.error) {
-      return sendSuccess(reply, 200, { synced: 0, error: result.error, message: "Sync failed." });
+      if (result.error) {
+        return sendSuccess(reply, 200, { synced: 0, error: result.error, message: "Sync failed." });
+      }
+      return sendSuccess(reply, 200, { synced: result.synced, message: `Synced ${result.synced} events.` });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to sync iCal feed.");
     }
-    return sendSuccess(reply, 200, { synced: result.synced, message: `Synced ${result.synced} events.` });
   });
 
   // ── GET /admin/reviews ────────────────────────────────────────────────────
@@ -2497,9 +2718,17 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
     const { q = "", isHidden, rating, listingId, page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
+
+    if (rating) {
+      const parsedRating = parseInt(rating, 10);
+      if (isNaN(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+        return sendError(reply, 400, "BAD_REQUEST", `Invalid rating filter: ${rating}. Must be between 1 and 5.`);
+      }
+    }
 
     const where: any = {
       AND: [
@@ -2516,36 +2745,40 @@ return { actioned: true };
       ],
     };
 
-    const [total, reviews] = await Promise.all([
-      prisma.listingReview.count({ where }),
-      prisma.listingReview.findMany({
-        where, skip, take,
-        orderBy: { createdAt: "desc" },
-        include: { listing: { select: { name: true } } },
-      }),
-    ]);
+    try {
+      const [total, reviews] = await Promise.all([
+        prisma.listingReview.count({ where }),
+        prisma.listingReview.findMany({
+          where, skip, take,
+          orderBy: { createdAt: "desc" },
+          include: { listing: { select: { name: true } } },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, {
-      reviews: reviews.map((r) => ({
-        id: r.id,
-        bookingId: r.bookingId,
-        listingId: r.listingId,
-        listingName: r.listing.name,
-        guestId: r.guestId,
-        rating: r.rating,
-        title: r.title,
-        body: r.body,
-        providerReply: r.providerReply,
-        isHidden: r.isHidden,
-        hiddenBy: r.hiddenBy,
-        hiddenAt: r.hiddenAt?.toISOString() ?? null,
-        hiddenReason: r.hiddenReason,
-        createdAt: r.createdAt.toISOString(),
-      })),
-      total,
-      page: parseInt(page, 10),
-      limit: take,
-    });
+      return sendSuccess(reply, 200, {
+        reviews: reviews.map((r) => ({
+          id: r.id,
+          bookingId: r.bookingId,
+          listingId: r.listingId,
+          listingName: r.listing.name,
+          guestId: r.guestId,
+          rating: r.rating,
+          title: r.title,
+          body: r.body,
+          providerReply: r.providerReply,
+          isHidden: r.isHidden,
+          hiddenBy: r.hiddenBy,
+          hiddenAt: r.hiddenAt?.toISOString() ?? null,
+          hiddenReason: r.hiddenReason,
+          createdAt: r.createdAt.toISOString(),
+        })),
+        total,
+        page: parseInt(page, 10),
+        limit: take,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch reviews.");
+    }
   });
 
   // ── GET /admin/booking-requests/pending ──────────────────────────────────
@@ -2612,20 +2845,24 @@ return { actioned: true };
       },
     };
 
-    const [total, requests] = await Promise.all([
-      prisma.booking.count({ where }),
-      prisma.booking.findMany({
-        where, skip, take,
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true, reference: true, guestFirstName: true, guestLastName: true,
-          totalAmount: true, currency: true, createdAt: true,
-          listing: { select: { name: true, country: true } }
-        }
-      }),
-    ]);
+    try {
+      const [total, requests] = await Promise.all([
+        prisma.booking.count({ where }),
+        prisma.booking.findMany({
+          where, skip, take,
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true, reference: true, guestFirstName: true, guestLastName: true,
+            totalAmount: true, currency: true, createdAt: true,
+            listing: { select: { name: true, country: true } }
+          }
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, { requests, total, page: parseInt(page, 10), limit: take });
+      return sendSuccess(reply, 200, { requests, total, page: parseInt(page, 10), limit: take });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch pending booking requests.");
+    }
   });
 
   // ── POST /admin/booking-requests/:id/approve ─────────────────────────────
@@ -2652,57 +2889,61 @@ return { actioned: true };
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: { listing: true },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    if (booking.status !== "pending_payment") {
-      return sendError(reply, 409, "INVALID_STATUS", "Booking is not pending.");
-    }
-    
-    if (["country_manager", "sales"].includes(admin.adminRole)) {
-      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
-         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      if (booking.status !== "pending_payment") {
+        return sendError(reply, 409, "INVALID_STATUS", `Cannot approve booking with status: ${booking.status}. Only pending_payment bookings can be approved.`);
       }
-    }
 
-    await prisma.booking.update({
-      where: { id },
-      data: { status: "confirmed", confirmedAt: new Date() },
-    });
-
-    await prisma.bookingStatusLog.create({
-      data: { bookingId: id, fromStatus: "pending_payment", toStatus: "confirmed", actorType: "admin", changedBy: admin.adminId },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_approved",
-        targetType: "booking", targetId: id,
-        oldValue: "pending_payment", newValue: "confirmed", ipAddress: req.ip,
-      },
-    });
-
-    const { sendBookingConfirmationEmail } = await import("../lib/email.js");
-    sendBookingConfirmationEmail(
-      booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
-      {
-        reference: booking.reference, listingName: booking.listing.name ?? "Your listing",
-        listingType: booking.listingType, checkIn: booking.checkIn?.toISOString(),
-        checkOut: booking.checkOut?.toISOString(), pickupDatetime: booking.pickupDatetime?.toISOString(),
-        returnDatetime: booking.returnDatetime?.toISOString(), nightsOrDays: booking.nightsOrDays,
-        totalAmount: Number(booking.totalAmount), currency: booking.currency,
+      if (["country_manager", "sales"].includes(admin.adminRole)) {
+        if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+          return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+        }
       }
-    ).catch(() => {});
 
-    const { getRedis } = await import("../lib/redis.js");
-    const lockSuffix = booking.checkIn
-      ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
-      : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
-    await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+      await prisma.booking.update({
+        where: { id },
+        data: { status: "confirmed", confirmedAt: new Date() },
+      });
 
-    return sendSuccess(reply, 200, { message: "Booking request approved." });
+      await prisma.bookingStatusLog.create({
+        data: { bookingId: id, fromStatus: "pending_payment", toStatus: "confirmed", actorType: "admin", changedBy: admin.adminId },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId, role: admin.adminRole, action: "booking_request_approved",
+          targetType: "booking", targetId: id,
+          oldValue: "pending_payment", newValue: "confirmed", ipAddress: req.ip,
+        },
+      });
+
+      const { sendBookingConfirmationEmail } = await import("../lib/email.js");
+      sendBookingConfirmationEmail(
+        booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
+        {
+          reference: booking.reference, listingName: booking.listing.name ?? "Your listing",
+          listingType: booking.listingType, checkIn: booking.checkIn?.toISOString(),
+          checkOut: booking.checkOut?.toISOString(), pickupDatetime: booking.pickupDatetime?.toISOString(),
+          returnDatetime: booking.returnDatetime?.toISOString(), nightsOrDays: booking.nightsOrDays,
+          totalAmount: Number(booking.totalAmount), currency: booking.currency,
+        }
+      ).catch(() => {});
+
+      const { getRedis } = await import("../lib/redis.js");
+      const lockSuffix = booking.checkIn
+        ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
+        : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
+      await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+
+      return sendSuccess(reply, 200, { message: "Booking request approved." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to approve booking request.");
+    }
   });
 
   // ── POST /admin/booking-requests/:id/decline ─────────────────────────────
@@ -2735,57 +2976,65 @@ return { actioned: true };
     const { id } = req.params as { id: string };
     const { reason } = req.body as { reason: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: { listing: true },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    if (booking.status !== "pending_payment") {
-      return sendError(reply, 409, "INVALID_STATUS", "Booking is not pending.");
-    }
-    
-    if (["country_manager", "sales"].includes(admin.adminRole)) {
-      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
-         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
-      }
+    if (!reason?.trim()) {
+      return sendError(reply, 400, "BAD_REQUEST", "Decline reason is required.");
     }
 
-    await prisma.booking.update({
-      where: { id },
-      data: { status: "cancelled_by_system", cancelledAt: new Date(), cancelledBy: "admin", cancellationReason: reason },
-    });
-
-    await prisma.bookingStatusLog.create({
-      data: { bookingId: id, fromStatus: "pending_payment", toStatus: "cancelled_by_system", actorType: "admin", changedBy: admin.adminId, reason },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_declined",
-        targetType: "booking", targetId: id,
-        oldValue: "pending_payment", newValue: "cancelled_by_system", ipAddress: req.ip,
-      },
-    });
-
-    const { sendBookingCancellationEmail } = await import("../lib/email.js");
-    sendBookingCancellationEmail(
-      booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
-      { 
-        reference: booking.reference, 
-        reason,
-        listingName: booking.listing.name ?? "Your listing",
-        refundAmount: 0,
-        currency: booking.currency
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      if (booking.status !== "pending_payment") {
+        return sendError(reply, 409, "INVALID_STATUS", `Cannot decline booking with status: ${booking.status}. Only pending_payment bookings can be declined.`);
       }
-    ).catch(() => {});
 
-    const { getRedis } = await import("../lib/redis.js");
-    const lockSuffix = booking.checkIn
-      ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
-      : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
-    await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+      if (["country_manager", "sales"].includes(admin.adminRole)) {
+        if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+          return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+        }
+      }
 
-    return sendSuccess(reply, 200, { message: "Booking request declined." });
+      await prisma.booking.update({
+        where: { id },
+        data: { status: "cancelled_by_system", cancelledAt: new Date(), cancelledBy: "admin", cancellationReason: reason },
+      });
+
+      await prisma.bookingStatusLog.create({
+        data: { bookingId: id, fromStatus: "pending_payment", toStatus: "cancelled_by_system", actorType: "admin", changedBy: admin.adminId, reason },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId, role: admin.adminRole, action: "booking_request_declined",
+          targetType: "booking", targetId: id,
+          oldValue: "pending_payment", newValue: "cancelled_by_system", ipAddress: req.ip,
+        },
+      });
+
+      const { sendBookingCancellationEmail } = await import("../lib/email.js");
+      sendBookingCancellationEmail(
+        booking.guestEmail, `${booking.guestFirstName} ${booking.guestLastName}`,
+        {
+          reference: booking.reference,
+          reason,
+          listingName: booking.listing.name ?? "Your listing",
+          refundAmount: 0,
+          currency: booking.currency
+        }
+      ).catch(() => {});
+
+      const { getRedis } = await import("../lib/redis.js");
+      const lockSuffix = booking.checkIn
+        ? `${booking.listingId}:${booking.checkIn.toISOString().slice(0, 10)}:${booking.checkOut?.toISOString().slice(0, 10)}`
+        : `${booking.listingId}:${booking.pickupDatetime?.toISOString().slice(0, 10)}:${booking.returnDatetime?.toISOString().slice(0, 10)}`;
+      await getRedis().del(`rlk:${lockSuffix}`).catch(() => {});
+
+      return sendSuccess(reply, 200, { message: "Booking request declined." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to decline booking request.");
+    }
   });
 
   // ── POST /admin/booking-requests/:id/request-info ────────────────────────
@@ -2817,50 +3066,58 @@ return { actioned: true };
     const { id } = req.params as { id: string };
     const { message } = req.body as { message: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: { listing: true },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    
-    if (["country_manager", "sales"].includes(admin.adminRole)) {
-      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
-         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
-      }
+    if (!message?.trim()) {
+      return sendError(reply, 400, "BAD_REQUEST", "Message body is required.");
     }
 
-    let conversation = await prisma.conversation.findUnique({
-      where: { bookingId: id },
-    });
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
 
-    if (!conversation) {
-      conversation = await prisma.conversation.create({
+      if (["country_manager", "sales"].includes(admin.adminRole)) {
+        if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+          return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+        }
+      }
+
+      let conversation = await prisma.conversation.findUnique({
+        where: { bookingId: id },
+      });
+
+      if (!conversation) {
+        conversation = await prisma.conversation.create({
+          data: {
+            bookingId: id,
+            listingId: booking.listingId,
+            guestId: booking.guestId,
+            providerId: booking.providerId,
+          },
+        });
+      }
+
+      await prisma.message.create({
         data: {
-          bookingId: id,
-          listingId: booking.listingId,
-          guestId: booking.guestId,
-          providerId: booking.providerId,
+          conversationId: conversation.id,
+          senderId: admin.adminId,
+          senderType: "admin",
+          body: message,
         },
       });
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId, role: admin.adminRole, action: "booking_request_info_asked",
+          targetType: "booking", targetId: id, ipAddress: req.ip,
+        },
+      });
+
+      return sendSuccess(reply, 200, { message: "Message sent to guest." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to send message to guest.");
     }
-
-    await prisma.message.create({
-      data: {
-        conversationId: conversation.id,
-        senderId: admin.adminId,
-        senderType: "admin",
-        body: message,
-      },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_info_asked",
-        targetType: "booking", targetId: id, ipAddress: req.ip,
-      },
-    });
-
-    return sendSuccess(reply, 200, { message: "Message sent to guest." });
   });
 
   // ── POST /admin/booking-requests/:id/escalate ────────────────────────────
@@ -2886,25 +3143,29 @@ return { actioned: true };
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
-    const booking = await prisma.booking.findUnique({
-      where: { id },
-      include: { listing: true },
-    });
-    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-    
-    if (["country_manager", "sales"].includes(admin.adminRole)) {
-      if (!admin.countryScope.includes(booking.listing.country ?? "")) {
-         return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+    try {
+      const booking = await prisma.booking.findUnique({
+        where: { id },
+        include: { listing: true },
+      });
+      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+
+      if (["country_manager", "sales"].includes(admin.adminRole)) {
+        if (!admin.countryScope.includes(booking.listing.country ?? "")) {
+          return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
+        }
       }
+
+      await prisma.auditLog.create({
+        data: {
+          adminId: admin.adminId, role: admin.adminRole, action: "booking_request_escalated",
+          targetType: "booking", targetId: id, ipAddress: req.ip,
+        },
+      });
+
+      return sendSuccess(reply, 200, { message: "Request escalated to host." });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to escalate booking request.");
     }
-
-    await prisma.auditLog.create({
-      data: {
-        adminId: admin.adminId, role: admin.adminRole, action: "booking_request_escalated",
-        targetType: "booking", targetId: id, ipAddress: req.ip,
-      },
-    });
-
-    return sendSuccess(reply, 200, { message: "Request escalated to host." });
   });
 }
