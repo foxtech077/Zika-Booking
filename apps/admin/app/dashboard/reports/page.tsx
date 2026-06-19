@@ -64,6 +64,8 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function ReportsPage() {
   const { user } = useAuthStore();
+  const canExportFinancialData = user?.role === "super_admin" || user?.role === "finance";
+
   const { data: bookingsData, isLoading } = useQuery({
     queryKey: ["reports-bookings"],
     queryFn: fetchAllBookings,
@@ -115,14 +117,16 @@ export default function ReportsPage() {
         title="Reports"
         description="Platform analytics and performance metrics"
         action={
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={exportSummary}
-            leftIcon={<Download className="h-4 w-4" />}
-          >
-            Export Summary
-          </Button>
+          canExportFinancialData && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={exportSummary}
+              leftIcon={<Download className="h-4 w-4" />}
+            >
+              Export Summary
+            </Button>
+          )
         }
       />
 

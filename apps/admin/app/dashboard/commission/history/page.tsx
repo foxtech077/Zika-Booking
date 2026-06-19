@@ -25,6 +25,8 @@ export default function CommissionHistoryPage() {
   const { user } = useAuthStore();
   const { commissionHistory } = useMockFinanceStore();
 
+  const canExportFinancialData = user?.role === "super_admin" || user?.role === "finance";
+
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
@@ -165,15 +167,17 @@ export default function CommissionHistoryPage() {
         title="Commission Audit History"
         description="Comprehensive log of default commission adjustments, country-specific rate overrides, and scheduled rule additions."
         action={
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleExportCsv}
-            disabled={filteredHistory.length === 0}
-            leftIcon={<Download className="h-4 w-4" />}
-          >
-            Export History (CSV)
-          </Button>
+          canExportFinancialData && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={filteredHistory.length === 0}
+              leftIcon={<Download className="h-4 w-4" />}
+            >
+              Export History (CSV)
+            </Button>
+          )
         }
       />
 

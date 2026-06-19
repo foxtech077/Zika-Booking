@@ -12,6 +12,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Avatar } from "@/components/ui/Avatar";
+import countries from "i18n-iso-countries";
+import enLocale from "i18n-iso-countries/langs/en.json";
+import ReactSelect from "react-select";
+
+// Register English locale for country names
+countries.registerLocale(enLocale);
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, slugToLabel } from "@/lib/utils";
@@ -47,6 +53,14 @@ const changeRole = ({ id, role, countryScope }: { id: string; role: string; coun
   api.patch(`/admin/operators/${id}/role`, { role, countryScope }).then((r) => r.data.data ?? r.data);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+const COUNTRY_OPTIONS = Object.keys(countries.getAlpha2Codes()).map((c) => ({
+  value: c,
+  label: countries.getName(c, "en") ?? c,
+}));
+
+const codeToFlag = (code: string) =>
+  code.toUpperCase().replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 
 const ROLE_OPTIONS: { value: AdminRole; label: string }[] = [
   { value: "admin", label: "Admin" },
@@ -111,7 +125,6 @@ export default function RolesPage() {
 
   // Edit form
   const [editRole, setEditRole] = useState<AdminRole>("admin");
-  const [editScope, setEditScope] = useState("");
   const [editCountries, setEditCountries] = useState<string[]>([]);
 
   const params = { q, ...(roleFilter ? { role: roleFilter } : {}), page: String(page), limit: String(limit) };
@@ -124,27 +137,13 @@ export default function RolesPage() {
   const operators: Operator[] = data?.operators ?? [];
   const total: number = data?.total ?? 0;
 
-  const offset = (page - 1) * limit;
-  const requestUrl = `/admin/operators?${new URLSearchParams(params)}`;
-  const responseCount = data?.operators?.length ?? 0;
-  const renderedRows = operators.length;
-  console.log("RolesPage Pagination Debug:", {
-    page,
-    limit,
-    offset,
-    params,
-    queryKey: ["admin-operators", params],
-    requestUrl,
-    responseCount,
-    renderedRows,
-  });
-
   const createMut = useMutation({
     mutationFn: (body: any) => createOperator(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-operators"] });
       setCreateModal(false);
       setForm({ name: "", email: "", password: "", role: "admin", countryScope: "" });
+      setCreateCountries([]);
     },
   });
 
@@ -166,7 +165,6 @@ export default function RolesPage() {
 
   const openEdit = (op: Operator) => {
     setEditRole(op.role);
-    setEditScope(op.countryScope?.join(", ") ?? "");
     setEditCountries(op.countryScope ?? []);
     setEditModal(op);
   };
@@ -330,47 +328,6 @@ export default function RolesPage() {
         <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
-      {/* Permission matrix */}
-      <Card padding="none">
-        <div className="p-5 border-b border-border">
-          <CardHeader title="Permission Matrix" description="Module access by role" />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="border-b border-border bg-surface-subtle">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-40">Module</th>
-                {[{ value: "super_admin", label: "Super Admin" }, ...ROLE_OPTIONS].map((r) => (
-                  <th key={r.value} className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    <Badge label={r.label} status={r.value} size="sm" />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {PERMISSION_MATRIX.map((row) => (
-                <tr key={row.module} className="hover:bg-slate-50/50">
-                  <td className="px-4 py-3 text-sm font-medium text-slate-900">{row.module}</td>
-                  {(["super_admin", "admin", "country_manager", "sales", "support", "finance"] as const).map((r) => {
-                    const perm = (row as any)[r];
-                    return (
-                      <td key={r} className="px-4 py-3 text-center">
-                        <span className={`text-xs font-medium ${
-                          perm === "Full" || perm === "✓" ? "text-success-dark" :
-                          perm === "View" ? "text-info-dark" : "text-slate-300"
-                        }`}>
-                          {perm}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
       {/* ── Create Admin Modal ── */}
       <ActionModal
         open={createModal}
@@ -447,51 +404,29 @@ export default function RolesPage() {
           </div>
 
           {(form.role === "country_manager" || form.role === "sales") && (
-            isScopedAdmin ? (
-              /* Scoped admin: can only assign countries from their own scope */
-              <div>
-                <p className="text-xs font-semibold text-slate-700 mb-2">
-                  Country Scope
-                  <span className="ml-1 font-normal text-slate-400">(select from your authorized countries)</span>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {adminCountries.map((c) => {
-                    const selected = createCountries.includes(c);
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() =>
-                          setCreateCountries((prev) =>
-                            selected ? prev.filter((x) => x !== c) : [...prev, c]
-                          )
-                        }
-                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                          selected
-                            ? "bg-primary text-white border-primary"
-                            : "bg-surface-subtle text-slate-600 border-border hover:border-primary/50"
-                        }`}
-                      >
-                        {selected && <span className="mr-1">✓</span>}{c}
-                      </button>
-                    );
-                  })}
+            <ReactSelect
+              aria-label="Country Scope"
+              placeholder="Select countries..."
+              isMulti
+              isClearable
+              closeMenuOnSelect={false}
+              menuPosition="fixed"
+              menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
+              styles={{
+                menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+              }}
+              options={COUNTRY_OPTIONS}
+              value={createCountries.map((c) => ({ value: c, label: c }))}
+              onChange={(selected) =>
+                setCreateCountries(selected ? selected.map((s: any) => s.value) : [])
+              }
+              formatOptionLabel={(opt: any) => (
+                <div className="flex items-center space-x-2">
+                  <span>{codeToFlag(opt.value)} {opt.value}</span>
                 </div>
-                {createCountries.length === 0 && (
-                  <p className="mt-1.5 text-xs text-slate-400">Select at least one country for this account.</p>
-                )}
-              </div>
-            ) : (
-              /* Super admin: free-text input */
-              <Input
-                id="country-scope"
-                label="Country Scope (comma-separated)"
-                value={form.countryScope}
-                onChange={(e) => setForm((f) => ({ ...f, countryScope: e.target.value }))}
-                placeholder="MT, GB, DE"
-                hint="Countries this user will have access to"
-              />
-            )
+              )}
+              getOptionLabel={(opt: any) => `${codeToFlag(opt.value)} ${opt.value}`}
+            />
           )}
 
           <div className="bg-surface-subtle border border-border rounded-lg p-3 text-xs text-slate-600">
@@ -518,9 +453,7 @@ export default function RolesPage() {
               onClick={() => editModal && editMut.mutate({
                 id: editModal.id,
                 role: editRole,
-                countryScope: editRole === "country_manager" || editRole === "sales"
-                  ? (isScopedAdmin ? editCountries : editScope.split(",").map((s) => s.trim()).filter(Boolean))
-                  : [],
+                countryScope: editCountries,
               })}
             >
               Save Changes
@@ -537,46 +470,29 @@ export default function RolesPage() {
             options={ROLE_OPTIONS}
           />
           {(editRole === "country_manager" || editRole === "sales") && (
-            isScopedAdmin ? (
-              /* Scoped admin: restrict country scope to their own countries */
-              <div>
-                <p className="text-xs font-semibold text-slate-700 mb-2">
-                  Country Scope
-                  <span className="ml-1 font-normal text-slate-400">(your authorized countries only)</span>
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {adminCountries.map((c) => {
-                    const selected = editCountries.includes(c);
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() =>
-                          setEditCountries((prev) =>
-                            selected ? prev.filter((x) => x !== c) : [...prev, c]
-                          )
-                        }
-                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                          selected
-                            ? "bg-primary text-white border-primary"
-                            : "bg-surface-subtle text-slate-600 border-border hover:border-primary/50"
-                        }`}
-                      >
-                        {selected && <span className="mr-1">✓</span>}{c}
-                      </button>
-                    );
-                  })}
+            <ReactSelect
+              aria-label="Country Scope"
+              placeholder="Select countries..."
+              isMulti
+              isClearable
+              closeMenuOnSelect={false}
+              menuPosition="fixed"
+              menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
+              styles={{
+                menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+              }}
+              options={COUNTRY_OPTIONS}
+              value={editCountries.map((c) => ({ value: c, label: c }))}
+              onChange={(selected) =>
+                setEditCountries(selected ? selected.map((s: any) => s.value) : [])
+              }
+              formatOptionLabel={(opt: any) => (
+                <div className="flex items-center space-x-2">
+                  <span>{codeToFlag(opt.value)} {opt.value}</span>
                 </div>
-              </div>
-            ) : (
-              <Input
-                id="edit-scope"
-                label="Country Scope"
-                value={editScope}
-                onChange={(e) => setEditScope(e.target.value)}
-                placeholder="MT, GB, DE"
-              />
-            )
+              )}
+              getOptionLabel={(opt: any) => `${codeToFlag(opt.value)} ${opt.value}`}
+            />
           )}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
             ⚠️ Their current session will be revoked and they must sign in again with the new role.

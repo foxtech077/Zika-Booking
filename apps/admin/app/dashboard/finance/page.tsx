@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { StatCard, RevenueBarChart } from "@/components/charts/Charts";
 import { formatDate, formatCurrency, formatNumber } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
 
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -37,10 +38,13 @@ function buildRevenueChart(bookings: Booking[]) {
 }
 
 export default function FinancePage() {
+  const { user } = useAuthStore();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [status, setStatus] = useState("confirmed");
   const [currency, setCurrency] = useState("");
+
+  const canExportFinancialData = user?.role === "super_admin" || user?.role === "finance";
 
   const params = { status, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
@@ -167,14 +171,16 @@ export default function FinancePage() {
         title="Finance"
         description="Revenue, commission, and provider payout overview"
         action={
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={exportCsv}
-            leftIcon={<Download className="h-4 w-4" />}
-          >
-            Export CSV
-          </Button>
+          canExportFinancialData && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={exportCsv}
+              leftIcon={<Download className="h-4 w-4" />}
+            >
+              Export CSV
+            </Button>
+          )
         }
       />
 
@@ -245,14 +251,16 @@ export default function FinancePage() {
           limit={limit}
           onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
           actions={
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={exportCsv}
-              leftIcon={<Download className="h-3.5 w-3.5" />}
-            >
-              Export
-            </Button>
+            canExportFinancialData && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={exportCsv}
+                leftIcon={<Download className="h-3.5 w-3.5" />}
+              >
+                Export
+              </Button>
+            )
           }
         />
         <DataTable

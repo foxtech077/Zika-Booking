@@ -54,29 +54,24 @@ export default function VouchersPage() {
     isActive: true,
   });
 
-  const params = { ...(isActive ? { isActive } : {}), page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-vouchers", params],
-    queryFn: () => fetchVouchers(params),
+    queryKey: ["admin-vouchers"],
+    queryFn: () => fetchVouchers({}), // Fetch all
   });
 
-  const vouchers: Voucher[] = data?.vouchers ?? [];
-  const total: number = data?.total ?? vouchers.length;
+  const allVouchers: Voucher[] = data?.vouchers ?? [];
 
+  // Frontend filtering
+  const filteredVouchers = allVouchers.filter((v) => {
+    if (isActive === "true" && !v.isActive) return false;
+    if (isActive === "false" && v.isActive) return false;
+    return true;
+  });
+
+  // Frontend pagination
+  const total = filteredVouchers.length;
   const offset = (page - 1) * limit;
-  const requestUrl = `/admin/vouchers?${new URLSearchParams(params)}`;
-  const responseCount = data?.vouchers?.length ?? 0;
-  const renderedRows = vouchers.length;
-  console.log("VouchersPage Pagination Debug:", {
-    page,
-    limit,
-    offset,
-    params,
-    queryKey: ["admin-vouchers", params],
-    requestUrl,
-    responseCount,
-    renderedRows,
-  });
+  const paginatedVouchers = filteredVouchers.slice(offset, offset + limit);
 
   const createMut = useMutation({
     mutationFn: (body: any) => listingApi.post("/admin/vouchers", body),
@@ -222,7 +217,7 @@ export default function VouchersPage() {
         />
         <DataTable
           columns={columns}
-          data={vouchers}
+          data={paginatedVouchers}
           loading={isLoading}
           emptyTitle="No vouchers found"
           emptyDescription="Create your first promotional voucher."

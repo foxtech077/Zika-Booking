@@ -56,6 +56,8 @@ type PaymentMethod = "stripe" | "tara";
 interface PriceSummary {
   baseAmount: number;
   discount: number;
+  voucherDiscount?: number;
+  promotionDiscount?: number;
   serviceFee: number;
   tax: number;
   total: number;
@@ -94,6 +96,17 @@ function getDayStatus(dateStr: string, availability: AvailabilityData | null): D
     if (isBetween(dateStr, r.start, r.end)) return "booked";
   }
   return "available";
+}
+
+function getCurrencyForCountry(countryCode: string): string {
+  const map: Record<string, string> = {
+    IN: "INR", US: "USD", GB: "GBP", AE: "AED", SG: "SGD", JP: "JPY",
+    AT: "EUR", BE: "EUR", CY: "EUR", EE: "EUR", FI: "EUR", FR: "EUR",
+    DE: "EUR", GR: "EUR", IE: "EUR", IT: "EUR", LV: "EUR", LT: "EUR",
+    LU: "EUR", MT: "EUR", NL: "EUR", PT: "EUR", SK: "EUR", SI: "EUR", ES: "EUR",
+    AU: "AUD", CA: "CAD", CH: "CHF", CN: "CNY", ZA: "ZAR", KE: "KES",
+  };
+  return map[countryCode] || "USD";
 }
 
 function SectionCard({
@@ -379,17 +392,34 @@ export default function ManualBookingPage() {
   // Register locale for i18n-iso-countries
   countries.registerLocale(enLocale);
 
-  const countryOptions: CountryOption[] = Object.entries(countries.getNames("en", { select: "official" })).map(([code, name]) => ({
+  const bookingCountryOptions: CountryOption[] = Object.entries(countries.getNames("en", { select: "official" })).map(([code, name]) => ({
     value: code,
-    label: `${name} (${code})`,
+    label: `${code}`,
   }));
 
   const formatOptionLabel = ({ value, label }: CountryOption) => (
     <div className="flex items-center gap-2">
       <ReactCountryFlag countryCode={value} svg style={{ width: "1.2em", height: "1.2em" }} />
-      <span>{label}</span>
+      <span>{value}</span>
     </div>
   );
+
+  const formatCountryOptionLabel = ({ value, label }: CountryOption) => (
+    <div className="flex items-center gap-2">
+      <ReactCountryFlag countryCode={value} svg style={{ width: "1.2em", height: "1.2em" }} />
+      <span>{value}</span>
+    </div>
+  );
+
+  // Options for the Nationality dropdown – only ISO code as label
+  const nationalityOptions: CountryOption[] = Object.entries(countries.getNames("en", { select: "official" })).map(([code, name]) => ({
+    value: code,
+    label: `${code}`,
+  }));
+
+
+  // Formatter for Nationality dropdown – flag and ISO code only
+
 
   // ── Section 2: Booking Info ───────────────────────────────────────────────────
   const [listingType, setListingType] = useState<ListingType>("hotel");
@@ -538,10 +568,12 @@ export default function ManualBookingPage() {
         setPrice({
           baseAmount: d.pricing.baseAmount ?? 0,
           discount: d.pricing.discount ?? 0,
+          voucherDiscount: d.pricing.voucherDiscount,
+          promotionDiscount: d.pricing.promotionDiscount,
           serviceFee: d.pricing.serviceFee ?? 0,
           tax: d.pricing.tax ?? 0,
           total: d.pricing.total ?? 0,
-          currency: d.pricing.currency ?? "USD",
+          currency: d.pricing.currency ?? getCurrencyForCountry(country),
         });
       }
       if (d.bookedRanges || d.lockedRanges) {
@@ -560,7 +592,7 @@ export default function ManualBookingPage() {
         serviceFee: Math.round(base * 0.05),
         tax: Math.round(base * 0.10),
         total: Math.round(base * 1.15),
-        currency: "USD",
+        currency: getCurrencyForCountry(country),
       });
       if (!availability) {
         const today = new Date();
@@ -578,6 +610,22 @@ export default function ManualBookingPage() {
       }
     }
   }
+
+  const renderClearDate = (setter: (v: string) => void) => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        setter("");
+        setAvailStatus("idle");
+        setPrice(null);
+      }}
+      className="mr-11 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer pointer-events-auto z-10"
+      title="Clear date"
+    >
+      <X className="h-4 w-4" />
+    </button>
+  );
 
   // ── Mutations ───────────────────────────────────────────────────────
   const createDraftMut = useMutation({
@@ -696,7 +744,7 @@ export default function ManualBookingPage() {
     );
   }
 
-  // ── Form ──────────────────────────────────────────────────────────────────────
+  // Form
   return (
     <div className="pb-10">
       {/* Header */}
@@ -720,109 +768,329 @@ export default function ManualBookingPage() {
         </div>
       )}
 
-      {/* Section 1 – Customer Information */}
-      <SectionCard step={1} title="Customer Information" icon={User}>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <Input id={`${uid}-firstName`} label="First Name" required placeholder="John" value={firstName} onChange={(e) => setFirstName(e.target.value)} error={errors.firstName} />
-            <Input id={`${uid}-lastName`} label="Last Name" required placeholder="Doe" value={lastName} onChange={(e) => setLastName(e.target.value)} error={errors.lastName} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Input id={`${uid}-email`} label="Email Address" type="email" required placeholder="john@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} leftIcon={<Mail className="h-4 w-4" />} />
-            <Input id={`${uid}-phone`} label="Phone Number" type="tel" required placeholder="+254700000000" value={phone} onChange={(e) => setPhone(e.target.value)} error={errors.phone} leftIcon={<Phone className="h-4 w-4" />} />
-          </div>
-          <div className="grid grid-cols-1 gap-4">
-            <ReactSelect
-              inputId={`${uid}-nationality`}
-              placeholder="Select nationality…"
-              options={countryOptions}
-              value={countryOptions.find((o) => o.value === nationality) || null}
-              onChange={(selected) => setNationality(selected?.value || "")}
-              formatOptionLabel={formatOptionLabel}
-              isClearable
-              styles={{ control: (provided) => ({ ...provided, borderRadius: "0.5rem" }) }}
-            />
-          </div>
-          <Textarea id={`${uid}-notes`} label="Notes / Special Requests" placeholder="Any special requests or notes for this booking…" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} hint="Visible to internal staff only." />
-        </div>
-      </SectionCard>
+      {/* Two-column layout: form left + calendar sidebar right */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
 
-      {/* Section 2 – Booking Information */}
-      <SectionCard step={2} title="Booking Information" icon={Building2}>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <UISelect id={`${uid}-listingType`} label="Listing Type" required value={listingType} onChange={(e: ChangeEvent<HTMLSelectElement>) => setListingType(e.target.value as ListingType)} options={[{ value: "hotel", label: "Hotel" }, { value: "apartment", label: "Apartment" }, { value: "car", label: "Car Rental" }]} />
-            <UISelect id={`${uid}-country`} label="Country" required value={country} onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-              setCountry(e.target.value);
-              setSelectedListing(null);
-              setAvailStatus("idle");
-              setPrice(null);
-            }} options={[{ value: "", label: "Select country…" }, ...["MT","US","GB","DE","FR","ES","IT","AE","AU","CA","JP","SG","NL","BE","SE","IN","KE","NG","ZA","GH"].map((c) => ({ value: c, label: c }))]} error={errors.country} />
+        {/* Left column */}
+        <div className="flex-1 min-w-0 space-y-5">
+
+          {/* Section 1 - Customer Information */}
+          <SectionCard step={1} title="Customer Information" icon={User}>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <Input id={`${uid}-firstName`} label="First Name" required placeholder="John" value={firstName} onChange={(e) => setFirstName(e.target.value)} error={errors.firstName} />
+                <Input id={`${uid}-lastName`} label="Last Name" required placeholder="Doe" value={lastName} onChange={(e) => setLastName(e.target.value)} error={errors.lastName} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <Input id={`${uid}-email`} label="Email Address" type="email" required placeholder="john@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} leftIcon={<Mail className="h-4 w-4" />} />
+                <Input id={`${uid}-phone`} label="Phone Number" type="tel" required placeholder="+254700000000" value={phone} onChange={(e) => setPhone(e.target.value)} error={errors.phone} leftIcon={<Phone className="h-4 w-4" />} />
+              </div>
+              <div className="grid grid-cols-1 gap-4">
+                <ReactSelect
+                  inputId={`${uid}-nationality`}
+                  placeholder="Select nationality..."
+                  options={nationalityOptions}
+                  value={nationalityOptions.find((o) => o.value === nationality) || null}
+                  onChange={(selected) => setNationality(selected?.value || "")}
+                  formatOptionLabel={formatOptionLabel}
+                  isClearable
+                  menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
+                  menuPosition="fixed"
+                  maxMenuHeight={200}
+                  styles={{
+                    control: (provided) => ({ ...provided, borderRadius: "0.5rem" }),
+                    menu: (provided) => ({ ...provided, zIndex: 9999 }),
+                    menuList: (provided) => ({ ...provided, maxHeight: "200px", overflowY: "auto" }),
+                  }}
+                />
+              </div>
+              <Textarea id={`${uid}-notes`} label="Notes / Special Requests" placeholder="Any special requests or notes for this booking..." value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} hint="Visible to internal staff only." />
+            </div>
+          </SectionCard>
+
+          {/* Section 2 - Booking Information */}
+          <SectionCard step={2} title="Booking Information" icon={Building2}>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <UISelect id={`${uid}-listingType`} label="Listing Type" required value={listingType} onChange={(e: ChangeEvent<HTMLSelectElement>) => setListingType(e.target.value as ListingType)} options={[{ value: "hotel", label: "Hotel" }, { value: "apartment", label: "Apartment" }, { value: "car", label: "Car Rental" }]} />
+                <div className="flex flex-col">
+                  <label htmlFor={`${uid}-country`} className="block text-sm font-medium text-gray-700 mb-1">
+                    Country <span className="text-red-500">*</span>
+                  </label>
+                  <ReactSelect
+                    inputId={`${uid}-country`}
+                    placeholder="Select country..."
+                    options={bookingCountryOptions}
+                    value={bookingCountryOptions.find((o) => o.value === country) || null}
+                    onChange={(selected) => {
+                      setCountry(selected?.value || "");
+                      setSelectedListing(null);
+                      setAvailStatus("idle");
+                      setPrice(null);
+                    }}
+                    formatOptionLabel={formatCountryOptionLabel}
+                    isClearable
+                    menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
+                    menuPosition="fixed"
+                    maxMenuHeight={200}
+                    styles={{
+                      control: (provided) => ({ ...provided, borderRadius: "0.5rem" }),
+                      menu: (provided) => ({ ...provided, zIndex: 9999 }),
+                      menuList: (provided) => ({ ...provided, maxHeight: "200px", overflowY: "auto" }),
+                    }}
+                  />
+                </div>
+              </div>
+              <ListingSearchDropdown
+                country={country}
+                listingType={listingType}
+                value={selectedListing}
+                onChange={(listing: SelectedListing | null) => {
+                  setSelectedListing(listing);
+                  setAvailStatus("idle");
+                  setPrice(null);
+                }}
+                error={errors.listingName}
+              />
+              {isAccommodation ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <Input id={`${uid}-checkIn`} label="Check-In" type="date" required value={checkIn} onChange={(e) => setCheckIn(e.target.value)} error={errors.checkIn} rightIcon={checkIn ? renderClearDate(setCheckIn) : undefined} />
+                  <Input id={`${uid}-checkOut`} label="Check-Out" type="date" required value={checkOut} onChange={(e) => setCheckOut(e.target.value)} error={errors.checkOut} rightIcon={checkOut ? renderClearDate(setCheckOut) : undefined} />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <Input id={`${uid}-pickup`} label="Pickup" type="date" required value={pickup} onChange={(e) => setPickup(e.target.value)} error={errors.pickup} rightIcon={pickup ? renderClearDate(setPickup) : undefined} />
+                  <Input id={`${uid}-return`} label="Return" type="date" required value={returnDt} onChange={(e) => setReturnDt(e.target.value)} error={errors.returnDt} rightIcon={returnDt ? renderClearDate(setReturnDt) : undefined} />
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <UISelect id={`${uid}-guests`} label="Guests" required value={String(guests)} onChange={(e) => setGuests(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
+                {listingType === "hotel" && (
+                  <UISelect id={`${uid}-rooms`} label="Rooms" required value={String(rooms)} onChange={(e) => setRooms(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
+                )}
+                {listingType === "apartment" && (
+                  <UISelect id={`${uid}-units`} label="Units" required value={String(units)} onChange={(e) => setUnits(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
+                )}
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* Section 3 - Availability Check */}
+          <SectionCard step={3} title="Availability Check" icon={Search}>
+            <div className="space-y-4">
+              <Button
+                type="button"
+                variant="secondary"
+                loading={availStatus === "checking"}
+                leftIcon={<Search className="h-4 w-4" />}
+                onClick={checkAvailability}
+              >
+                Check Availability
+              </Button>
+              {availStatus === "available" && (
+                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <p className="text-sm font-medium text-green-700">Available for the selected dates</p>
+                </div>
+              )}
+              {availStatus === "unavailable" && (
+                <div className="flex items-center gap-2 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
+                  <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
+                  <p className="text-sm font-medium text-danger">Not available for the selected dates</p>
+                </div>
+              )}
+              {errors._avail && (
+                <p className="text-xs text-danger">{errors._avail}</p>
+              )}
+              {availStatus === "idle" && (
+                <p className="text-sm text-slate-400">
+                  The system will verify existing bookings, reservation locks, and available inventory.
+                </p>
+              )}
+            </div>
+          </SectionCard>
+
+          {/* Section 4 - Payment */}
+          <SectionCard step={4} title="Payment" icon={CreditCard}>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Payment Method</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("stripe")}
+                    className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
+                      paymentMethod === "stripe"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Stripe
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("tara")}
+                    className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
+                      paymentMethod === "tara"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Tara
+                  </button>
+                </div>
+              </div>
+              <p className="text-xs text-slate-500">
+                A secure payment link will be sent to{" "}
+                <strong>the guest's email</strong> via{" "}
+                {paymentMethod === "stripe" ? "Stripe" : "Tara"}.
+              </p>
+
+              {/* Price summary (shown when available) */}
+              {price && (
+                <div className="space-y-4">
+                  {/* Booking Summary */}
+                  <div className="rounded-lg border border-border bg-slate-50/60 p-5 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Booking Summary</h3>
+                    
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-slate-600">
+                      <div><span className="font-medium text-slate-700 block mb-0.5">Listing</span> {selectedListing?.name || "—"}</div>
+                      <div><span className="font-medium text-slate-700 block mb-0.5">Listing Type</span> <span className="capitalize">{listingType}</span></div>
+                      <div><span className="font-medium text-slate-700 block mb-0.5">Country</span> {country || "—"}</div>
+                      
+                      {isAccommodation ? (
+                        <>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Check-In</span> {formatDateLabel(checkIn)}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Check-Out</span> {formatDateLabel(checkOut)}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Nights</span> {nights}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Guests</span> {guests}</div>
+                          {listingType === "hotel" && <div><span className="font-medium text-slate-700 block mb-0.5">Rooms</span> {rooms}</div>}
+                          {listingType === "apartment" && <div><span className="font-medium text-slate-700 block mb-0.5">Units</span> {units}</div>}
+                        </>
+                      ) : (
+                        <>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Pickup</span> {formatDateLabel(pickup)}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Return</span> {formatDateLabel(returnDt)}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Days</span> {nights}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Guests</span> {guests}</div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Pricing Breakdown */}
+                  <div className="rounded-lg border border-border bg-slate-50/60 p-5 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Pricing Breakdown</h3>
+                    
+                    <div className="pt-2 space-y-1.5">
+                      <InfoRow label="Base Booking Amount" value={formatCurrency(price.baseAmount, price.currency)} />
+                      {price.voucherDiscount !== undefined && price.voucherDiscount > 0 && <InfoRow label="Voucher Discount" value={`-${formatCurrency(price.voucherDiscount, price.currency)}`} />}
+                      {price.promotionDiscount !== undefined && price.promotionDiscount > 0 && <InfoRow label="Promotion Discount" value={`-${formatCurrency(price.promotionDiscount, price.currency)}`} />}
+                      {price.discount > 0 && !price.voucherDiscount && !price.promotionDiscount && <InfoRow label="Discount" value={`-${formatCurrency(price.discount, price.currency)}`} />}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                      <InfoRow label="Subtotal" value={formatCurrency(price.baseAmount - price.discount, price.currency)} />
+                      <InfoRow label={serviceFeeRate !== null ? `Service Fee (${formatRate(serviceFeeRate)})` : "Service Fee"} value={formatCurrency(price.serviceFee, price.currency)} />
+                      <InfoRow label={taxRate !== null ? `Tax (${formatRate(taxRate)})` : "Tax"} value={formatCurrency(price.tax, price.currency)} />
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-base font-bold text-slate-900">Grand Total</span>
+                        <span className="text-lg font-bold text-primary">{formatCurrency(price.total, price.currency)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </SectionCard>
+
+          {/* Section 5 - Internal Information */}
+          <SectionCard step={5} title="Internal Information" icon={Hash}>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Booking Reference</p>
+                <p className="text-sm font-mono text-primary">Auto-generated on submit</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Created By</p>
+                <div className="flex items-center gap-1.5">
+                  <UserCircle className="h-4 w-4 text-slate-400" />
+                  <p className="text-sm text-slate-700">{user?.name ?? "-"}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Created Date</p>
+                <p className="text-sm text-slate-700">
+                  {new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Assigned Country</p>
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-slate-400" />
+                  <p className="text-sm text-slate-700">{country || "-"}</p>
+                </div>
+              </div>
+              {role && (
+                <div>
+                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Agent Role</p>
+                  <p className="text-sm text-slate-700 capitalize">{role.replace(/_/g, " ")}</p>
+                </div>
+              )}
+            </div>
+          </SectionCard>
+
+          {/* Action Buttons */}
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <Link href="/dashboard/bookings">
+              <Button type="button" variant="ghost" leftIcon={<X className="h-4 w-4" />}>
+                Cancel
+              </Button>
+            </Link>
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="secondary" loading={createDraftMut.isPending} leftIcon={<Save className="h-4 w-4" />} onClick={() => createDraftMut.mutate()}>
+                Save Draft
+              </Button>
+              <Button type="button" loading={paymentLinkMut.isPending} leftIcon={<Send className="h-4 w-4" />} onClick={handleSendLink} disabled={availStatus === "unavailable"}>
+                Send Payment Link
+              </Button>
+            </div>
           </div>
-          <ListingSearchDropdown
-            country={country}
-            listingType={listingType}
-            value={selectedListing}
-            onChange={(listing: SelectedListing | null) => {
-              setSelectedListing(listing);
-              setAvailStatus("idle");
-              setPrice(null);
+
+        </div>
+
+        {/* Right column - Availability Calendar sidebar */}
+        <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-6 self-start">
+          <AvailabilityCalendar
+            checkIn={checkIn}
+            checkOut={checkOut}
+            availability={availability}
+            loading={calLoading}
+            onSelectDate={(date) => {
+              if (calSelectStep === "checkIn") {
+                setCheckIn(date);
+                setCheckOut("");
+                setCalSelectStep("checkOut");
+              } else {
+                if (date > checkIn) {
+                  setCheckOut(date);
+                  setCalSelectStep("checkIn");
+                } else {
+                  setCheckIn(date);
+                  setCheckOut("");
+                }
+              }
             }}
-            error={errors.listingName}
           />
-          {/* Dates */}
-          {isAccommodation ? (
-            <div className="grid grid-cols-2 gap-4">
-              <Input id={`${uid}-checkIn`} label="Check‑In" type="date" required value={checkIn} onChange={(e) => setCheckIn(e.target.value)} error={errors.checkIn} />
-              <Input id={`${uid}-checkOut`} label="Check‑Out" type="date" required value={checkOut} onChange={(e) => setCheckOut(e.target.value)} error={errors.checkOut} />
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-4">
-              <Input id={`${uid}-pickup`} label="Pickup" type="date" required value={pickup} onChange={(e) => setPickup(e.target.value)} error={errors.pickup} />
-              <Input id={`${uid}-return`} label="Return" type="date" required value={returnDt} onChange={(e) => setReturnDt(e.target.value)} error={errors.returnDt} />
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-4">
-            <UISelect id={`${uid}-guests`} label="Guests" required value={String(guests)} onChange={(e) => setGuests(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
-            {listingType === "hotel" && (
-              <UISelect id={`${uid}-rooms`} label="Rooms" required value={String(rooms)} onChange={(e) => setRooms(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
-            )}
-            {listingType === "apartment" && (
-              <UISelect id={`${uid}-units`} label="Units" required value={String(units)} onChange={(e) => setUnits(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
-            )}
-          </div>
         </div>
-      </SectionCard>
 
-      {/* Price Summary */}
-      {price && (
-        <SectionCard step={4} title="Price Summary" icon={FileText}>
-          {/* Display price details */}
-          <InfoRow label="Base Amount" value={formatCurrency(price.baseAmount, price.currency)} />
-          <InfoRow label="Discount" value={price.discount ? formatCurrency(price.discount, price.currency) : "—"} />
-          <InfoRow label="Service Fee" value={price.serviceFee ? formatCurrency(price.serviceFee, price.currency) : "—"} />
-          <InfoRow label="Tax" value={price.tax ? formatCurrency(price.tax, price.currency) : "—"} />
-          <InfoRow label="Total" value={formatCurrency(price.total, price.currency)} />
-        </SectionCard>
-      )}
-
-      {/* Action Buttons */}
-      <div className="flex items-center justify-between gap-3 pt-2">
-        <Link href="/dashboard/bookings">
-          <Button type="button" variant="ghost" leftIcon={<X className="h-4 w-4" />}>
-            Cancel
-          </Button>
-        </Link>
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="secondary" loading={createDraftMut.isPending} leftIcon={<Save className="h-4 w-4" />} onClick={() => createDraftMut.mutate()}>
-            Save Draft
-          </Button>
-          <Button type="button" loading={paymentLinkMut.isPending} leftIcon={<Send className="h-4 w-4" />} onClick={handleSendLink} disabled={availStatus === "unavailable"}>
-            Send Payment Link
-          </Button>
-        </div>
       </div>
     </div>
   );
 }
-
