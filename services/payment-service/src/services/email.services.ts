@@ -13,7 +13,7 @@ export async function sendGuestEmail(
     to: booking.user.email ?? ["EMAIL_ADDRESS"],
     from: {
       email: process.env.SENDGRID_FROM_EMAIL!,
-      name: process.env.SENDGRID_FROM_NAME ?? "ZikaBooking",
+      name: process.env.SENDGRID_FROM_NAME ?? "Kainook",
     },
     subject: `Your booking is confirmed — ${booking.code}`,
     html: `
@@ -56,13 +56,13 @@ export async function sendGuestEmail(
 
       <p style="text-align:center;">
         <a href="${BOOKING_BASE_URL}/${booking.code}"
-           style="display:inline-block;background:#1e3a8a;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">
+           style="display:inline-block;background:#16a34a;color:#ffffff;padding:12px 28px;border-radius:6px;text-decoration:none;font-weight:bold;font-size:15px;">
           View Your Booking
         </a>
       </p>
 
       <p style="text-align:center;margin-top:12px;">
-        <a href="${pdf.pdfUrl}" style="color:#1e3a8a;font-size:14px;">
+        <a href="${pdf.pdfUrl}" style="color:#16a34a;font-size:14px;">
           📄 Download Your Voucher PDF
         </a>
       </p>
@@ -73,7 +73,7 @@ export async function sendGuestEmail(
     attachments: [
       {
         content: pdf.pdfBuffer.toString("base64"),
-        filename: `ZikaBooking-${booking.code}.pdf`,
+        filename: `KAINOOK-${booking.code}.pdf`,
         type: "application/pdf",
         disposition: "attachment",
       },
@@ -93,7 +93,7 @@ export async function sendPaymentLinkEmail(
     to: email,
     from: {
       email: process.env.SENDGRID_FROM_EMAIL!,
-      name: process.env.SENDGRID_FROM_NAME ?? "ZikaBooking",
+      name: process.env.SENDGRID_FROM_NAME ?? "Kainook",
     },
     subject: `Complete your payment for booking ${reference}`,
     html: `
@@ -104,7 +104,7 @@ export async function sendPaymentLinkEmail(
       <p><a href="${paymentUrl}" style="padding: 10px 20px; background: #000; color: #fff; text-decoration: none; border-radius: 5px;">Pay Now</a></p>
       <p>Alternatively, copy and paste this link into your browser:</p>
       <p><a href="${paymentUrl}">${paymentUrl}</a></p>
-      <p>Thank you for choosing Zika.</p>
+      <p>Thank you for choosing Kainook.</p>
     `,
   });
 }
@@ -115,9 +115,9 @@ export async function sendAdminAlert(context: string, error: any) {
     to: process.env.ADMIN_ALERT_EMAIL!,
     from: {
       email: process.env.SENDGRID_FROM_EMAIL!,
-      name: "ZikaBooking Alerts",
+      name: "Kainook Alerts",
     },
-    subject: `Email failure: ${context}`,
-    html: `<p>Failed after 3 attempts:</p><pre>${error.message}</pre>`,
+    subject: `[Kainook] Email delivery failure: ${context}`,
+    html: `<p><strong>Confirmation email failed after 3 attempts.</strong></p><pre>${error?.message ?? String(error)}</pre>`,
   });
 }
