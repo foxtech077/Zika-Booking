@@ -119,3 +119,7 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
 
   return { fileName, pdfUrl, pdfBuffer };
 }
+
+console.log("AWS_ACCESS_KEY_ID =", process.env.AWS_ACCESS_KEY_ID);
+console.log("AWS_REGION =", process.env.AWS_REGION);
+console.log("S3_BUCKET_NAME =", process.env.S3_BUCKET_NAME);

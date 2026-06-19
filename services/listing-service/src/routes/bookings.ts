@@ -206,6 +206,8 @@ export async function bookingRoutes(app: FastifyInstance) {
       sendError(reply, 503, "SERVICE_UNAVAILABLE", "Internal service key not configured.");
       return false;
     }
+    console.log("Expected =", process.env.INTERNAL_SERVICE_KEY);
+    console.log("Received =", req.headers["x-service-key"]);
     const token = req.headers["x-service-key"];
     if (!token || token !== INTERNAL_SERVICE_KEY) {
       sendError(reply, 401, "UNAUTHORIZED", "Invalid or missing service token.");
