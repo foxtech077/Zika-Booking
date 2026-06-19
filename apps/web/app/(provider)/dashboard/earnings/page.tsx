@@ -292,7 +292,7 @@ function StatCard({
       ) : (
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-medium text-slate-500">{label}</p>
+            <p className="text-[15px] font-medium text-slate-500">{label}</p>
             <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
             <p className={cn("mt-2 flex items-center gap-1 text-xs font-semibold", positive ? "text-emerald-600" : "text-red-600")}>
               {positive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
@@ -450,12 +450,12 @@ export default function EarningsPage() {
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        <StatCard label="Total Earnings" value={formatCurrency(data.allTime.payout)} icon={<Wallet />} trend={payoutTrend} loading={isLoading} tone="bg-emerald-50 text-emerald-700" />
-        <StatCard label="This Month Earnings" value={formatCurrency(chartData.at(-1)?.payout ?? 0)} icon={<CalendarDays />} trend={payoutTrend} loading={isLoading} tone="bg-blue-50 text-blue-700" />
-        <StatCard label="Pending Payouts" value={formatCurrency(data.allTime.pendingPayouts)} icon={<CreditCard />} trend={0} loading={isLoading} tone="bg-amber-50 text-amber-700" />
-        <StatCard label="Completed Payouts" value={formatCurrency(data.allTime.completedPayouts)} icon={<Banknote />} trend={payoutTrend} loading={isLoading} tone="bg-teal-50 text-teal-700" />
-        <StatCard label="Total Bookings Revenue" value={formatCurrency(data.allTime.bookingsRevenue)} icon={<ReceiptText />} trend={revenueTrend} loading={isLoading} tone="bg-indigo-50 text-indigo-700" />
-        <StatCard label="Average Booking Value" value={formatCurrency(data.allTime.averageBookingValue)} icon={<TrendingUp />} trend={revenueTrend} loading={isLoading} tone="bg-slate-100 text-slate-700" />
+        <StatCard label="Total Earnings" value={formatCurrency(data.allTime.payout)} icon={<Wallet />} trend={payoutTrend} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="This Month Earnings" value={formatCurrency(chartData.at(-1)?.payout ?? 0)} icon={<CalendarDays />} trend={payoutTrend} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="Pending Payouts" value={formatCurrency(data.allTime.pendingPayouts)} icon={<CreditCard />} trend={0} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="Completed Payouts" value={formatCurrency(data.allTime.completedPayouts)} icon={<Banknote />} trend={payoutTrend} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="Total Bookings Revenue" value={formatCurrency(data.allTime.bookingsRevenue)} icon={<ReceiptText />} trend={revenueTrend} loading={isLoading} tone="bg-green-700 text-white" />
+        <StatCard label="Average Booking Value" value={formatCurrency(data.allTime.averageBookingValue)} icon={<TrendingUp />} trend={revenueTrend} loading={isLoading} tone="bg-green-700 text-white" />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
@@ -466,7 +466,7 @@ export default function EarningsPage() {
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              <Area type="monotone" dataKey="revenue" stroke="#0ea5e9" fill="#bae6fd" name="Revenue" />
+              <Area type="monotone" dataKey="revenue" stroke="#16a34a" fill="#bbf7d0" name="Revenue" />
               <Area type="monotone" dataKey="payout" stroke="#10b981" fill="#bbf7d0" name="Payout" />
             </AreaChart>
           </ResponsiveContainer>
@@ -479,7 +479,7 @@ export default function EarningsPage() {
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              <Bar dataKey="revenue" fill="#0284c7" radius={[6, 6, 0, 0]} name="Revenue" />
+              <Bar dataKey="revenue" fill="#16a34a" radius={[6, 6, 0, 0]} name="Revenue" />
             </BarChart>
           </ResponsiveContainer>
         </ChartShell>
@@ -503,7 +503,7 @@ export default function EarningsPage() {
               <XAxis dataKey="label" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              <Bar dataKey="revenue" fill="#38bdf8" radius={[6, 6, 0, 0]} name="Earnings" />
+              <Bar dataKey="revenue" fill="#16a34a" radius={[6, 6, 0, 0]} name="Earnings" />
               <Bar dataKey="payout" fill="#34d399" radius={[6, 6, 0, 0]} name="Payouts" />
             </BarChart>
           </ResponsiveContainer>

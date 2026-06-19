@@ -8,7 +8,7 @@ interface ShellProps {
 
 export function Shell({ children }: ShellProps) {
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-subtle">
+    <div className="flex h-screen overflow-hidden bg-[#eef8f1]">
       <Sidebar />
       <div className="flex flex-col flex-1 overflow-hidden">
         <TopBar />
