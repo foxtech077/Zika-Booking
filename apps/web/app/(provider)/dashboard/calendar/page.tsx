@@ -359,7 +359,7 @@ function SummaryCard({
     <Card className="min-h-[104px]">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-slate-500">{label}</p>
+          <p className="text-[15px] font-medium text-slate-500">{label}</p>
           <p className="mt-2 text-2xl font-bold text-slate-950">{count}</p>
         </div>
         <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl [&>svg]:h-5 [&>svg]:w-5", tone)}>
@@ -551,13 +551,13 @@ export default function CalendarPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <SummaryCard label="Total Bookings" count={summary.total} icon={<BookOpen />} tone="bg-slate-100 text-slate-700" />
-        <SummaryCard label="Today Check-ins" count={summary.todayCheckIns} icon={<User />} tone="bg-emerald-50 text-emerald-700" />
-        <SummaryCard label="Today Check-outs" count={summary.todayCheckOuts} icon={<Clock3 />} tone="bg-green-50 text-green-700" />
-        <SummaryCard label="Pending Bookings" count={summary.pending} icon={<AlertCircle />} tone="bg-yellow-50 text-yellow-700" />
-        <SummaryCard label="Confirmed" count={summary.confirmed} icon={<CheckCircle2 />} tone="bg-emerald-50 text-emerald-700" />
-        <SummaryCard label="Cancelled" count={summary.cancelled} icon={<XCircle />} tone="bg-red-50 text-red-700" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard label="Total Bookings" count={summary.total} icon={<BookOpen />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Today Check-ins" count={summary.todayCheckIns} icon={<User />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Today Check-outs" count={summary.todayCheckOuts} icon={<Clock3 />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Pending Bookings" count={summary.pending} icon={<AlertCircle />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Confirmed" count={summary.confirmed} icon={<CheckCircle2 />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Cancelled" count={summary.cancelled} icon={<XCircle />} tone="bg-red-500 text-white" />
       </div>
 
       <Card>

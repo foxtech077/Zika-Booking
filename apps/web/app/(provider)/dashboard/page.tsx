@@ -389,7 +389,7 @@ function OverviewCard({
       ) : (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide">{title}</p>
+            <p className="text-[15px] font-semibold text-slate-400 uppercase tracking-wide">{title}</p>
             <p className="mt-2 text-2xl font-bold text-slate-900 leading-none">{value}</p>
             {trend !== undefined && (
               <p className={cn("mt-2.5 flex items-center gap-1 text-[11px] font-semibold", positive ? "text-emerald-600" : "text-red-500")}>
@@ -437,11 +437,11 @@ export default function DashboardPage() {
       { title: "Active Listings",    value: data.analytics.activeListings,                                        icon: <CheckCircle2 />, trend: trend.activeListings,    tone: "bg-green-700 text-white" },
       { title: "Total Bookings",     value: data.analytics.totalBookings,                                         icon: <BookOpen />,    trend: trend.totalBookings,     tone: "bg-green-700 text-white" },
       { title: "Upcoming Bookings",  value: data.analytics.upcomingBookings,                                      icon: <CalendarDays />, trend: trend.upcomingBookings,  tone: "bg-green-700 text-white" },
-      { title: "Pending Bookings",   value: data.analytics.pendingBookings,                                       icon: <Clock3 />,      trend: trend.pendingBookings,   tone: "bg-amber-500 text-white" },
+      { title: "Pending Bookings",   value: data.analytics.pendingBookings,                                       icon: <Clock3 />,      trend: trend.pendingBookings,   tone: "bg-green-700 text-white" },
       { title: "Cancelled Bookings", value: data.analytics.cancelledBookings,                                     icon: <XCircle />,     trend: trend.cancelledBookings, tone: "bg-red-500 text-white" },
       { title: "Total Earnings",     value: formatCurrency(data.analytics.totalEarnings),                        icon: <DollarSign />,  trend: trend.totalEarnings,     tone: "bg-green-700 text-white" },
       { title: "This Month Earnings",value: formatCurrency(data.analytics.thisMonthEarnings),                    icon: <TrendingUp />,  trend: trend.thisMonthEarnings, tone: "bg-green-700 text-white" },
-      { title: "Average Rating",     value: data.analytics.averageRating ? data.analytics.averageRating.toFixed(1) : "0.0", icon: <Star />, trend: trend.averageRating, tone: "bg-amber-500 text-white" },
+      { title: "Average Rating",     value: data.analytics.averageRating ? data.analytics.averageRating.toFixed(1) : "0.0", icon: <Star />, trend: trend.averageRating, tone: "bg-green-700 text-white" },
       { title: "Total Reviews",      value: data.analytics.totalReviews,                                         icon: <MessageSquare />,trend: trend.totalReviews,     tone: "bg-green-700 text-white" },
     ],
     [data.analytics, trend]
@@ -474,7 +474,7 @@ export default function DashboardPage() {
       )}
 
       {/* ── Stat cards ── */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => (
           <OverviewCard key={card.title} {...card} loading={isLoading} />
         ))}

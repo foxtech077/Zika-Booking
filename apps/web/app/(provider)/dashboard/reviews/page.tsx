@@ -220,7 +220,7 @@ function StatCard({
     <Card className="min-h-[108px]">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-slate-500">{label}</p>
+          <p className="text-[15px] font-medium text-slate-500">{label}</p>
           <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
         </div>
         <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl [&>svg]:h-5 [&>svg]:w-5", tone)}>
@@ -380,10 +380,10 @@ export default function ReviewsPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total Reviews" value={stats.total} icon={<MessageSquare />} tone="bg-slate-100 text-slate-700" />
-        <StatCard label="Average Rating" value={stats.average ? `${stats.average}/5` : "-"} icon={<Star />} tone="bg-amber-50 text-amber-600" />
-        <StatCard label="5-star Reviews" value={stats.fiveStar} icon={<Star />} tone="bg-emerald-50 text-emerald-700" />
-        <StatCard label="Pending Replies" value={stats.pendingReplies} icon={<Clock3 />} tone="bg-green-50 text-green-700" />
+        <StatCard label="Total Reviews" value={stats.total} icon={<MessageSquare />} tone="bg-green-700 text-white" />
+        <StatCard label="Average Rating" value={stats.average ? `${stats.average}/5` : "-"} icon={<Star />} tone="bg-green-700 text-white" />
+        <StatCard label="5-star Reviews" value={stats.fiveStar} icon={<Star />} tone="bg-green-700 text-white" />
+        <StatCard label="Pending Replies" value={stats.pendingReplies} icon={<Clock3 />} tone="bg-green-700 text-white" />
       </div>
 
       <Card>
