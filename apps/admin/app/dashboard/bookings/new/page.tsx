@@ -30,6 +30,7 @@ import {
   Info,
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
+import { paymentApi } from "@/lib/payment-api";
 import { canAccess } from "@/permissions/rbac";
 import { SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -449,6 +450,7 @@ export default function ManualBookingPage() {
   const [linkSent, setLinkSent] = useState(false);
   const [paymentLink, setPaymentLink] = useState<string>("");
 
+  const [isSending, setIsSending] = useState(false);
   // ── Shared state ──────────────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -561,6 +563,9 @@ export default function ManualBookingPage() {
         ...(isAccommodation ? { checkIn, checkOut } : { pickupDatetime: pickup, returnDatetime: returnDt }),
         guests: String(guests),
       };
+      
+    
+
       const res = await listingApi.get("/admin/bookings/availability", { params });
       const d = res.data?.data ?? res.data;
       setAvailStatus(d.available ? "available" : "unavailable");
@@ -1094,3 +1099,4 @@ export default function ManualBookingPage() {
     </div>
   );
 }
+
