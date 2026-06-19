@@ -28,7 +28,7 @@ export async function generateReference(countryCode: string): Promise<string> {
   const result = await prisma.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('booking_seq') AS nextval`;
   const seq = Number(result[0]!.nextval);
   const padded = String(seq).padStart(6, "0");
-  return `ZIKA-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
+  return `KAINOOK-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
 }
 
 import { getEffectiveCommissionRate } from "../services/commission.service.js";
