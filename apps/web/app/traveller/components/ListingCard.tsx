@@ -69,8 +69,8 @@ export const ListingCard: React.FC<ListingCardProps> = ({
       onClick={() => onSelect(listing.id)}
       onMouseEnter={() => onHover?.(listing.id)}
       onMouseLeave={() => onHover?.(null)}
-      className={`group relative bg-white border rounded-3xl overflow-hidden cursor-pointer shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 ${
-        isHovered ? "border-[#0B1E3F] ring-1 ring-[#0B1E3F]/20" : "border-slate-100"
+      className={`group relative bg-white border rounded-3xl overflow-hidden cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 ${
+        isHovered ? "border-[#166534] ring-2 ring-[#166534]/20" : "border-slate-200"
       }`}
     >
       {/* Badges */}
