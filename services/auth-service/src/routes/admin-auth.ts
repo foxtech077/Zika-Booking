@@ -35,48 +35,6 @@ const SESSION_TTL_DAYS = 30;
 
 // ── Middleware: verify intermediate token ─────────────────────────────────────
 
-
-// async function requireIntermediate(
-//   req: FastifyRequest,
-//   reply: FastifyReply
-// ) {
-//   const body = (req.body ?? {}) as {
-//     intermediateToken?: string;
-//   };
-
-//   let token = body.intermediateToken;
-
-//   if (!token) {
-//     token = req.headers["x-intermediate-token"] as string | undefined;
-//   }
-
-//   if (!token) {
-//     return sendError(
-//       reply,
-//       401,
-//       "NO_TOKEN",
-//       "Intermediate token required."
-//     );
-//   }
-
-//   try {
-//     const payload = await verifyIntermediateToken(token);
-
-//     (req as FastifyRequest & {
-//       adminIntermediate: typeof payload;
-//     }).adminIntermediate = payload;
-//   } catch (err) {
-//     req.log.error(err, "Intermediate token verification failed");
-
-//     return sendError(
-//       reply,
-//       401,
-//       "INVALID_TOKEN",
-//       "Intermediate token invalid or expired."
-//     );
-//   }
-// }
-
 async function requireIntermediate(
   req: FastifyRequest,
   reply: FastifyReply
@@ -225,51 +183,62 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid credentials.");
     const { email, password } = parsed.data;
 
-    const admin = await prisma.adminUser.findUnique({ where: { email } });
-    const GENERIC = "Incorrect email or password.";
+    try {
+      const admin = await prisma.adminUser.findUnique({ where: { email } });
+      const GENERIC = "Incorrect email or password.";
 
-    const dummyHash = "$2b$12$invalidhashfortimingprotection000000000000000000000000000";
-    const ok = admin ? await verifyPassword(password, admin.passwordHash) : await verifyPassword(password, dummyHash).then(() => false);
-    if (!admin || !ok) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
+      const dummyHash = "$2b$12$invalidhashfortimingprotection000000000000000000000000000";
+      const ok = admin ? await verifyPassword(password, admin.passwordHash) : await verifyPassword(password, dummyHash).then(() => false);
+      if (!admin || !ok) return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
 
-    // Enforce TOTP 2FA (PRD UC-1.10 and UC-1.11)
-    const intermediateToken = await signIntermediateToken({
-      sub: admin.id,
-      role: admin.role,
-      step: "awaiting_totp",
-    });
-
-    if (admin.totpEnabled) {
-      await writeAudit(admin.id, admin.role, "admin_login_attempt", req);
-      return sendSuccess(reply, 200, {
-        totpRequired: true,
-        setupRequired: false,
-        intermediateToken,
+      // Enforce TOTP 2FA (PRD UC-1.10 and UC-1.11)
+      const intermediateToken = await signIntermediateToken({
+        sub: admin.id,
+        role: admin.role,
+        step: "awaiting_totp",
       });
-    } else {
-      await writeAudit(admin.id, admin.role, "admin_login_attempt_setup_required", req);
-      return sendSuccess(reply, 200, {
-        totpRequired: true,
-        setupRequired: true,
-        intermediateToken,
-      });
+
+      if (admin.totpEnabled) {
+        await writeAudit(admin.id, admin.role, "admin_login_attempt", req);
+        return sendSuccess(reply, 200, {
+          totpRequired: true,
+          setupRequired: false,
+          intermediateToken,
+        });
+      } else {
+        await writeAudit(admin.id, admin.role, "admin_login_attempt_setup_required", req);
+        return sendSuccess(reply, 200, {
+          totpRequired: true,
+          setupRequired: true,
+          intermediateToken,
+        });
+      }
+    } catch {
+      return sendError(reply, 400, "LOGIN_FAILED", "Admin login could not be completed. Please try again.");
     }
   });
 
   // ── POST /admin/auth/totp/setup  (UC-1.10 — first login) ─────────────────
   app.post("/admin/auth/totp/setup", { schema: { tags: ["Admin Auth"], body: { type: "object", required: ["intermediateToken"], properties: { intermediateToken: { type: "string" } } } }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId } = (req as FastifyRequest & { adminIntermediate: { sub: string } }).adminIntermediate;
-    const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
+    try {
+      const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
-    const secret = generateTotpSecret();
-    const otpauthUri = buildOtpAuthUri(admin.email, secret);
-    const qrCode = await generateQrCode(otpauthUri);
+      const secret = generateTotpSecret();
+      const otpauthUri = buildOtpAuthUri(admin.email, secret);
+      const qrCode = await generateQrCode(otpauthUri);
 
-    // Store temp secret in Redis until confirmed
-    const { getRedis } = await import("../lib/redis");
-    await getRedis().set(`totp:pending:${adminId}`, secret, "EX", 600);
+      // Store temp secret in Redis until confirmed
+      const { getRedis } = await import("../lib/redis");
+      await getRedis().set(`totp:pending:${adminId}`, secret, "EX", 600);
 
-    return sendSuccess(reply, 200, { qrCodeDataUrl: qrCode, secret, otpauthUri });
+      return sendSuccess(reply, 200, { qrCodeDataUrl: qrCode, secret, otpauthUri });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
+      }
+      return sendError(reply, 400, "TOTP_SETUP_FAILED", "TOTP setup could not be initiated. Please try again.");
+    }
   });
 
   // ── POST /admin/auth/totp/confirm  (UC-1.10 step 7 onward) ───────────────
@@ -287,19 +256,23 @@ export async function adminAuthRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "INVALID_CODE", "Invalid code. Please check your authenticator app and try again.");
     }
 
-    const { plain: recoveryCodes, hashes } = generateRecoveryCodes();
-    const encryptedSecret = encryptTotpSecret(pendingSecret);
+    try {
+      const { plain: recoveryCodes, hashes } = generateRecoveryCodes();
+      const encryptedSecret = encryptTotpSecret(pendingSecret);
 
-    await prisma.$transaction([
-      prisma.adminUser.update({ where: { id: adminId }, data: { totpEnabled: true, totpSecretEncrypted: encryptedSecret } }),
-      prisma.adminRecoveryCode.createMany({ data: hashes.map((h) => ({ adminUserId: adminId, codeHash: h })) }),
-    ]);
-    await getRedis().del(`totp:pending:${adminId}`);
+      await prisma.$transaction([
+        prisma.adminUser.update({ where: { id: adminId }, data: { totpEnabled: true, totpSecretEncrypted: encryptedSecret } }),
+        prisma.adminRecoveryCode.createMany({ data: hashes.map((h) => ({ adminUserId: adminId, codeHash: h })) }),
+      ]);
+      await getRedis().del(`totp:pending:${adminId}`);
 
-    const sessionToken = await issueAdminSession(adminId, role);
-    await writeAudit(adminId, role, "totp_setup_completed", req);
+      const sessionToken = await issueAdminSession(adminId, role);
+      await writeAudit(adminId, role, "totp_setup_completed", req);
 
-    return sendSuccess(reply, 200, { message: "Two-factor authentication has been set up.", recoveryCodes, sessionToken });
+      return sendSuccess(reply, 200, { message: "Two-factor authentication has been set up.", recoveryCodes, sessionToken });
+    } catch {
+      return sendError(reply, 400, "TOTP_CONFIRM_FAILED", "TOTP setup could not be completed. Please try again.");
+    }
   });
 
   // ── POST /admin/auth/totp/verify  (UC-1.11 step 5) ───────────────────────
@@ -310,38 +283,45 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
 
     // Check for recovery code usage
-    const body = req.body as { code?: string; recoveryCode?: string; intermediateToken: string };
-    if (body.recoveryCode) {
-      return handleRecoveryCode(req, reply, adminId, role, body.recoveryCode);
+    try {
+      const body = req.body as { code?: string; recoveryCode?: string; intermediateToken: string };
+      if (body.recoveryCode) {
+        return handleRecoveryCode(req, reply, adminId, role, body.recoveryCode);
+      }
+
+      const parsed = totpCodeSchema.safeParse(req.body);
+      if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid code format.");
+      const { code } = parsed.data;
+
+      // Lockout check
+      const locked = await checkTotpAttempts(adminId);
+      if (locked) {
+        await writeAudit(adminId, role, "totp_locked", req);
+        return sendError(reply, 429, "TOTP_LOCKED", "Too many failed attempts. Please wait 15 minutes.");
+      }
+
+      const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
+      if (!admin.totpSecretEncrypted) return sendError(reply, 400, "TOTP_NOT_SETUP", "TOTP not configured.");
+
+      const secret = decryptTotpSecret(admin.totpSecretEncrypted);
+      if (!verifyTotpCode(secret, code)) {
+        return sendError(reply, 400, "INVALID_CODE", "Invalid verification code. Please try again.");
+      }
+
+      // Clear failed-attempt counter
+      const { getRedis } = await import("../lib/redis");
+      await getRedis().del(`totp:fail:${adminId}`);
+
+      const sessionToken = await issueAdminSession(adminId, role);
+      await writeAudit(adminId, role, "admin_login", req);
+
+      return sendSuccess(reply, 200, { sessionToken });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
+      }
+      return sendError(reply, 400, "TOTP_VERIFY_FAILED", "TOTP verification could not be completed. Please try again.");
     }
-
-    const parsed = totpCodeSchema.safeParse(req.body);
-    if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid code format.");
-    const { code } = parsed.data;
-
-    // Lockout check
-    const locked = await checkTotpAttempts(adminId);
-    if (locked) {
-      await writeAudit(adminId, role, "totp_locked", req);
-      return sendError(reply, 429, "TOTP_LOCKED", "Too many failed attempts. Please wait 15 minutes.");
-    }
-
-    const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
-    if (!admin.totpSecretEncrypted) return sendError(reply, 400, "TOTP_NOT_SETUP", "TOTP not configured.");
-
-    const secret = decryptTotpSecret(admin.totpSecretEncrypted);
-    if (!verifyTotpCode(secret, code)) {
-      return sendError(reply, 400, "INVALID_CODE", "Invalid verification code. Please try again.");
-    }
-
-    // Clear failed-attempt counter
-    const { getRedis } = await import("../lib/redis");
-    await getRedis().del(`totp:fail:${adminId}`);
-
-    const sessionToken = await issueAdminSession(adminId, role);
-    await writeAudit(adminId, role, "admin_login", req);
-
-    return sendSuccess(reply, 200, { sessionToken });
   });
 
   // ── Recovery code handler ─────────────────────────────────────────────────
@@ -368,18 +348,25 @@ export async function adminAuthRoutes(app: FastifyInstance) {
   // ── POST /admin/auth/webauthn/challenge  (UC-1.12 step 2) ────────────────
   app.post("/admin/auth/webauthn/challenge", { schema: { tags: ["Admin Auth"] }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId } = (req as FastifyRequest & { adminIntermediate: { sub: string } }).adminIntermediate;
-    const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
+    try {
+      const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
 
 
 console.log("admin.fido2Credential =", admin.fido2Credential);
 
 
-    if (!admin.fido2Credential) {
-      return sendError(reply, 400, "NO_FIDO2", "No hardware key registered for this account.");
+      if (!admin.fido2Credential) {
+        return sendError(reply, 400, "NO_FIDO2", "No hardware key registered for this account.");
+      }
+      const cred = admin.fido2Credential as { id: string; publicKey: string; counter: number };
+      const options = await waStartAuthentication(adminId, cred.id, cred.publicKey);
+      return sendSuccess(reply, 200, { options });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
+      }
+      return sendError(reply, 400, "CHALLENGE_FAILED", "WebAuthn challenge could not be generated. Please try again.");
     }
-    const cred = admin.fido2Credential as { id: string; publicKey: string; counter: number };
-    const options = await waStartAuthentication(adminId, cred.id, cred.publicKey);
-    return sendSuccess(reply, 200, { options });
   });
 
   // ── POST /admin/auth/webauthn/verify  (UC-1.12 step 6) ───────────────────
@@ -414,9 +401,16 @@ console.log("admin.fido2Credential =", admin.fido2Credential);
   // ── POST /admin/auth/webauthn/register  (UC-1.12 A3) ─────────────────────
   app.post("/admin/auth/webauthn/register", { schema: { tags: ["Admin Auth"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const adminId = (req as FastifyRequest & { adminId: string }).adminId;
-    const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
-    const options = await waStartRegistration(adminId, admin.email);
-    return sendSuccess(reply, 200, { options });
+    try {
+      const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
+      const options = await waStartRegistration(adminId, admin.email);
+      return sendSuccess(reply, 200, { options });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
+      }
+      return sendError(reply, 400, "WEBAUTHN_REGISTER_FAILED", "WebAuthn registration could not be initiated. Please try again.");
+    }
   });
 
   // ── POST /admin/auth/webauthn/register/complete  (UC-1.12 A3) ─────────────────────
@@ -433,16 +427,23 @@ console.log("admin.fido2Credential =", admin.fido2Credential);
     if (!result.verified || !result.registrationInfo) return sendError(reply, 400, "WEBAUTHN_FAILED", "Verification failed.");
 
     const { credential } = result.registrationInfo;
-    await prisma.adminUser.update({
-      where: { id: adminId },
-      data: {
-        fido2Credential: {
-          id: credential.id,
-          publicKey: isoBase64URL.fromBuffer(credential.publicKey),
-          counter: credential.counter,
+    try {
+      await prisma.adminUser.update({
+        where: { id: adminId },
+        data: {
+          fido2Credential: {
+            id: credential.id,
+            publicKey: isoBase64URL.fromBuffer(credential.publicKey),
+            counter: credential.counter,
+          },
         },
-      },
-    });
+      });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
+      }
+      return sendError(reply, 400, "WEBAUTHN_SAVE_FAILED", "Security key could not be saved. Please try registering again.");
+    }
     return sendSuccess(reply, 200, { message: "Security key registered successfully." });
   });
 
@@ -535,29 +536,37 @@ console.log("admin.fido2Credential =", admin.fido2Credential);
 // );
   // ── POST /admin/auth/logout ───────────────────────────────────────────────
   app.post("/admin/auth/logout", { schema: { tags: ["Admin Auth"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const token = req.headers.authorization?.slice(7) ?? "";
-    await prisma.adminSession.updateMany({ where: { tokenHash: hashToken(token) }, data: { revoked: true } });
-    return sendSuccess(reply, 200, { message: "Signed out." });
+    try {
+      const token = req.headers.authorization?.slice(7) ?? "";
+      await prisma.adminSession.updateMany({ where: { tokenHash: hashToken(token) }, data: { revoked: true } });
+      return sendSuccess(reply, 200, { message: "Signed out." });
+    } catch {
+      return sendError(reply, 400, "LOGOUT_FAILED", "Sign-out could not be completed. Please try again.");
+    }
   });
 
   // ── GET /admin/auth/me — return current admin profile ────────────────────
   app.get("/admin/auth/me", { schema: { tags: ["Admin Auth"] }, preHandler: [requireAdminSession] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const adminId = (req as FastifyRequest & { adminId: string }).adminId;
-    const admin = await prisma.adminUser.findUnique({
-      where: { id: adminId },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        countryScope: true,
-        totpEnabled: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-    if (!admin) return sendError(reply, 404, "NOT_FOUND", "Admin user not found.");
-    return sendSuccess(reply, 200, { user: admin });
+    try {
+      const adminId = (req as FastifyRequest & { adminId: string }).adminId;
+      const admin = await prisma.adminUser.findUnique({
+        where: { id: adminId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          countryScope: true,
+          totpEnabled: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+      if (!admin) return sendError(reply, 404, "NOT_FOUND", "Admin user not found.");
+      return sendSuccess(reply, 200, { user: admin });
+    } catch {
+      return sendError(reply, 400, "FETCH_FAILED", "Admin profile could not be retrieved. Please try again.");
+    }
   });
 }
 
@@ -618,27 +627,31 @@ export async function adminUserRoutes(app: FastifyInstance) {
     }
     if (and.length > 0) where.AND = and;
 
-    const [total, logs] = await Promise.all([
-      prisma.auditLog.count({ where }),
-      prisma.auditLog.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { timestamp: "desc" },
-        include: {
-          admin: { select: { name: true, email: true } },
-        },
-      }),
-    ]);
+    try {
+      const [total, logs] = await Promise.all([
+        prisma.auditLog.count({ where }),
+        prisma.auditLog.findMany({
+          where,
+          skip,
+          take,
+          orderBy: { timestamp: "desc" },
+          include: {
+            admin: { select: { name: true, email: true } },
+          },
+        }),
+      ]);
 
-    // Flatten admin name into response
-    const enriched = logs.map(({ admin, ...l }) => ({
-      ...l,
-      adminName:  admin.name,
-      adminEmail: admin.email,
-    }));
+      // Flatten admin name into response
+      const enriched = logs.map(({ admin, ...l }) => ({
+        ...l,
+        adminName:  admin.name,
+        adminEmail: admin.email,
+      }));
 
-    return sendSuccess(reply, 200, { logs: enriched, total, page: parseInt(page, 10), limit: take });
+      return sendSuccess(reply, 200, { logs: enriched, total, page: parseInt(page, 10), limit: take });
+    } catch {
+      return sendError(reply, 400, "FETCH_FAILED", "Audit logs could not be retrieved. Please try again.");
+    }
   });
 
   // ── GET /admin/audit-logs/export — CSV export (Super Admin only) ───────────
@@ -656,68 +669,72 @@ export async function adminUserRoutes(app: FastifyInstance) {
       return sendError(reply, 403, "FORBIDDEN", "Only Super Admins can export audit logs.");
     }
 
-    // Fetch all rows — full export, no filters, no pagination
-    const logs = await prisma.auditLog.findMany({
-      orderBy: { timestamp: "desc" },
-      include: {
-        admin: { select: { name: true, email: true } },
-      },
-    });
+    try {
+      // Fetch all rows — full export, no filters, no pagination
+      const logs = await prisma.auditLog.findMany({
+        orderBy: { timestamp: "desc" },
+        include: {
+          admin: { select: { name: true, email: true } },
+        },
+      });
 
-    // Build CSV
-    const CSV_HEADERS = [
-      "id",
-      "timestamp",
-      "admin_id",
-      "admin_name",
-      "admin_email",
-      "role",
-      "action",
-      "target_type",
-      "target_id",
-      "old_value",
-      "new_value",
-      "ip_address",
-    ];
+      // Build CSV
+      const CSV_HEADERS = [
+        "id",
+        "timestamp",
+        "admin_id",
+        "admin_name",
+        "admin_email",
+        "role",
+        "action",
+        "target_type",
+        "target_id",
+        "old_value",
+        "new_value",
+        "ip_address",
+      ];
 
-    function escapeCsv(val: string | null | undefined): string {
-      if (val === null || val === undefined) return "";
-      const str = String(val);
-      // Wrap in quotes if the value contains a comma, quote, or newline
-      if (str.includes(",") || str.includes('"') || str.includes("\n")) {
-        return `"${str.replace(/"/g, '""')}"`;
+      function escapeCsv(val: string | null | undefined): string {
+        if (val === null || val === undefined) return "";
+        const str = String(val);
+        // Wrap in quotes if the value contains a comma, quote, or newline
+        if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
       }
-      return str;
+
+      const rows = logs.map(({ admin, ...l }) =>
+        [
+          l.id,
+          l.timestamp.toISOString(),
+          l.adminId,
+          admin.name,
+          admin.email,
+          l.role,
+          l.action,
+          l.targetType ?? "",
+          l.targetId   ?? "",
+          l.oldValue   ?? "",
+          l.newValue   ?? "",
+          l.ipAddress,
+        ]
+          .map(escapeCsv)
+          .join(",")
+      );
+
+      const csv = [CSV_HEADERS.join(","), ...rows].join("\n");
+
+      const filename = `audit-log-export-${new Date().toISOString().slice(0, 10)}.csv`;
+
+      reply
+        .header("Content-Type", "text/csv; charset=utf-8")
+        .header("Content-Disposition", `attachment; filename="${filename}"`)
+        .header("Cache-Control", "no-store")
+        .send(csv);
+    } catch {
+      return sendError(reply, 400, "EXPORT_FAILED", "Audit log export could not be completed. Please try again.");
     }
-
-    const rows = logs.map(({ admin, ...l }) =>
-      [
-        l.id,
-        l.timestamp.toISOString(),
-        l.adminId,
-        admin.name,
-        admin.email,
-        l.role,
-        l.action,
-        l.targetType ?? "",
-        l.targetId   ?? "",
-        l.oldValue   ?? "",
-        l.newValue   ?? "",
-        l.ipAddress,
-      ]
-        .map(escapeCsv)
-        .join(",")
-    );
-
-    const csv = [CSV_HEADERS.join(","), ...rows].join("\n");
-
-    const filename = `audit-log-export-${new Date().toISOString().slice(0, 10)}.csv`;
-
-    reply
-      .header("Content-Type", "text/csv; charset=utf-8")
-      .header("Content-Disposition", `attachment; filename="${filename}"`)
-      .header("Cache-Control", "no-store")
-      .send(csv);
   });
 
   // ── GET /admin/users ──────────────────────────────────────────────────────
@@ -751,33 +768,37 @@ export async function adminUserRoutes(app: FastifyInstance) {
       where.AND = and;
     }
 
-    const [total, users] = await Promise.all([
-      prisma.user.count({ where }),
-      prisma.user.findMany({
-        where,
-        skip,
-        take,
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          status: true,
-          userType: true,
-          emailVerified: true,
-          oauthProvider: true,
-          currentTier: true,
-          loyaltyPoints: true,
-          businessName: true,
-          country: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: { createdAt: "desc" },
-      }),
-    ]);
+    try {
+      const [total, users] = await Promise.all([
+        prisma.user.count({ where }),
+        prisma.user.findMany({
+          where,
+          skip,
+          take,
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            status: true,
+            userType: true,
+            emailVerified: true,
+            oauthProvider: true,
+            currentTier: true,
+            loyaltyPoints: true,
+            businessName: true,
+            country: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, { users, total, page: parseInt(page, 10), limit: take });
+      return sendSuccess(reply, 200, { users, total, page: parseInt(page, 10), limit: take });
+    } catch {
+      return sendError(reply, 400, "FETCH_FAILED", "Users could not be retrieved. Please try again.");
+    }
   });
 
   // ── PATCH /admin/users/:id/suspend ───────────────────────────────────────
@@ -789,28 +810,35 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
     if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Suspension reason is required.");
 
-    const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
-    const target = await prisma.user.findUnique({ where: { id: targetId } });
-    if (!target) return sendError(reply, 404, "NOT_FOUND", "User not found.");
+    try {
+      const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
+      const target = await prisma.user.findUnique({ where: { id: targetId } });
+      if (!target) return sendError(reply, 404, "NOT_FOUND", "User not found.");
 
-    // Cannot suspend a super_admin
-    const targetAdmin = await prisma.adminUser.findUnique({ where: { email: target.email } });
-    if (targetAdmin?.role === "super_admin") return sendError(reply, 403, "FORBIDDEN", "You cannot suspend or ban a Super Admin account.");
+      // Cannot suspend a super_admin
+      const targetAdmin = await prisma.adminUser.findUnique({ where: { email: target.email } });
+      if (targetAdmin?.role === "super_admin") return sendError(reply, 403, "FORBIDDEN", "You cannot suspend or ban a Super Admin account.");
 
-    const oldStatus = target.status;
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: targetId }, data: { status: "suspended" } }),
-      prisma.session.updateMany({ where: { userId: targetId }, data: { revoked: true } }),
-    ]);
+      const oldStatus = target.status;
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: targetId }, data: { status: "suspended" } }),
+        prisma.session.updateMany({ where: { userId: targetId }, data: { revoked: true } }),
+      ]);
 
-    await writeAudit(adminId, adminRole, "account_suspended", req, {
-      targetType: "user", targetId, oldValue: oldStatus, newValue: "suspended", reason,
-    });
+      await writeAudit(adminId, adminRole, "account_suspended", req, {
+        targetType: "user", targetId, oldValue: oldStatus, newValue: "suspended", reason,
+      });
 
-    const { sendAccountSuspendedEmail } = await import("../lib/email");
-    await sendAccountSuspendedEmail(target.email).catch(() => null);
+      const { sendAccountSuspendedEmail } = await import("../lib/email");
+      await sendAccountSuspendedEmail(target.email).catch(() => null);
 
-    return sendSuccess(reply, 200, { message: "Account suspended." });
+      return sendSuccess(reply, 200, { message: "Account suspended." });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
+      }
+      return sendError(reply, 400, "SUSPEND_FAILED", "Account could not be suspended. Please try again.");
+    }
   });
 
   // ── PATCH /admin/users/:id/reinstate ─────────────────────────────────────
@@ -819,20 +847,24 @@ export async function adminUserRoutes(app: FastifyInstance) {
     const adminRole = (req as FastifyRequest & { adminRole: string }).adminRole;
     const { id: targetId } = req.params as { id: string };
 
-    const target = await prisma.user.findUnique({ where: { id: targetId } });
-    if (!target) return sendError(reply, 404, "NOT_FOUND", "User not found.");
-    if (target.status !== "suspended") return sendError(reply, 409, "INVALID_STATUS", "User is not suspended.");
+    try {
+      const target = await prisma.user.findUnique({ where: { id: targetId } });
+      if (!target) return sendError(reply, 404, "NOT_FOUND", "User not found.");
+      if (target.status !== "suspended") return sendError(reply, 409, "INVALID_STATUS", "User is not suspended.");
 
-    await prisma.user.update({ where: { id: targetId }, data: { status: "active" } });
+      await prisma.user.update({ where: { id: targetId }, data: { status: "active" } });
 
-    await writeAudit(adminId, adminRole, "account_reinstated", req, {
-      targetType: "user", targetId, oldValue: "suspended", newValue: "active",
-    });
+      await writeAudit(adminId, adminRole, "account_reinstated", req, {
+        targetType: "user", targetId, oldValue: "suspended", newValue: "active",
+      });
 
-    const { sendAccountReinstatedEmail } = await import("../lib/email");
-    await sendAccountReinstatedEmail(target.email).catch(() => null);
+      const { sendAccountReinstatedEmail } = await import("../lib/email");
+      await sendAccountReinstatedEmail(target.email).catch(() => null);
 
-    return sendSuccess(reply, 200, { message: "Account reinstated." });
+      return sendSuccess(reply, 200, { message: "Account reinstated." });
+    } catch {
+      return sendError(reply, 400, "REINSTATE_FAILED", "Account could not be reinstated. Please try again.");
+    }
   });
 
   // ── PATCH /admin/users/:id/approve ───────────────────────────────────────
@@ -878,23 +910,27 @@ export async function adminUserRoutes(app: FastifyInstance) {
 
     if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Ban reason is required.");
 
-    const target = await prisma.user.findUnique({ where: { id: targetId } });
-    if (!target) return sendError(reply, 404, "NOT_FOUND", "User not found.");
+    try {
+      const target = await prisma.user.findUnique({ where: { id: targetId } });
+      if (!target) return sendError(reply, 404, "NOT_FOUND", "User not found.");
 
-    const targetAdmin = await prisma.adminUser.findUnique({ where: { email: target.email } });
-    if (targetAdmin?.role === "super_admin") return sendError(reply, 403, "FORBIDDEN", "You cannot ban a Super Admin account.");
+      const targetAdmin = await prisma.adminUser.findUnique({ where: { email: target.email } });
+      if (targetAdmin?.role === "super_admin") return sendError(reply, 403, "FORBIDDEN", "You cannot ban a Super Admin account.");
 
-    const oldStatus = target.status;
-    await prisma.$transaction([
-      prisma.user.update({ where: { id: targetId }, data: { status: "banned" } }),
-      prisma.session.updateMany({ where: { userId: targetId }, data: { revoked: true } }),
-    ]);
+      const oldStatus = target.status;
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: targetId }, data: { status: "banned" } }),
+        prisma.session.updateMany({ where: { userId: targetId }, data: { revoked: true } }),
+      ]);
 
-    await writeAudit(adminId, adminRole, "account_banned", req, {
-      targetType: "user", targetId, oldValue: oldStatus, newValue: "banned", reason,
-    });
+      await writeAudit(adminId, adminRole, "account_banned", req, {
+        targetType: "user", targetId, oldValue: oldStatus, newValue: "banned", reason,
+      });
 
-    return sendSuccess(reply, 200, { message: "Account permanently banned." });
+      return sendSuccess(reply, 200, { message: "Account permanently banned." });
+    } catch {
+      return sendError(reply, 400, "BAN_FAILED", "Account could not be banned. Please try again.");
+    }
   });
 }
 
@@ -936,27 +972,31 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
       ],
     };
 
-    const [total, operators] = await Promise.all([
-      prisma.adminUser.count({ where }),
-      prisma.adminUser.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          countryScope: true,
-          totpEnabled: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-    ]);
+    try {
+      const [total, operators] = await Promise.all([
+        prisma.adminUser.count({ where }),
+        prisma.adminUser.findMany({
+          where,
+          skip,
+          take,
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            countryScope: true,
+            totpEnabled: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        }),
+      ]);
 
-    return sendSuccess(reply, 200, { operators, total, page: parseInt(page, 10), limit: take });
+      return sendSuccess(reply, 200, { operators, total, page: parseInt(page, 10), limit: take });
+    } catch {
+      return sendError(reply, 400, "FETCH_FAILED", "Operators could not be retrieved. Please try again.");
+    }
   });
 
   // ── POST /admin/operators — Create a new admin user ─────────────────────────
@@ -1021,38 +1061,42 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
     const existing = await prisma.adminUser.findUnique({ where: { email } });
     if (existing) return sendError(reply, 409, "EMAIL_TAKEN", "An admin with this email already exists.");
 
-    const passwordHash = await hashPassword(password);
+    try {
+      const passwordHash = await hashPassword(password);
 
-    const newAdmin = await prisma.adminUser.create({
-      data: {
-        name,
-        email,
-        passwordHash,
-        role: role as PrismaAdminRole,
-        countryScope: countryScope ?? [],
-        totpEnabled: false,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        countryScope: true,
-        totpEnabled: true,
-        createdAt: true,
-      },
-    });
+      const newAdmin = await prisma.adminUser.create({
+        data: {
+          name,
+          email,
+          passwordHash,
+          role: role as PrismaAdminRole,
+          countryScope: countryScope ?? [],
+          totpEnabled: false,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          countryScope: true,
+          totpEnabled: true,
+          createdAt: true,
+        },
+      });
 
-    await writeAudit(adminId, adminRole, "admin_operator_created", req, {
-      targetType: "admin_user",
-      targetId: newAdmin.id,
-      newValue: JSON.stringify({
-        roleAssigned: role,
-        countryScope: countryScope ?? [],
-      }),
-    });
+      await writeAudit(adminId, adminRole, "admin_operator_created", req, {
+        targetType: "admin_user",
+        targetId: newAdmin.id,
+        newValue: JSON.stringify({
+          roleAssigned: role,
+          countryScope: countryScope ?? [],
+        }),
+      });
 
-    return sendSuccess(reply, 201, { operator: newAdmin, message: `Admin account created for ${email}.` });
+      return sendSuccess(reply, 201, { operator: newAdmin, message: `Admin account created for ${email}.` });
+    } catch {
+      return sendError(reply, 400, "CREATE_FAILED", "Admin account could not be created. Please try again.");
+    }
   });
 
   // ── DELETE /admin/operators/:id — Delete an admin user ──────────────────────
@@ -1074,28 +1118,35 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
     // Revoke all sessions
     // await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
     // await prisma.adminUser.delete({ where: { id: targetId } });
-    await prisma.$transaction([
-  prisma.adminSession.updateMany({
-    where: { adminUserId: targetId },
-    data: { revoked: true }
-  }),
+    try {
+      await prisma.$transaction([
+        prisma.adminSession.updateMany({
+          where: { adminUserId: targetId },
+          data: { revoked: true }
+        }),
 
-  prisma.auditLog.deleteMany({
-    where: { adminId: targetId }
-  }),
+        prisma.auditLog.deleteMany({
+          where: { adminId: targetId }
+        }),
 
-  prisma.adminUser.delete({
-    where: { id: targetId }
-  })
-]);
+        prisma.adminUser.delete({
+          where: { id: targetId }
+        })
+      ]);
 
-    await writeAudit(adminId, adminRole, "admin_operator_deleted", req, {
-      targetType: "admin_user",
-      targetId,
-      oldValue: JSON.stringify({ email: target.email, role: target.role }),
-    });
+      await writeAudit(adminId, adminRole, "admin_operator_deleted", req, {
+        targetType: "admin_user",
+        targetId,
+        oldValue: JSON.stringify({ email: target.email, role: target.role }),
+      });
 
-    return sendSuccess(reply, 200, { message: `Admin account ${target.email} deleted.` });
+      return sendSuccess(reply, 200, { message: `Admin account ${target.email} deleted.` });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
+      }
+      return sendError(reply, 400, "DELETE_FAILED", "Admin account could not be deleted. Please try again.");
+    }
   });
 
   // ── PATCH /admin/operators/:id/role — Change an admin's role ────────────────
@@ -1112,27 +1163,34 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
       return sendError(reply, 422, "VALIDATION_ERROR", "Invalid role.");
     }
 
-    const target = await prisma.adminUser.findUnique({ where: { id: targetId } });
-    if (!target) return sendError(reply, 404, "NOT_FOUND", "Admin user not found.");
-    if (target.role === "super_admin") return sendError(reply, 403, "FORBIDDEN", "Cannot change Super Admin role.");
+    try {
+      const target = await prisma.adminUser.findUnique({ where: { id: targetId } });
+      if (!target) return sendError(reply, 404, "NOT_FOUND", "Admin user not found.");
+      if (target.role === "super_admin") return sendError(reply, 403, "FORBIDDEN", "Cannot change Super Admin role.");
 
-    const updated = await prisma.adminUser.update({
-      where: { id: targetId },
-      data: { role: role as PrismaAdminRole, countryScope: countryScope ?? target.countryScope },
-      select: { id: true, name: true, email: true, role: true, countryScope: true },
-    });
+      const updated = await prisma.adminUser.update({
+        where: { id: targetId },
+        data: { role: role as PrismaAdminRole, countryScope: countryScope ?? target.countryScope },
+        select: { id: true, name: true, email: true, role: true, countryScope: true },
+      });
 
-    // Revoke existing sessions so they must re-login with new role
-    await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
+      // Revoke existing sessions so they must re-login with new role
+      await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
 
-    await writeAudit(adminId, adminRole, "admin_role_changed", req, {
-      targetType: "admin_user",
-      targetId,
-      oldValue: JSON.stringify({ role: target.role }),
-      newValue: JSON.stringify({ role }),
-    });
+      await writeAudit(adminId, adminRole, "admin_role_changed", req, {
+        targetType: "admin_user",
+        targetId,
+        oldValue: JSON.stringify({ role: target.role }),
+        newValue: JSON.stringify({ role }),
+      });
 
-    return sendSuccess(reply, 200, { operator: updated, message: "Role updated. Their session has been revoked." });
+      return sendSuccess(reply, 200, { operator: updated, message: "Role updated. Their session has been revoked." });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
+      }
+      return sendError(reply, 400, "UPDATE_FAILED", "Admin role could not be updated. Please try again.");
+    }
   });
 }
 

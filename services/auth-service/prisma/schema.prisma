@@ -125,6 +125,7 @@ model User {
   sessions           Session[]
   emailLogs          EmailLog[]
   accreditation      Accreditation?
+  notifications      Notification[]
 
   @@unique([oauthProvider, oauthSub])
   @@index([email])
@@ -297,5 +298,25 @@ model Accreditation {
   updatedAt       DateTime            @updatedAt
 
   @@index([status])
+  @@schema("auth")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Notifications
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   @db.VarChar(50)
+  title     String   @db.VarChar(100)
+  body      String   @db.Text
+  isRead    Boolean  @default(false)
+  data      Json?    @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
   @@schema("auth")
 }

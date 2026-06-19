@@ -2301,12 +2301,17 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const admin = req.admin as AdminRequest;
     const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
+    const isCountryManager = admin.adminRole === "country_manager";
+    const listingFilter = isCountryManager ? { country: { in: admin.countryScope } } : {};
+    
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
 
-    const where: any = {
+    const where = {
       AND: [
+        listingFilter,
         status ? { status } : {},
         q ? { OR: [{ guestId: { contains: q } }, { bookingId: { contains: q } }] } : {},
       ],
@@ -2315,9 +2320,11 @@ return { actioned: true };
     const [total, conversations] = await Promise.all([
       prisma.conversation.count({ where }),
       prisma.conversation.findMany({
-        where, skip, take,
+        where,
+        skip,
+        take,
         orderBy: { updatedAt: "desc" },
-        include: { messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+        include: { messages: { orderBy: { createdAt: "desc" }, take: 1 }, listing: { select: { country: true } } },
       }),
     ]);
 
@@ -2400,15 +2407,22 @@ return { actioned: true };
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
-
-    const convo = await prisma.conversation.findUnique({ where: { id } });
+    const admin = req.admin as AdminRequest;
+    const convo = await prisma.conversation.findUnique({
+      where: { id },
+      include: { listing: { select: { country: true } } },
+    });
     if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
-
+    if (admin.adminRole === "country_manager") {
+      const country = convo.listing?.country;
+      if (!country || !admin.countryScope.includes(country)) {
+        return sendError(reply, 403, "FORBIDDEN", "Conversation out of scope.");
+      }
+    }
     const messages = await prisma.message.findMany({
       where: { conversationId: id },
       orderBy: { createdAt: "asc" },
     });
-
     return sendSuccess(reply, 200, {
       conversation: {
         id: convo.id,
@@ -2428,6 +2442,8 @@ return { actioned: true };
         createdAt: m.createdAt.toISOString(),
       })),
     });
+
+
   });
 
   // ── GET /admin/ical-feeds ─────────────────────────────────────────────────

@@ -55,6 +55,8 @@ model Payment {
   failureCode         String?
   failureMessage      String?
   capturedAt          DateTime?
+  voucherGenerated    Boolean         @default(false)
+  confirmationEmailsSent Boolean      @default(false)
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   refund              Refund?
