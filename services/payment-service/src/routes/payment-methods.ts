@@ -72,23 +72,27 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   }, }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req as GuestRequest;
 
-    const methods = await prisma.paymentMethod.findMany({
-      where: { userId, isDeleted: false },
-      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
-      select: {
-        id: true,
-        type: true,
-        paymentProvider: true,
-        cardBrand: true,
-        cardLast4: true,
-        cardExpMonth: true,
-        cardExpYear: true,
-        mobileNumberMasked: true,
-        isDefault: true,
-      },
-    });
+    try {
+      const methods = await prisma.paymentMethod.findMany({
+        where: { userId, isDeleted: false },
+        orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
+        select: {
+          id: true,
+          type: true,
+          paymentProvider: true,
+          cardBrand: true,
+          cardLast4: true,
+          cardExpMonth: true,
+          cardExpYear: true,
+          mobileNumberMasked: true,
+          isDefault: true,
+        },
+      });
 
-    return sendSuccess(reply, 200, { paymentMethods: methods.map(formatMethod) });
+      return sendSuccess(reply, 200, { paymentMethods: methods.map(formatMethod) });
+    } catch (err) {
+      return sendError(reply, 400, "DATABASE_ERROR", (err as Error).message);
+    }
   });
 
 
@@ -155,7 +159,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
       } catch (err) {
         return sendError(
           reply,
-          500,
+          400,
           "SETUP_INTENT_FAILED",
           (err as Error).message
         );
@@ -188,101 +192,105 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
     const { paymentMethodId } = parsed.data;
 
-    const customerAccount = await prisma.customerAccount.findUnique({
-      where: {
-        userId_paymentProvider: {
-          userId,
-          paymentProvider: "stripe",
-        },
-      },
-    });
-
-    if (!customerAccount) {
-      return sendError(
-        reply,
-        404,
-        "CUSTOMER_NOT_FOUND",
-        "Stripe customer account not found."
-      );
-    }
-
     try {
-      await stripe.paymentMethods.attach(
-        paymentMethodId,
-        {
-          customer: customerAccount.providerCustomerId,
-        }
-      );
-    } catch (err: any) {
-      if (err.code !== "payment_method_unexpected_state") {
-        throw err;
-      }
-    }
-
-    // Retrieve the Stripe PM to get card details
-    let pm: Awaited<ReturnType<typeof stripe.paymentMethods.retrieve>>;
-    try {
-      pm = await stripe.paymentMethods.retrieve(paymentMethodId);
-    } catch (err) {
-      return sendError(reply, 422, "INVALID_PAYMENT_METHOD", `Could not retrieve payment method: ${(err as Error).message}`);
-    }
-
-    const card = pm.card;
-    if (!card) {
-      return sendError(reply, 422, "UNSUPPORTED_PM_TYPE", "Only card payment methods are supported via this endpoint.");
-    }
-
-    // Check if this is the user's first saved method (to set as default)
-    const existingCount = await prisma.paymentMethod.count({
-      where: { userId, isDeleted: false },
-    });
-
-    const isDefault = existingCount === 0;
-
-    if (isDefault) {
-      await stripe.customers.update(
-        customerAccount.providerCustomerId,
-        {
-          invoice_settings: {
-            default_payment_method: paymentMethodId,
+      const customerAccount = await prisma.customerAccount.findUnique({
+        where: {
+          userId_paymentProvider: {
+            userId,
+            paymentProvider: "stripe",
           },
+        },
+      });
+
+      if (!customerAccount) {
+        return sendError(
+          reply,
+          404,
+          "CUSTOMER_NOT_FOUND",
+          "Stripe customer account not found."
+        );
+      }
+
+      try {
+        await stripe.paymentMethods.attach(
+          paymentMethodId,
+          {
+            customer: customerAccount.providerCustomerId,
+          }
+        );
+      } catch (err: any) {
+        if (err.code !== "payment_method_unexpected_state") {
+          throw err;
         }
-      );
-    }
+      }
 
-    // Upsert by providerPmId — if the same card was added before, update it
-    const existing = await prisma.paymentMethod.findFirst({
-      where: { userId, providerPmId: paymentMethodId, isDeleted: false },
-    });
+      // Retrieve the Stripe PM to get card details
+      let pm: Awaited<ReturnType<typeof stripe.paymentMethods.retrieve>>;
+      try {
+        pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+      } catch (err) {
+        return sendError(reply, 422, "INVALID_PAYMENT_METHOD", `Could not retrieve payment method: ${(err as Error).message}`);
+      }
 
-    let method;
-    if (existing) {
-      method = await prisma.paymentMethod.update({
-        where: { id: existing.id },
-        data: {
-          cardBrand: card.brand,
-          cardLast4: card.last4,
-          cardExpMonth: card.exp_month,
-          cardExpYear: card.exp_year,
-        },
+      const card = pm.card;
+      if (!card) {
+        return sendError(reply, 422, "UNSUPPORTED_PM_TYPE", "Only card payment methods are supported via this endpoint.");
+      }
+
+      // Check if this is the user's first saved method (to set as default)
+      const existingCount = await prisma.paymentMethod.count({
+        where: { userId, isDeleted: false },
       });
-    } else {
-      method = await prisma.paymentMethod.create({
-        data: {
-          userId,
-          paymentProvider: "stripe",
-          type: "card",
-          providerPmId: paymentMethodId,
-          cardBrand: card.brand,
-          cardLast4: card.last4,
-          cardExpMonth: card.exp_month,
-          cardExpYear: card.exp_year,
-          isDefault,
-        },
-      });
-    }
 
-    return sendSuccess(reply, 201, formatMethod(method));
+      const isDefault = existingCount === 0;
+
+      if (isDefault) {
+        await stripe.customers.update(
+          customerAccount.providerCustomerId,
+          {
+            invoice_settings: {
+              default_payment_method: paymentMethodId,
+            },
+          }
+        );
+      }
+
+      // Upsert by providerPmId — if the same card was added before, update it
+      const existing = await prisma.paymentMethod.findFirst({
+        where: { userId, providerPmId: paymentMethodId, isDeleted: false },
+      });
+
+      let method;
+      if (existing) {
+        method = await prisma.paymentMethod.update({
+          where: { id: existing.id },
+          data: {
+            cardBrand: card.brand,
+            cardLast4: card.last4,
+            cardExpMonth: card.exp_month,
+            cardExpYear: card.exp_year,
+          },
+        });
+      } else {
+        method = await prisma.paymentMethod.create({
+          data: {
+            userId,
+            paymentProvider: "stripe",
+            type: "card",
+            providerPmId: paymentMethodId,
+            cardBrand: card.brand,
+            cardLast4: card.last4,
+            cardExpMonth: card.exp_month,
+            cardExpYear: card.exp_year,
+            isDefault,
+          },
+        });
+      }
+
+      return sendSuccess(reply, 201, formatMethod(method));
+    } catch (err) {
+      return sendError(reply, 400, "CONFIRM_PAYMENT_METHOD_FAILED", (err as Error).message);
+    }
   },
   );
 
@@ -313,23 +321,27 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
       const { mobileNumber } = parsed.data;
       const mobileNumberMasked = mobileNumber.slice(-4);
 
-      // Check if first saved method
-      const existingCount = await prisma.paymentMethod.count({
-        where: { userId, isDeleted: false },
-      });
-      const isDefault = existingCount === 0;
+      try {
+        // Check if first saved method
+        const existingCount = await prisma.paymentMethod.count({
+          where: { userId, isDeleted: false },
+        });
+        const isDefault = existingCount === 0;
 
-      const method = await prisma.paymentMethod.create({
-        data: {
-          userId,
-          paymentProvider: "tara",
-          type: "mobile_money",
-          mobileNumberMasked,
-          isDefault,
-        },
-      });
+        const method = await prisma.paymentMethod.create({
+          data: {
+            userId,
+            paymentProvider: "tara",
+            type: "mobile_money",
+            mobileNumberMasked,
+            isDefault,
+          },
+        });
 
-      return sendSuccess(reply, 201, formatMethod(method));
+        return sendSuccess(reply, 201, formatMethod(method));
+      } catch (err) {
+        return sendError(reply, 400, "ADD_TARA_METHOD_FAILED", (err as Error).message);
+      }
     },
   );
 
@@ -344,49 +356,54 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
       };
 
       const authHeader = req.headers.authorization ?? "";
-      const booking = (await bindCommission(bookingId, authHeader)) as any;
+      
+      try {
+        const booking = (await bindCommission(bookingId, authHeader)) as any;
 
-      if (!booking) {
-        return sendError(
-          reply,
-          404,
-          "BOOKING_NOT_FOUND",
-          "Booking not found"
-        );
-      }
+        if (!booking) {
+          return sendError(
+            reply,
+            404,
+            "BOOKING_NOT_FOUND",
+            "Booking not found"
+          );
+        }
 
-      const currency = (booking.currency as string).toLowerCase();
-      const taraResult = await initiateTaraPayment({
-        amount: Number(booking.totalAmount),
-        currency,
-        mobileNumber,
-        reference: booking.reference ?? `tara-${bookingId}-${Date.now()}`,
-        description: `Booking ${bookingId}`,
-      });
-
-      const failedCount = await prisma.payment.count({
-        where: {
-          bookingId,
-          status: { in: ["failed", "timed_out"] },
-        },
-      });
-      const attemptNumber = failedCount + 1;
-      const idempotencyKey = `pay-${bookingId}-${attemptNumber}`;
-
-      await prisma.payment.create({
-        data: {
-          bookingId: booking.id,
-          status: "pending",
-          paymentProvider: "tara",
+        const currency = (booking.currency as string).toLowerCase();
+        const taraResult = await initiateTaraPayment({
           amount: Number(booking.totalAmount),
           currency,
-          attemptNumber,
-          idempotencyKey,
-          providerPaymentId: taraResult.taraReference,
-        },
-      });
+          mobileNumber,
+          reference: booking.reference ?? `tara-${bookingId}-${Date.now()}`,
+          description: `Booking ${bookingId}`,
+        });
 
-      return sendSuccess(reply, 200, taraResult);
+        const failedCount = await prisma.payment.count({
+          where: {
+            bookingId,
+            status: { in: ["failed", "timed_out"] },
+          },
+        });
+        const attemptNumber = failedCount + 1;
+        const idempotencyKey = `pay-${bookingId}-${attemptNumber}`;
+
+        await prisma.payment.create({
+          data: {
+            bookingId: booking.id,
+            status: "pending",
+            paymentProvider: "tara",
+            amount: Number(booking.totalAmount),
+            currency,
+            attemptNumber,
+            idempotencyKey,
+            providerPaymentId: taraResult.taraReference,
+          },
+        });
+
+        return sendSuccess(reply, 200, taraResult);
+      } catch (err) {
+        return sendError(reply, 400, "TARA_PAYMENT_FAILED", (err as Error).message);
+      }
     }
   );
 
@@ -429,31 +446,35 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
         return sendError(reply, 422, "VALIDATION_ERROR", "Invalid request body.", fields);
       }
 
-      const method = await prisma.paymentMethod.findFirst({
-        where: { id, userId, isDeleted: false },
-      });
-      if (!method) {
-        return sendError(reply, 404, "NOT_FOUND", "Payment method not found.");
+      try {
+        const method = await prisma.paymentMethod.findFirst({
+          where: { id, userId, isDeleted: false },
+        });
+        if (!method) {
+          return sendError(reply, 404, "NOT_FOUND", "Payment method not found.");
+        }
+
+        const { isDefault } = parsed.data;
+
+        if (isDefault === true) {
+          // Clear existing defaults for this user, then set this one
+          await prisma.$transaction([
+            prisma.paymentMethod.updateMany({
+              where: { userId, isDeleted: false, isDefault: true },
+              data: { isDefault: false },
+            }),
+            prisma.paymentMethod.update({
+              where: { id },
+              data: { isDefault: true },
+            }),
+          ]);
+        }
+
+        const updated = await prisma.paymentMethod.findUniqueOrThrow({ where: { id } });
+        return sendSuccess(reply, 200, formatMethod(updated));
+      } catch (err) {
+        return sendError(reply, 400, "UPDATE_METHOD_FAILED", (err as Error).message);
       }
-
-      const { isDefault } = parsed.data;
-
-      if (isDefault === true) {
-        // Clear existing defaults for this user, then set this one
-        await prisma.$transaction([
-          prisma.paymentMethod.updateMany({
-            where: { userId, isDeleted: false, isDefault: true },
-            data: { isDefault: false },
-          }),
-          prisma.paymentMethod.update({
-            where: { id },
-            data: { isDefault: true },
-          }),
-        ]);
-      }
-
-      const updated = await prisma.paymentMethod.findUniqueOrThrow({ where: { id } });
-      return sendSuccess(reply, 200, formatMethod(updated));
     },
   );
 
@@ -475,41 +496,45 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
       const { userId } = req as GuestRequest;
       const { id } = req.params as { id: string };
 
-      const method = await prisma.paymentMethod.findFirst({
-        where: { id, userId, isDeleted: false },
-      });
-      if (!method) {
-        return sendError(reply, 404, "NOT_FOUND", "Payment method not found.");
-      }
-
-      // Soft-delete
-      await prisma.paymentMethod.update({
-        where: { id },
-        data: { isDefault: false, isDeleted: true },
-      });
-
-      // For Stripe: detach the payment method (ignore errors)
-      if (method.paymentProvider === "stripe" && method.providerPmId) {
-        stripe.paymentMethods.detach(method.providerPmId).catch((err: unknown) => {
-          console.warn("[payment-methods] Failed to detach Stripe PM:", (err as Error).message);
+      try {
+        const method = await prisma.paymentMethod.findFirst({
+          where: { id, userId, isDeleted: false },
         });
-      }
+        if (!method) {
+          return sendError(reply, 404, "NOT_FOUND", "Payment method not found.");
+        }
 
-      // If deleted method was the default, promote the next available one
-      if (method.isDefault) {
-        const next = await prisma.paymentMethod.findFirst({
-          where: { userId, isDeleted: false },
-          orderBy: { createdAt: "asc" },
+        // Soft-delete
+        await prisma.paymentMethod.update({
+          where: { id },
+          data: { isDefault: false, isDeleted: true },
         });
-        if (next) {
-          await prisma.paymentMethod.update({
-            where: { id: next.id },
-            data: { isDefault: true },
+
+        // For Stripe: detach the payment method (ignore errors)
+        if (method.paymentProvider === "stripe" && method.providerPmId) {
+          stripe.paymentMethods.detach(method.providerPmId).catch((err: unknown) => {
+            console.warn("[payment-methods] Failed to detach Stripe PM:", (err as Error).message);
           });
         }
-      }
 
-      return reply.status(204).send();
+        // If deleted method was the default, promote the next available one
+        if (method.isDefault) {
+          const next = await prisma.paymentMethod.findFirst({
+            where: { userId, isDeleted: false },
+            orderBy: { createdAt: "asc" },
+          });
+          if (next) {
+            await prisma.paymentMethod.update({
+              where: { id: next.id },
+              data: { isDefault: true },
+            });
+          }
+        }
+
+        return reply.status(204).send();
+      } catch (err) {
+        return sendError(reply, 400, "DELETE_METHOD_FAILED", (err as Error).message);
+      }
     },
   );
 }

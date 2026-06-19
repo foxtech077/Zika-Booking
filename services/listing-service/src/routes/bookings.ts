@@ -28,7 +28,7 @@ export async function generateReference(countryCode: string): Promise<string> {
   const result = await prisma.$queryRaw<{ nextval: bigint }[]>`SELECT nextval('booking_seq') AS nextval`;
   const seq = Number(result[0]!.nextval);
   const padded = String(seq).padStart(6, "0");
-  return `ZIKA-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
+  return `KAINOOK-${padded}-${(countryCode ?? "XX").toUpperCase()}`;
 }
 
 import { getEffectiveCommissionRate } from "../services/commission.service.js";
@@ -836,6 +836,37 @@ export async function bookingRoutes(app: FastifyInstance) {
 
       let voucherDiscount = 0;
       let appliedVoucher: { id: string; code: string } | null = null;
+
+      let redeemPoints = 0;
+      let pointsDiscount = 0;
+
+      if (body.redeemPoints && body.redeemPoints > 0) {
+        const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(
+          `SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1`,
+          guestId
+        );
+        const userPoints = userRes[0]?.loyaltyPoints ?? 0;
+        if (body.redeemPoints > userPoints) {
+          return sendError(reply, 400, "INSUFFICIENT_POINTS", "You do not have enough loyalty points.");
+        }
+
+        const settings = await prisma.platformSettings.findUnique({
+          where: { id: "global" },
+        });
+        const minPointsRedemption = settings?.minPointsRedemption ?? 500;
+        if (body.redeemPoints < minPointsRedemption) {
+          return sendError(
+            reply,
+            400,
+            "MIN_POINTS_NOT_MET",
+            `Minimum points allowed for redemption is ${minPointsRedemption}.`
+          );
+        }
+
+        const pointsToCurrencyRatio = settings?.pointsToCurrencyRatio ?? 100;
+        redeemPoints = body.redeemPoints;
+        pointsDiscount = Number((redeemPoints / pointsToCurrencyRatio).toFixed(2));
+      }
 
 
       // 2. VOUCHER LOGIC

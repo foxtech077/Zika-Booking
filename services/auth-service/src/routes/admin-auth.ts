@@ -248,15 +248,15 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     const { code } = parsed.data;
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
 
-    const { getRedis } = await import("../lib/redis");
-    const pendingSecret = await getRedis().get(`totp:pending:${adminId}`);
-    if (!pendingSecret) return sendError(reply, 400, "SETUP_EXPIRED", "Setup session expired. Please start again.");
-
-    if (!verifyTotpCode(pendingSecret, code)) {
-      return sendError(reply, 400, "INVALID_CODE", "Invalid code. Please check your authenticator app and try again.");
-    }
-
     try {
+      const { getRedis } = await import("../lib/redis");
+      const pendingSecret = await getRedis().get(`totp:pending:${adminId}`);
+      if (!pendingSecret) return sendError(reply, 400, "SETUP_EXPIRED", "Setup session expired. Please start again.");
+
+      if (!verifyTotpCode(pendingSecret, code)) {
+        return sendError(reply, 400, "INVALID_CODE", "Invalid code. Please check your authenticator app and try again.");
+      }
+
       const { plain: recoveryCodes, hashes } = generateRecoveryCodes();
       const encryptedSecret = encryptTotpSecret(pendingSecret);
 
@@ -286,7 +286,7 @@ export async function adminAuthRoutes(app: FastifyInstance) {
     try {
       const body = req.body as { code?: string; recoveryCode?: string; intermediateToken: string };
       if (body.recoveryCode) {
-        return handleRecoveryCode(req, reply, adminId, role, body.recoveryCode);
+        return await handleRecoveryCode(req, reply, adminId, role, body.recoveryCode);
       }
 
       const parsed = totpCodeSchema.safeParse(req.body);
@@ -372,30 +372,37 @@ console.log("admin.fido2Credential =", admin.fido2Credential);
   // ── POST /admin/auth/webauthn/verify  (UC-1.12 step 6) ───────────────────
   app.post("/admin/auth/webauthn/verify", { schema: { tags: ["Admin Auth"], body: { type: "object", required: ["id", "rawId", "response", "type"], properties: { id: { type: "string" }, rawId: { type: "string" }, response: { type: "object" }, type: { type: "string", enum: ["public-key"] } } } }, preHandler: [requireIntermediate] }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { sub: adminId, role } = (req as FastifyRequest & { adminIntermediate: { sub: string; role: string } }).adminIntermediate;
-    const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
-
-    if (!admin.fido2Credential) return sendError(reply, 400, "NO_FIDO2", "No hardware key registered.");
-    const storedCred = admin.fido2Credential as { id: string; publicKey: string; counter: number };
-
-    let verified: Awaited<ReturnType<typeof waFinishAuthentication>>;
     try {
-      verified = await waFinishAuthentication(adminId, req.body, storedCred);
-    } catch (err) {
-      await writeAudit(adminId, role, "webauthn_failed", req);
-      return sendError(reply, 401, "WEBAUTHN_FAILED", "Authentication failed. Please use your registered security key.");
+      const admin = await prisma.adminUser.findUniqueOrThrow({ where: { id: adminId } });
+
+      if (!admin.fido2Credential) return sendError(reply, 400, "NO_FIDO2", "No hardware key registered.");
+      const storedCred = admin.fido2Credential as { id: string; publicKey: string; counter: number };
+
+      let verified: Awaited<ReturnType<typeof waFinishAuthentication>>;
+      try {
+        verified = await waFinishAuthentication(adminId, req.body, storedCred);
+      } catch (err) {
+        await writeAudit(adminId, role, "webauthn_failed", req);
+        return sendError(reply, 401, "WEBAUTHN_FAILED", "Authentication failed. Please use your registered security key.");
+      }
+
+      if (!verified.verified) return sendError(reply, 401, "WEBAUTHN_FAILED", "Authentication failed.");
+
+      // Update counter
+      await prisma.adminUser.update({
+        where: { id: adminId },
+        data: { fido2Credential: { ...storedCred, counter: verified.authenticationInfo.newCounter } },
+      });
+
+      const sessionToken = await issueAdminSession(adminId, role);
+      await writeAudit(adminId, role, "admin_login", req);
+      return sendSuccess(reply, 200, { sessionToken });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return sendError(reply, 404, "ADMIN_NOT_FOUND", "Admin account not found.");
+      }
+      return sendError(reply, 400, "WEBAUTHN_VERIFY_FAILED", "WebAuthn verification could not be completed. Please try again.");
     }
-
-    if (!verified.verified) return sendError(reply, 401, "WEBAUTHN_FAILED", "Authentication failed.");
-
-    // Update counter
-    await prisma.adminUser.update({
-      where: { id: adminId },
-      data: { fido2Credential: { ...storedCred, counter: verified.authenticationInfo.newCounter } },
-    });
-
-    const sessionToken = await issueAdminSession(adminId, role);
-    await writeAudit(adminId, role, "admin_login", req);
-    return sendSuccess(reply, 200, { sessionToken });
   });
 
   // ── POST /admin/auth/webauthn/register  (UC-1.12 A3) ─────────────────────
@@ -1034,34 +1041,34 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
       }
     }
 
-    // Creator scope visibility checks
-    if (adminRole === "admin") {
-      const creator = await prisma.adminUser.findUnique({
-        where: { id: adminId },
-        select: { countryScope: true },
-      });
-      const creatorScope = creator?.countryScope ?? [];
+    try {
+      // Creator scope visibility checks
+      if (adminRole === "admin") {
+        const creator = await prisma.adminUser.findUnique({
+          where: { id: adminId },
+          select: { countryScope: true },
+        });
+        const creatorScope = creator?.countryScope ?? [];
 
-      if (creatorScope.length > 0) {
-        if (!countryScope || countryScope.length === 0) {
-          return sendError(reply, 422, "VALIDATION_ERROR", "You must assign a country scope within your visibility scope.");
-        }
-        const outOfScopeCountries = countryScope.filter((c) => !creatorScope.includes(c));
-        if (outOfScopeCountries.length > 0) {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            `You cannot assign country scope outside your own visibility scope: ${outOfScopeCountries.join(", ")}`
-          );
+        if (creatorScope.length > 0) {
+          if (!countryScope || countryScope.length === 0) {
+            return sendError(reply, 422, "VALIDATION_ERROR", "You must assign a country scope within your visibility scope.");
+          }
+          const outOfScopeCountries = countryScope.filter((c) => !creatorScope.includes(c));
+          if (outOfScopeCountries.length > 0) {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              `You cannot assign country scope outside your own visibility scope: ${outOfScopeCountries.join(", ")}`
+            );
+          }
         }
       }
-    }
 
-    const existing = await prisma.adminUser.findUnique({ where: { email } });
-    if (existing) return sendError(reply, 409, "EMAIL_TAKEN", "An admin with this email already exists.");
+      const existing = await prisma.adminUser.findUnique({ where: { email } });
+      if (existing) return sendError(reply, 409, "EMAIL_TAKEN", "An admin with this email already exists.");
 
-    try {
       const passwordHash = await hashPassword(password);
 
       const newAdmin = await prisma.adminUser.create({
@@ -1109,16 +1116,13 @@ export async function adminOperatorRoutes(app: FastifyInstance) {
       return sendError(reply, 403, "FORBIDDEN", "You cannot delete your own account.");
     }
 
-    const target = await prisma.adminUser.findUnique({ where: { id: targetId } });
-    if (!target) return sendError(reply, 404, "NOT_FOUND", "Admin user not found.");
-    if (target.role === "super_admin") {
-      return sendError(reply, 403, "FORBIDDEN", "Cannot delete a Super Admin account.");
-    }
-
-    // Revoke all sessions
-    // await prisma.adminSession.updateMany({ where: { adminUserId: targetId }, data: { revoked: true } });
-    // await prisma.adminUser.delete({ where: { id: targetId } });
     try {
+      const target = await prisma.adminUser.findUnique({ where: { id: targetId } });
+      if (!target) return sendError(reply, 404, "NOT_FOUND", "Admin user not found.");
+      if (target.role === "super_admin") {
+        return sendError(reply, 403, "FORBIDDEN", "Cannot delete a Super Admin account.");
+      }
+
       await prisma.$transaction([
         prisma.adminSession.updateMany({
           where: { adminUserId: targetId },
