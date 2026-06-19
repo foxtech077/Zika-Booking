@@ -118,7 +118,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#d4edda] via-[#c3e6cb] to-[#a8d5b5] p-4 overflow-hidden">
+    <div className="h-screen w-full flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-[#07543f] via-[#128055] to-[#2ac98a]">
       <div className="w-full max-w-5xl flex rounded-3xl overflow-hidden shadow-2xl" style={{ height: "min(680px, calc(100vh - 2rem))" }}>
 
         {/* ── Left Panel: Image ── */}
