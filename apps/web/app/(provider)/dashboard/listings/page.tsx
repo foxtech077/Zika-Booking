@@ -715,13 +715,23 @@ function getActivationMessage(status: string) {
 const getListingPrice = (listing: Listing | any) => {
   if (listing.category === "car") {
     // Try all possible field names the API might return for the car daily rate
-    return listing.pricePerDay
-      ?? listing.dailyRate
-      ?? listing.price_per_day
-      ?? listing.pricePerNight  // fallback: some backends store in the shared column
-      ?? null;
+    const raw =
+      listing.pricePerDay ??
+      listing.dailyRate ??
+      listing.price_per_day ??
+      listing.dailyPrice ??
+      listing.rate ??
+      listing.price ??
+      listing.pricePerNight ?? // last-resort: some backends share the column
+      null;
+    return raw;
   }
-  return listing.pricePerNight ?? listing.nightlyRate ?? null;
+  return (
+    listing.pricePerNight ??
+    listing.nightlyRate ??
+    listing.price ??
+    null
+  );
 };
 
 const getPriceLabel = (listing: Listing | any) =>
@@ -729,6 +739,7 @@ const getPriceLabel = (listing: Listing | any) =>
 
 const formatListingPrice = (listing: Listing | any) => {
   const price = getListingPrice(listing);
+  // Treat null, undefined, empty string, and NaN as missing
   if (price == null || price === "" || Number.isNaN(Number(price))) return "—";
   const num = Number(price);
   return num > 0 ? formatCurrency(num, listing.currency ?? "USD") : "—";

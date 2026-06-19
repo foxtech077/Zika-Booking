@@ -14,6 +14,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -31,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Bookings",     href: "/dashboard/bookings",  icon: <BookOpen /> },
   { label: "Calendar",     href: "/dashboard/calendar",  icon: <CalendarDays /> },
   { label: "Reviews",      href: "/dashboard/reviews",   icon: <Star /> },
-  { label: "Payements",    href: "/dashboard/payments",           icon: <LayoutDashboard /> },
+  { label: "Payments",     href: "/dashboard/payments",           icon: <CreditCard /> },
   { label: "Messages",     href: "/dashboard/messaging", icon: <MessageSquare /> },
   { label: "Earnings",     href: "/dashboard/earnings",  icon: <DollarSign /> },
   { label: "Channel Sync", href: "/dashboard/channel",   icon: <Globe2 /> },
