@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X } from "lucide-react";
+import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
-import { DataTable, Pagination, type Column } from "@/components/tables/DataTable";
+import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +12,8 @@ import { Textarea, Select } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatRelativeTime } from "@/lib/utils";
-import type { ListingReviewTask } from "@/types/admin";
+import { api } from "@/lib/api";
+import type { ListingReviewTask, PlatformUser } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 
 // ── Spec-defined rejection reasons ────────────────────────────────────────────
@@ -71,10 +72,106 @@ function DocViewer({ url, fileType, label, onClose }: { url: string; fileType: s
   );
 }
 
+// ── Photo gallery lightbox ────────────────────────────────────────────────────
+function PhotoLightbox({
+  photos,
+  currentIndex,
+  onClose,
+  onPrev,
+  onNext,
+  onJump,
+}: {
+  photos: any[];
+  currentIndex: number;
+  onClose: () => void;
+  onPrev: () => void;
+  onNext: () => void;
+  onJump: (index: number) => void;
+}) {
+  const photo = photos[currentIndex];
+  const total = photos.length;
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowLeft") onPrev();
+      if (e.key === "ArrowRight") onNext();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose, onPrev, onNext]);
+
+  if (!photo) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col bg-black/95" onClick={onClose}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-3 bg-black/60 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <p className="text-white/70 text-sm">
+          Photo <span className="text-white font-semibold">{currentIndex + 1}</span> of <span className="text-white font-semibold">{total}</span>
+        </p>
+        <button onClick={onClose} className="text-white/70 hover:text-white transition p-1 rounded-lg hover:bg-white/10">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Image */}
+      <div className="flex-1 flex items-center justify-center relative p-4" onClick={(e) => e.stopPropagation()}>
+        {/* Prev */}
+        {currentIndex > 0 && (
+          <button
+            onClick={onPrev}
+            className="absolute left-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center h-10 w-10 rounded-full bg-black/50 text-white hover:bg-black/80 transition border border-white/20"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
+
+        <img
+          src={photo.cdnUrl}
+          alt={`Photo ${currentIndex + 1}`}
+          className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+        />
+
+        {/* Next */}
+        {currentIndex < total - 1 && (
+          <button
+            onClick={onNext}
+            className="absolute right-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center h-10 w-10 rounded-full bg-black/50 text-white hover:bg-black/80 transition border border-white/20"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        )}
+      </div>
+
+      {/* Thumbnail strip */}
+      <div className="flex-shrink-0 px-4 pb-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex gap-1.5 overflow-x-auto py-2 scrollbar-hide justify-center flex-wrap max-h-[90px]">
+          {photos.map((p, i) => (
+            <button
+              key={p.id ?? i}
+              onClick={() => onJump(i)}
+              className={`flex-shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition ${
+                i === currentIndex ? "border-white opacity-100" : "border-transparent opacity-50 hover:opacity-80"
+              }`}
+              title={`Photo ${i + 1}`}
+            >
+              <img src={p.cdnUrl} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function AccreditationPage() {
-  const { token } = useAuthStore();
+  const { token, user, _hasHydrated } = useAuthStore();
+  const isCountryManager = user?.role === "country_manager";
+  const userCountryScope = user?.countryScope ?? [];
   const qc = useQueryClient();
+  
   const [page, setPage] = useState(1);
   const [selectedTask, setSelectedTask] = useState<ListingReviewTask | null>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
@@ -85,18 +182,91 @@ export default function AccreditationPage() {
   const [providerNote, setProviderNote] = useState("");
   const [docViewer, setDocViewer] = useState<{ url: string; fileType: string; label: string } | null>(null);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
+  const [photoLightbox, setPhotoLightbox] = useState<{ photos: any[]; index: number } | null>(null);
+
+  const openPhoto = useCallback((photos: any[], index: number) => {
+    setPhotoLightbox({ photos, index });
+  }, []);
+
+  const prevPhoto = useCallback(() =>
+    setPhotoLightbox((s) => s && s.index > 0 ? { ...s, index: s.index - 1 } : s), []);
+
+  const nextPhoto = useCallback(() =>
+    setPhotoLightbox((s) => s && s.index < s.photos.length - 1 ? { ...s, index: s.index + 1 } : s), []);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  const params = { page: String(page), limit: "20" };
+  // const params = { page: String(page), limit: "20" };
 
+  const [activeDocId, setActiveDocId] = useState<string | null>(null);
+  const [docUrl, setDocUrl] = useState<{ url: string; fileType: string } | null>(null);
+  const [docLoading, setDocLoading] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
+
+  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+  const countryOptions = userCountryScope.length > 0
+    ? userCountryScope.map((c) => ({ value: c, label: c }))
+    : [
+      "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
+    ].map((c) => ({ value: c, label: c }));
+
+  const [country, setCountry] = useState(() => userCountryScope[0] ?? "");
+
+  // Sync country selection after auth store hydration
+  useEffect(() => {
+    if (userCountryScope.length > 0 && !country) {
+      setCountry(userCountryScope[0] ?? "");
+    }
+  }, [userCountryScope, country]);
+
+  // For country managers, always send their first scoped country as the filter.
+  // Previously this was set to "" which caused the API to return all countries.
+  const effectiveCountry = isCountryManager ? (country || userCountryScope[0] || "") : country;
+  const params = Object.fromEntries(
+    Object.entries({
+      page: String(page),
+      limit: "20",
+      country: effectiveCountry,
+    }).filter(([, v]) => v !== "")
+  );
   const { data, isLoading } = useQuery({
     queryKey: ["accreditation-queue", params],
     queryFn: () => fetchQueue(params),
+    // Wait for auth store to rehydrate so userCountryScope/effectiveCountry are correct
+    enabled: !!token && _hasHydrated,
+  });
+
+  const { data: providersData } = useQuery({
+    queryKey: ["admin-providers-list"],
+    queryFn: () =>
+      listingApi
+        .get("/admin/users", { params: { userType: "provider", limit: "1000" } })
+        .then((r) => r.data.data ?? r.data),
     enabled: !!token,
   });
 
-  const tasks: ListingReviewTask[] = data?.tasks ?? [];
-  const total: number = data?.total ?? 0;
+  const providers: PlatformUser[] = providersData?.users ?? [];
+  const providerMap = new Map<string, string>();
+  for (const p of providers) {
+    const name = p.businessName || `${p.firstName} ${p.lastName}`.trim() || p.email;
+    providerMap.set(p.id, name);
+  }
+
+  // Country managers: client-side filter as safety net (in case API doesn't filter)
+  const rawTasks: ListingReviewTask[] = data?.tasks ?? [];
+
+  const tasks = isCountryManager && userCountryScope.length > 0
+    ? rawTasks.filter((t) => {
+      const listingCountry = t.listing?.country?.toUpperCase();
+      const selectedCountry = country?.toUpperCase();
+      const inScope = listingCountry
+        ? userCountryScope.some((sc) => sc.toUpperCase() === listingCountry)
+        : false;
+
+      return inScope && (!selectedCountry || selectedCountry === listingCountry);
+    })
+    : rawTasks;
+  const total: number = isCountryManager ? tasks.length : (data?.total ?? 0);
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ["listing-review-detail", selectedTask?.listing?.id],
@@ -163,9 +333,14 @@ export default function AccreditationPage() {
     {
       key: "provider",
       label: "Provider",
-      render: (t) => (
-        <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
-      ),
+      render: (t) => {
+        const name = providerMap.get(t.listing.providerId);
+        return name ? (
+          <span className="text-xs text-slate-700 font-medium">{name}</span>
+        ) : (
+          <span className="text-xs text-slate-500 font-mono">{t.listing.providerId?.slice(0, 10)}…</span>
+        );
+      },
     },
     {
       key: "stars",
@@ -197,6 +372,18 @@ export default function AccreditationPage() {
         <DocViewer url={docViewer.url} fileType={docViewer.fileType} label={docViewer.label} onClose={() => setDocViewer(null)} />
       )}
 
+      {/* Photo lightbox */}
+      {photoLightbox && (
+        <PhotoLightbox
+          photos={photoLightbox.photos}
+          currentIndex={photoLightbox.index}
+          onClose={() => setPhotoLightbox(null)}
+          onPrev={prevPhoto}
+          onNext={nextPhoto}
+          onJump={(i) => setPhotoLightbox((s) => s ? { ...s, index: i } : null)}
+        />
+      )}
+
       <SectionHeader
         title="Hotel Accreditation Queue"
         description={`${total} hotel listings pending review`}
@@ -204,6 +391,22 @@ export default function AccreditationPage() {
       />
 
       <Card padding="none">
+        {canShowCountryFilter && (
+          <FilterBar
+            filters={[
+              {
+                key: "country",
+                label: "All Countries",
+                value: country,
+                onChange: (v: string) => {
+                  setCountry(v);
+                  setPage(1);
+                },
+                options: countryOptions,
+              },
+            ]}
+          />
+        )}
         <DataTable
           columns={columns}
           data={tasks}
@@ -246,7 +449,7 @@ export default function AccreditationPage() {
             {/* Submission summary */}
             <dl className="grid grid-cols-2 gap-3 text-sm">
               {[
-                ["Provider", selectedTask?.listing?.providerId ?? "—"],
+                ["Provider", selectedTask?.listing?.providerId ? (providerMap.get(selectedTask.listing.providerId) ?? selectedTask.listing.providerId) : "—"],
                 ["Submission Date", selectedTask?.listing?.submittedAt ? formatRelativeTime(selectedTask.listing.submittedAt) : "—"],
                 ["Claimed Stars", selectedTask?.listing?.claimedStarRating
                   ? `${"★".repeat(selectedTask.listing.claimedStarRating)} (${selectedTask.listing.claimedStarRating}★)`
@@ -310,11 +513,19 @@ export default function AccreditationPage() {
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
                   Listing Photos ({detail.photos.length})
                 </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {detail.photos.slice(0, 6).map((p: any) => (
-                    <div key={p.id} className="aspect-video bg-slate-100 rounded-lg overflow-hidden">
-                      <img src={p.cdnUrl} alt="" className="w-full h-full object-cover" />
-                    </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {detail.photos.map((p: any, i: number) => (
+                    <button
+                      key={p.id ?? i}
+                      onClick={() => openPhoto(detail.photos, i)}
+                      className="aspect-square bg-slate-100 rounded-lg overflow-hidden group relative focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      title={`View photo ${i + 1}`}
+                    >
+                      <img src={p.cdnUrl} alt={`Photo ${i + 1}`} className="w-full h-full object-cover transition group-hover:scale-105 duration-200" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
+                        <Eye className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                      </div>
+                    </button>
                   ))}
                 </div>
               </div>

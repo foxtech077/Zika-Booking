@@ -16,9 +16,7 @@
 
 /* ── Base ────────────────────────────────────────────────────────────────────── */
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
 
   html {
     font-family: "Inter", system-ui, -apple-system, sans-serif;
@@ -26,14 +24,10 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  body {
-    @apply bg-surface-subtle text-slate-900;
-  }
+  body { @apply bg-surface-subtle text-slate-900; }
 
   /* Dark mode */
-  .dark body {
-    @apply bg-slate-950 text-slate-100;
-  }
+  .dark body { @apply bg-slate-950 text-slate-100; }
 }
 
 /* ── Utility Classes ─────────────────────────────────────────────────────────── */
@@ -43,21 +37,15 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
 
   /* Custom thin scrollbar */
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: #e2e8f0 transparent;
   }
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-  }
-  .scrollbar-thin::-webkit-scrollbar-track {
-    background: transparent;
-  }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background: #e2e8f0;
     border-radius: 3px;
@@ -70,18 +58,42 @@
     -webkit-backdrop-filter: blur(12px);
   }
 
+  /* Sidebar background gradient */
+  .sidebar-bg {
+    background: linear-gradient(180deg, #022C22 0%, #033D2F 50%, #064E3B 100%);
+    color: #FFFFFF;
+  }
+
+  /* Active menu item */
+  .nav-active {
+    background-color: #059669;
+    border-radius: 0.375rem; /* rounded-md */
+    color: #FFFFFF;
+  }
+
+  /* Section header */
+  .header-green {
+    color: #10B981;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* Icon color */
+  .icon-green {
+    color: #10B981;
+  }
+
   /* Text gradient */
   .text-gradient-primary {
-    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    background: linear-gradient(135deg, #10b981, #047857);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
   /* Dot pulse (for live indicator) */
-  .dot-pulse {
-    position: relative;
-  }
+  .dot-pulse { position: relative; }
   .dot-pulse::before {
     content: "";
     position: absolute;
@@ -92,34 +104,17 @@
   }
 
   @keyframes ping {
-    75%, 100% {
-      transform: scale(2.5);
-      opacity: 0;
-    }
+    75%, 100% { transform: scale(2.5); opacity: 0; }
   }
 
   /* Card hover lift */
-  .card-hover {
-    @apply transition-all duration-200 hover:shadow-card-md hover:-translate-y-px;
-  }
+  .card-hover { @apply transition-all duration-200 hover:shadow-card-md hover:-translate-y-px; }
 
   /* Focus ring */
-  .focus-ring {
-    @apply focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary;
-  }
+  .focus-ring { @apply focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary; }
 
   /* Gradient backgrounds */
-  .gradient-primary {
-    background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
-  }
-
-  .gradient-mesh {
-    background-color: #f8fafc;
-    background-image:
-      radial-gradient(at 40% 20%, hsla(220, 100%, 97%, 1) 0px, transparent 50%),
-      radial-gradient(at 80% 0%, hsla(214, 100%, 97%, 1) 0px, transparent 50%),
-      radial-gradient(at 0% 50%, hsla(240, 100%, 97%, 1) 0px, transparent 50%);
-  }
+  .gradient-primary { background: linear-gradient(135deg, #10b981 0%, #047857 100%); }
 
   /* Status dot colors */
   .status-dot-green { @apply bg-success; }

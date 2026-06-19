@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
+import { startAuthentication } from "@simplewebauthn/browser";
 
 type Step = "credentials" | "totp" | "totp-setup" | "recovery-codes";
 
@@ -96,7 +97,33 @@ console.log(`${window.location.origin}/admin/api/admin/auth/login`);
     }
   };
 
-  
+  // Handle WebAuthn Login
+  const handleWebAuthnLogin = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      
+      const { data: challengeRes } = await api.post("/admin/auth/webauthn/challenge", { email });
+      const options = challengeRes.data ?? challengeRes;
+
+      const attResp = await startAuthentication(options);
+
+      const { data: verifyRes } = await api.post("/admin/auth/webauthn/verify", attResp);
+      const { sessionToken } = verifyRes.data ?? verifyRes;
+
+      const meRes = await api.get("/admin/auth/me", {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      const user = meRes.data?.data?.user ?? meRes.data?.user;
+      setSession(sessionToken, user);
+      router.replace("/dashboard");
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.response?.data?.error?.message || "Failed to sign in with Passkey.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch TOTP QR code and setup secret
   const fetchSetupData = async (token: string) => {
@@ -322,6 +349,26 @@ console.log(`${window.location.origin}/admin/api/admin/auth/login`);
 
                 <Button type="submit" fullWidth loading={loading} size="lg" className="mt-6">
                   Sign in
+                </Button>
+                
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-200"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-slate-50 lg:bg-white text-slate-500">Or</span>
+                  </div>
+                </div>
+
+                <Button 
+                  type="button" 
+                  fullWidth 
+                  variant="secondary" 
+                  onClick={handleWebAuthnLogin} 
+                  disabled={loading}
+                >
+                  <Key className="h-4 w-4 mr-2" />
+                  Sign in with Passkey
                 </Button>
               </form>
             </>

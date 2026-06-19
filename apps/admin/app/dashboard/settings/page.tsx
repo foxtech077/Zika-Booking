@@ -1,11 +1,14 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Settings, CheckCircle, AlertCircle, Server } from "lucide-react";
+import { Settings, CheckCircle, AlertCircle, Server, Key } from "lucide-react";
+import { startRegistration } from "@simplewebauthn/browser";
 import { api } from "@/lib/api";
 import { listingApi } from "@/lib/listing-api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/stores/auth";
 import { formatRelativeTime } from "@/lib/utils";
 
