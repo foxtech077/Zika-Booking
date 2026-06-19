@@ -386,75 +386,79 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
+        throw error;
+      }
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        include: {
+          photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
+          documents: { where: { replacedAt: null } },
+          amenities: true,
+          customAmenities: true,
+          reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
+        },
+      });
+
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      const legacyAmenityCategoryMap: Record<string, string> = {
+        wifi: "Connectivity", high_speed_wifi: "Connectivity", ethernet: "Connectivity",
+        pool: "Wellness", spa: "Wellness", gym: "Wellness", sauna: "Wellness", massage: "Wellness", hot_tub: "Wellness",
+        restaurant: "Food & Drink", bar: "Food & Drink", room_service: "Food & Drink", mini_bar: "Food & Drink", breakfast: "Food & Drink", kitchen: "Food & Drink",
+        air_conditioning: "Comfort", heating: "Comfort", fireplace: "Comfort", balcony: "Comfort",
+        concierge: "Services", parking: "Services", security: "Services", laundry: "Services",
+        dry_cleaning: "Services", housekeeping: "Services", luggage_storage: "Services",
+        airport_shuttle: "Services", tv: "Services", workspace: "Services", washing_machine: "Services", garden: "Services",
+      };
+
+      const groupedAmenities: Record<string, string[]> = {
+        Connectivity: [], "Food & Drink": [], Wellness: [], Comfort: [], Services: [],
+      };
+      for (const item of listing.amenities) {
+        const key = item.amenityKey;
+        if (key.includes(":")) {
+          const [cat = "Services", val = ""] = key.split(":");
+          (groupedAmenities[cat] ??= []).push(val);
+        } else {
+          const cat = legacyAmenityCategoryMap[key] || "Services";
+          (groupedAmenities[cat] ??= []).push(key);
         }
       }
 
-      throw error;
+      const presentDocTypes = listing.documents.map((d) => d.documentType as string);
+      const docChecklist = HOTEL_REQUIRED_DOC_GROUPS.map((group) => ({
+        label: group.label,
+        satisfied: group.types.some((t) => presentDocTypes.includes(t)),
+        uploadedTypes: group.types.filter((t) => presentDocTypes.includes(t)),
+      }));
+
+      return sendSuccess(reply, 200, {
+        ...listing,
+        amenities: groupedAmenities,
+        photos: await withSignedPhotos(listing.photos),
+        docChecklist,
+      });
+    } catch (err: any) {
+      return sendError(reply, 400, "GET_REVIEW_FAILED", "Failed to retrieve listing for review. Please try again.");
     }
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      include: {
-        photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
-        documents: { where: { replacedAt: null } },
-        amenities: true,
-        customAmenities: true,
-        reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
-      },
-    });
-
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    const legacyAmenityCategoryMap: Record<string, string> = {
-      wifi: "Connectivity", high_speed_wifi: "Connectivity", ethernet: "Connectivity",
-      pool: "Wellness", spa: "Wellness", gym: "Wellness", sauna: "Wellness", massage: "Wellness", hot_tub: "Wellness",
-      restaurant: "Food & Drink", bar: "Food & Drink", room_service: "Food & Drink", mini_bar: "Food & Drink", breakfast: "Food & Drink", kitchen: "Food & Drink",
-      air_conditioning: "Comfort", heating: "Comfort", fireplace: "Comfort", balcony: "Comfort",
-      concierge: "Services", parking: "Services", security: "Services", laundry: "Services",
-      dry_cleaning: "Services", housekeeping: "Services", luggage_storage: "Services",
-      airport_shuttle: "Services", tv: "Services", workspace: "Services", washing_machine: "Services", garden: "Services",
-    };
-
-    const groupedAmenities: Record<string, string[]> = {
-      Connectivity: [], "Food & Drink": [], Wellness: [], Comfort: [], Services: [],
-    };
-    for (const item of listing.amenities) {
-      const key = item.amenityKey;
-      if (key.includes(":")) {
-        const [cat = "Services", val = ""] = key.split(":");
-        (groupedAmenities[cat] ??= []).push(val);
-      } else {
-        const cat = legacyAmenityCategoryMap[key] || "Services";
-        (groupedAmenities[cat] ??= []).push(key);
-      }
-    }
-
-    const presentDocTypes = listing.documents.map((d) => d.documentType as string);
-    const docChecklist = HOTEL_REQUIRED_DOC_GROUPS.map((group) => ({
-      label: group.label,
-      satisfied: group.types.some((t) => presentDocTypes.includes(t)),
-      uploadedTypes: group.types.filter((t) => presentDocTypes.includes(t)),
-    }));
-
-    return sendSuccess(reply, 200, {
-      ...listing,
-      amenities: groupedAmenities,
-      photos: await withSignedPhotos(listing.photos),
-      docChecklist,
-    });
   });
 
   // ── GET /admin/listings/:id/documents/:docId ──────────────────────────────
@@ -490,36 +494,40 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const admin = req as AdminRequest;
     const { id, docId } = req.params as { id: string; docId: string };
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(
-            reply,
-            404,
-            "NOT_FOUND",
-            "Listing not found."
-          );
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(
+              reply,
+              404,
+              "NOT_FOUND",
+              "Listing not found."
+            );
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
 
-      throw error;
+      const doc = await prisma.listingDocument.findFirst({ where: { id: docId, listingId: id } });
+      if (!doc) return sendError(reply, 404, "NOT_FOUND", "Document not found.");
+
+      const url = await createPresignedDownloadUrl(doc.s3Key, 900);
+      return sendSuccess(reply, 200, { url, fileType: doc.fileType });
+    } catch (err: any) {
+      return sendError(reply, 400, "GET_DOCUMENT_FAILED", "Failed to retrieve listing document. Please try again.");
     }
-
-    const doc = await prisma.listingDocument.findFirst({ where: { id: docId, listingId: id } });
-    if (!doc) return sendError(reply, 404, "NOT_FOUND", "Document not found.");
-
-    const url = await createPresignedDownloadUrl(doc.s3Key, 900);
-    return sendSuccess(reply, 200, { url, fileType: doc.fileType });
   });
 
   // ── PATCH /admin/listings/review-tasks/:taskId/assign (UC-2.8 A3) ─────────
@@ -549,50 +557,54 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({
-      where: { id: taskId }, include: {
-        listing: {
-          select: {
-            id: true,
+    try {
+      const task = await prisma.listingReviewTask.findUnique({
+        where: { id: taskId }, include: {
+          listing: {
+            select: {
+              id: true,
+            },
           },
         },
-      },
-    });
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
-    try {
-      await verifyListingScope(admin, task.listing.id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(
-            reply,
-            404,
-            "NOT_FOUND",
-            "Listing not found."
-          );
+      });
+      if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+      try {
+        await verifyListingScope(admin, task.listing.id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(
+              reply,
+              404,
+              "NOT_FOUND",
+              "Listing not found."
+            );
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This review task is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This review task is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      if (!["open", "escalated"].includes(task.status)) {
+        return sendError(reply, 409, "TASK_RESOLVED", "Cannot assign a resolved task.");
+      }
+      if (task.assignedTo && task.assignedTo !== admin.adminId) {
+        return sendError(reply, 409, "ALREADY_ASSIGNED", "This listing is already assigned to another reviewer.");
       }
 
-      throw error;
+      await prisma.listingReviewTask.update({ where: { id: taskId }, data: { assignedTo: admin.adminId } });
+      return sendSuccess(reply, 200, { message: "Assigned to you." });
+    } catch (err: any) {
+      return sendError(reply, 400, "ASSIGN_TASK_FAILED", "Failed to assign review task. Please try again.");
     }
-    if (!["open", "escalated"].includes(task.status)) {
-      return sendError(reply, 409, "TASK_RESOLVED", "Cannot assign a resolved task.");
-    }
-    if (task.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 409, "ALREADY_ASSIGNED", "This listing is already assigned to another reviewer.");
-    }
-
-    await prisma.listingReviewTask.update({ where: { id: taskId }, data: { assignedTo: admin.adminId } });
-    return sendSuccess(reply, 200, { message: "Assigned to you." });
   });
 
   // ── PATCH /admin/listings/review-tasks/:taskId/unassign ───────────────────
@@ -621,50 +633,54 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const admin = req as AdminRequest;
     const { taskId } = req.params as { taskId: string };
 
-    const task = await prisma.listingReviewTask.findUnique({
-      where: { id: taskId }, include: {
-        listing: {
-          select: {
-            id: true,
-          },
-        },
-      }
-    });
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
     try {
-      await verifyListingScope(admin, task.listing.id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(
-            reply,
-            404,
-            "NOT_FOUND",
-            "Listing not found."
-          );
+      const task = await prisma.listingReviewTask.findUnique({
+        where: { id: taskId }, include: {
+          listing: {
+            select: {
+              id: true,
+            },
+          },
+        }
+      });
+      if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+      try {
+        await verifyListingScope(admin, task.listing.id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(
+              reply,
+              404,
+              "NOT_FOUND",
+              "Listing not found."
+            );
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This review task is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This review task is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      if (!["open", "escalated"].includes(task.status)) {
+        return sendError(reply, 409, "TASK_RESOLVED", "Cannot unassign a resolved task.");
+      }
+      if (task.assignedTo && task.assignedTo !== admin.adminId && admin.adminRole !== "super_admin") {
+        return sendError(reply, 403, "FORBIDDEN", "Only the assigned reviewer or a super admin can unassign this task.");
       }
 
-      throw error;
+      await prisma.listingReviewTask.update({ where: { id: taskId }, data: { assignedTo: null } });
+      return sendSuccess(reply, 200, { message: "Task unassigned." });
+    } catch (err: any) {
+      return sendError(reply, 400, "UNASSIGN_TASK_FAILED", "Failed to unassign review task. Please try again.");
     }
-    if (!["open", "escalated"].includes(task.status)) {
-      return sendError(reply, 409, "TASK_RESOLVED", "Cannot unassign a resolved task.");
-    }
-    if (task.assignedTo && task.assignedTo !== admin.adminId && admin.adminRole !== "super_admin") {
-      return sendError(reply, 403, "FORBIDDEN", "Only the assigned reviewer or a super admin can unassign this task.");
-    }
-
-    await prisma.listingReviewTask.update({ where: { id: taskId }, data: { assignedTo: null } });
-    return sendSuccess(reply, 200, { message: "Task unassigned." });
   });
 
   // ── PATCH /admin/listings/review-tasks/:taskId/escalate ───────────────────
@@ -701,59 +717,63 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { taskId } = req.params as { taskId: string };
     const { reason } = req.body as { reason?: string };
 
-    const task = await prisma.listingReviewTask.findUnique({
-      where: { id: taskId }, include: {
-        listing: {
-          select: {
-            id: true,
+    try {
+      const task = await prisma.listingReviewTask.findUnique({
+        where: { id: taskId }, include: {
+          listing: {
+            select: {
+              id: true,
+            },
           },
         },
-      },
-    });
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
-    try {
-      await verifyListingScope(admin, task.listing.id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(
-            reply,
-            404,
-            "NOT_FOUND",
-            "Listing not found."
-          );
+      });
+      if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+      try {
+        await verifyListingScope(admin, task.listing.id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(
+              reply,
+              404,
+              "NOT_FOUND",
+              "Listing not found."
+            );
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This review task is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This review task is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      if (!["open", "awaiting_provider_response"].includes(task.status)) {
+        return sendError(reply, 409, "INVALID_STATUS", "Only open or awaiting-provider-response tasks can be escalated.");
       }
 
-      throw error;
-    }
-    if (!["open", "awaiting_provider_response"].includes(task.status)) {
-      return sendError(reply, 409, "INVALID_STATUS", "Only open or awaiting-provider-response tasks can be escalated.");
-    }
+      await prisma.$transaction([
+        prisma.listingReviewTask.update({ where: { id: taskId }, data: { status: "escalated" } }),
+        prisma.listingModerationLog.create({
+          data: {
+            listingId: task.listingId,
+            action: "escalated",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: { taskId, reason: reason ?? null, slaDeadline: task.slaDeadline.toISOString(), ipAddress: req.ip },
+          },
+        }),
+      ]);
 
-    await prisma.$transaction([
-      prisma.listingReviewTask.update({ where: { id: taskId }, data: { status: "escalated" } }),
-      prisma.listingModerationLog.create({
-        data: {
-          listingId: task.listingId,
-          action: "escalated",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: { taskId, reason: reason ?? null, slaDeadline: task.slaDeadline.toISOString(), ipAddress: req.ip },
-        },
-      }),
-    ]);
-
-    return sendSuccess(reply, 200, { message: "Review task escalated." });
+      return sendSuccess(reply, 200, { message: "Review task escalated." });
+    } catch (err: any) {
+      return sendError(reply, 400, "ESCALATE_TASK_FAILED", "Failed to escalate review task. Please try again.");
+    }
   });
 
   // ── POST /admin/listings/review-tasks/:taskId/resolve (Agent Unblock Process) ──
@@ -794,98 +814,102 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { taskId } = req.params as { taskId: string };
     const { decision, adminNote } = req.body as { decision: string; adminNote?: string };
 
-    const task = await prisma.listingReviewTask.findUnique({
-      where: { id: taskId },
-      include: { listing: true },
-    });
+    try {
+      const task = await prisma.listingReviewTask.findUnique({
+        where: { id: taskId },
+        include: { listing: true },
+      });
 
-    if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
-    if (!["open", "escalated"].includes(task.status)) {
-      return sendError(reply, 409, "TASK_RESOLVED", "This task is already resolved or in a different state.");
-    }
-
-    if (task.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 403, "FORBIDDEN", "This task is assigned to someone else.");
-    }
-
-    if (decision === "unblock_no_warning" && !adminNote) {
-      return sendError(reply, 400, "VALIDATION_ERROR", "Internal note is mandatory when unblocking without a warning.");
-    }
-
-    if (decision === "ban" && !["admin", "super_admin"].includes(admin.adminRole)) {
-      return sendError(reply, 403, "FORBIDDEN", "Only Admin or Super Admin can permanently ban a listing.");
-    }
-
-    await prisma.$transaction(async (tx) => {
-      let nextStatus = "resolved";
-      let listingStatusUpdate: string | undefined = undefined;
-      let resetConsecutiveNegative = false;
-
-      switch (decision) {
-        case "unblock_warning":
-          // TODO: Send formal warning email to provider
-          listingStatusUpdate = "active";
-          resetConsecutiveNegative = true;
-          break;
-        case "unblock_no_warning":
-          listingStatusUpdate = "active";
-          resetConsecutiveNegative = true;
-          break;
-        case "keep_suspended":
-          nextStatus = "awaiting_provider_response";
-          // TODO: Send message to provider
-          break;
-        case "ban":
-          listingStatusUpdate = "permanently_banned";
-          // TODO: Notify provider of ban
-          break;
+      if (!task) return sendError(reply, 404, "NOT_FOUND", "Review task not found.");
+      if (!["open", "escalated"].includes(task.status)) {
+        return sendError(reply, 409, "TASK_RESOLVED", "This task is already resolved or in a different state.");
       }
 
-      if (listingStatusUpdate) {
-        await tx.listing.update({
-          where: { id: task.listingId },
+      if (task.assignedTo && task.assignedTo !== admin.adminId) {
+        return sendError(reply, 403, "FORBIDDEN", "This task is assigned to someone else.");
+      }
+
+      if (decision === "unblock_no_warning" && !adminNote) {
+        return sendError(reply, 400, "VALIDATION_ERROR", "Internal note is mandatory when unblocking without a warning.");
+      }
+
+      if (decision === "ban" && !["admin", "super_admin"].includes(admin.adminRole)) {
+        return sendError(reply, 403, "FORBIDDEN", "Only Admin or Super Admin can permanently ban a listing.");
+      }
+
+      await prisma.$transaction(async (tx) => {
+        let nextStatus = "resolved";
+        let listingStatusUpdate: string | undefined = undefined;
+        let resetConsecutiveNegative = false;
+
+        switch (decision) {
+          case "unblock_warning":
+            // TODO: Send formal warning email to provider
+            listingStatusUpdate = "active";
+            resetConsecutiveNegative = true;
+            break;
+          case "unblock_no_warning":
+            listingStatusUpdate = "active";
+            resetConsecutiveNegative = true;
+            break;
+          case "keep_suspended":
+            nextStatus = "awaiting_provider_response";
+            // TODO: Send message to provider
+            break;
+          case "ban":
+            listingStatusUpdate = "permanently_banned";
+            // TODO: Notify provider of ban
+            break;
+        }
+
+        if (listingStatusUpdate) {
+          await tx.listing.update({
+            where: { id: task.listingId },
+            data: {
+              status: listingStatusUpdate as any,
+              ...(resetConsecutiveNegative ? { consecutiveNegative: 0 } : {}),
+            },
+          });
+        }
+
+        await tx.listingReviewTask.update({
+          where: { id: taskId },
           data: {
-            status: listingStatusUpdate as any,
-            ...(resetConsecutiveNegative ? { consecutiveNegative: 0 } : {}),
+            status: nextStatus as any,
+            outcome: decision,
+            adminNote: adminNote ?? null,
+            ...(nextStatus === "resolved" ? { resolvedAt: new Date() } : {}),
           },
         });
-      }
 
-      await tx.listingReviewTask.update({
-        where: { id: taskId },
-        data: {
-          status: nextStatus as any,
-          outcome: decision,
-          adminNote: adminNote ?? null,
-          ...(nextStatus === "resolved" ? { resolvedAt: new Date() } : {}),
-        },
+        await tx.listingModerationLog.create({
+          data: {
+            listingId: task.listingId,
+            action: "review_task_resolved",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: { taskId, decision, adminNote: adminNote ?? null },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "review_task_resolved",
+            targetType: "listing",
+            targetId: task.listingId,
+            oldValue: task.status,
+            newValue: JSON.stringify({ decision, outcome: nextStatus }),
+            ipAddress: req.ip,
+          },
+        });
       });
 
-      await tx.listingModerationLog.create({
-        data: {
-          listingId: task.listingId,
-          action: "review_task_resolved",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: { taskId, decision, adminNote: adminNote ?? null },
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          adminId: admin.adminId,
-          role: admin.adminRole,
-          action: "review_task_resolved",
-          targetType: "listing",
-          targetId: task.listingId,
-          oldValue: task.status,
-          newValue: JSON.stringify({ decision, outcome: nextStatus }),
-          ipAddress: req.ip,
-        },
-      });
-    });
-
-    return sendSuccess(reply, 200, { message: `Task resolved with decision: ${decision}.` });
+      return sendSuccess(reply, 200, { message: `Task resolved with decision: ${decision}.` });
+    } catch (err: any) {
+      return sendError(reply, 400, "RESOLVE_TASK_FAILED", "Failed to resolve review task. Please try again.");
+    }
   });
 
   // POST /admin/listings/:id/approve — Approve listing (UC-2.9)
@@ -915,58 +939,58 @@ export async function adminListingRoutes(app: FastifyInstance) {
     }
     const { id } = req.params as { id: string };
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
+
+      if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "A verified star rating (1–5, integer) is required to approve a hotel listing.");
       }
 
-      throw error;
-    }
-    const { starRating, adminNote } = (req.body ?? {}) as { starRating: number; adminNote?: string };
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        include: {
+          reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
+          documents: { where: { replacedAt: null } },
+        },
+      });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
 
-    if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "A verified star rating (1–5, integer) is required to approve a hotel listing.");
-    }
+      const task = listing.reviewTasks[0] ?? null;
 
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      include: {
-        reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
-        documents: { where: { replacedAt: null } },
-      },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
+      if (task?.assignedTo && task.assignedTo !== admin.adminId) {
+        return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
+          "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
+      }
 
-    const task = listing.reviewTasks[0] ?? null;
+      const presentDocTypes = listing.documents.map((d) => d.documentType as string);
+      const missingDocs = HOTEL_REQUIRED_DOC_GROUPS
+        .filter((g) => !g.types.some((t) => presentDocTypes.includes(t)))
+        .map((g) => g.label);
+      if (missingDocs.length > 0) {
+        return sendError(reply, 422, "MISSING_DOCUMENTS",
+          `Cannot approve: the following required document(s) are missing: ${missingDocs.join(", ")}.`);
+      }
 
-    if (task?.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
-        "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
-    }
-
-    const presentDocTypes = listing.documents.map((d) => d.documentType as string);
-    const missingDocs = HOTEL_REQUIRED_DOC_GROUPS
-      .filter((g) => !g.types.some((t) => presentDocTypes.includes(t)))
-      .map((g) => g.label);
-    if (missingDocs.length > 0) {
-      return sendError(reply, 422, "MISSING_DOCUMENTS",
-        `Cannot approve: the following required document(s) are missing: ${missingDocs.join(", ")}.`);
-    }
-
-    try {
       const result = await prisma.$transaction(async (tx) => {
         const updated = await tx.listing.updateMany({
           where: { id, status: "pending_review" },
@@ -1029,7 +1053,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
       return sendSuccess(reply, 200, { message: "Listing approved and published." });
     } catch (err: any) {
-      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to approve listing.");
+      return sendError(reply, 400, "APPROVE_LISTING_FAILED", "Failed to approve listing. Please try again.");
     }
   });
 
@@ -1092,117 +1116,121 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      const { reasons, providerNote, adminNote } = req.body as {
+        reasons: string[];
+        providerNote?: string;
+        adminNote?: string;
+      };
+
+      if (!reasons?.length) return sendError(reply, 422, "VALIDATION_ERROR", "At least one rejection reason is required.");
+      for (const r of reasons) {
+        if (!REJECTION_REASONS.has(r)) return sendError(reply, 422, "INVALID_REASON", `Invalid rejection reason: ${r}`);
+      }
+      if (reasons.includes("Other") && !providerNote?.trim()) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "Please describe the reason when selecting 'Other'.");
       }
 
-      throw error;
-    }
-    const { reasons, providerNote, adminNote } = req.body as {
-      reasons: string[];
-      providerNote?: string;
-      adminNote?: string;
-    };
-
-    if (!reasons?.length) return sendError(reply, 422, "VALIDATION_ERROR", "At least one rejection reason is required.");
-    for (const r of reasons) {
-      if (!REJECTION_REASONS.has(r)) return sendError(reply, 422, "INVALID_REASON", `Invalid rejection reason: ${r}`);
-    }
-    if (reasons.includes("Other") && !providerNote?.trim()) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "Please describe the reason when selecting 'Other'.");
-    }
-
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      include: { reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } } },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
-
-    const task = listing.reviewTasks[0] ?? null;
-
-    if (task?.assignedTo && task.assignedTo !== admin.adminId) {
-      return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
-        "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
-    }
-
-    const result = await prisma.$transaction(async (tx) => {
-      const updated = await tx.listing.updateMany({
-        where: { id, status: "pending_review" },
-        data: {
-          status: "rejected",
-          rejectedAt: new Date(),
-          rejectedBy: admin.adminId,
-          rejectionReasons: reasons,
-          rejectionNote: providerNote ?? null,
-        },
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        include: { reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } } },
       });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (listing.status !== "pending_review") return sendError(reply, 409, "INVALID_STATUS", "Listing is not pending review.");
 
-      if (updated.count === 0) return { actioned: false };
+      const task = listing.reviewTasks[0] ?? null;
 
-      if (task) {
-        await tx.listingReviewTask.update({
-          where: { id: task.id },
-          data: { status: "resolved", outcome: "rejected", adminNote: adminNote ?? null, resolvedAt: new Date() },
-        });
+      if (task?.assignedTo && task.assignedTo !== admin.adminId) {
+        return sendError(reply, 409, "TASK_ASSIGNED_TO_OTHER",
+          "This review task is assigned to another admin. Unassign it first or coordinate with the assigned reviewer.");
       }
 
-      await tx.listingModerationLog.create({
-        data: {
-          listingId: id,
-          action: "rejected",
-          actorId: admin.adminId,
-          actorRole: admin.adminRole,
-          metadata: {
-            reasons,
-            providerNote: providerNote ?? null,
-            adminNote: adminNote ?? null,
-            taskId: task?.id ?? null,
-            submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+      const result = await prisma.$transaction(async (tx) => {
+        const updated = await tx.listing.updateMany({
+          where: { id, status: "pending_review" },
+          data: {
+            status: "rejected",
+            rejectedAt: new Date(),
+            rejectedBy: admin.adminId,
+            rejectionReasons: reasons,
+            rejectionNote: providerNote ?? null,
+          },
+        });
+
+        if (updated.count === 0) return { actioned: false };
+
+        if (task) {
+          await tx.listingReviewTask.update({
+            where: { id: task.id },
+            data: { status: "resolved", outcome: "rejected", adminNote: adminNote ?? null, resolvedAt: new Date() },
+          });
+        }
+
+        await tx.listingModerationLog.create({
+          data: {
+            listingId: id,
+            action: "rejected",
+            actorId: admin.adminId,
+            actorRole: admin.adminRole,
+            metadata: {
+              reasons,
+              providerNote: providerNote ?? null,
+              adminNote: adminNote ?? null,
+              taskId: task?.id ?? null,
+              submissionNumber: task?.submissionNumber ?? listing.submissionCount,
+              ipAddress: req.ip,
+            },
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            adminId: admin.adminId,
+            role: admin.adminRole,
+            action: "listing_rejected",
+            targetType: "listing",
+            targetId: id,
+            oldValue: JSON.stringify({
+              status: listing.status,
+            }),
+            newValue: JSON.stringify({
+              status: "rejected",
+              reasons,
+            }),
             ipAddress: req.ip,
           },
-        },
+        });
+        return { actioned: true };
       });
-      await tx.auditLog.create({
-        data: {
-          adminId: admin.adminId,
-          role: admin.adminRole,
-          action: "listing_rejected",
-          targetType: "listing",
-          targetId: id,
-          oldValue: JSON.stringify({
-            status: listing.status,
-          }),
-          newValue: JSON.stringify({
-            status: "rejected",
-            reasons,
-          }),
-          ipAddress: req.ip,
-        },
-      });
-      return { actioned: true };
-    });
 
-    if (!result.actioned) {
-      return sendError(reply, 409, "INVALID_STATUS",
-        "Listing is not pending review — it may have already been actioned by another admin.");
+      if (!result.actioned) {
+        return sendError(reply, 409, "INVALID_STATUS",
+          "Listing is not pending review — it may have already been actioned by another admin.");
+      }
+
+      sendListingRejectedEmail(listing.providerId, listing.name ?? id, reasons, providerNote ?? null).catch(() => null);
+      return sendSuccess(reply, 200, { message: "Listing rejected. Provider has been notified." });
+    } catch (err: any) {
+      return sendError(reply, 400, "REJECT_LISTING_FAILED", "Failed to reject listing. Please try again.");
     }
-
-    sendListingRejectedEmail(listing.providerId, listing.name ?? id, reasons, providerNote ?? null).catch(() => null);
-    return sendSuccess(reply, 200, { message: "Listing rejected. Provider has been notified." });
   });
 
   // ── PATCH /admin/listings/:id/star-rating (UC-2.12) ───────────────────────
@@ -1251,39 +1279,39 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
+      const { starRating, reason } = req.body as { starRating: number; reason: string };
 
-      throw error;
-    }
-    const { starRating, reason } = req.body as { starRating: number; reason: string };
+      if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "Star rating must be a whole number between 1 and 5.");
+      }
+      if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "A reason for the rating change is required.");
 
-    if (!Number.isInteger(starRating) || starRating < 1 || starRating > 5) {
-      return sendError(reply, 422, "VALIDATION_ERROR", "Star rating must be a whole number between 1 and 5.");
-    }
-    if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "A reason for the rating change is required.");
+      const listing = await prisma.listing.findUnique({ where: { id } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (listing.status !== "approved") return sendError(reply, 409, "INVALID_STATUS", "Star rating can only be updated on approved listings.");
 
-    const listing = await prisma.listing.findUnique({ where: { id } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (listing.status !== "approved") return sendError(reply, 409, "INVALID_STATUS", "Star rating can only be updated on approved listings.");
+      const oldRating = listing.starRating ?? 0;
 
-    const oldRating = listing.starRating ?? 0;
-
-    try {
       await prisma.$transaction([
         prisma.listing.update({
           where: { id },
@@ -1322,7 +1350,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       sendStarRatingUpdatedEmail(listing.providerId, listing.name ?? id, oldRating, starRating, reason).catch(() => null);
       return sendSuccess(reply, 200, { message: "Star rating updated." });
     } catch (err: any) {
-      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to update star rating.");
+      return sendError(reply, 400, "UPDATE_RATING_FAILED", "Failed to update star rating. Please try again.");
     }
   });
 
@@ -1371,36 +1399,36 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
+      }
+      const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };
+
+      if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Suspension reason is required.");
+
+      const listing = await prisma.listing.findUnique({ where: { id } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (!["approved", "active"].includes(listing.status)) {
+        return sendError(reply, 409, "INVALID_STATUS", "Only live listings can be suspended.");
       }
 
-      throw error;
-    }
-    const { reason, notifyProvider = true } = req.body as { reason: string; notifyProvider?: boolean };
-
-    if (!reason?.trim()) return sendError(reply, 422, "VALIDATION_ERROR", "Suspension reason is required.");
-
-    const listing = await prisma.listing.findUnique({ where: { id } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (!["approved", "active"].includes(listing.status)) {
-      return sendError(reply, 409, "INVALID_STATUS", "Only live listings can be suspended.");
-    }
-
-    try {
       await prisma.$transaction([
         prisma.listing.update({
           where: { id },
@@ -1447,7 +1475,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, { message: "Listing suspended." });
     } catch (err: any) {
-      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to suspend listing.");
+      return sendError(reply, 400, "SUSPEND_LISTING_FAILED", "Failed to suspend listing. Please try again.");
     }
   });
 
@@ -1488,34 +1516,34 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
+      const { reason } = req.body as { reason?: string };
 
-      throw error;
-    }
-    const { reason } = req.body as { reason?: string };
+      const listing = await prisma.listing.findUnique({ where: { id } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      if (listing.status !== "suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
 
-    const listing = await prisma.listing.findUnique({ where: { id } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    if (listing.status !== "suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
+      const restoreStatus = (listing.category === "apartment" || listing.category === "car") ? "active" : "approved";
 
-    const restoreStatus = (listing.category === "apartment" || listing.category === "car") ? "active" : "approved";
-
-    try {
       await prisma.$transaction([
         prisma.listing.update({ where: { id }, data: { status: restoreStatus } }),
         prisma.listingModerationLog.create({
@@ -1551,7 +1579,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       sendListingReinstatedEmail(listing.providerId, listing.name ?? id).catch(() => null);
       return sendSuccess(reply, 200, { message: "Listing reinstated and live again." });
     } catch (err: any) {
-      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to reinstate listing.");
+      return sendError(reply, 400, "REINSTATE_LISTING_FAILED", "Failed to reinstate listing. Please try again.");
     }
   });
 
@@ -1614,49 +1642,53 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
 
-      throw error;
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        select: { id: true, name: true, status: true, category: true, submissionCount: true },
+      });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      const tasks = await prisma.listingReviewTask.findMany({
+        where: { listingId: id },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          submissionNumber: true,
+          assignedTo: true,
+          status: true,
+          outcome: true,
+          adminNote: true,
+          slaDeadline: true,
+          createdAt: true,
+          resolvedAt: true,
+        },
+      });
+
+      return sendSuccess(reply, 200, { listing, tasks, total: tasks.length });
+    } catch (err: any) {
+      return sendError(reply, 400, "GET_TASKS_FAILED", "Failed to fetch review tasks history. Please try again.");
     }
-
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      select: { id: true, name: true, status: true, category: true, submissionCount: true },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    const tasks = await prisma.listingReviewTask.findMany({
-      where: { listingId: id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        submissionNumber: true,
-        assignedTo: true,
-        status: true,
-        outcome: true,
-        adminNote: true,
-        slaDeadline: true,
-        createdAt: true,
-        resolvedAt: true,
-      },
-    });
-
-    return sendSuccess(reply, 200, { listing, tasks, total: tasks.length });
   });
 
   // ── GET /admin/listings/:id/moderation-history ────────────────────────────
@@ -1725,51 +1757,55 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string };
 
     try {
-      await verifyListingScope(admin, id);
-    } catch (error) {
-      if (error instanceof Error) {
-        if (error.message === "LISTING_NOT_FOUND") {
-          return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      try {
+        await verifyListingScope(admin, id);
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.message === "LISTING_NOT_FOUND") {
+            return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+          }
+
+          if (error.message === "OUT_OF_SCOPE") {
+            return sendError(
+              reply,
+              403,
+              "FORBIDDEN",
+              "This listing is outside your country scope."
+            );
+          }
         }
 
-        if (error.message === "OUT_OF_SCOPE") {
-          return sendError(
-            reply,
-            403,
-            "FORBIDDEN",
-            "This listing is outside your country scope."
-          );
-        }
+        throw error;
       }
 
-      throw error;
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        select: {
+          id: true, name: true, status: true, category: true,
+          starRating: true, claimedStarRating: true, submissionCount: true,
+          approvedAt: true, approvedBy: true,
+          rejectedAt: true, rejectedBy: true, rejectionReasons: true, rejectionNote: true,
+          suspendedAt: true, suspendedBy: true, suspensionReason: true,
+        },
+      });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      const history = await prisma.listingModerationLog.findMany({
+        where: { listingId: id },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          action: true,
+          actorRole: true,
+          metadata: true,
+          createdAt: true,
+        },
+      });
+
+      return sendSuccess(reply, 200, { listing, history, total: history.length });
+    } catch (err: any) {
+      return sendError(reply, 400, "GET_MODERATION_HISTORY_FAILED", "Failed to fetch moderation history. Please try again.");
     }
-
-    const listing = await prisma.listing.findUnique({
-      where: { id },
-      select: {
-        id: true, name: true, status: true, category: true,
-        starRating: true, claimedStarRating: true, submissionCount: true,
-        approvedAt: true, approvedBy: true,
-        rejectedAt: true, rejectedBy: true, rejectionReasons: true, rejectionNote: true,
-        suspendedAt: true, suspendedBy: true, suspensionReason: true,
-      },
-    });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-
-    const history = await prisma.listingModerationLog.findMany({
-      where: { listingId: id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        action: true,
-        actorRole: true,
-        metadata: true,
-        createdAt: true,
-      },
-    });
-
-    return sendSuccess(reply, 200, { listing, history, total: history.length });
   });
 
   // ── GET /admin/listings ───────────────────────────────────────────────────

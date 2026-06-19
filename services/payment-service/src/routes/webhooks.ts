@@ -71,121 +71,136 @@ export async function webhookRoutes(app: FastifyInstance) {
     // PAYMENT SUCCESS
     // ========================
     if (event.type === "payment_intent.succeeded") {
-      const intent = event.data.object as Stripe.PaymentIntent;
-  
-      let payment = await prisma.payment.findFirst({
-        where: { providerPaymentId: intent.id },
-      });
-  
-      if (!payment && intent.metadata?.bookingId) {
-        payment = await prisma.payment.findFirst({
-          where: { bookingId: intent.metadata.bookingId, status: { in: ["initiated", "pending"] } }
+      try {
+        const intent = event.data.object as Stripe.PaymentIntent;
+    
+        let payment = await prisma.payment.findFirst({
+          where: { providerPaymentId: intent.id },
         });
-        if (payment) {
-          await prisma.payment.update({
-            where: { id: payment.id },
-            data: { providerPaymentId: intent.id }
+    
+        if (!payment && intent.metadata?.bookingId) {
+          payment = await prisma.payment.findFirst({
+            where: { bookingId: intent.metadata.bookingId, status: { in: ["initiated", "pending"] } }
           });
+          if (payment) {
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: { providerPaymentId: intent.id }
+            });
+          }
         }
-      }
-
-      if (!payment) {
-        console.log("Payment not found");
+  
+        if (!payment) {
+          console.log("Payment not found");
+          return reply.send({ received: true });
+        }
+    
+        //  IDEMPOTENCY CHECK — must be FIRST, before any side effects
+        if (payment.status === "captured") {
+          console.log("Already captured, skipping duplicate webhook");
+          return reply.send({ received: true });
+        }
+    
+        const chargeId = intent.latest_charge as string | null;
+    
+        let cardDetails = null;
+        let pmType = null;
+    
+        if (chargeId) {
+          const charge = await stripe.charges.retrieve(chargeId);
+          cardDetails = charge.payment_method_details?.card ?? null;
+          pmType = charge.payment_method_details?.type ?? null;
+        }
+    
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: "captured",
+            capturedAt: new Date(),
+            paymentMethodType: pmType,
+            cardBrand: cardDetails?.brand ?? null,
+            cardLast4: cardDetails?.last4 ?? null,
+          },
+        });
+    
+        //  emails + PDF + confirm booking — runs only once
+        await bookingConfirmedHandler({
+          id: payment.id,
+          metadata: { bookingId: payment.bookingId },
+        });
+    
         return reply.send({ received: true });
+      } catch (err: any) {
+        req.log.error(err, "payment_intent.succeeded handler error");
+        return reply.code(400).send({ error: "payment_intent.succeeded handler failed: " + (err?.message || "Unknown error") });
       }
-  
-      //  IDEMPOTENCY CHECK — must be FIRST, before any side effects
-      if (payment.status === "captured") {
-        console.log("Already captured, skipping duplicate webhook");
-        return reply.send({ received: true });
-      }
-  
-      const chargeId = intent.latest_charge as string | null;
-  
-      let cardDetails = null;
-      let pmType = null;
-  
-      if (chargeId) {
-        const charge = await stripe.charges.retrieve(chargeId);
-        cardDetails = charge.payment_method_details?.card ?? null;
-        pmType = charge.payment_method_details?.type ?? null;
-      }
-  
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "captured",
-          capturedAt: new Date(),
-          paymentMethodType: pmType,
-          cardBrand: cardDetails?.brand ?? null,
-          cardLast4: cardDetails?.last4 ?? null,
-        },
-      });
-  
-      //  emails + PDF + confirm booking — runs only once
-      await bookingConfirmedHandler({
-        id: payment.id,
-        metadata: { bookingId: payment.bookingId },
-      });
-  
-      return reply.send({ received: true });
     }
   
     // ========================
     // PAYMENT FAILED
     // ========================
     if (event.type === "payment_intent.payment_failed") {
-      const intent = event.data.object as any;
-  
-      const payment = await prisma.payment.findFirst({
-        where: { providerPaymentId: intent.id },
-      });
-  
-      if (!payment) {
+      try {
+        const intent = event.data.object as any;
+    
+        const payment = await prisma.payment.findFirst({
+          where: { providerPaymentId: intent.id },
+        });
+    
+        if (!payment) {
+          return reply.send({ received: true });
+        }
+    
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: "failed",
+            failureCode: intent.last_payment_error?.code ?? null,
+            failureMessage: intent.last_payment_error?.message ?? null,
+          },
+        });
+    
+        if (payment.attemptNumber >= 3) {
+          await failBooking(payment.bookingId);
+        }
+    
         return reply.send({ received: true });
+      } catch (err: any) {
+        req.log.error(err, "payment_intent.payment_failed handler error");
+        return reply.code(400).send({ error: "payment_intent.payment_failed handler failed: " + (err?.message || "Unknown error") });
       }
-  
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "failed",
-          failureCode: intent.last_payment_error?.code ?? null,
-          failureMessage: intent.last_payment_error?.message ?? null,
-        },
-      });
-  
-      if (payment.attemptNumber >= 3) {
-        await failBooking(payment.bookingId);
-      }
-  
-      return reply.send({ received: true });
     }
   
     // ========================
     // REFUND
     // ========================
     if (event.type === "charge.refunded") {
-      const charge = event.data.object as any;
-  
-      const providerRefundId = charge.refunds?.data?.[0]?.id;
-  
-      if (providerRefundId) {
-        const refund = await prisma.refund.findFirst({
-          where: { providerRefundId },
-        });
-  
-        if (refund && refund.status !== "succeeded") {
-          await prisma.refund.update({
-            where: { id: refund.id },
-            data: {
-              status: "succeeded",
-              refundedAt: new Date(),
-            },
+      try {
+        const charge = event.data.object as any;
+    
+        const providerRefundId = charge.refunds?.data?.[0]?.id;
+    
+        if (providerRefundId) {
+          const refund = await prisma.refund.findFirst({
+            where: { providerRefundId },
           });
+    
+          if (refund && refund.status !== "succeeded") {
+            await prisma.refund.update({
+              where: { id: refund.id },
+              data: {
+                status: "succeeded",
+                refundedAt: new Date(),
+              },
+            });
+          }
         }
+    
+        return reply.send({ received: true });
+      } catch (err: any) {
+        req.log.error(err, "charge.refunded handler error");
+        return reply.code(400).send({ error: "charge.refunded handler failed: " + (err?.message || "Unknown error") });
       }
-  
-      return reply.send({ received: true });
     }
   
     // ========================
@@ -326,55 +341,60 @@ export async function webhookRoutes(app: FastifyInstance) {
 
     const taraReference = body.taraReference ?? body.reference;
 
-    if (body.event === "payment_successful") {
-      const payment = await prisma.payment.findFirst({
-        where: { providerPaymentId: taraReference },
-      });
+    try {
+      if (body.event === "payment_successful") {
+        const payment = await prisma.payment.findFirst({
+          where: { providerPaymentId: taraReference },
+        });
 
-      if (!payment) {
-        app.log.warn(`[tara-webhook] Payment not found for taraReference ${taraReference}`);
-        return reply.status(200).send({ received: true });
+        if (!payment) {
+          app.log.warn(`[tara-webhook] Payment not found for taraReference ${taraReference}`);
+          return reply.status(200).send({ received: true });
+        }
+
+        if (payment.status === "captured") {
+          return reply.status(200).send({ received: true });
+        }
+
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: "captured",
+            capturedAt: new Date(),
+            paymentMethodType: "mobile_money",
+          },
+        });
+
+        await bookingConfirmedHandler({ id: payment.id, metadata: { bookingId: payment.bookingId } });
+
+      } else if (body.event === "payment_failed") {
+        const payment = await prisma.payment.findFirst({
+          where: { providerPaymentId: taraReference },
+        });
+
+        if (!payment) {
+          app.log.warn(`[tara-webhook] Payment not found for taraReference ${taraReference}`);
+          return reply.status(200).send({ received: true });
+        }
+
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: "failed",
+            failureCode: body.failureCode ?? null,
+            failureMessage: body.failureMessage ?? null,
+          },
+        });
+
+        if (payment.attemptNumber >= 3) {
+          await failBooking(payment.bookingId);
+        }
       }
 
-      if (payment.status === "captured") {
-        return reply.status(200).send({ received: true });
-      }
-
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "captured",
-          capturedAt: new Date(),
-          paymentMethodType: "mobile_money",
-        },
-      });
-
-      await bookingConfirmedHandler({ id: payment.id, metadata: { bookingId: payment.bookingId } });
-
-    } else if (body.event === "payment_failed") {
-      const payment = await prisma.payment.findFirst({
-        where: { providerPaymentId: taraReference },
-      });
-
-      if (!payment) {
-        app.log.warn(`[tara-webhook] Payment not found for taraReference ${taraReference}`);
-        return reply.status(200).send({ received: true });
-      }
-
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: "failed",
-          failureCode: body.failureCode ?? null,
-          failureMessage: body.failureMessage ?? null,
-        },
-      });
-
-      if (payment.attemptNumber >= 3) {
-        await failBooking(payment.bookingId);
-      }
+      return reply.status(200).send({ received: true });
+    } catch (err: any) {
+      app.log.error(err, "tara webhook handler error");
+      return sendError(reply, 400, "WEBHOOK_HANDLER_FAILED", err?.message ?? "Tara webhook processing failed.");
     }
-
-    return reply.status(200).send({ received: true });
   });
 }
