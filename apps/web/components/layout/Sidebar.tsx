@@ -31,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Bookings",     href: "/dashboard/bookings",  icon: <BookOpen /> },
   { label: "Calendar",     href: "/dashboard/calendar",  icon: <CalendarDays /> },
   { label: "Reviews",      href: "/dashboard/reviews",   icon: <Star /> },
+  { label: "Payements",    href: "/dashboard/payments",           icon: <LayoutDashboard /> },
   { label: "Messages",     href: "/dashboard/messaging", icon: <MessageSquare /> },
   { label: "Earnings",     href: "/dashboard/earnings",  icon: <DollarSign /> },
   { label: "Channel Sync", href: "/dashboard/channel",   icon: <Globe2 /> },
