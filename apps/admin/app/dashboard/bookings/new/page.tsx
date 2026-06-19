@@ -11,6 +11,7 @@ import {
   Send, Save, X, ChevronLeft, ChevronRight, Info,
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
+import { paymentApi } from "@/lib/payment-api";
 import { canAccess } from "@/permissions/rbac";
 import { SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -383,6 +384,7 @@ export default function ManualBookingPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("stripe");
   const [linkSent, setLinkSent] = useState(false);
 
+  const [isSending, setIsSending] = useState(false);
   // ── Shared state ──────────────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -556,6 +558,9 @@ export default function ManualBookingPage() {
         checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : "") : (returnDt ? new Date(returnDt).toISOString() : ""),
         guests: String(guests),
       };
+      
+    
+
       const res = await listingApi.get("/admin/bookings/availability", { params });
       const d = res.data?.data ?? res.data;
       setAvailStatus(d.available ? "available" : "unavailable");
@@ -605,40 +610,9 @@ export default function ManualBookingPage() {
     }
   }
 
-  // ── Send Payment Link ─────────────────────────────────────────────────────────
-  const sendLinkMut = useMutation({
-    mutationFn: async () => {
-        // Create draft booking first
-        const draft = await listingApi.post("/admin/bookings/draft", {
-          listingId, listingType, listingName,
-          guestFirstName: firstName, guestLastName: lastName,
-          guestEmail: email, guestPhone: phone, nationality,
-          country, guests,
-          checkIn: isAccommodation ? (checkIn ? new Date(checkIn).toISOString() : undefined) : (pickup ? new Date(pickup).toISOString() : undefined),
-          checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : undefined) : (returnDt ? new Date(returnDt).toISOString() : undefined),
-          ...(isAccommodation ? { rooms, units } : {}),
-          nightsOrDays: nights,
-          nightlyRate: price?.baseAmount ?? 0,
-          guestId: "",
-          notes,
-          agentId: user?.id,
-          agentName: user?.name,
-        }).then(r => r.data);
-        const bookingId = draft?.bookingId ?? draft?.id;
-        if (!bookingId) {
-          throw new Error("Failed to obtain booking ID from draft creation");
-        }
-        // Trigger payment link based on selected method
-        const endpoint = `/payments/${paymentMethod}/payment-link`;
-        await listingApi.post(endpoint, { bookingId }).then(r => r.data);
-        return;
-      },
-    onSuccess: () => { setSubmitted(true); setLinkSent(true); },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
-      setErrors((p) => ({ ...p, _api: msg }));
-    },
-  });
+
+
+  
 
   // ── Save Draft ────────────────────────────────────────────────────────────────
   const saveDraftMut = useMutation({
@@ -658,14 +632,31 @@ export default function ManualBookingPage() {
     onError: () => setErrors((p) => ({ ...p, _api: "Draft saved (backend not yet active — data stored locally)." })),
   });
 
-  function handleSendLink() {
-    if (!validate()) return;
-    if (availStatus !== "available") {
-      setErrors((p) => ({ ...p, _avail: "Please check availability before sending a payment link." }));
-      return;
+
+
+    async function handleSendLink() {
+      setIsSending(true);
+      // Create draft booking first
+      try {
+        const draft = await saveDraftMut.mutateAsync();
+        const bookingId = draft?.data?.bookingId ?? draft?.bookingId ?? draft?.id ?? draft?.data?.id;
+        if (!bookingId) {
+          setErrors(p => ({ ...p, _api: "Failed to obtain booking ID." }));
+          setIsSending(false);
+          return;
+        }
+        await paymentApi.post(`/payments/${paymentMethod}/payment-link`, { bookingId });
+        setSubmitted(true);
+        setLinkSent(true);
+      } catch (err: any) {
+        const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
+        setErrors(p => ({ ...p, _api: msg }));
+      } finally {
+        setIsSending(false);
+      }
     }
-    sendLinkMut.mutate();
-  }
+
+
 
   // ── Success state ─────────────────────────────────────────────────────────────
   if (submitted && linkSent) {
@@ -843,21 +834,21 @@ export default function ManualBookingPage() {
               </div>
 
 
-<Select
-    id={`${uid}-listing`}
-    label="Listing"
-    placeholder="Select a listing"
-    value={listingId}
-    onChange={(e) => {
-      const selected = listingOptions.find(opt => opt.value === e.target.value);
-      setListingId(e.target.value);
-      setListingName(selected?.label ?? "");
-      setAvailability(null);
-    }}
-    error={errors.listingName}
-    hint="Select the listing name from the dropdown."
-    options={listingOptions}
-  />
+              <Select
+                id={`${uid}-listing`}
+                label="Listing"
+                placeholder="Select a listing"
+                value={listingId}
+                onChange={(e) => {
+                  const selected = listingOptions.find(opt => opt.value === e.target.value);
+                  setListingId(e.target.value);
+                  setListingName(selected?.label ?? "");
+                  setAvailability(null);
+                }}
+                error={errors.listingName}
+                hint="Select the listing name from the dropdown."
+                options={listingOptions}
+              />
 
               <Input
                 id={`${uid}-listingId`}
@@ -1097,8 +1088,8 @@ export default function ManualBookingPage() {
                       type="button"
                       onClick={() => setPaymentMethod(m)}
                       className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 transition-all ${paymentMethod === m
-                          ? "border-primary bg-primary/5 text-primary"
-                          : "border-border text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-slate-500 hover:border-slate-300 hover:bg-slate-50"
                         }`}
                     >
                       <CreditCard className="h-5 w-5 flex-shrink-0" />
@@ -1175,10 +1166,10 @@ export default function ManualBookingPage() {
               </Button>
               <Button
                 type="button"
-                loading={sendLinkMut.isPending}
+                loading={isSending}
                 leftIcon={<Send className="h-4 w-4" />}
                 onClick={handleSendLink}
-                disabled={availStatus === "unavailable"}
+                disabled={availStatus === "unavailable" || isSending}
               >
                 Send Payment Link
               </Button>
@@ -1202,3 +1193,4 @@ export default function ManualBookingPage() {
     </div>
   );
 }
+
