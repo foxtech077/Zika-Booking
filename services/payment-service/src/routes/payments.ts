@@ -8,7 +8,7 @@ import { initiateTaraPayment, initiateTaraReversal } from "../lib/tara.js";
 import { sendPaymentLinkEmail } from "../services/email.services.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
 
-const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
+const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"];
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
 
 function internalHeaders(): Record<string, string> {
@@ -61,17 +61,6 @@ async function fetchBooking(bookingId: string, authHeader: string) {
   return json.data;
 }
 
-async function bindCommission(bookingId: string, authHeader: string) {
-  const res = await fetch(`${BOOKING_SERVICE_URL}/guests/me/bookings/${bookingId}/bind-commission`, {
-    method: "PATCH",
-    headers: { Authorization: authHeader },
-  });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { success: boolean; data?: Record<string, unknown> };
-  if (!json.success || !json.data) return null;
-  return json.data;
-}
-
 // ── Route plugin ──────────────────────────────────────────────────────────────
 
 export async function paymentRoutes(app: FastifyInstance) {
@@ -94,69 +83,65 @@ export async function paymentRoutes(app: FastifyInstance) {
       },
     },
   }, async (req, reply) => {
-    try {
-      const { bookingId } = req.body as { bookingId: string };
-      const booking = await fetchBookingInternal(bookingId);
-      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-      if (booking["status"] !== "draft") return sendError(reply, 409, "INVALID_STATUS", "Booking is not in DRAFT status.");
+    const { bookingId } = req.body as { bookingId: string };
+    const booking = await fetchBookingInternal(bookingId);
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    if (booking["status"] !== "draft") return sendError(reply, 409, "INVALID_STATUS", "Booking is not in DRAFT status.");
 
-      const amount = Number(booking["totalAmount"]);
-      const currency = (booking["currency"] as string).toLowerCase();
+    const amount = Number(booking["totalAmount"]);
+    const currency = (booking["currency"] as string).toLowerCase();
 
-      // Step 1: Create Stripe Checkout Session
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency,
-              product_data: { name: `Booking ${booking["reference"]}` },
-              unit_amount: Math.round(amount * 100),
-            },
-            quantity: 1,
+    // Step 1: Create Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency,
+            product_data: { name: `Booking ${booking["reference"]}` },
+            unit_amount: Math.round(amount * 100),
           },
-        ],
-        mode: "payment",
-        success_url: "https://zikabooking.com/success",
-        cancel_url: "https://zikabooking.com/cancel",
-        payment_intent_data: { metadata: { bookingId } },
-      });
-
-      // Step 2: Validate session URL
-      if (!session.url) {
-        return sendError(reply, 400, "STRIPE_ERROR", "Stripe did not return a payment URL.");
-      }
-
-      // Step 3: Create payment record
-      await prisma.payment.create({
-        data: {
-          bookingId,
-          paymentProvider: "stripe",
-          status: "initiated",
-          amount,
-          currency,
-          idempotencyKey: `sess-${bookingId}-${Date.now()}`,
-          providerPaymentId: null,
+          quantity: 1,
         },
-      });
+      ],
+      mode: "payment",
+      success_url: "https://zikabooking.com/success",
+      cancel_url: "https://zikabooking.com/cancel",
+      payment_intent_data: { metadata: { bookingId } },
+    });
 
-      // Step 4: Send email
-      await sendPaymentLinkEmail(
-        booking["guestEmail"] as string,
-        booking["guestFirstName"] as string,
+    //  Validate session URL
+    if (!session.url) {
+      return sendError(reply, 502, "STRIPE_ERROR", "Stripe did not return a payment URL.");
+    }
+
+    //  Create payment record
+    await prisma.payment.create({
+      data: {
+        bookingId,
+        paymentProvider: "stripe",
+        status: "initiated",
         amount,
         currency,
-        session.url,
-        booking["reference"] as string
-      );
+        idempotencyKey: `sess-${bookingId}-${Date.now()}`,
+        providerPaymentId: null,
+      },
+    });
 
-      // Step 5: Only after all steps succeed, update status to pending_payment
-      await updateBookingStatus(bookingId, "pending_payment");
+    //  Send email
+    await sendPaymentLinkEmail(
+      booking["guestEmail"] as string,
+      booking["guestFirstName"] as string,
+      amount,
+      currency,
+      session.url,
+      booking["reference"] as string
+    );
 
-      return sendSuccess(reply, 200, { paymentUrl: session.url });
-    } catch (err) {
-      return sendError(reply, 400, "STRIPE_LINK_FAILED", (err as Error).message);
-    }
+    //  Only after all steps succeed, update status to pending_payment
+    await updateBookingStatus(bookingId, "pending_payment");
+
+    return sendSuccess(reply, 200, { paymentUrl: session.url });
   });
 
   // ── POST /payments/tara/payment-link ───────────────────────────────────────
@@ -177,48 +162,44 @@ export async function paymentRoutes(app: FastifyInstance) {
       },
     },
   }, async (req, reply) => {
-    try {
-      const { bookingId } = req.body as { bookingId: string };
-      const booking = await fetchBookingInternal(bookingId);
-      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-      if (booking["status"] !== "draft") return sendError(reply, 409, "INVALID_STATUS", "Booking is not in DRAFT status.");
+    const { bookingId } = req.body as { bookingId: string };
+    const booking = await fetchBookingInternal(bookingId);
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    if (booking["status"] !== "draft") return sendError(reply, 409, "INVALID_STATUS", "Booking is not in DRAFT status.");
 
-      const amount = Number(booking["totalAmount"]);
-      const currency = (booking["currency"] as string).toLowerCase();
+    const amount = Number(booking["totalAmount"]);
+    const currency = (booking["currency"] as string).toLowerCase();
 
-      // Step 1: Create payment record
-      await prisma.payment.create({
-        data: {
-          bookingId,
-          paymentProvider: "tara",
-          status: "initiated",
-          amount,
-          currency,
-          idempotencyKey: `tara-link-${bookingId}-${Date.now()}`,
-        },
-      });
-
-      // Step 2: Build trigger URL and send email
-      const host = req.headers.host ?? "api.zikabooking.com";
-      const protocol = req.headers["x-forwarded-proto"] ?? "https";
-      const triggerUrl = `${protocol}://${host}/payments/tara/trigger/${bookingId}`;
-
-      await sendPaymentLinkEmail(
-        booking["guestEmail"] as string,
-        booking["guestFirstName"] as string,
+    // Step 1: Create payment record
+    await prisma.payment.create({
+      data: {
+        bookingId,
+        paymentProvider: "tara",
+        status: "initiated",
         amount,
         currency,
-        triggerUrl,
-        booking["reference"] as string
-      );
+        idempotencyKey: `tara-link-${bookingId}-${Date.now()}`,
+      },
+    });
 
-      // Step 3: Only after all steps succeed, update status to pending_payment
-      await updateBookingStatus(bookingId, "pending_payment");
+    // Step 2: Build trigger URL and send email
+    const host = req.headers.host ?? "api.zikabooking.com";
+    const protocol = req.headers["x-forwarded-proto"] ?? "https";
+    const triggerUrl = `${protocol}://${host}/payments/tara/trigger/${bookingId}`;
 
-      return sendSuccess(reply, 200, { paymentUrl: triggerUrl });
-    } catch (err) {
-      return sendError(reply, 400, "TARA_LINK_FAILED", (err as Error).message);
-    }
+    await sendPaymentLinkEmail(
+      booking["guestEmail"] as string,
+      booking["guestFirstName"] as string,
+      amount,
+      currency,
+      triggerUrl,
+      booking["reference"] as string
+    );
+
+    // Step 3: Only after all steps succeed, update status to pending_payment
+    await updateBookingStatus(bookingId, "pending_payment");
+
+    return sendSuccess(reply, 200, { paymentUrl: triggerUrl });
   });
 
   // ── GET /payments/tara/trigger/:bookingId ──────────────────────────────────
@@ -228,479 +209,469 @@ export async function paymentRoutes(app: FastifyInstance) {
       summary: "Trigger STK push for Tara payment link",
     },
   }, async (req, reply) => {
-    try {
-      const { bookingId } = req.params as { bookingId: string };
-      const booking = await fetchBookingInternal(bookingId);
-      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+    const { bookingId } = req.params as { bookingId: string };
+    const booking = await fetchBookingInternal(bookingId);
+    if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
 
-      if (booking["status"] !== "pending_payment") {
-        return sendError(reply, 409, "INVALID_STATUS", "Booking is not awaiting payment.");
-      }
-
-      if (!booking["guestPhone"]) {
-        return sendError(reply, 400, "MISSING_PHONE", "Guest phone number is required for Tara STK push.");
-      }
-
-      // Find the existing initiated payment record (created by /payments/tara/payment-link)
-      const existingPayment = await prisma.payment.findFirst({
-        where: { bookingId, paymentProvider: "tara" },
-        orderBy: { createdAt: "desc" },
-      });
-
-      if (!existingPayment) {
-        return sendError(reply, 404, "NO_PAYMENT", "No payment record found for this booking.");
-      }
-
-      // Idempotency: if already pending or captured, don't trigger again
-      if (existingPayment.status === "captured") {
-        return reply.type("text/html").send("<h2>Payment already completed.</h2>");
-      }
-      if (existingPayment.status === "pending") {
-        return reply.type("text/html").send("<h2>A payment request was already sent to your phone. Please check your phone.</h2>");
-      }
-
-      const taraResult = await initiateTaraPayment({
-        amount: Number(booking["totalAmount"]),
-        currency: booking["currency"] as string,
-        mobileNumber: booking["guestPhone"] as string,
-        reference: booking["reference"] as string,
-        description: `Booking ${booking["reference"]}`,
-        attemptNumber: 1,
-      });
-
-      // Update the existing payment record instead of creating a duplicate
-      await prisma.payment.update({
-        where: { id: existingPayment.id },
-        data: {
-          status: "pending",
-          providerPaymentId: taraResult.taraReference,
-        },
-      });
-
-      return reply.type("text/html").send("<h2>A payment request has been sent to your phone. Please enter your PIN to confirm.</h2>");
-    } catch (err) {
-      return reply.status(400).type("text/html").send(`<h2>Error triggering payment: ${(err as Error).message}</h2>`);
+    if (booking["status"] !== "pending_payment") {
+      return sendError(reply, 409, "INVALID_STATUS", "Booking is not awaiting payment.");
     }
+
+    if (!booking["guestPhone"]) {
+      return sendError(reply, 400, "MISSING_PHONE", "Guest phone number is required for Tara STK push.");
+    }
+
+    // Find the existing initiated payment record (created by /payments/tara/payment-link)
+    const existingPayment = await prisma.payment.findFirst({
+      where: { bookingId, paymentProvider: "tara", status: "initiated" },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!existingPayment) {
+      return sendError(reply, 404, "NO_PAYMENT", "No payment record found for this booking.");
+    }
+
+    // Idempotency: if already pending or captured, don't trigger again
+    if (existingPayment.status === "captured") {
+      return reply.type("text/html").send("<h2>Payment already completed.</h2>");
+    }
+    if (existingPayment.status === "pending") {
+      return reply.type("text/html").send("<h2>A payment request was already sent to your phone. Please check your phone.</h2>");
+    }
+
+    const taraResult = await initiateTaraPayment({
+      amount: Number(booking["totalAmount"]),
+      currency: booking["currency"] as string,
+      mobileNumber: booking["guestPhone"] as string,
+      reference: booking["reference"] as string,
+      description: `Booking ${booking["reference"]}`,
+      attemptNumber: 1,
+    });
+
+    // Update the existing payment record instead of creating a duplicate
+    await prisma.payment.update({
+      where: { id: existingPayment.id },
+      data: {
+        status: "pending",
+        providerPaymentId: taraResult.taraReference,
+      },
+    });
+
+    return reply.type("text/html").send("<h2>A payment request has been sent to your phone. Please enter your PIN to confirm.</h2>");
   });
 
-  app.post("/payments/create-intent", { preHandler: [requireUser], schema: {
-    tags: ["Payments"],
-    summary: "Create Stripe PaymentIntent (New Card Flow)",
-    body: {
-      type: "object",
-      required: ["bookingId"],
-      properties: {
-        bookingId: { type: "string", format: "uuid" },
+  app.post("/payments/create-intent", {
+    preHandler: [requireUser], schema: {
+      tags: ["Payments"],
+      summary: "Create Stripe PaymentIntent (New Card Flow)",
+      body: {
+        type: "object",
+        required: ["bookingId"],
+        properties: {
+          bookingId: { type: "string", format: "uuid" },
+        },
       },
-    },
-  }}, async (req, reply) => {
+    }
+  }, async (req, reply) => {
     const { userId } = req as GuestRequest;
     const { bookingId } = req.body as { bookingId: string };
     const authHeader = req.headers.authorization ?? "";
-  
-    try {
-      // ── 1. Bind commission rate and update billing at payment step ──────────
-      const booking = await bindCommission(bookingId, authHeader);
-      if (!booking) {
-        return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
+
+    // ── 1. Fetch booking ────────────────────────────────────────────────────
+    const booking = await fetchBooking(bookingId, authHeader);
+    if (!booking) {
+      return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
+    }
+
+    const amount = booking["totalAmount"] as number;
+    const currency = (booking["currency"] as string).toLowerCase();
+
+    if (amount <= 0) {
+      return sendError(reply, 400, "INVALID_AMOUNT", "Payment amount must be greater than 0.");
+    }
+
+    // ── 2. Idempotency check ────────────────────────────────────────────────
+    const existingPayment = await prisma.payment.findFirst({
+      where: {
+        bookingId,
+        status: { in: ["initiated", "captured"] },
+      },
+    });
+
+    if (existingPayment?.providerPaymentId) {
+      const existingIntent = await stripe.paymentIntents.retrieve(
+        existingPayment.providerPaymentId
+      );
+
+      if (!["canceled", "succeeded"].includes(existingIntent.status)) {
+        return sendSuccess(reply, 200, {
+          paymentId: existingPayment.id,
+          clientSecret: existingIntent.client_secret,
+          publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+        });
       }
-    
-      const amount = booking["totalAmount"] as number;
-      const currency = (booking["currency"] as string).toLowerCase();
-    
-      if (amount <= 0) {
-        return sendError(reply, 400, "INVALID_AMOUNT", "Payment amount must be greater than 0.");
+    }
+
+    // ── 3. Customer account ─────────────────────────────────────────────────
+    let customerAccount = await prisma.customerAccount.findUnique({
+      where: {
+        userId_paymentProvider: { userId, paymentProvider: "stripe" },
+      },
+    });
+
+    if (customerAccount) {
+      try {
+        await stripe.customers.retrieve(customerAccount.providerCustomerId);
+      } catch {
+        customerAccount = null;
       }
-    
-      // ── 2. Idempotency check ────────────────────────────────────────────────
-      const existingPayment = await prisma.payment.findFirst({
-        where: {
-          bookingId,
-          status: { in: ["initiated", "captured"] },
-        },
-      });
-    
-      if (existingPayment?.providerPaymentId) {
-        const existingIntent = await stripe.paymentIntents.retrieve(
-          existingPayment.providerPaymentId
-        );
-    
-        if (!["canceled", "succeeded"].includes(existingIntent.status)) {
-          return sendSuccess(reply, 200, {
-            paymentId: existingPayment.id,
-            clientSecret: existingIntent.client_secret,
-            publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
-          });
-        }
-      }
-    
-      // ── 3. Customer account ─────────────────────────────────────────────────
-      let customerAccount = await prisma.customerAccount.findUnique({
+    }
+
+    if (!customerAccount) {
+      const customer = await stripe.customers.create({ metadata: { userId } });
+
+      const existingAccount = await prisma.customerAccount.findUnique({
         where: {
           userId_paymentProvider: { userId, paymentProvider: "stripe" },
         },
       });
-    
-      if (customerAccount) {
-        try {
-          await stripe.customers.retrieve(customerAccount.providerCustomerId);
-        } catch {
-          customerAccount = null;
-        }
-      }
-    
-      if (!customerAccount) {
-        const customer = await stripe.customers.create({ metadata: { userId } });
-    
-        const existingAccount = await prisma.customerAccount.findUnique({
+
+      if (existingAccount) {
+        customerAccount = await prisma.customerAccount.update({
           where: {
             userId_paymentProvider: { userId, paymentProvider: "stripe" },
           },
+          data: { providerCustomerId: customer.id },
         });
-    
-        if (existingAccount) {
-          customerAccount = await prisma.customerAccount.update({
-            where: {
-              userId_paymentProvider: { userId, paymentProvider: "stripe" },
-            },
-            data: { providerCustomerId: customer.id },
-          });
-        } else {
-          customerAccount = await prisma.customerAccount.create({
-            data: { userId, paymentProvider: "stripe", providerCustomerId: customer.id },
-          });
-        }
+      } else {
+        customerAccount = await prisma.customerAccount.create({
+          data: { userId, paymentProvider: "stripe", providerCustomerId: customer.id },
+        });
       }
-    
-      // ── 4. Create payment record ────────────────────────────────────────────
-      const payment = await prisma.payment.create({
-        data: {
-          bookingId,
-          paymentProvider: "stripe",
-          status: "initiated",
-          amount,
-          currency,
-          idempotencyKey: `pi-${bookingId}`,
-        },
-      });
-    
-      // ── 5. Create Stripe intent ─────────────────────────────────────────────
-      const intent = await stripe.paymentIntents.create(
-        {
-          amount: Math.round(Number(amount) * 100),
-          currency,
-          customer: customerAccount.providerCustomerId,
-          automatic_payment_methods: { enabled: true },
-          metadata: { bookingId },
-        },
-        { idempotencyKey: `pi-${bookingId}` }
-      );
-    
-      // ── 6. Save intent ID to payment record ────────────────────────────────
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { providerPaymentId: intent.id },
-      });
-    
-      return sendSuccess(reply, 200, {
-        paymentId: payment.id,
-        clientSecret: intent.client_secret,
-        publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
-      });
-    } catch (err) {
-      return sendError(reply, 400, "CREATE_INTENT_FAILED", (err as Error).message);
     }
-  });
 
-  // ── POST /payments/initiate ───────────────────────────────────────────────
-  app.post("/payments/initiate", { preHandler: [requireUser], schema: {
-    tags: ["Payments"],
-    summary: "Initiate payment — saved Stripe card or Tara mobile money",
-    description:
-      "**Stripe (saved card):** pass `paymentProvider: \"stripe\"` and `paymentMethodId` (from GET /guests/me/payment-methods).\n\n" +
-      "**Tara (mobile money):** pass `paymentProvider: \"tara\"` and `mobileNumber` in E.164 format (e.g. `+254712345678`). " +
-      "An STK push is sent to the handset — the guest approves within 60 seconds and the booking is confirmed via webhook.",
-    security: [{ bearerAuth: [] }],
-    body: {
-      type: "object",
-      required: ["bookingId", "paymentProvider"],
-      properties: {
-        bookingId: {
-          type: "string",
-          format: "uuid",
-          description: "ID of the booking to pay for (must be in pending_payment status)",
-        },
-        paymentProvider: {
-          type: "string",
-          enum: ["stripe", "tara"],
-          description: "Use \"stripe\" for saved card, \"tara\" for mobile money (Africa)",
-        },
-        paymentMethodId: {
-          type: "string",
-          description: "Required when paymentProvider is \"stripe\" — ID from GET /guests/me/payment-methods",
-        },
-        mobileNumber: {
-          type: "string",
-          description: "Required when paymentProvider is \"tara\" — E.164 format e.g. +254712345678",
-        },
+    // ── 4. Create payment record ────────────────────────────────────────────
+    const payment = await prisma.payment.create({
+      data: {
+        bookingId,
+        paymentProvider: "stripe",
+        status: "initiated",
+        amount,
+        currency,
+        idempotencyKey: `pi-${bookingId}`,
       },
-    },
-    response: {
-      201: {
-        description: "Payment initiated",
+    });
+
+    // ── 5. Create Stripe intent ─────────────────────────────────────────────
+    const intent = await stripe.paymentIntents.create(
+      {
+        amount: Math.round(Number(amount) * 100),
+        currency,
+        customer: customerAccount.providerCustomerId,
+        automatic_payment_methods: { enabled: true },
+        metadata: { bookingId },
+      },
+      { idempotencyKey: `pi-${bookingId}` }
+    );
+
+    // ── 6. Save intent ID to payment record ────────────────────────────────
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: { providerPaymentId: intent.id },
+    });
+
+    return sendSuccess(reply, 200, {
+      paymentId: payment.id,
+      clientSecret: intent.client_secret,
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+    });
+  });
+  // ── POST /payments/initiate ───────────────────────────────────────────────
+  app.post("/payments/initiate", {
+    preHandler: [requireUser], schema: {
+      tags: ["Payments"],
+      summary: "Initiate payment — saved Stripe card or Tara mobile money",
+      description:
+        "**Stripe (saved card):** pass `paymentProvider: \"stripe\"` and `paymentMethodId` (from GET /guests/me/payment-methods).\n\n" +
+        "**Tara (mobile money):** pass `paymentProvider: \"tara\"` and `mobileNumber` in E.164 format (e.g. `+254712345678`). " +
+        "An STK push is sent to the handset — the guest approves within 60 seconds and the booking is confirmed via webhook.",
+      security: [{ bearerAuth: [] }],
+      body: {
         type: "object",
+        required: ["bookingId", "paymentProvider"],
         properties: {
-          success: { type: "boolean" },
-          data: {
-            type: "object",
-            properties: {
-              paymentId:     { type: "string", description: "Internal payment record ID" },
-              taraReference: { type: "string", description: "Tara transaction reference (Tara flow only)" },
-              message:       { type: "string", description: "STK push status message (Tara flow only)" },
-              requiresAction: { type: "boolean", description: "true when Stripe 3DS is required (Stripe flow only)" },
-              clientSecret:  { type: "string", description: "Stripe client secret for 3DS re-auth (Stripe flow only)" },
-            },
+          bookingId: {
+            type: "string",
+            format: "uuid",
+            description: "ID of the booking to pay for (must be in pending_payment status)",
+          },
+          paymentProvider: {
+            type: "string",
+            enum: ["stripe", "tara"],
+            description: "Use \"stripe\" for saved card, \"tara\" for mobile money (Africa)",
+          },
+          paymentMethodId: {
+            type: "string",
+            description: "Required when paymentProvider is \"stripe\" — ID from GET /guests/me/payment-methods",
+          },
+          mobileNumber: {
+            type: "string",
+            description: "Required when paymentProvider is \"tara\" — E.164 format e.g. +254712345678",
           },
         },
       },
-      404: { description: "Booking not found",    type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
-      409: { description: "Duplicate payment",    type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
-      422: { description: "Validation error",     type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
-    },
-  }}, async (req, reply) => {
+      response: {
+        201: {
+          description: "Payment initiated",
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                paymentId: { type: "string", description: "Internal payment record ID" },
+                taraReference: { type: "string", description: "Tara transaction reference (Tara flow only)" },
+                message: { type: "string", description: "STK push status message (Tara flow only)" },
+                requiresAction: { type: "boolean", description: "true when Stripe 3DS is required (Stripe flow only)" },
+                clientSecret: { type: "string", description: "Stripe client secret for 3DS re-auth (Stripe flow only)" },
+              },
+            },
+          },
+        },
+        404: { description: "Booking not found", type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
+        409: { description: "Duplicate payment", type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
+        422: { description: "Validation error", type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
+      },
+    }
+  }, async (req, reply) => {
     const { userId } = req as GuestRequest;
-  
+
     // ── 1. Validate body ──────────────────────────────────────────────────
     const parsed = initiatePaymentSchema.safeParse(req.body);
     if (!parsed.success) {
       return sendError(reply, 422, "VALIDATION_ERROR", "Invalid request body.");
     }
-  
+
     const { bookingId, paymentProvider, paymentMethodId, mobileNumber } = parsed.data;
-  
-    try {
-      // ── 2. Bind commission rate and update billing at payment step ──────────
-      const authHeader = req.headers.authorization ?? "";
-      const booking = await bindCommission(bookingId, authHeader);
-      if (!booking) {
-        return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
-      }
-    
-      const amount = booking["totalAmount"] as number;
-      const currency = (booking["currency"] as string).toLowerCase();
-    
-      // ── 3. Idempotency check ──────────────────────────────────────────────
-      const existingPayment = await prisma.payment.findFirst({
+
+    // ── 2. Fetch booking ──────────────────────────────────────────────────
+    const authHeader = req.headers.authorization ?? "";
+    const booking = await fetchBooking(bookingId, authHeader);
+    if (!booking) {
+      return sendError(reply, 404, "BOOKING_NOT_FOUND", "Booking not found.");
+    }
+
+    const amount = booking["totalAmount"] as number;
+    const currency = (booking["currency"] as string).toLowerCase();
+
+    // ── 3. Idempotency check ──────────────────────────────────────────────
+    const existingPayment = await prisma.payment.findFirst({
+      where: {
+        bookingId,
+        status: { in: ["initiated", "captured", "pending"] },
+      },
+    });
+
+    if (existingPayment) {
+      return sendError(reply, 409, "DUPLICATE_PAYMENT", "A payment for this booking already exists.");
+    }
+
+    // ── 4. Calculate attempt number ───────────────────────────────────────
+    const failedCount = await prisma.payment.count({
+      where: {
+        bookingId,
+        status: { in: ["failed", "timed_out"] },
+      },
+    });
+
+    const attemptNumber = failedCount + 1;
+    const idempotencyKey = `pay-${bookingId}-${attemptNumber}`;
+
+    // ── 5. Create payment record ──────────────────────────────────────────
+    const payment = await prisma.payment.create({
+      data: {
+        bookingId,
+        paymentProvider,
+        status: "initiated",
+        amount,
+        currency,
+        attemptNumber,
+        idempotencyKey,
+      },
+    });
+
+    // ── 6. Stripe flow ────────────────────────────────────────────────────
+    if (paymentProvider === "stripe") {
+
+      // Customer lookup
+      const customerAccount = await prisma.customerAccount.findUnique({
         where: {
-          bookingId,
-          status: { in: ["initiated", "captured", "pending"] },
+          userId_paymentProvider: { userId, paymentProvider: "stripe" },
         },
       });
-    
-      if (existingPayment) {
-        return sendError(reply, 409, "DUPLICATE_PAYMENT", "A payment for this booking already exists.");
+
+      if (!customerAccount) {
+        return sendError(reply, 404, "CUSTOMER_NOT_FOUND", "Stripe customer account not found.");
       }
-    
-      // ── 4. Calculate attempt number ───────────────────────────────────────
-      const failedCount = await prisma.payment.count({
+
+      // Saved card lookup
+      const savedMethod = await prisma.paymentMethod.findFirst({
         where: {
-          bookingId,
-          status: { in: ["failed", "timed_out"] },
+          id: paymentMethodId,
+          userId,
+          isDeleted: false,
+          paymentProvider: "stripe",
         },
       });
-    
-      const attemptNumber = failedCount + 1;
-      const idempotencyKey = `pay-${bookingId}-${attemptNumber}`;
-    
-      // ── 5. Create payment record ──────────────────────────────────────────
-      const payment = await prisma.payment.create({
+
+      if (!savedMethod?.providerPmId) {
+        return sendError(reply, 404, "PAYMENT_METHOD_NOT_FOUND", "Saved payment method not found.");
+      }
+
+      // Create Stripe intent
+      let intent;
+      try {
+        intent = await stripe.paymentIntents.create(
+          {
+            amount: Math.round(Number(amount) * 100),
+            currency,
+            customer: customerAccount.providerCustomerId,
+            payment_method: savedMethod.providerPmId,
+            off_session: true,
+            confirm: true,
+            capture_method: "automatic",
+            metadata: {
+              bookingId,
+              booking_reference: (booking["reference"] as string | undefined) ?? "",
+            },
+            statement_descriptor_suffix: "ZIKA",
+          },
+          { idempotencyKey: `pi-${bookingId}-${attemptNumber}` }, // ✅ attempt-aware
+        );
+      } catch (err: any) {
+        if (err.code === "authentication_required") {
+          const paymentIntent = err.raw?.payment_intent;
+          return sendSuccess(reply, 200, {
+            requiresAction: true,
+            clientSecret: paymentIntent?.client_secret,
+            paymentId: payment.id,
+          });
+        }
+        throw err;
+      }
+
+      // Update payment row
+      await prisma.payment.update({
+        where: { id: payment.id },
         data: {
-          bookingId,
-          paymentProvider,
-          status: "initiated",
-          amount,
-          currency,
+          providerPaymentId: intent.id,
+          status: "captured",
           attemptNumber,
           idempotencyKey,
         },
       });
-    
-      // ── 6. Stripe flow ────────────────────────────────────────────────────
-      if (paymentProvider === "stripe") {
-    
-        // Customer lookup
-        const customerAccount = await prisma.customerAccount.findUnique({
-          where: {
-            userId_paymentProvider: { userId, paymentProvider: "stripe" },
-          },
-        });
-    
-        if (!customerAccount) {
-          return sendError(reply, 404, "CUSTOMER_NOT_FOUND", "Stripe customer account not found.");
-        }
-    
-        // Saved card lookup
-        const savedMethod = await prisma.paymentMethod.findFirst({
-          where: {
-            id: paymentMethodId,
-            userId,
-            isDeleted: false,
-            paymentProvider: "stripe",
-          },
-        });
-    
-        if (!savedMethod?.providerPmId) {
-          return sendError(reply, 404, "PAYMENT_METHOD_NOT_FOUND", "Saved payment method not found.");
-        }
-    
-        // Create Stripe intent
-        let intent;
-        try {
-          intent = await stripe.paymentIntents.create(
-            {
-              amount: Math.round(Number(amount) * 100),
-              currency,
-              customer: customerAccount.providerCustomerId,
-              payment_method: savedMethod.providerPmId,
-              off_session: true,
-              confirm: true,
-              capture_method: "automatic",
-              metadata: {
-                bookingId,
-                booking_reference: (booking["reference"] as string | undefined) ?? "",
-              },
-              statement_descriptor_suffix: "ZIKA",
-            },
-            { idempotencyKey: `pi-${bookingId}-${attemptNumber}` }, // ✅ attempt-aware
-          );
-        } catch (err: any) {
-          if (err.code === "authentication_required") {
-            const paymentIntent = err.raw?.payment_intent;
-            return sendSuccess(reply, 200, {
-              requiresAction: true,
-              clientSecret: paymentIntent?.client_secret,
-              paymentId: payment.id,
-            });
-          }
-          throw err;
-        }
-    
-        // Update payment row
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            providerPaymentId: intent.id,
-            status: "captured",
-            attemptNumber,
-            idempotencyKey,
-          },
-        });
-  
-        // Confirm the booking (set status → confirmed, send emails, generate PDF)
-        bookingConfirmedHandler({ id: payment.id, metadata: { bookingId } }).catch((err) => {
-          console.error("[payments/initiate] bookingConfirmedHandler failed:", err);
-        });
-  
-        return sendSuccess(reply, 201, { paymentId: payment.id });
+
+      // Confirm the booking (set status → confirmed, send emails, generate PDF)
+      bookingConfirmedHandler({ id: payment.id, metadata: { bookingId } }).catch((err) => {
+        console.error("[payments/initiate] bookingConfirmedHandler failed:", err);
+      });
+
+      return sendSuccess(reply, 201, { paymentId: payment.id });
+    }
+
+    // ── 7. Tara flow ──────────────────────────────────────────────────────
+    if (paymentProvider === "tara") {
+      if (!mobileNumber) {
+        return sendError(reply, 422, "VALIDATION_ERROR", "mobileNumber is required for Tara payments.");
       }
-  
-      // ── 7. Tara flow ──────────────────────────────────────────────────────
-      if (paymentProvider === "tara") {
-        if (!mobileNumber) {
-          return sendError(reply, 422, "VALIDATION_ERROR", "mobileNumber is required for Tara payments.");
-        }
-  
-        const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
-  
-        const taraResult = await initiateTaraPayment({
-          amount:        Number(amount),
-          currency,
-          mobileNumber,
-          reference:     bookingReference,   // booking ref, e.g. ZIKA-001234-KE
-          description:   `Booking ${bookingReference}`,
-          attemptNumber,                     // idempotency key = reference + attemptNumber
-        });
-  
-        await prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            providerPaymentId: taraResult.taraReference,
-            status:            "pending",
-            attemptNumber,
-            idempotencyKey:    `${bookingReference}-${attemptNumber}`,
-          },
-        });
-  
-        return sendSuccess(reply, 201, {
-          paymentId:     payment.id,
-          taraReference: taraResult.taraReference,
-          message:       "STK push sent. Please approve on your handset within 60 seconds.",
-        });
-      }
-    } catch (err) {
-      return sendError(reply, 400, "INITIATE_PAYMENT_FAILED", (err as Error).message);
+
+      const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
+
+      const taraResult = await initiateTaraPayment({
+        amount: Number(amount),
+        currency,
+        mobileNumber,
+        reference: bookingReference,   // booking ref, e.g. ZIKA-001234-KE
+        description: `Booking ${bookingReference}`,
+        attemptNumber,                     // idempotency key = reference + attemptNumber
+      });
+
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          providerPaymentId: taraResult.taraReference,
+          status: "pending",
+          attemptNumber,
+          idempotencyKey: `${bookingReference}-${attemptNumber}`,
+        },
+      });
+
+      return sendSuccess(reply, 201, {
+        paymentId: payment.id,
+        taraReference: taraResult.taraReference,
+        message: "STK push sent. Please approve on your handset within 60 seconds.",
+      });
     }
   });
 
   // ── GET /payments/:id/status ──────────────────────────────────────────────
-  app.get("/payments/:id/status", { preHandler: [requireUser],schema: {
-    tags: ["Payments"],
-    params: {
-      type: "object",
-      required: ["id"],
-      properties: {
-        id: { type: "string" },
+  app.get("/payments/:id/status", {
+    preHandler: [requireUser], schema: {
+      tags: ["Payments"],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string" },
+        },
       },
     },
-  },
 
- }, async (req: FastifyRequest, reply: FastifyReply) => {
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { userId } = req as GuestRequest;
     const authHeader = req.headers.authorization ?? "";
     const { id } = req.params as { id: string };
 
-    try {
-      const payment = await prisma.payment.findUnique({ where: { id } });
-      if (!payment) {
-        return sendError(reply, 404, "NOT_FOUND", "Payment not found.");
-      }
-
-      // Verify ownership by checking booking belongs to user
-      const booking = await fetchBooking(payment.bookingId, authHeader);
-      if (!booking) {
-        return sendError(reply, 403, "FORBIDDEN", "You do not have access to this payment.");
-      }
-
-      // The booking service returns the booking only if it belongs to the authenticated user
-      // If userId in token doesn't match booking guestId the booking service returns 403/404
-      void userId; // ownership is enforced by booking service
-
-      return sendSuccess(reply, 200, {
-        id: payment.id,
-        status: payment.status,
-        bookingId: payment.bookingId,
-        amount: Number(payment.amount),
-        currency: payment.currency,
-        capturedAt: payment.capturedAt?.toISOString() ?? null,
-      });
-    } catch (err) {
-      return sendError(reply, 400, "GET_STATUS_FAILED", (err as Error).message);
+    const payment = await prisma.payment.findUnique({ where: { id } });
+    if (!payment) {
+      return sendError(reply, 404, "NOT_FOUND", "Payment not found.");
     }
+
+    // Verify ownership by checking booking belongs to user
+    const booking = await fetchBooking(payment.bookingId, authHeader);
+    if (!booking) {
+      return sendError(reply, 403, "FORBIDDEN", "You do not have access to this payment.");
+    }
+
+    // The booking service returns the booking only if it belongs to the authenticated user
+    // If userId in token doesn't match booking guestId the booking service returns 403/404
+    void userId; // ownership is enforced by booking service
+
+    return sendSuccess(reply, 200, {
+      id: payment.id,
+      status: payment.status,
+      bookingId: payment.bookingId,
+      amount: Number(payment.amount),
+      currency: payment.currency,
+      capturedAt: payment.capturedAt?.toISOString() ?? null,
+    });
   });
 
   // ── POST /payments/refunds (internal) ─────────────────────────────────────
-  app.post("/payments/refunds",{schema: {
-    tags: ["Payments"],
-    body: {
-      type: "object",
-      required: ["bookingId", "refundAmount"],
-      properties: {
-        bookingId: { type: "string", format: "uuid" },
-        refundAmount: { type: "number" },
-        reason: { type: "string" },
+  app.post("/payments/refunds", {
+    schema: {
+      tags: ["Payments"],
+      body: {
+        type: "object",
+        required: ["bookingId", "refundAmount"],
+        properties: {
+          bookingId: { type: "string", format: "uuid" },
+          refundAmount: { type: "number" },
+          reason: { type: "string" },
+        },
       },
     },
-  },}, async (req: FastifyRequest, reply: FastifyReply) => {
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
     const parsed = refundSchema.safeParse(req.body);
     if (!parsed.success) {
       const fields: Record<string, string> = {};
@@ -710,70 +681,46 @@ export async function paymentRoutes(app: FastifyInstance) {
 
     const { bookingId, refundAmount, reason } = parsed.data;
 
-    try {
-      // 1. Find the most recent captured payment for this booking
-      const payment = await prisma.payment.findFirst({
-        where: { bookingId, status: "captured" },
-        orderBy: { attemptNumber: "desc" },
-      });
+    // 1. Find the most recent captured payment for this booking
+    const payment = await prisma.payment.findFirst({
+      where: { bookingId, status: "captured" },
+      orderBy: { attemptNumber: "desc" },
+    });
 
-      if (!payment) {
-        return sendError(reply, 404, "PAYMENT_NOT_FOUND", "No captured payment found for this booking.");
-      }
+    if (!payment) {
+      return sendError(reply, 404, "PAYMENT_NOT_FOUND", "No captured payment found for this booking.");
+    }
 
-      // 2. Check no existing refund for this payment
-      const existingRefund = await prisma.refund.findUnique({ where: { paymentId: payment.id } });
-      if (existingRefund) {
-        return sendError(reply, 409, "REFUND_EXISTS", "A refund already exists for this payment.");
-      }
+    // 2. Check no existing refund for this payment
+    const existingRefund = await prisma.refund.findUnique({ where: { paymentId: payment.id } });
+    if (existingRefund) {
+      return sendError(reply, 409, "REFUND_EXISTS", "A refund already exists for this payment.");
+    }
 
-      // 3. Insert refund row
-      const refund = await prisma.refund.create({
-        data: {
-          paymentId: payment.id,
-          bookingId,
-          amount: refundAmount,
-          currency: payment.currency,
-          reason: reason ?? null,
-          status: "pending",
-        },
-      });
+    // 3. Insert refund row
+    const refund = await prisma.refund.create({
+      data: {
+        paymentId: payment.id,
+        bookingId,
+        amount: refundAmount,
+        currency: payment.currency,
+        reason: reason ?? null,
+        status: "pending",
+      },
+    });
 
-      // 4. Provider-specific refund logic
-      if (payment.paymentProvider === "stripe") {
-        try {
-          const re = await stripe.refunds.create({
-            payment_intent: payment.providerPaymentId ?? undefined,
-            amount: Math.round(refundAmount * 100),
-            reason: "requested_by_customer",
-          });
-
-          await prisma.refund.update({
-            where: { id: refund.id },
-            data: { status: "submitted", providerRefundId: re.id },
-          });
-
-          return sendSuccess(reply, 201, { refundId: refund.id, status: "submitted" });
-        } catch (err) {
-          await prisma.refund.update({
-            where: { id: refund.id },
-            data: { status: "failed", failureReason: (err as Error).message },
-          });
-          return sendError(reply, 400, "REFUND_FAILED", "Failed to submit refund to Stripe.");
-        }
-      }
-
-      // Tara reversal
+    // 4. Provider-specific refund logic
+    if (payment.paymentProvider === "stripe") {
       try {
-        const reversal = await initiateTaraReversal({
-          taraReference: payment.providerPaymentId ?? "",
-          amount: refundAmount,
-          reason: reason ?? "requested_by_customer",
+        const re = await stripe.refunds.create({
+          payment_intent: payment.providerPaymentId ?? undefined,
+          amount: Math.round(refundAmount * 100),
+          reason: "requested_by_customer",
         });
 
         await prisma.refund.update({
           where: { id: refund.id },
-          data: { status: "submitted", providerRefundId: reversal.reversalId },
+          data: { status: "submitted", providerRefundId: re.id },
         });
 
         return sendSuccess(reply, 201, { refundId: refund.id, status: "submitted" });
@@ -782,10 +729,30 @@ export async function paymentRoutes(app: FastifyInstance) {
           where: { id: refund.id },
           data: { status: "failed", failureReason: (err as Error).message },
         });
-        return sendError(reply, 400, "REFUND_FAILED", "Failed to submit Tara reversal.");
+        return sendError(reply, 502, "REFUND_FAILED", "Failed to submit refund to Stripe.");
       }
+    }
+
+    // Tara reversal
+    try {
+      const reversal = await initiateTaraReversal({
+        taraReference: payment.providerPaymentId ?? "",
+        amount: refundAmount,
+        reason: reason ?? "requested_by_customer",
+      });
+
+      await prisma.refund.update({
+        where: { id: refund.id },
+        data: { status: "submitted", providerRefundId: reversal.reversalId },
+      });
+
+      return sendSuccess(reply, 201, { refundId: refund.id, status: "submitted" });
     } catch (err) {
-      return sendError(reply, 400, "REFUND_FAILED", (err as Error).message);
+      await prisma.refund.update({
+        where: { id: refund.id },
+        data: { status: "failed", failureReason: (err as Error).message },
+      });
+      return sendError(reply, 502, "REFUND_FAILED", "Failed to submit Tara reversal.");
     }
   });
 }

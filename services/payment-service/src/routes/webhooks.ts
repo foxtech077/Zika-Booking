@@ -14,6 +14,19 @@ const TARA_WEBHOOK_SECRET = process.env["TARA_WEBHOOK_SECRET"] ?? "";
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
+async function confirmBooking(bookingId: string, paymentId: string, paymentProvider: string) {
+  const response = await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}/confirm`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ paymentId, paymentProvider }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`Failed to confirm booking ${bookingId}: status ${response.status}. Response: ${errorText}`);
+  }
+}
+
 async function failBooking(bookingId: string) {
   try {
     await fetch(`${BOOKING_SERVICE_URL}/bookings/${bookingId}/fail`, {
@@ -67,9 +80,9 @@ export async function webhookRoutes(app: FastifyInstance) {
   
     console.log("Event:", event.type);
   
-    // ========================
+
     // PAYMENT SUCCESS
-    // ========================
+   
     if (event.type === "payment_intent.succeeded") {
       try {
         const intent = event.data.object as Stripe.PaymentIntent;
@@ -352,6 +365,30 @@ export async function webhookRoutes(app: FastifyInstance) {
           return reply.status(200).send({ received: true });
         }
 
+      try {
+        if (payment.status !== "captured") {
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              status: "captured",
+              capturedAt: new Date(),
+              paymentMethodType: "mobile_money",
+            },
+          });
+        }
+  
+        await bookingConfirmedHandler({
+          id: payment.id,
+          paymentProvider: payment.paymentProvider,
+          metadata: { bookingId: payment.bookingId },
+        });
+      } catch (err: any) {
+        app.log.error(`[tara-webhook] Error processing successful payment: ${err.message}`, err);
+        return reply.status(500).send({
+          error: "Internal Server Error",
+          message: err.message,
+        });
+      }
         if (payment.status === "captured") {
           return reply.status(200).send({ received: true });
         }

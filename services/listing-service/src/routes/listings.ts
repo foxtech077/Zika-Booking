@@ -178,6 +178,7 @@ const patchListingSchema = z.object({
   pickupHoursFrom: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
   pickupHoursTo: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
   returnSameLocation: z.boolean().optional().nullable(),
+  allowPreBooking: z.boolean().optional(),
   insuranceType: z.preprocess((val) => {
     if (typeof val !== "string") return val;
     return val.toLowerCase()
@@ -585,6 +586,7 @@ export async function listingRoutes(app: FastifyInstance) {
           airportPickup: dbFields.airportPickup ?? undefined,
           deliveryEnabled: dbFields.deliveryEnabled ?? undefined,
           returnSameLocation: dbFields.returnSameLocation ?? undefined,
+          allowPreBooking: dbFields.allowPreBooking ?? undefined,
         },
       });
 
