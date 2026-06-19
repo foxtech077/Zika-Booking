@@ -658,6 +658,76 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── GET /auth/me  (Loyalty & Profile) ──────────────────────────────────────
+  app.get("/auth/me", {
+    schema: {
+      tags: ["User Auth"],
+      summary: "Get current user profile including loyalty status",
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                user: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    firstName: { type: "string" },
+                    lastName: { type: "string" },
+                    email: { type: "string" },
+                    status: { type: "string" },
+                    userType: { type: "string" },
+                    businessName: { type: "string", nullable: true },
+                    country: { type: "string", nullable: true },
+                    emailVerified: { type: "boolean" },
+                    currentTier: { type: "string" },
+                    loyaltyPoints: { type: "integer" },
+                  }
+                },
+                pointsToNextTier: { type: "integer", nullable: true },
+                nextTier: { type: "string", nullable: true },
+              }
+            }
+          }
+        },
+        401: { type: "object" },
+        404: { type: "object" }
+      }
+    },
+    preHandler: [requireAuth]
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const userId = (req as FastifyRequest & { userId: string }).userId;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      return sendError(reply, 404, "USER_NOT_FOUND", "User not found.");
+    }
+    
+    let nextTier: string | null = null;
+    let pointsToNextTier: number | null = null;
+    
+    if (user.loyaltyPoints < 500) {
+      nextTier = "silver";
+      pointsToNextTier = 500 - user.loyaltyPoints;
+    } else if (user.loyaltyPoints < 2000) {
+      nextTier = "gold";
+      pointsToNextTier = 2000 - user.loyaltyPoints;
+    } else if (user.loyaltyPoints < 5000) {
+      nextTier = "diamond";
+      pointsToNextTier = 5000 - user.loyaltyPoints;
+    }
+    
+    return sendSuccess(reply, 200, {
+      user: publicUser(user),
+      nextTier,
+      pointsToNextTier
+    });
+  });
+
   // ── POST /auth/logout  (UC-1.9) ────────────────────────────────────────────
   app.post("/auth/logout", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {

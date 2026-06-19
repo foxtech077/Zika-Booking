@@ -2301,10 +2301,10 @@ return { actioned: true };
       },
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const admin = req.admin as AdminRequest;
+    const admin = req as AdminRequest;
     const { q = "", status, page = "1", limit = "20" } = req.query as Record<string, string>;
     const isCountryManager = admin.adminRole === "country_manager";
-    const listingFilter = isCountryManager ? { country: { in: admin.countryScope } } : {};
+    const listingFilter = isCountryManager ? { listing: { country: { in: admin.countryScope } } } : {};
     
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -2312,7 +2312,7 @@ return { actioned: true };
     const where = {
       AND: [
         listingFilter,
-        status ? { status } : {},
+        status ? { status: status as any } : {},
         q ? { OR: [{ guestId: { contains: q } }, { bookingId: { contains: q } }] } : {},
       ],
     };
@@ -2407,7 +2407,7 @@ return { actioned: true };
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const { id } = req.params as { id: string };
-    const admin = req.admin as AdminRequest;
+    const admin = req as AdminRequest;
     const convo = await prisma.conversation.findUnique({
       where: { id },
       include: { listing: { select: { country: true } } },

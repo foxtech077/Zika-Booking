@@ -877,6 +877,30 @@ export async function bookingRoutes(app: FastifyInstance) {
         };
       }
 
+      // 2b. POINTS LOGIC
+      const redeemPoints = body.redeemPoints ?? 0;
+      let pointsDiscount = 0;
+      if (redeemPoints > 0) {
+        const settings = await prisma.platformSettings.findUnique({ where: { id: "global" } });
+        const minRedemption = settings?.minPointsRedemption ?? 500;
+        
+        if (redeemPoints < minRedemption) {
+          return sendError(reply, 400, "MINIMUM_REDEMPTION_NOT_MET", `You must redeem at least ${minRedemption} points.`);
+        }
+        
+        const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(
+          `SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1`,
+          guestId
+        );
+        
+        if (!userRes[0] || userRes[0].loyaltyPoints < redeemPoints) {
+          return sendError(reply, 400, "INSUFFICIENT_POINTS", "You do not have enough loyalty points to redeem.");
+        }
+
+        const ratio = settings?.pointsToCurrencyRatio ?? 100;
+        pointsDiscount = redeemPoints / ratio;
+      }
+
       // 3. FINAL RECALCULATION
 
       const finalBilling = calculateBilling({
