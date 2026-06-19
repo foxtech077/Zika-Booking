@@ -71,8 +71,9 @@ export async function searchRoutes(app: FastifyInstance) {
   // so calling .get("/search") resolves to /listings/search. We register the
   // handler at both /search and /listings/search to cover both paths.
   async function handleSearch(req: FastifyRequest, reply: FastifyReply) {
-    const guestId = (req as GuestRequest).guestId;
-    const q = req.query as Record<string, string>;
+    try {
+      const guestId = (req as GuestRequest).guestId;
+      const q = req.query as Record<string, string>;
 
     const category = q["category"] as string | undefined;
     const lat = parseFloat(q["lat"] ?? "");
@@ -259,6 +260,10 @@ export async function searchRoutes(app: FastifyInstance) {
       nextCursor,
       results,
     });
+    } catch (err) {
+      req.log.error({ err }, "Failed to execute search");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while searching.");
+    }
   }
 
   // Register at /search (direct service calls) and /listings/search (mobile app via listingApi)
@@ -335,8 +340,9 @@ export async function searchRoutes(app: FastifyInstance) {
       preHandler: [optionalGuest],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as GuestRequest).guestId;
-      const { id } = req.params as { id: string };
+      try {
+        const guestId = (req as GuestRequest).guestId;
+        const { id } = req.params as { id: string };
 
       const listing = await prisma.listing.findUnique({
         where: { id, deletedAt: null },
@@ -377,6 +383,10 @@ export async function searchRoutes(app: FastifyInstance) {
       }
 
       return sendSuccess(reply, 200, data);
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch public listing details");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching listing details.");
+      }
     },
   );
 
@@ -402,8 +412,9 @@ export async function searchRoutes(app: FastifyInstance) {
       },
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const { id } = req.params as { id: string };
-      const { month } = req.query as { month?: string };
+      try {
+        const { id } = req.params as { id: string };
+        const { month } = req.query as { month?: string };
 
       const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
@@ -434,6 +445,10 @@ export async function searchRoutes(app: FastifyInstance) {
       })).filter((r) => r.start && r.end);
 
       return sendSuccess(reply, 200, { unavailableRanges });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch listing availability");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching availability.");
+      }
     },
   );
 
@@ -458,8 +473,9 @@ export async function searchRoutes(app: FastifyInstance) {
       },
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const body = req.body as { ids?: string[] };
-      const ids = (body.ids ?? []).slice(0, 20);
+      try {
+        const body = req.body as { ids?: string[] };
+        const ids = (body.ids ?? []).slice(0, 20);
       if (!ids.length) return sendSuccess(reply, 200, { listings: [] });
 
       const listings = await prisma.listing.findMany({
@@ -479,6 +495,10 @@ export async function searchRoutes(app: FastifyInstance) {
           primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
         })),
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch batch listing summaries");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching listing summaries.");
+      }
     },
   );
 
@@ -500,8 +520,9 @@ export async function searchRoutes(app: FastifyInstance) {
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const userId = (req as any).providerId as string;
-      const { listingId } = req.body as { listingId: string };
+      try {
+        const userId = (req as any).providerId as string;
+        const { listingId } = req.body as { listingId: string };
 
       const listing = await prisma.listing.findUnique({ where: { id: listingId, deletedAt: null } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
@@ -513,6 +534,10 @@ export async function searchRoutes(app: FastifyInstance) {
       });
 
       return sendSuccess(reply, 201, { message: "Saved to favourites." });
+      } catch (err) {
+        req.log.error({ err }, "Failed to save favourite listing");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while saving favourite.");
+      }
     },
   );
 
@@ -532,11 +557,16 @@ export async function searchRoutes(app: FastifyInstance) {
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const userId = (req as any).providerId as string;
-      const { listingId } = req.params as { listingId: string };
+      try {
+        const userId = (req as any).providerId as string;
+        const { listingId } = req.params as { listingId: string };
 
       await prisma.userFavourite.deleteMany({ where: { userId, listingId } });
       return sendSuccess(reply, 200, { message: "Favourite removed successfully." });
+      } catch (err) {
+        req.log.error({ err }, "Failed to remove favourite listing");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while removing favourite.");
+      }
     },
   );
 
@@ -555,8 +585,9 @@ export async function searchRoutes(app: FastifyInstance) {
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const userId = (req as any).providerId as string;
-      const q = req.query as Record<string, string>;
+      try {
+        const userId = (req as any).providerId as string;
+        const q = req.query as Record<string, string>;
       const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
       const limit = 20;
 
@@ -593,6 +624,10 @@ export async function searchRoutes(app: FastifyInstance) {
         })),
         nextCursor: hasMore ? String(cursor + limit) : null,
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch favourite listings");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching favourites.");
+      }
     },
   );
 
@@ -614,8 +649,9 @@ export async function searchRoutes(app: FastifyInstance) {
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const userId = (req as any).providerId as string;
-      const { listingId } = req.body as { listingId: string };
+      try {
+        const userId = (req as any).providerId as string;
+        const { listingId } = req.body as { listingId: string };
 
       const listing = await prisma.listing.findUnique({ where: { id: listingId, deletedAt: null } });
       if (!listing) return reply.status(204).send();
@@ -638,6 +674,10 @@ export async function searchRoutes(app: FastifyInstance) {
       }
 
       return sendSuccess(reply, 200, { message: "Recently viewed updated." });
+      } catch (err) {
+        req.log.error({ err }, "Failed to update recently viewed listing");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating recently viewed.");
+      }
     },
   );
 
@@ -650,7 +690,8 @@ export async function searchRoutes(app: FastifyInstance) {
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const userId = (req as any).providerId as string;
+      try {
+        const userId = (req as any).providerId as string;
 
       const views = await prisma.userRecentlyViewed.findMany({
         where: { userId },
@@ -679,6 +720,10 @@ export async function searchRoutes(app: FastifyInstance) {
           },
         })),
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch recently viewed listings");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching recently viewed.");
+      }
     },
   );
 
@@ -710,8 +755,9 @@ export async function searchRoutes(app: FastifyInstance) {
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const userId = (req as any).providerId as string;
-      const { items } = req.body as { items: { listingId: string; viewedAt: string }[] };
+      try {
+        const userId = (req as any).providerId as string;
+        const { items } = req.body as { items: { listingId: string; viewedAt: string }[] };
 
       if (!Array.isArray(items)) return sendError(reply, 400, "INVALID_BODY", "items array required.");
 
@@ -729,6 +775,10 @@ export async function searchRoutes(app: FastifyInstance) {
         message: "Recently viewed imported successfully.",
         importedCount: items.slice(0, 20).length,
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to import recently viewed listings");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while importing recently viewed.");
+      }
     },
   );
 }
