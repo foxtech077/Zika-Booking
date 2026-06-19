@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
@@ -22,16 +22,25 @@ function CategoryIcon({ category }: { category: string }) {
 }
 
 const fetchListings = (params: Record<string, string>) =>
-  listingApi.get(`/admin/listings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  listingApi.get("/admin/listings", { params }).then((r) => r.data.data ?? r.data);
 
 export default function ListingsPage() {
-  const { token } = useAuthStore();
+  const { token, user, _hasHydrated } = useAuthStore();
+  const isCountryManager = user?.role === "country_manager";
+  const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
+
+  // Sync country selection after auth store hydration
+  useEffect(() => {
+    if (scopedCountries.length > 0 && !country) {
+      setCountry(scopedCountries[0] ?? "");
+    }
+  }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Listing | null>(null);
   const [suspendModal, setSuspendModal] = useState<Listing | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
@@ -40,14 +49,21 @@ export default function ListingsPage() {
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
 
-  const params = { q, status, category, country, page: String(page), limit: "20" };
+  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
+  const params = { q, status, category, country: effectiveCountry, page: String(page), limit: "20" };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-listings", params],
+    queryKey: ["admin-listings", page, "20", q, status, category, effectiveCountry],
     queryFn: () => fetchListings(params),
-    enabled: !!token,
+    enabled: !!token && _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
   });
 
-  const listings: Listing[] = data?.listings ?? [];
+  const rawListings: Listing[] = data?.listings ?? [];
+  const listings = isCountryManager && scopedCountries.length > 0
+    ? rawListings.filter((l) => {
+        const listingCountry = l.country?.toUpperCase();
+        return listingCountry ? scopedCountries.some((sc) => sc.toUpperCase() === listingCountry) : false;
+      })
+    : rawListings;
   const total: number = data?.total ?? 0;
 
   const suspendMut = useMutation({

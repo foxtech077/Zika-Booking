@@ -9,7 +9,7 @@ import { Spinner } from "@/components/ui/Skeleton";
 import { api } from "@/lib/api";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
-  const { isAuthenticated, user, token, setSession, clearSession } = useAuthStore();
+  const { isAuthenticated, user, token, setSession, clearSession, _hasHydrated } = useAuthStore();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -20,7 +20,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // Step 1: Wait for hydration (client mount).
   // Redirect ONLY after mounting is confirmed.
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || !_hasHydrated) return;
 
     if (!isAuthenticated || !token) {
       router.replace("/login");
@@ -46,10 +46,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           router.replace("/login");
         });
     }
-  }, [mounted, isAuthenticated, token, user?.role, setSession, clearSession, router]);
+  }, [mounted, _hasHydrated, isAuthenticated, token, user?.role, setSession, clearSession, router]);
 
-  // Show spinner until layout has mounted in the browser
-  if (!mounted) {
+  // Show spinner until layout has mounted in the browser and store is hydrated
+  if (!mounted || !_hasHydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface-subtle">
         <Spinner size="lg" />
