@@ -23,6 +23,7 @@ import {
   DollarSign,
   History,
   RefreshCw,
+  Settings,
   Star,
   TrendingDown,
   TrendingUp,
@@ -278,12 +279,16 @@ function RowsSkeleton({ rows = 4 }: { rows?: number }) {
   );
 }
 
-// ─── Quick actions ────────────────────────────────────────────────────────────
+// ─── Available actions ────────────────────────────────────────────────────────
 
-const QUICK_ACTIONS = [
-  { label: "View Earnings Analytics", href: "/dashboard/earnings", icon: <DollarSign /> },
-  { label: "Upcoming Booking Earnings", href: "/dashboard/payments/upcoming-earnings", icon: <CalendarDays /> },
-  { label: "Payout History", href: "/dashboard/payments/payout-history", icon: <History /> },
+const AVAILABLE_ACTIONS = [
+  { label: "View Earnings", href: "/dashboard/payments/reports", icon: <DollarSign /> },
+  { label: "View Payouts", href: "/dashboard/payments/payout-history", icon: <History /> },
+  { label: "View Bookings", href: "/dashboard/payments/upcoming-earnings", icon: <CalendarDays /> },
+];
+
+const CONFIGURATION_ACTIONS = [
+  { label: "Payment Settings", href: "/dashboard/payments/settings", icon: <Settings /> },
   { label: "Booking Revenue Details", href: "/dashboard/payments/booking-revenue", icon: <BookOpen /> },
 ];
 
@@ -470,21 +475,40 @@ export default function PaymentDashboardPage() {
         </Card>
 
         <Card>
-          <SectionHeader title="Quick Actions" subtitle="Payment management shortcuts" />
+          <SectionHeader title="Available Actions" subtitle="Primary payment actions" />
           <div className="grid gap-2">
-            {QUICK_ACTIONS.map((action) => (
+            {AVAILABLE_ACTIONS.map((action) => (
               <Link
                 key={action.href}
                 href={action.href}
-                className="flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-slate-50"
+                className="flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-emerald-50 border border-transparent hover:border-emerald-100 group"
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-green-700 [&>svg]:h-4 [&>svg]:w-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-green-700 group-hover:bg-green-100 transition-colors [&>svg]:h-4 [&>svg]:w-4">
                   {action.icon}
                 </span>
-                <span className="text-sm font-semibold text-slate-700">{action.label}</span>
-                <ArrowRight className="ml-auto h-4 w-4 text-slate-400" />
+                <span className="text-sm font-semibold text-slate-700 group-hover:text-green-800 transition-colors">{action.label}</span>
+                <ArrowRight className="ml-auto h-4 w-4 text-slate-400 group-hover:text-green-600 transition-colors" />
               </Link>
             ))}
+          </div>
+
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <SectionHeader title="Account Config" subtitle="Manage methods and reports" />
+            <div className="grid gap-2">
+              {CONFIGURATION_ACTIONS.map((action) => (
+                <Link
+                  key={action.href}
+                  href={action.href}
+                  className="flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-emerald-50 border border-transparent hover:border-emerald-100 group"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-green-700 group-hover:bg-green-100 transition-colors [&>svg]:h-4 [&>svg]:w-4">
+                    {action.icon}
+                  </span>
+                  <span className="text-sm font-semibold text-slate-700 group-hover:text-green-800 transition-colors">{action.label}</span>
+                  <ArrowRight className="ml-auto h-4 w-4 text-slate-400 group-hover:text-green-600 transition-colors" />
+                </Link>
+              ))}
+            </div>
           </div>
 
           <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-100 p-4">

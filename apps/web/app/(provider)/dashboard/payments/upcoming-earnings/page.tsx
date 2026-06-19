@@ -384,12 +384,12 @@ export default function UpcomingEarningsPage() {
                       <Badge label={item.payoutStatus} status={item.payoutStatus} dot />
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-2">
                         <Link href={`/dashboard/bookings?ref=${item.bookingReference}`}>
-                          <Button variant="ghost" size="xs">View Booking</Button>
+                          <Button variant="ghost" size="xs">View Booking Details</Button>
                         </Link>
                         <Link href={`/dashboard/messaging`}>
-                          <Button variant="ghost" size="xs" icon={<MessageSquare />} />
+                          <Button variant="outline" size="xs" icon={<MessageSquare />}>Contact Guest</Button>
                         </Link>
                       </div>
                     </td>

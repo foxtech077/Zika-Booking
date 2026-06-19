@@ -33,6 +33,7 @@ interface Payout {
   grossAmount: number;
   platformCommission: number;
   netPayout: number;
+  paymentMethod: string;
   payoutDate: string;
   transactionReference: string;
   status: PayoutStatus;
@@ -50,6 +51,7 @@ function readString(v: unknown, fallback = ""): string {
   return typeof v === "string" && v.trim() ? v : fallback;
 }
 
+// ... helper to unwrap payload ...
 function unwrap(payload: unknown): Record<string, unknown> {
   const root = payload as Record<string, unknown>;
   return (root?.data as Record<string, unknown>) ?? root ?? {};
@@ -77,6 +79,7 @@ function normalizePayout(raw: unknown): Payout {
     grossAmount: gross,
     platformCommission: commission,
     netPayout: net,
+    paymentMethod: readString(m.payoutMethod ?? m.paymentMethod ?? m.method, "Bank Transfer"),
     payoutDate: readString(m.payoutDate ?? m.paidAt ?? m.processedAt ?? m.createdAt, new Date().toISOString()),
     transactionReference: readString(m.transactionReference ?? m.transactionId ?? m.reference, "—"),
     status: normalizeStatus(m.status ?? m.payoutStatus),
@@ -351,6 +354,9 @@ export default function PayoutHistoryPage() {
                     Commission
                   </th>
                   <SortableHeader label="Net Payout" sortKey="netPayout" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">
+                    Payment Method
+                  </th>
                   <SortableHeader label="Payout Date" sortKey="payoutDate" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">
                     Transaction Ref
@@ -381,6 +387,9 @@ export default function PayoutHistoryPage() {
                     <td className="px-4 py-3 font-bold text-emerald-700 whitespace-nowrap">
                       {formatCurrency(payout.netPayout, payout.currency)}
                     </td>
+                    <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">
+                      {payout.paymentMethod}
+                    </td>
                     <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
                       {formatDate(payout.payoutDate)}
                     </td>
@@ -393,15 +402,25 @@ export default function PayoutHistoryPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <Link href={`/dashboard/payments/payout-details/${payout.id}`}>
-                          <Button variant="ghost" size="xs" icon={<Eye />}>View</Button>
+                          <Button variant="ghost" size="xs" icon={<Eye />}>View Details</Button>
                         </Link>
                         <Button
                           variant="ghost"
                           size="xs"
                           icon={<Download />}
-                          onClick={() => alert("Receipt download will be available once the export API is connected.")}
+                          onClick={() => {
+                            const content = `RECEIPT - ZIKA BOOKING\n\nBooking Reference: ${payout.bookingReference}\nListing: ${payout.listingName}\nGross Amount: $${payout.grossAmount}\nPlatform Commission: $${payout.platformCommission}\nNet Payout: $${payout.netPayout}\nPayment Method: ${payout.paymentMethod}\nPayout Date: ${formatDate(payout.payoutDate)}\nTransaction Reference: ${payout.transactionReference}\nStatus: ${payout.status.toUpperCase()}\n\nThank you for partnering with Zika Booking.`;
+                            const blob = new Blob([content], { type: "text/plain" });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement("a");
+                            a.href = url;
+                            a.download = `receipt_${payout.bookingReference}.txt`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                          }}
                         >
-                          Receipt
+                          Download Report
                         </Button>
                       </div>
                     </td>
