@@ -26,25 +26,25 @@ function formatUnreadCount(count: number) {
 }
 
 /** Derive a human-readable page title from the current pathname */
-function getPageTitle(pathname: string): string {
-  const segments = pathname.split("/").filter(Boolean);
-  const last = segments[segments.length - 1];
-  if (!last || last === "dashboard") return "Dashboard";
-  const map: Record<string, string> = {
-    listings:      "Listings",
-    bookings:      "Bookings",
-    calendar:      "Calendar",
-    reviews:       "Reviews",
-    messaging:     "Messages",
-    earnings:      "Earnings",
-    channel:       "Channel Sync",
-    settings:      "Settings",
-    notifications: "Notifications",
-    new:           "New Listing",
-    edit:          "Edit Listing",
-  };
-  return map[last] ?? last.charAt(0).toUpperCase() + last.slice(1);
-}
+// function getPageTitle(pathname: string): string {
+//   const segments = pathname.split("/").filter(Boolean);
+//   const last = segments[segments.length - 1];
+//   if (!last || last === "dashboard") return "Dashboard";
+//   const map: Record<string, string> = {
+//     listings:      "Listings",
+//     bookings:      "Bookings",
+//     calendar:      "Calendar",
+//     reviews:       "Reviews",
+//     messaging:     "Messages",
+//     earnings:      "Earnings",
+//     channel:       "Channel Sync",
+//     settings:      "Settings",
+//     notifications: "Notifications",
+//     new:           "New Listing",
+//     edit:          "Edit Listing",
+//   };
+//   return map[last] ?? last.charAt(0).toUpperCase() + last.slice(1);
+// }
 
 export function TopBar() {
   const { user, clearSession } = useAuthStore();
@@ -64,7 +64,7 @@ export function TopBar() {
   };
 
   const name = user ? `${user.firstName} ${user.lastName}` : "Provider";
-  const pageTitle = getPageTitle(pathname);
+  // const pageTitle = getPageTitle(pathname);
 
   return (
     <header
@@ -82,7 +82,7 @@ export function TopBar() {
     >
       {/* Left — page title */}
       <div>
-        <h1 className="text-base font-bold text-white leading-none">{pageTitle}</h1>
+        {/* <h1 className="text-base font-bold text-white leading-none">{pageTitle}</h1> */}
       </div>
 
       {/* Right — notification + user */}

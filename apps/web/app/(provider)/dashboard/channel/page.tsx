@@ -259,7 +259,7 @@ function StatCard({ label, value, icon, tone }: { label: string; value: string |
     <Card>
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-slate-500">{label}</p>
+          <p className="text-[15px] font-medium text-slate-500">{label}</p>
           <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
         </div>
         <div className={cn("flex h-11 w-11 items-center justify-center rounded-xl [&>svg]:h-5 [&>svg]:w-5", tone)}>
@@ -464,11 +464,11 @@ export default function ChannelPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Connected Feeds" value={stats.total} icon={<Globe2 />} tone="bg-green-50 text-green-700" />
-        <StatCard label="Active Feeds" value={channelStatus?.activeFeeds ?? stats.active} icon={<ShieldCheck />} tone="bg-emerald-50 text-emerald-700" />
-        <StatCard label="Failed Syncs" value={channelStatus?.failedFeeds ?? stats.failed} icon={<XCircle />} tone="bg-red-50 text-red-700" />
-        <StatCard label="Pending Syncs" value={channelStatus?.pendingSyncs ?? stats.pending} icon={<Clock3 />} tone="bg-amber-50 text-amber-700" />
-        <StatCard label="Last Success" value={stats.lastSuccessful ? formatRelativeTime(stats.lastSuccessful) : "Never"} icon={<CheckCircle2 />} tone="bg-slate-100 text-slate-700" />
+        <StatCard label="Connected Feeds" value={stats.total} icon={<Globe2 />} tone="bg-green-700 text-white" />
+        <StatCard label="Active Feeds" value={channelStatus?.activeFeeds ?? stats.active} icon={<ShieldCheck />} tone="bg-green-700 text-white" />
+        <StatCard label="Failed Syncs" value={channelStatus?.failedFeeds ?? stats.failed} icon={<XCircle />} tone="bg-red-500 text-white" />
+        <StatCard label="Pending Syncs" value={channelStatus?.pendingSyncs ?? stats.pending} icon={<Clock3 />} tone="bg-green-700 text-white" />
+        <StatCard label="Last Success" value={stats.lastSuccessful ? formatRelativeTime(stats.lastSuccessful) : "Never"} icon={<CheckCircle2 />} tone="bg-green-700 text-white" />
       </div>
 
       <Card>

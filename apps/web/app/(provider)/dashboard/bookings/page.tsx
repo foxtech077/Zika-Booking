@@ -211,9 +211,9 @@ const StatusBadge = ({ status, type = "booking" }: { status: string; type?: "boo
 const SummaryCard = ({ title, value, icon: Icon, trend }: any) => (
     <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-lg transition-shadow duration-200 min-h-[124px]">
         <div className="flex items-center justify-between mb-4">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-[0.28em]">{title}</span>
-            <div className="p-2 rounded-2xl bg-slate-100">
-                <Icon className="w-4 h-4 text-slate-500" />
+            <span className="text-[15px] font-semibold text-slate-500 uppercase tracking-[0.28em]">{title}</span>
+            <div className="rounded-xl flex h-10 w-10 items-center justify-center  bg-green-700">
+                <Icon className="w-5 h-5 text-white " />
             </div>
         </div>
         <div className="flex items-end justify-between gap-3">
@@ -227,7 +227,6 @@ const SummaryCard = ({ title, value, icon: Icon, trend }: any) => (
         </div>
     </div>
 );
-
 // Loading Skeleton
 const LoadingSkeleton = () => (
     <div className="space-y-4">
