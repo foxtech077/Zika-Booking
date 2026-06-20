@@ -7,210 +7,47 @@ import {
   Platform,
   Alert,
   StyleSheet,
-  Image,
   TextInput,
   TouchableOpacity,
-  Dimensions,
   ActivityIndicator,
+  ImageBackground,
+  Image,
+  Dimensions,
 } from "react-native";
 import { Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
-import { K } from "../../constants/theme";
 import type { PublicUser, ApiResponse, AuthResponse } from "@zika/types";
 
-interface FieldErrors {
-  email?: string;
-  password?: string;
-  general?: string;
-}
+const { height: SCREEN_H } = Dimensions.get("window");
+const HERO_H = Math.round(SCREEN_H * 0.44);
 
+const GREEN    = "#024622";
+const ACCENT   = "#1D8D2B";
+const TEXT     = "#111827";
+const MUTED    = "#6B7280";
+const BORDER   = "#E5E7EB";
+const INPUT_BG = "#F3F4F6";
+const ERR      = "#EF4444";
+
+// ─── redirect helper ─────────────────────────────────────────────────────────
 export function handleRoleAndStatusRedirect(user: PublicUser) {
   if (user.userType === "provider") {
-    if (user.status === "pending_verification") {
-      router.replace("/pending-approval");
-    } else if (user.status === "suspended" || user.status === "banned") {
-      router.replace("/suspended");
-    } else {
-      router.replace("/(provider)");
-    }
+    if (user.status === "pending_verification") router.replace("/pending-approval");
+    else if (user.status === "suspended" || user.status === "banned") router.replace("/suspended");
+    else router.replace("/(provider)");
   } else {
     router.replace("/(tabs)");
   }
 }
 
-export default function LoginScreen() {
-  const [form, setForm] = useState({ email: "", password: "" });
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [showPass, setShowPass] = useState(false);
-  const setAuth = useAuthStore((s) => s.setAuth);
-
-  const set = (key: keyof typeof form) => (val: string) =>
-    setForm((prev) => ({ ...prev, [key]: val }));
-
-  const setGeneralError = (msg: string | null) =>
-    setErrors((prev) => ({ ...prev, general: msg ?? undefined }));
-
-  const loginMutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.post<ApiResponse<AuthResponse>>("/auth/login", { email: form.email, password: form.password });
-      if (!res.data.success) throw res.data;
-      return res.data.data;
-    },
-    onSuccess: async (data) => {
-      await setAuth(data.user, data.tokens.accessToken);
-      handleRoleAndStatusRedirect(data.user);
-    },
-    onError: (err: unknown) => {
-      const axiosErr = err as { message?: string; code?: string; config?: { url?: string; baseURL?: string }; response?: { data?: ApiResponse<unknown> } };
-      const data = axiosErr.response?.data;
-      const structuredError = data && !data.success && data.error && typeof data.error === "object";
-      if (structuredError) {
-        const apiErr = (data as { success: false; error: { code: string; message: string } }).error;
-        if (apiErr.code === "EMAIL_NOT_VERIFIED") {
-          router.push({ pathname: "/(auth)/verify-pending", params: { email: form.email } });
-          return;
-        }
-        setGeneralError(apiErr.message);
-      } else {
-        const details = __DEV__
-          ? `\n\n[Dev Details]\nURL: ${axiosErr.config?.baseURL ?? api.defaults.baseURL}${axiosErr.config?.url ?? ""}\nError: ${axiosErr.message ?? "Unknown Network Error"}\nCode: ${axiosErr.code ?? "Unknown Code"}`
-          : "";
-        setErrors({ general: `Unable to connect. Please check your network and try again.${details}` });
-      }
-    },
-  });
-
-  function handleSubmit() {
-    if (!form.email.trim() || !form.password) {
-      setGeneralError("Please enter your email and password.");
-      return;
-    }
-    setGeneralError(null);
-    loginMutation.mutate();
-  }
-
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Brand Header */}
-        <View style={styles.brandRow}>
-          <View style={styles.logoContainer}>
-            <Image
-              source={require("../../assets/logo.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
-        </View>
-
-        <Text style={styles.headline}>Welcome{"\n"}Back</Text>
-        <Text style={styles.subheadline}>Sign in to your premium account</Text>
-
-        {/* Card containing login inputs */}
-        <View style={styles.card}>
-          {/* Email field */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Email Address</Text>
-            <TextInput
-              style={[styles.input, errors.email ? styles.inputError : null]}
-              value={form.email}
-              onChangeText={(v) => { set("email")(v); setErrors({}); }}
-              placeholder="you@example.com"
-              placeholderTextColor={K.colors.textLightDim}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-            />
-            {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
-          </View>
-
-          {/* Password field */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.passRow}>
-              <TextInput
-                style={[styles.input, styles.inputFlex, errors.password ? styles.inputError : null]}
-                value={form.password}
-                onChangeText={(v) => { set("password")(v); setErrors({}); }}
-                placeholder="Your password"
-                placeholderTextColor={K.colors.textLightDim}
-                secureTextEntry={!showPass}
-              />
-              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPass((v) => !v)}>
-                <Text style={styles.eyeIcon}>{showPass ? "🙈" : "👁️"}</Text>
-              </TouchableOpacity>
-            </View>
-            {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
-          </View>
-
-          {/* Forgot password link */}
-          <Link href="/(auth)/forgot-password" asChild>
-            <TouchableOpacity>
-              <Text style={styles.forgotLink}>Forgot password?</Text>
-            </TouchableOpacity>
-          </Link>
-
-          {errors.general ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{errors.general}</Text>
-            </View>
-          ) : null}
-
-          {/* Submit button */}
-          <TouchableOpacity
-            style={[styles.primaryBtn, loginMutation.isPending && styles.btnDisabled]}
-            onPress={handleSubmit}
-            disabled={loginMutation.isPending}
-            activeOpacity={0.85}
-          >
-            {loginMutation.isPending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.primaryBtnText}>Sign In</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-
-        {/* Divider */}
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* OAuth third party buttons */}
-        <GoogleSignInButton onError={(msg) => setErrors({ general: msg })} />
-        {Platform.OS === "ios" && <View style={{ marginTop: 12 }}><AppleSignInButton /></View>}
-
-        <View style={styles.registerRow}>
-          <Text style={styles.registerText}>Don't have an account? </Text>
-          <Link href="/(auth)/register" asChild>
-            <TouchableOpacity>
-              <Text style={styles.registerLink}>Create one</Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
-
+// ─── Google Sign-In ───────────────────────────────────────────────────────────
 let _GoogleSignin: typeof import("@react-native-google-signin/google-signin")["GoogleSignin"] | null = null;
-try {
-  _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin;
-} catch { /* not available in Expo Go */ }
+try { _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin; } catch { /* Expo Go */ }
 
-function configureGoogleSignIn() {
+function configureGoogle() {
   if (!_GoogleSignin) return;
   _GoogleSignin.configure({
     webClientId: process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"] ?? "",
@@ -219,20 +56,17 @@ function configureGoogleSignIn() {
   });
 }
 
-export function GoogleSignInButton({ onError }: { onError: (msg: string) => void }) {
-  const setAuth = useAuthStore((s) => s.setAuth);
-
+export function GoogleSignInButton({ onError }: { onError: (m: string) => void }) {
+  const setAuth  = useAuthStore((s) => s.setAuth);
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!_GoogleSignin) {
-        throw Object.assign(new Error("Expo Go"), { code: "EXPO_GO" });
-      }
-      configureGoogleSignIn();
+      if (!_GoogleSignin) throw Object.assign(new Error("Expo Go"), { code: "EXPO_GO" });
+      configureGoogle();
       await _GoogleSignin.hasPlayServices();
-      const signInResult = await _GoogleSignin.signIn();
-      const idToken = (signInResult as any).data?.idToken ?? (signInResult as any).idToken;
+      const result  = await _GoogleSignin.signIn();
+      const idToken = (result as any).data?.idToken ?? (result as any).idToken;
       if (!idToken) throw new Error("No ID token");
-      const res = await api.post("/auth/oauth/google", { idToken });
+      const res = await api.post("auth/oauth/google", { idToken });
       return (res.data as { data: AuthResponse }).data;
     },
     onSuccess: async (data) => {
@@ -242,189 +76,285 @@ export function GoogleSignInButton({ onError }: { onError: (msg: string) => void
     onError: (err: unknown) => {
       const code = String((err as any)?.code ?? "");
       if (code === "SIGN_IN_CANCELLED" || code === "12501") return;
-      if (code === "EXPO_GO") {
-        Alert.alert("Not supported in Expo Go", "Google Sign-In requires a development build. Please use email & password to sign in.");
-        return;
-      }
-      if (code === "SIGN_IN_FAILED" || code === "12500") {
-        Alert.alert("Google Sign-In Failed", "The app's SHA-1 fingerprint is not registered in Google Cloud Console. Use email & password instead.");
-        return;
-      }
-      Alert.alert("Google Sign-In Failed", (err as any)?.message ?? "Unknown error");
+      if (code === "EXPO_GO") { Alert.alert("Not supported", "Google Sign-In needs a development build."); return; }
+      onError("Google Sign-In failed. Please use email & password.");
     },
   });
-
   return (
     <TouchableOpacity
-      style={[styles.oauthBtn, mutation.isPending && { opacity: 0.6 }]}
+      style={[ss.socialBtn, mutation.isPending && { opacity: 0.6 }]}
       onPress={() => mutation.mutate()}
       disabled={mutation.isPending}
-      activeOpacity={0.85}
+      activeOpacity={0.8}
     >
-      <Ionicons name="logo-google" size={18} color="#fff" />
-      <Text style={styles.oauthBtnTxt}>Continue with Google</Text>
+      {mutation.isPending
+        ? <ActivityIndicator color={TEXT} size="small" />
+        : <Ionicons name="logo-google" size={18} color={TEXT} />}
+      <Text style={ss.socialBtnTxt}>Google</Text>
     </TouchableOpacity>
   );
 }
 
-function AppleSignInButton() {
-  const AppleAuthentication = require("expo-apple-authentication") as typeof import("expo-apple-authentication");
+// ─── Login Screen ─────────────────────────────────────────────────────────────
+export default function LoginScreen() {
+  const [email,    setEmail]    = useState("");
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [error,    setError]    = useState<string | null>(null);
   const setAuth = useAuthStore((s) => s.setAuth);
 
-  const mutation = useMutation({
+  const loginMutation = useMutation({
     mutationFn: async () => {
-      const cred = await AppleAuthentication.signInAsync({
-        requestedScopes: [AppleAuthentication.AppleAuthenticationScope.FULL_NAME, AppleAuthentication.AppleAuthenticationScope.EMAIL],
+      const res = await api.post<ApiResponse<AuthResponse>>("auth/login", {
+        email: email.trim().toLowerCase(),
+        password,
       });
-      const res = await api.post("/auth/oauth/apple", { authorizationCode: cred.authorizationCode, identityToken: cred.identityToken });
-      return (res.data as { data: AuthResponse }).data;
+      if (!res.data.success) throw res.data;
+      return res.data.data;
     },
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
-      router.replace("/(tabs)");
+      handleRoleAndStatusRedirect(data.user);
     },
-    onError: () => Alert.alert("Error", "Sign in with Apple failed. Please try again."),
+    onError: (err: unknown) => {
+      const data = (err as any)?.response?.data ?? err;
+      if (data?.error?.code === "EMAIL_NOT_VERIFIED") {
+        router.push({ pathname: "/(auth)/verify-pending", params: { email } });
+        return;
+      }
+      setError(data?.error?.message ?? (err as any)?.message ?? "Unable to sign in. Please try again.");
+    },
   });
 
+  function submit() {
+    setError(null);
+    if (!email.trim() || !password) { setError("Please enter your email and password."); return; }
+    loginMutation.mutate();
+  }
+
   return (
-    <AppleAuthentication.AppleAuthenticationButton
-      buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-      buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-      cornerRadius={10}
-      style={{ height: 52 }}
-      onPress={() => mutation.mutate()}
-    />
+    <KeyboardAvoidingView style={ss.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+
+      {/* ── Hero section ── */}
+      <ImageBackground
+        source={require("../../assets/splash.png")}
+        style={[ss.hero, { height: HERO_H }]}
+        resizeMode="cover"
+      >
+        <View style={ss.heroOverlay} />
+        <View style={ss.heroContent}>
+          <View style={ss.logoWrap}>
+            <Image
+              source={require("../../assets/logo.png")}
+              style={ss.logo}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={ss.heroTitle}>Welcome Back</Text>
+          <Text style={ss.heroSub}>Sign in to continue your journey</Text>
+        </View>
+      </ImageBackground>
+
+      {/* ── Form card ── */}
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#fff", marginTop: -24, borderTopLeftRadius: 28, borderTopRightRadius: 28 }}
+        contentContainerStyle={ss.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={ss.cardTitle}>Sign In</Text>
+
+        {/* Email */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Email Address</Text>
+          <View style={ss.inputRow}>
+            <Ionicons name="mail-outline" size={18} color={MUTED} style={ss.inputIcon} />
+            <TextInput
+              style={ss.input}
+              value={email}
+              onChangeText={(v) => { setEmail(v); setError(null); }}
+              placeholder="you@example.com"
+              placeholderTextColor="#9CA3AF"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoComplete="email"
+            />
+          </View>
+        </View>
+
+        {/* Password */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Password</Text>
+          <View style={ss.inputRow}>
+            <Ionicons name="lock-closed-outline" size={18} color={MUTED} style={ss.inputIcon} />
+            <TextInput
+              style={ss.input}
+              value={password}
+              onChangeText={(v) => { setPassword(v); setError(null); }}
+              placeholder="Your password"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!showPass}
+            />
+            <TouchableOpacity onPress={() => setShowPass((p) => !p)} style={ss.eye}>
+              <Ionicons name={showPass ? "eye-off-outline" : "eye-outline"} size={18} color={MUTED} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Forgot password */}
+        <Link href="/(auth)/forgot-password" asChild>
+          <TouchableOpacity style={ss.forgotWrap}>
+            <Text style={ss.forgotTxt}>Forgot Password?</Text>
+          </TouchableOpacity>
+        </Link>
+
+        {/* Error */}
+        {error ? (
+          <View style={ss.errBox}>
+            <Ionicons name="alert-circle-outline" size={15} color={ERR} />
+            <Text style={ss.errTxt}>{error}</Text>
+          </View>
+        ) : null}
+
+        {/* Submit */}
+        <TouchableOpacity
+          style={[ss.btn, loginMutation.isPending && ss.btnDim]}
+          onPress={submit}
+          disabled={loginMutation.isPending}
+          activeOpacity={0.85}
+        >
+          {loginMutation.isPending
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <Text style={ss.btnTxt}>Sign In</Text>}
+        </TouchableOpacity>
+
+        {/* Divider */}
+        <View style={ss.divRow}>
+          <View style={ss.divLine} />
+          <Text style={ss.divTxt}>or continue with</Text>
+          <View style={ss.divLine} />
+        </View>
+
+        {/* Social buttons */}
+        <View style={ss.socialRow}>
+          <GoogleSignInButton onError={(m) => setError(m)} />
+          {Platform.OS === "ios" && <AppleButton onError={(m) => setError(m)} />}
+        </View>
+
+        {/* Register link */}
+        <View style={ss.linkRow}>
+          <Text style={ss.linkTxt}>Don't have an account? </Text>
+          <Link href="/(auth)/register" asChild>
+            <TouchableOpacity>
+              <Text style={ss.link}>Sign Up</Text>
+            </TouchableOpacity>
+          </Link>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
-const { height } = Dimensions.get("window");
+// ─── Apple button ─────────────────────────────────────────────────────────────
+function AppleButton({ onError }: { onError: (m: string) => void }) {
+  const AppleAuth = require("expo-apple-authentication") as typeof import("expo-apple-authentication");
+  const setAuth   = useAuthStore((s) => s.setAuth);
+  const mutation  = useMutation({
+    mutationFn: async () => {
+      const cred = await AppleAuth.signInAsync({
+        requestedScopes: [
+          AppleAuth.AppleAuthenticationScope.FULL_NAME,
+          AppleAuth.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+      const res = await api.post("auth/oauth/apple", {
+        authorizationCode: cred.authorizationCode,
+        identityToken:     cred.identityToken,
+      });
+      return (res.data as { data: AuthResponse }).data;
+    },
+    onSuccess: async (data) => { await setAuth(data.user, data.tokens.accessToken); router.replace("/(tabs)"); },
+    onError: () => onError("Apple Sign-In failed. Please try again."),
+  });
+  return (
+    <TouchableOpacity
+      style={[ss.socialBtn, mutation.isPending && { opacity: 0.6 }]}
+      onPress={() => mutation.mutate()}
+      disabled={mutation.isPending}
+      activeOpacity={0.8}
+    >
+      {mutation.isPending
+        ? <ActivityIndicator color={TEXT} size="small" />
+        : <Ionicons name="logo-apple" size={18} color={TEXT} />}
+      <Text style={ss.socialBtnTxt}>Apple</Text>
+    </TouchableOpacity>
+  );
+}
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.colors.darkGreen },
-  scroll: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const ss = StyleSheet.create({
+  root: { flex: 1, backgroundColor: GREEN },
 
-  brandRow: { alignItems: "flex-start", marginBottom: 32 },
-  logoContainer: {
-    width: 130, height: 130, borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+  hero:        { width: "100%", justifyContent: "flex-end" },
+  heroOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(1,26,12,0.62)" },
+  heroContent: { paddingHorizontal: 28, paddingBottom: 44 },
+  logoWrap: {
+    width: 64, height: 64, borderRadius: 16,
+    backgroundColor: "#fff",
     alignItems: "center", justifyContent: "center",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
-  },
-  logoImage: { width: 118, height: 118 },
-
-  headline: { fontSize: K.font.xxxl, fontWeight: "800", color: "#fff", lineHeight: 38, letterSpacing: -0.5 },
-  subheadline: { fontSize: K.font.base, color: K.colors.textLightMuted, marginTop: 8, marginBottom: 28 },
-
-  card: {
-    backgroundColor: K.colors.glassBg,
-    borderRadius: K.radius.xxl,
-    borderWidth: 1,
-    borderColor: K.colors.glassBorder,
-    padding: 24,
-  },
-  field: { marginBottom: 16 },
-  label: {
-    fontSize: K.font.sm,
-    fontWeight: "600",
-    color: K.colors.textLightMuted,
-    marginBottom: 8,
-    letterSpacing: 0.3,
-  },
-  input: {
-    backgroundColor: K.colors.glassInput,
-    borderWidth: 1,
-    borderColor: K.colors.glassInputBorder,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: K.font.base,
-    color: K.colors.textLight,
-    flex: 1,
-  },
-  inputFlex: { flex: 1 },
-  inputError: { borderColor: K.colors.error },
-  passRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  eyeBtn: {
-    backgroundColor: K.colors.glassInput,
-    borderWidth: 1,
-    borderColor: K.colors.glassInputBorder,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  eyeIcon: { fontSize: 16 },
-  fieldError: { fontSize: 12, color: "#FCA5A5", marginTop: 4 },
-
-  errorBox: {
-    backgroundColor: "rgba(239,68,68,0.15)",
-    borderRadius: K.radius.md,
-    borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.30)",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 16,
-  },
-  errorText: { color: "#FCA5A5", fontSize: K.font.sm, lineHeight: 20 },
-
-  primaryBtn: {
-    backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    paddingVertical: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    height: 54,
-    marginTop: 8,
-  },
-  btnDisabled: { opacity: 0.6 },
-  primaryBtnText: { color: "#fff", fontSize: K.font.lg, fontWeight: "700", letterSpacing: 0.3 },
-
-  dividerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginVertical: 24,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.12)",
-  },
-  dividerText: {
-    marginHorizontal: 16,
-    color: K.colors.textLightMuted,
-    fontSize: K.font.sm,
-  },
-
-  oauthBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.16)",
-    borderRadius: K.radius.md,
-    paddingVertical: 14,
-    height: 52,
-  },
-  oauthBtnTxt: {
-    color: "#fff",
-    fontSize: K.font.base,
-    fontWeight: "600",
-  },
-
-  registerRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 28 },
-  registerText: { color: K.colors.textLightMuted, fontSize: K.font.sm },
-  registerLink: { color: K.colors.accentLight, fontSize: K.font.sm, fontWeight: "700" },
-
-  forgotLink: {
-    alignSelf: "flex-end",
-    color: K.colors.accentLight,
-    fontSize: K.font.sm,
-    fontWeight: "600",
     marginBottom: 20,
-    marginTop: -8,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 10, elevation: 6,
   },
+  logo:      { width: 50, height: 50 },
+  heroTitle: { fontSize: 32, fontWeight: "800", color: "#fff", letterSpacing: -0.5 },
+  heroSub:   { fontSize: 15, color: "rgba(255,255,255,0.72)", marginTop: 6 },
+
+  scroll: {
+    paddingHorizontal: 24, paddingTop: 28, paddingBottom: 36,
+    backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28,
+  },
+  cardTitle: { fontSize: 20, fontWeight: "800", color: TEXT, marginBottom: 24, letterSpacing: -0.3 },
+
+  field:    { marginBottom: 16 },
+  label:    { fontSize: 13, fontWeight: "600", color: TEXT, marginBottom: 8 },
+  inputRow: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: INPUT_BG,
+    borderRadius: 12, borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14,
+  },
+  inputIcon: { marginRight: 10 },
+  input:     { flex: 1, paddingVertical: 13, fontSize: 15, color: TEXT },
+  eye:       { paddingVertical: 13, paddingLeft: 8 },
+
+  forgotWrap: { alignItems: "flex-end", marginBottom: 20, marginTop: -4 },
+  forgotTxt:  { fontSize: 13, color: ACCENT, fontWeight: "600" },
+
+  errBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "#FEF2F2", borderRadius: 10,
+    borderWidth: 1.5, borderColor: "#FECACA",
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16,
+  },
+  errTxt: { flex: 1, color: "#DC2626", fontSize: 13, lineHeight: 18 },
+
+  btn:    { backgroundColor: GREEN, borderRadius: 14, height: 52, alignItems: "center", justifyContent: "center" },
+  btnDim: { opacity: 0.6 },
+  btnTxt: { color: "#fff", fontSize: 16, fontWeight: "700" },
+
+  divRow:  { flexDirection: "row", alignItems: "center", marginVertical: 22 },
+  divLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  divTxt:  { marginHorizontal: 12, color: MUTED, fontSize: 12 },
+
+  socialRow: { flexDirection: "row", gap: 12 },
+  socialBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#F9FAFB", borderWidth: 1.5, borderColor: BORDER,
+    borderRadius: 12, paddingVertical: 13,
+  },
+  socialBtnTxt: { fontSize: 14, fontWeight: "600", color: TEXT },
+
+  linkRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 24 },
+  linkTxt: { color: MUTED, fontSize: 14 },
+  link:    { color: ACCENT, fontSize: 14, fontWeight: "700" },
 });

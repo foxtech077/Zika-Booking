@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuthStore } from "@/stores/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Users, ShieldOff, ShieldCheck, Ban, Eye } from "lucide-react";
 import { api } from "@/lib/api";
@@ -15,9 +16,13 @@ import { formatDate, formatRelativeTime } from "@/lib/utils";
 import type { PlatformUser } from "@/types/admin";
 
 const fetchUsers = (params: Record<string, string>) =>
-  api.get(`/admin/users?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
 
 export default function UsersPage() {
+  const { user, _hasHydrated } = useAuthStore();
+  const isCountryManager = user?.role === "country_manager";
+  const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
+  const limit = 20;
   const qc = useQueryClient();
 
   const [page, setPage] = useState(1);
@@ -30,12 +35,19 @@ export default function UsersPage() {
 
   const params = { q, status, userType, page: String(page), limit: "20" };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-users", params],
+    queryKey: ["admin-users", page, limit, q, status, userType, scopedCountries.join(",")],
     queryFn: () => fetchUsers(params),
+    enabled: _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
   });
 
-  const users: PlatformUser[] = data?.users ?? [];
-  const total: number = data?.total ?? 0;
+  const rawUsers: PlatformUser[] = data?.users ?? [];
+  const scopedUsers = scopedCountries.length > 0
+    ? rawUsers.filter((u) => u.country && scopedCountries.some((c) => c.toUpperCase() === u.country?.toUpperCase()))
+    : rawUsers;
+  const users: PlatformUser[] = scopedCountries.length > 0
+    ? scopedUsers.slice((page - 1) * limit, page * limit)
+    : scopedUsers;
+  const total: number = scopedCountries.length > 0 ? scopedUsers.length : (data?.total ?? 0);
 
   const mutate = useMutation({
     mutationFn: ({ action, id }: { action: string; id: string }) => {

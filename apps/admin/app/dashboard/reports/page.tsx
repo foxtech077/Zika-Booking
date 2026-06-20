@@ -61,6 +61,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ReportsPage() {
+  const canViewFinancials = true;
   const { data: bookingsData, isLoading } = useQuery({
     queryKey: ["reports-bookings"],
     queryFn: fetchAllBookings,
@@ -68,6 +69,7 @@ export default function ReportsPage() {
   const { data: usersData } = useQuery({
     queryKey: ["reports-users"],
     queryFn: fetchUsers,
+    enabled: canViewFinancials,
   });
 
   const bookings: Booking[] = bookingsData?.bookings ?? [];
