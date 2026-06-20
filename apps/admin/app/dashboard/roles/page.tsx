@@ -54,13 +54,15 @@ const changeRole = ({ id, role, countryScope }: { id: string; role: string; coun
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+function codeToFlag(code: string) {
+  return code.toUpperCase().replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 const COUNTRY_OPTIONS = Object.keys(countries.getAlpha2Codes()).map((c) => ({
   value: c,
-  label: countries.getName(c, "en") ?? c,
+  label: `${codeToFlag(c)} ${c}`,
 }));
-
-const codeToFlag = (code: string) =>
-  code.toUpperCase().replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 
 const ROLE_OPTIONS: { value: AdminRole; label: string }[] = [
   { value: "admin", label: "Admin" },
@@ -416,7 +418,7 @@ export default function RolesPage() {
                 menuPortal: (base) => ({ ...base, zIndex: 9999 }),
               }}
               options={COUNTRY_OPTIONS}
-              value={createCountries.map((c) => ({ value: c, label: c }))}
+              value={createCountries.map((c) => ({ value: c, label: `${codeToFlag(c)} ${c}` }))}
               onChange={(selected) =>
                 setCreateCountries(selected ? selected.map((s: any) => s.value) : [])
               }
@@ -482,7 +484,7 @@ export default function RolesPage() {
                 menuPortal: (base) => ({ ...base, zIndex: 9999 }),
               }}
               options={COUNTRY_OPTIONS}
-              value={editCountries.map((c) => ({ value: c, label: c }))}
+              value={editCountries.map((c) => ({ value: c, label: `${codeToFlag(c)} ${c}` }))}
               onChange={(selected) =>
                 setEditCountries(selected ? selected.map((s: any) => s.value) : [])
               }

@@ -60,7 +60,7 @@ export default function VerifyPendingScreen() {
 
   const resendMutation = useMutation({
     mutationFn: async () => {
-      await api.post("/auth/resend-verification", { email });
+      await api.post("auth/resend-verification", { email });
     },
     onSuccess: () => {
       setCooldown(60);
@@ -84,7 +84,7 @@ export default function VerifyPendingScreen() {
   // Direct verification via pasted link — calls the hosted API
   const verifyMutation = useMutation({
     mutationFn: async (token: string) => {
-      await api.get("/auth/verify", { params: { token } });
+      await api.get("auth/verify", { params: { token } });
     },
     onSuccess: () => {
       Alert.alert(

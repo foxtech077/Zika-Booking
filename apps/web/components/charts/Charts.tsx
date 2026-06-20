@@ -33,7 +33,7 @@ interface StatCardProps {
 }
 
 const COLOR_MAP = {
-  blue:    { bg: "bg-blue-50",    icon: "text-blue-600",    value: "text-blue-700" },
+  blue:    { bg: "bg-green-50",   icon: "text-green-600",   value: "text-green-700" },
   emerald: { bg: "bg-emerald-50", icon: "text-emerald-600", value: "text-emerald-700" },
   amber:   { bg: "bg-amber-50",   icon: "text-amber-600",   value: "text-amber-700" },
   violet:  { bg: "bg-violet-50",  icon: "text-violet-600",  value: "text-violet-700" },
@@ -101,8 +101,8 @@ export function RevenueAreaChart({ data, currency = "USD", height = 220 }: Reven
       <AreaChart data={formatted} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
         <defs>
           <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#0284c7" stopOpacity={0.15} />
-            <stop offset="95%" stopColor="#0284c7" stopOpacity={0} />
+            <stop offset="5%"  stopColor="#16a34a" stopOpacity={0.15} />
+            <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -113,8 +113,8 @@ export function RevenueAreaChart({ data, currency = "USD", height = 220 }: Reven
           contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "12px" }}
           formatter={(v: any) => [formatCurrency(Number(v ?? 0), currency), "Revenue"]}
         />
-        <Area type="monotone" dataKey="revenue" stroke="#0284c7" strokeWidth={2.5}
-          fill="url(#revenueGrad)" dot={false} activeDot={{ r: 5, fill: "#0284c7" }} />
+        <Area type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={2.5}
+          fill="url(#revenueGrad)" dot={false} activeDot={{ r: 5, fill: "#16a34a" }} />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -140,7 +140,7 @@ export function RevenueBarChart({ data, currency = "USD", height = 200 }: Revenu
           contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "12px" }}
           formatter={(v: any) => [formatCurrency(Number(v ?? 0), currency), "Revenue"]}
         />
-        <Bar dataKey="revenue" fill="#0284c7" radius={[6, 6, 0, 0]} maxBarSize={40} />
+        <Bar dataKey="revenue" fill="#16a34a" radius={[6, 6, 0, 0]} maxBarSize={40} />
       </BarChart>
     </ResponsiveContainer>
   );

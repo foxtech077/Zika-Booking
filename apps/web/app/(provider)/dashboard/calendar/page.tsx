@@ -124,7 +124,7 @@ const statusStyles: Record<BookingStatus, string> = {
   confirmed: "border-emerald-200 bg-emerald-50 text-emerald-800",
   cancelled: "border-red-200 bg-red-50 text-red-800",
   failed: "border-orange-200 bg-orange-50 text-orange-800",
-  completed: "border-blue-200 bg-blue-50 text-blue-800",
+  completed: "border-green-200 bg-green-50 text-green-800",
 };
 
 const eventDotStyles: Record<BookingStatus, string> = {
@@ -132,7 +132,7 @@ const eventDotStyles: Record<BookingStatus, string> = {
   confirmed: "bg-emerald-500",
   cancelled: "bg-red-500",
   failed: "bg-orange-500",
-  completed: "bg-blue-500",
+  completed: "bg-green-500",
 };
 
 function unwrapList<T>(payload: unknown, keys: string[]): T[] {
@@ -359,7 +359,7 @@ function SummaryCard({
     <Card className="min-h-[104px]">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-slate-500">{label}</p>
+          <p className="text-[15px] font-medium text-slate-500">{label}</p>
           <p className="mt-2 text-2xl font-bold text-slate-950">{count}</p>
         </div>
         <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl [&>svg]:h-5 [&>svg]:w-5", tone)}>
@@ -551,13 +551,13 @@ export default function CalendarPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <SummaryCard label="Total Bookings" count={summary.total} icon={<BookOpen />} tone="bg-slate-100 text-slate-700" />
-        <SummaryCard label="Today Check-ins" count={summary.todayCheckIns} icon={<User />} tone="bg-emerald-50 text-emerald-700" />
-        <SummaryCard label="Today Check-outs" count={summary.todayCheckOuts} icon={<Clock3 />} tone="bg-blue-50 text-blue-700" />
-        <SummaryCard label="Pending Bookings" count={summary.pending} icon={<AlertCircle />} tone="bg-yellow-50 text-yellow-700" />
-        <SummaryCard label="Confirmed" count={summary.confirmed} icon={<CheckCircle2 />} tone="bg-emerald-50 text-emerald-700" />
-        <SummaryCard label="Cancelled" count={summary.cancelled} icon={<XCircle />} tone="bg-red-50 text-red-700" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard label="Total Bookings" count={summary.total} icon={<BookOpen />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Today Check-ins" count={summary.todayCheckIns} icon={<User />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Today Check-outs" count={summary.todayCheckOuts} icon={<Clock3 />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Pending Bookings" count={summary.pending} icon={<AlertCircle />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Confirmed" count={summary.confirmed} icon={<CheckCircle2 />} tone="bg-green-700 text-white" />
+        <SummaryCard label="Cancelled" count={summary.cancelled} icon={<XCircle />} tone="bg-red-500 text-white" />
       </div>
 
       <Card>
@@ -660,7 +660,7 @@ export default function CalendarPage() {
                           isOutsideMonth && "bg-slate-50/70 text-slate-400",
                           isSelected && "bg-primary-50",
                           isFullyBooked && "bg-emerald-50",
-                          isPartial && !isSelected && "bg-blue-50/50",
+                          isPartial && !isSelected && "bg-green-50/50",
                           dayBlocks.length > 0 && "bg-slate-100"
                         )}
                       >
@@ -777,9 +777,9 @@ export default function CalendarPage() {
               <p className="text-xs font-medium text-slate-600">Blocked Dates</p>
               <p className="mt-2 text-2xl font-bold text-slate-900">{blockedDates.length}</p>
             </div>
-            <div className="rounded-xl bg-blue-50 p-4">
-              <p className="text-xs font-medium text-blue-700">Synced Reservations</p>
-              <p className="mt-2 text-2xl font-bold text-blue-900">{blockedDates.filter((date) => date.type === "synced" || date.platform).length}</p>
+            <div className="rounded-xl bg-green-50 p-4">
+              <p className="text-xs font-medium text-green-700">Synced Reservations</p>
+              <p className="mt-2 text-2xl font-bold text-green-900">{blockedDates.filter((date) => date.type === "synced" || date.platform).length}</p>
             </div>
           </div>
           <div className="mt-4 space-y-2">

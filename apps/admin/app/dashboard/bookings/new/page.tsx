@@ -646,7 +646,7 @@ export default function ManualBookingPage() {
         nationality,
         country,
         guests,
-        ...(isAccommodation ? { checkIn, checkOut, rooms, units } : { pickupDatetime: pickup, returnDatetime: returnDt }),
+        ...(isAccommodation ? { checkIn: new Date(checkIn).toISOString(), checkOut: new Date(checkOut).toISOString(), rooms, units } : { pickupDatetime: pickup, returnDatetime: returnDt }),
         notes,
       });
       return res.data as { bookingId: string; draftId: string };
@@ -659,8 +659,8 @@ export default function ManualBookingPage() {
 
   const paymentLinkMut = useMutation({
     mutationFn: async (bookingId: string) => {
-      const endpoint = paymentMethod === "stripe" ? "/payments/stripe/payment-link" : "/payments/tara/payment-link";
-      const res = await listingApi.post(endpoint, { bookingId });
+      const endpoint = paymentMethod === "stripe" ? "/stripe/payment-link" : "/tara/payment-link";
+      const res = await paymentApi.post(endpoint, { bookingId });
       return res.data as { paymentLink: string };
     },
     onError: (err: any) => {

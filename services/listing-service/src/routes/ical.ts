@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
@@ -248,30 +248,35 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
-    const providerId = (req as ProviderRequest).providerId;
+    try {
+      const { id } = req.params as { id: string };
+      const providerId = (req as ProviderRequest).providerId;
 
-    const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-    const feeds = await prisma.icalFeed.findMany({
-      where: { listingId: id },
-      orderBy: { createdAt: "desc" },
-    });
+      const feeds = await prisma.icalFeed.findMany({
+        where: { listingId: id },
+        orderBy: { createdAt: "desc" },
+      });
 
-    return sendSuccess(reply, 200, {
-      feeds: feeds.map((f) => ({
-        id: f.id,
-        platform: f.platform,
-        feedUrl: f.feedUrl,
-        isActive: f.isActive,
-        status: deriveFeedStatus(f),
-        lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
-        lastError: f.lastError,
-        consecutiveFailures: f.consecutiveFailures,
-        createdAt: f.createdAt.toISOString(),
-      })),
-    });
+      return sendSuccess(reply, 200, {
+        feeds: feeds.map((f) => ({
+          id: f.id,
+          platform: f.platform,
+          feedUrl: f.feedUrl,
+          isActive: f.isActive,
+          status: deriveFeedStatus(f),
+          lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
+          lastError: f.lastError,
+          consecutiveFailures: f.consecutiveFailures,
+          createdAt: f.createdAt.toISOString(),
+        })),
+      });
+    } catch (err) {
+      req.log.error({ err }, "Failed to fetch iCal feeds");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching iCal feeds.");
+    }
   });
 
   // ── POST /listings/:id/ical-feeds ─────────────────────────────────────
@@ -331,35 +336,40 @@ export async function icalRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "VALIDATION_ERROR", "feedUrl must be a valid URL.");
     }
 
-    const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    try {
+      const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-    const existing = await prisma.icalFeed.findFirst({ where: { listingId: id, feedUrl: body.feedUrl } });
-    if (existing) {
-      return sendError(reply, 409, "CONFLICT", "This feed URL is already connected to this listing.");
+      const existing = await prisma.icalFeed.findFirst({ where: { listingId: id, feedUrl: body.feedUrl } });
+      if (existing) {
+        return sendError(reply, 409, "CONFLICT", "This feed URL is already connected to this listing.");
+      }
+
+      const feed = await prisma.icalFeed.create({
+        data: {
+          listingId: id,
+          platform: body.platform,
+          feedUrl: body.feedUrl,
+        },
+      });
+
+      // Trigger initial sync in background
+      syncFeed(feed.id).catch(() => null);
+
+      return sendSuccess(reply, 201, {
+        id: feed.id,
+        platform: feed.platform,
+        feedUrl: feed.feedUrl,
+        isActive: feed.isActive,
+        status: "pending" as const,
+        lastSyncedAt: null,
+        consecutiveFailures: 0,
+        createdAt: feed.createdAt.toISOString(),
+      });
+    } catch (err) {
+      req.log.error({ err }, "Failed to create iCal feed");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while creating iCal feed.");
     }
-
-    const feed = await prisma.icalFeed.create({
-      data: {
-        listingId: id,
-        platform: body.platform,
-        feedUrl: body.feedUrl,
-      },
-    });
-
-    // Trigger initial sync in background
-    syncFeed(feed.id).catch(() => null);
-
-    return sendSuccess(reply, 201, {
-      id: feed.id,
-      platform: feed.platform,
-      feedUrl: feed.feedUrl,
-      isActive: feed.isActive,
-      status: "pending" as const,
-      lastSyncedAt: null,
-      consecutiveFailures: 0,
-      createdAt: feed.createdAt.toISOString(),
-    });
   });
 
   // ── DELETE /listings/:id/ical-feeds/:feedId ───────────────────────────
@@ -391,18 +401,23 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id, feedId } = req.params as { id: string; feedId: string };
-    const providerId = (req as ProviderRequest).providerId;
+    try {
+      const { id, feedId } = req.params as { id: string; feedId: string };
+      const providerId = (req as ProviderRequest).providerId;
 
-    const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-    const feed = await prisma.icalFeed.findFirst({ where: { id: feedId, listingId: id } });
-    if (!feed) return sendError(reply, 404, "NOT_FOUND", "Feed not found.");
+      const feed = await prisma.icalFeed.findFirst({ where: { id: feedId, listingId: id } });
+      if (!feed) return sendError(reply, 404, "NOT_FOUND", "Feed not found.");
 
-    await prisma.icalFeed.delete({ where: { id: feedId } });
+      await prisma.icalFeed.delete({ where: { id: feedId } });
 
-    return sendSuccess(reply, 200, { message: "Feed removed." });
+      return sendSuccess(reply, 200, { message: "Feed removed." });
+    } catch (err) {
+      req.log.error({ err }, "Failed to delete iCal feed");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while deleting iCal feed.");
+    }
   });
 
   // ── POST /listings/:id/ical-feeds/:feedId/sync ────────────────────────
@@ -438,22 +453,27 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id, feedId } = req.params as { id: string; feedId: string };
-    const providerId = (req as ProviderRequest).providerId;
+    try {
+      const { id, feedId } = req.params as { id: string; feedId: string };
+      const providerId = (req as ProviderRequest).providerId;
 
-    const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-    const feed = await prisma.icalFeed.findFirst({ where: { id: feedId, listingId: id } });
-    if (!feed) return sendError(reply, 404, "NOT_FOUND", "Feed not found.");
+      const feed = await prisma.icalFeed.findFirst({ where: { id: feedId, listingId: id } });
+      if (!feed) return sendError(reply, 404, "NOT_FOUND", "Feed not found.");
 
-    const result = await syncFeed(feedId);
+      const result = await syncFeed(feedId);
 
-    if (result.error) {
-      return sendSuccess(reply, 200, { synced: 0, error: result.error, message: "Sync failed — check the feed URL." });
+      if (result.error) {
+        return sendSuccess(reply, 200, { synced: 0, error: result.error, message: "Sync failed — check the feed URL." });
+      }
+
+      return sendSuccess(reply, 200, { synced: result.synced, message: `Synced ${result.synced} events.` });
+    } catch (err) {
+      req.log.error({ err }, "Failed to manually sync iCal feed");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while syncing iCal feed.");
     }
-
-    return sendSuccess(reply, 200, { synced: result.synced, message: `Synced ${result.synced} events.` });
   });
 
   // ── GET /listings/:id/blocked-dates ───────────────────────────────────
@@ -505,90 +525,95 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
-    const { from, to } = req.query as { from?: string; to?: string };
+    try {
+      const { id } = req.params as { id: string };
+      const { from, to } = req.query as { from?: string; to?: string };
 
-    const dateFilter = {
-      ...(from ? { startDate: { gte: new Date(from) } } : {}),
-      ...(to ? { endDate: { lte: new Date(to) } } : {}),
-    };
+      const dateFilter = {
+        ...(from ? { startDate: { gte: new Date(from) } } : {}),
+        ...(to ? { endDate: { lte: new Date(to) } } : {}),
+      };
 
-    // FIX: booking date filter covers both hotel (checkIn/checkOut) and car (pickupDatetime/returnDatetime)
-    const bookingDateFilter = from || to ? {
-      OR: [
-        {
-          ...(from ? { checkIn: { gte: new Date(from) } } : {}),
-          ...(to ? { checkOut: { lte: new Date(to) } } : {}),
+      // FIX: booking date filter covers both hotel (checkIn/checkOut) and car (pickupDatetime/returnDatetime)
+      const bookingDateFilter = from || to ? {
+        OR: [
+          {
+            ...(from ? { checkIn: { gte: new Date(from) } } : {}),
+            ...(to ? { checkOut: { lte: new Date(to) } } : {}),
+          },
+          {
+            ...(from ? { pickupDatetime: { gte: new Date(from) } } : {}),
+            ...(to ? { returnDatetime: { lte: new Date(to) } } : {}),
+          },
+        ],
+      } : {};
+
+      // 1. iCal-blocked dates from external feeds (grey)
+      const externalBlocked = await prisma.icalBlockedDate.findMany({
+        where: { listingId: id, ...dateFilter },
+        include: { feed: { select: { platform: true } } },
+        orderBy: { startDate: "asc" },
+      });
+
+      // 2. Confirmed bookings (green)
+      const confirmedBookings = await prisma.booking.findMany({
+        where: {
+          listingId: id,
+          status: "confirmed",
+          ...bookingDateFilter,
         },
-        {
-          ...(from ? { pickupDatetime: { gte: new Date(from) } } : {}),
-          ...(to ? { returnDatetime: { lte: new Date(to) } } : {}),
+        select: { id: true, checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true, reference: true },
+        orderBy: { checkIn: "asc" },
+      });
+
+      // 3. Pending payment bookings — "held" (amber)
+      const heldBookings = await prisma.booking.findMany({
+        where: {
+          listingId: id,
+          status: "pending_payment",
+          ...bookingDateFilter,
         },
-      ],
-    } : {};
+        select: { id: true, checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true, reference: true },
+        orderBy: { checkIn: "asc" },
+      });
 
-    // 1. iCal-blocked dates from external feeds (grey)
-    const externalBlocked = await prisma.icalBlockedDate.findMany({
-      where: { listingId: id, ...dateFilter },
-      include: { feed: { select: { platform: true } } },
-      orderBy: { startDate: "asc" },
-    });
+      const toDateStr = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
 
-    // 2. Confirmed bookings (green)
-    const confirmedBookings = await prisma.booking.findMany({
-      where: {
-        listingId: id,
-        status: "confirmed",
-        ...bookingDateFilter,
-      },
-      select: { id: true, checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true, reference: true },
-      orderBy: { checkIn: "asc" },
-    });
-
-    // 3. Pending payment bookings — "held" (amber)
-    const heldBookings = await prisma.booking.findMany({
-      where: {
-        listingId: id,
-        status: "pending_payment",
-        ...bookingDateFilter,
-      },
-      select: { id: true, checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true, reference: true },
-      orderBy: { checkIn: "asc" },
-    });
-
-    const toDateStr = (d: Date | null) => d?.toISOString().slice(0, 10) ?? null;
-
-    return sendSuccess(reply, 200, {
-      blockedDates: [
-        // External iCal blocked (grey)
-        ...externalBlocked.map((b) => ({
-          id: b.id,
-          type: "blocked" as const,
-          startDate: toDateStr(b.startDate),
-          endDate: toDateStr(b.endDate),
-          summary: b.summary,
-          platform: b.feed?.platform ?? "external",
-        })),
-        // Confirmed bookings (green)
-        ...confirmedBookings.map((b) => ({
-          id: b.id,
-          type: "confirmed" as const,
-          startDate: toDateStr(b.checkIn ?? b.pickupDatetime),
-          endDate: toDateStr(b.checkOut ?? b.returnDatetime),
-          summary: `Booking ${b.reference}`,
-          platform: "Kainook",
-        })),
-        // Held / pending payment (amber)
-        ...heldBookings.map((b) => ({
-          id: b.id,
-          type: "held" as const,
-          startDate: toDateStr(b.checkIn ?? b.pickupDatetime),
-          endDate: toDateStr(b.checkOut ?? b.returnDatetime),
-          summary: `Held ${b.reference}`,
-          platform: "Kainook",
-        })),
-      ].sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? "")),
-    });
+      return sendSuccess(reply, 200, {
+        blockedDates: [
+          // External iCal blocked (grey)
+          ...externalBlocked.map((b) => ({
+            id: b.id,
+            type: "blocked" as const,
+            startDate: toDateStr(b.startDate),
+            endDate: toDateStr(b.endDate),
+            summary: b.summary,
+            platform: b.feed?.platform ?? "external",
+          })),
+          // Confirmed bookings (green)
+          ...confirmedBookings.map((b) => ({
+            id: b.id,
+            type: "confirmed" as const,
+            startDate: toDateStr(b.checkIn ?? b.pickupDatetime),
+            endDate: toDateStr(b.checkOut ?? b.returnDatetime),
+            summary: `Booking ${b.reference}`,
+            platform: "Kainook",
+          })),
+          // Held / pending payment (amber)
+          ...heldBookings.map((b) => ({
+            id: b.id,
+            type: "held" as const,
+            startDate: toDateStr(b.checkIn ?? b.pickupDatetime),
+            endDate: toDateStr(b.checkOut ?? b.returnDatetime),
+            summary: `Held ${b.reference}`,
+            platform: "Kainook",
+          })),
+        ].sort((a, b) => (a.startDate ?? "").localeCompare(b.startDate ?? "")),
+      });
+    } catch (err) {
+      req.log.error({ err }, "Failed to fetch blocked dates");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching blocked dates.");
+    }
   });
 
   // ── GET /listings/:id/channel-status ──────────────────────────────────
@@ -635,30 +660,35 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
-    const providerId = (req as ProviderRequest).providerId;
+    try {
+      const { id } = req.params as { id: string };
+      const providerId = (req as ProviderRequest).providerId;
 
-    const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
-    if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      const listing = await prisma.listing.findFirst({ where: { id, providerId, deletedAt: null } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-    const feeds = await prisma.icalFeed.findMany({
-      where: { listingId: id, isActive: true },
-      include: { blockedDates: { select: { id: true } } },
-      orderBy: { createdAt: "desc" },
-    });
+      const feeds = await prisma.icalFeed.findMany({
+        where: { listingId: id, isActive: true },
+        include: { blockedDates: { select: { id: true } } },
+        orderBy: { createdAt: "desc" },
+      });
 
-    return sendSuccess(reply, 200, {
-      channels: feeds.map((f) => ({
-        id: f.id,
-        platform: f.platform,
-        status: deriveFeedStatus(f),
-        lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
-        lastError: f.lastError,
-        consecutiveFailures: f.consecutiveFailures,
-        blockedDatesImported: f.blockedDates.length,
-        nextRetryAt: f.nextRetryAt?.toISOString() ?? null,
-      })),
-    });
+      return sendSuccess(reply, 200, {
+        channels: feeds.map((f) => ({
+          id: f.id,
+          platform: f.platform,
+          status: deriveFeedStatus(f),
+          lastSyncedAt: f.lastSyncedAt?.toISOString() ?? null,
+          lastError: f.lastError,
+          consecutiveFailures: f.consecutiveFailures,
+          blockedDatesImported: f.blockedDates.length,
+          nextRetryAt: f.nextRetryAt?.toISOString() ?? null,
+        })),
+      });
+    } catch (err) {
+      req.log.error({ err }, "Failed to fetch listing channel status");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching listing channel status.");
+    }
   });
 
   // ── GET /listings/:id/ical — outbound iCal export (public) ───────────
@@ -678,109 +708,114 @@ export async function icalRoutes(app: FastifyInstance) {
       }
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const { id } = req.params as { id: string };
+    try {
+      const { id } = req.params as { id: string };
 
-    const listing = await prisma.listing.findUnique({
-      where: { id, deletedAt: null },
-      select: { id: true, name: true, status: true },
-    });
+      const listing = await prisma.listing.findUnique({
+        where: { id, deletedAt: null },
+        select: { id: true, name: true, status: true },
+      });
 
-    if (!listing) {
-      return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-    }
-
-    const validStatuses = ["approved", "active"];
-    if (!validStatuses.includes(listing.status)) {
-      return reply.status(410).send({ success: false, error: { code: "LISTING_INACTIVE", message: "This listing is not available." } });
-    }
-
-    const bookings = await prisma.booking.findMany({
-      where: { listingId: id, status: "confirmed" },
-      select: {
-        id: true,
-        reference: true,
-        checkIn: true,
-        checkOut: true,
-        pickupDatetime: true,
-        returnDatetime: true,
-        guestFirstName: true,
-        guestLastName: true,
-        confirmedAt: true,
-        updatedAt: true,
-      },
-      orderBy: { createdAt: "asc" },
-    });
-
-    function toIcalUtc(d: Date): string {
-      return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
-    }
-
-    function foldLine(line: string): string {
-      const bytes = Buffer.from(line, "utf8");
-      if (bytes.length <= 75) return line;
-      const chunks: string[] = [];
-      let offset = 0;
-      let first = true;
-      while (offset < bytes.length) {
-        const chunkSize = first ? 75 : 74;
-        chunks.push((first ? "" : " ") + bytes.slice(offset, offset + chunkSize).toString("utf8"));
-        offset += chunkSize;
-        first = false;
+      if (!listing) {
+        return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
       }
-      return chunks.join("\r\n");
+
+      const validStatuses = ["approved", "active"];
+      if (!validStatuses.includes(listing.status)) {
+        return reply.status(410).send({ success: false, error: { code: "LISTING_INACTIVE", message: "This listing is not available." } });
+      }
+
+      const bookings = await prisma.booking.findMany({
+        where: { listingId: id, status: "confirmed" },
+        select: {
+          id: true,
+          reference: true,
+          checkIn: true,
+          checkOut: true,
+          pickupDatetime: true,
+          returnDatetime: true,
+          guestFirstName: true,
+          guestLastName: true,
+          confirmedAt: true,
+          updatedAt: true,
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      function toIcalUtc(d: Date): string {
+        return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+      }
+
+      function foldLine(line: string): string {
+        const bytes = Buffer.from(line, "utf8");
+        if (bytes.length <= 75) return line;
+        const chunks: string[] = [];
+        let offset = 0;
+        let first = true;
+        while (offset < bytes.length) {
+          const chunkSize = first ? 75 : 74;
+          chunks.push((first ? "" : " ") + bytes.slice(offset, offset + chunkSize).toString("utf8"));
+          offset += chunkSize;
+          first = false;
+        }
+        return chunks.join("\r\n");
+      }
+
+      const prodId = "-//Kainook//Listing Service//EN";
+      const now = toIcalUtc(new Date());
+      const listingName = (listing.name ?? "Kainook").replace(/[\\;,]/g, "\\$&");
+
+      const vevents = bookings.map((b) => {
+        const dtstart = b.checkIn ?? b.pickupDatetime;
+        const dtend = b.checkOut ?? b.returnDatetime;
+        if (!dtstart || !dtend) return "";
+
+        const uid = `${b.reference}@${id}.Kainook`;
+        const dtstamp = toIcalUtc(b.updatedAt ?? new Date());
+        const created = toIcalUtc(b.confirmedAt ?? new Date());
+        const summary = foldLine(`SUMMARY:Booking - ${listingName}`);
+        const guestName = `${b.guestFirstName} ${b.guestLastName}`.trim();
+        const description = foldLine(`DESCRIPTION:Guest: ${guestName}\\nRef: ${b.reference}`);
+
+        return [
+          "BEGIN:VEVENT",
+          `UID:${uid}`,
+          `DTSTAMP:${dtstamp}`,
+          `CREATED:${created}`,
+          `DTSTART:${toIcalUtc(dtstart)}`,
+          `DTEND:${toIcalUtc(dtend)}`,
+          summary,
+          description,
+          "TRANSP:OPAQUE",
+          "STATUS:CONFIRMED",
+          "END:VEVENT",
+        ].join("\r\n");
+      }).filter(Boolean);
+
+      const icsBody = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        `PRODID:${prodId}`,
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        `X-WR-CALNAME:${listingName}`,
+        `X-WR-CALDESC:Confirmed bookings for ${listingName}`,
+        "X-WR-TIMEZONE:UTC",
+        `LAST-MODIFIED:${now}`,
+        ...vevents,
+        "END:VCALENDAR",
+      ].join("\r\n") + "\r\n";
+
+      reply
+        .header("Content-Type", "text/calendar; charset=utf-8")
+        .header("Content-Disposition", `attachment; filename="listing-${id}.ics"`)
+        .header("Cache-Control", "no-cache")
+        .status(200)
+        .send(icsBody);
+    } catch (err) {
+      req.log.error({ err }, "Failed to export listing calendar to iCal");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while exporting calendar.");
     }
-
-    const prodId = "-//Kainook//Listing Service//EN";
-    const now = toIcalUtc(new Date());
-    const listingName = (listing.name ?? "Kainook").replace(/[\\;,]/g, "\\$&");
-
-    const vevents = bookings.map((b) => {
-      const dtstart = b.checkIn ?? b.pickupDatetime;
-      const dtend = b.checkOut ?? b.returnDatetime;
-      if (!dtstart || !dtend) return "";
-
-      const uid = `${b.reference}@${id}.Kainook`;
-      const dtstamp = toIcalUtc(b.updatedAt ?? new Date());
-      const created = toIcalUtc(b.confirmedAt ?? new Date());
-      const summary = foldLine(`SUMMARY:Booking - ${listingName}`);
-      const guestName = `${b.guestFirstName} ${b.guestLastName}`.trim();
-      const description = foldLine(`DESCRIPTION:Guest: ${guestName}\\nRef: ${b.reference}`);
-
-      return [
-        "BEGIN:VEVENT",
-        `UID:${uid}`,
-        `DTSTAMP:${dtstamp}`,
-        `CREATED:${created}`,
-        `DTSTART:${toIcalUtc(dtstart)}`,
-        `DTEND:${toIcalUtc(dtend)}`,
-        summary,
-        description,
-        "TRANSP:OPAQUE",
-        "STATUS:CONFIRMED",
-        "END:VEVENT",
-      ].join("\r\n");
-    }).filter(Boolean);
-
-    const icsBody = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      `PRODID:${prodId}`,
-      "CALSCALE:GREGORIAN",
-      "METHOD:PUBLISH",
-      `X-WR-CALNAME:${listingName}`,
-      `X-WR-CALDESC:Confirmed bookings for ${listingName}`,
-      "X-WR-TIMEZONE:UTC",
-      `LAST-MODIFIED:${now}`,
-      ...vevents,
-      "END:VCALENDAR",
-    ].join("\r\n") + "\r\n";
-
-    reply
-      .header("Content-Type", "text/calendar; charset=utf-8")
-      .header("Content-Disposition", `attachment; filename="listing-${id}.ics"`)
-      .header("Cache-Control", "no-cache")
-      .status(200)
-      .send(icsBody);
   });
 }
 

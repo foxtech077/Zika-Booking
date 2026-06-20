@@ -20,7 +20,7 @@ export default function ForgotPasswordScreen() {
   const [sent, setSent] = useState(false);
 
   const mutation = useMutation({
-    mutationFn: () => api.post("/auth/forgot-password", { email }),
+    mutationFn: () => api.post("auth/forgot-password", { email }),
     onSuccess: () => setSent(true),
     onError: () => setSent(true), // always show success (enumeration prevention)
   });

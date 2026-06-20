@@ -17,7 +17,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor={inputId} className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
             {label}
           </label>
         )}
@@ -33,8 +33,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             className={cn(
               "w-full h-10 rounded-xl border bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400",
               "transition-all duration-150 outline-none",
-              "focus:ring-2 focus:ring-primary focus:ring-offset-0 focus:border-primary",
-              error ? "border-danger focus:ring-danger" : "border-border hover:border-slate-400",
+              "focus:ring-2 focus:ring-green-500/20 focus:ring-offset-0 focus:border-green-500",
+              error
+                ? "border-red-400 focus:ring-red-400/20 focus:border-red-400"
+                : "border-slate-200 hover:border-green-300",
               leftIcon && "pl-9",
               rightIcon && "pr-9",
               className
@@ -47,8 +49,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             </span>
           )}
         </div>
-        {error && <p className="mt-1 text-xs text-danger">{error}</p>}
-        {hint && !error && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+        {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
+        {hint && !error && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
       </div>
     );
   }
@@ -67,7 +69,7 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor={inputId} className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
             {label}
           </label>
         )}
@@ -77,13 +79,15 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           className={cn(
             "w-full rounded-xl border bg-white px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400",
             "transition-all duration-150 outline-none resize-none",
-            "focus:ring-2 focus:ring-primary focus:border-primary",
-            error ? "border-danger focus:ring-danger" : "border-border hover:border-slate-400",
+            "focus:ring-2 focus:ring-green-500/20 focus:border-green-500",
+            error
+              ? "border-red-400 focus:ring-red-400/20"
+              : "border-slate-200 hover:border-green-300",
             className
           )}
           {...props}
         />
-        {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+        {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
       </div>
     );
   }
@@ -104,7 +108,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-slate-700 mb-1.5">
+          <label htmlFor={inputId} className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
             {label}
           </label>
         )}
@@ -114,8 +118,8 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           className={cn(
             "w-full h-10 rounded-xl border bg-white px-3 text-sm text-slate-900",
             "transition-all duration-150 outline-none",
-            "focus:ring-2 focus:ring-primary focus:border-primary",
-            error ? "border-danger" : "border-border hover:border-slate-400",
+            "focus:ring-2 focus:ring-green-500/20 focus:border-green-500",
+            error ? "border-red-400" : "border-slate-200 hover:border-green-300",
             className
           )}
           {...props}
@@ -127,7 +131,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
             </option>
           ))}
         </select>
-        {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+        {error && <p className="mt-1 text-xs text-red-500">{error}</p>}
       </div>
     );
   }

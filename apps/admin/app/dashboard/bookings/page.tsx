@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle, Plus, Send } from "lucide-react";
+import { CalendarDays, XCircle, Plus, Send, MessageSquare } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
+import MessagingPage from "@/app/dashboard/messaging/page";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
@@ -61,6 +62,7 @@ export default function BookingsPage() {
       setCountry(scopedCountries[0] ?? "");
     }
   }, [scopedCountries, country]);
+  const [showMessagingDrawer, setShowMessagingDrawer] = useState(false);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
@@ -257,15 +259,15 @@ export default function BookingsPage() {
       width: "80px",
       render: (b) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          {["pending_payment", "confirmed"].includes(b.status) && role !== "sales" && (
-            <button
-              onClick={() => setCancelModal(b)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
-              title="Cancel booking"
-            >
-              <XCircle className="h-3.5 w-3.5" />
-            </button>
-          )}
+            {["pending_payment", "confirmed"].includes(b.status) && (
+              <button
+                onClick={() => setCancelModal(b)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
+                title="Cancel booking"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+              </button>
+            )}
           {["pending_payment", "draft"].includes(b.status) && (
             <button
               onClick={() => resendLinkMut.mutate(b.id)}
@@ -391,22 +393,40 @@ export default function BookingsPage() {
                 </div>
               </div>
 
-              {["pending_payment", "confirmed"].includes(detailData.status) && role !== "sales" && (
-                <div className="border-t border-border pt-4">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => { setCancelModal(selected); setSelected(null); }}
-                  >
-                    Cancel Booking
-                  </Button>
-                </div>
-              )}
+                {"pending_payment".includes(detailData.status) && (
+                  <div className="border-t border-border pt-4 flex gap-2">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={() => { setCancelModal(selected); setSelected(null); }}
+                    >
+                      Cancel Booking
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<MessageSquare className="h-3 w-3" />}
+                      onClick={() => setShowMessagingDrawer(true)}
+                    >
+                      Message Guest
+                    </Button>
+                  </div>
+                )}
             </div>
           ) : null}
         </SlideDrawer>
       )}
 
+        {/* Messaging Drawer */}
+        <SlideDrawer
+          open={showMessagingDrawer}
+          onClose={() => setShowMessagingDrawer(false)}
+          title="Messaging"
+          description="Guest communication"
+          width="md"
+        >
+          <MessagingPage />
+        </SlideDrawer>
       {/* Cancel confirmation modal */}
       {cancelModal && (
         <ConfirmModal

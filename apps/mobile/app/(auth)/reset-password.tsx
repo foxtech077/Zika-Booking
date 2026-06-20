@@ -19,7 +19,7 @@ export default function ResetPasswordScreen() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!token) throw new Error("Missing token");
-      const res = await api.post<ApiResponse<AuthResponse & { message: string }>>("/auth/reset-password", {
+      const res = await api.post<ApiResponse<AuthResponse & { message: string }>>("auth/reset-password", {
         token, password: form.password, confirmPassword: form.confirmPassword,
       });
       if (!res.data.success) throw res.data;
