@@ -222,6 +222,18 @@ export async function searchRoutes(app: FastifyInstance) {
       },
     }).catch(() => { /* non-critical */ });
 
+    // Fetch active promotion badge for this category (non-critical — never blocks search)
+    let promoBadge: { labelText: string; labelColour: string } | null = null;
+    try {
+      const now = new Date();
+      const promo = await (prisma as any).activityPromotion.findFirst({
+        where: { activity: category, status: "active", validFrom: { lte: now }, validUntil: { gte: now } },
+        orderBy: { createdAt: "desc" },
+        select: { labelText: true, labelColour: true },
+      });
+      if (promo) promoBadge = { labelText: promo.labelText, labelColour: promo.labelColour };
+    } catch { /* non-critical */ }
+
     const results = page.map((l) => ({
       id: l.id,
       listingType: l.category,
@@ -252,6 +264,8 @@ export async function searchRoutes(app: FastifyInstance) {
       mileagePolicy: l.mileagePolicy,
       // Favourited
       isFavourited: guestId ? favouriteSet.has(l.id) : undefined,
+      // Promotion badge (null when no active campaign for this category)
+      promoBadge,
     }));
 
     return sendSuccess(reply, 200, {
