@@ -5,6 +5,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, XCircle, Plus, Send, MessageSquare } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
+import { paymentApi } from "@/lib/payment-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import Link from "next/link";
@@ -67,7 +68,9 @@ export default function BookingsPage() {
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
-  
+  const [resendModal, setResendModal] = useState<Booking | null>(null);
+  const [resendError, setResendError] = useState("");
+  const [resendSuccess, setResendSuccess] = useState(false);
 
   
 
@@ -183,10 +186,21 @@ export default function BookingsPage() {
 
   // Resend payment link for draft bookings
   const resendLinkMut = useMutation({
-    mutationFn: (id: string) => listingApi.post(`/admin/bookings/${id}/send-link`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-bookings"] });
+    mutationFn: async ({ id, gateway }: { id: string; gateway: "stripe" | "tara" }) => {
+      setResendError("");
+      setResendSuccess(false);
+      const res = await paymentApi.post(`/${gateway}/payment-link`, { bookingId: id });
+      return res.data;
     },
+    onSuccess: () => {
+      setResendSuccess(true);
+      qc.invalidateQueries({ queryKey: ["admin-bookings"] });
+      qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
+      setResendError(msg);
+    }
   });
 
   const columns: Column<Booking>[] = [
@@ -274,7 +288,7 @@ export default function BookingsPage() {
             )}
           {["pending_payment", "draft"].includes(b.status) && canAccess(role as AdminRole, "manage_bookings") && (
             <button
-              onClick={() => resendLinkMut.mutate(b.id)}
+              onClick={() => setResendModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
               title="Resend payment link"
             >
@@ -450,6 +464,23 @@ export default function BookingsPage() {
         >
           <MessagingPage />
         </SlideDrawer>
+      {/* Resend Payment Link Modal */}
+      {resendModal && (
+        <ConfirmModal
+          open={!!resendModal}
+          onClose={() => { setResendModal(null); setResendError(""); setResendSuccess(false); }}
+          title="Resend Payment Link"
+          description={`Send a new payment link to ${resendModal.guestEmail}?`}
+          confirmLabel="Send Link"
+          variant="info"
+          loading={resendLinkMut.isPending}
+          onConfirm={() => resendLinkMut.mutate({ id: resendModal.id, gateway: "stripe" })}
+        >
+          {resendError && <p className="text-sm text-danger mt-2">{resendError}</p>}
+          {resendSuccess && <p className="text-sm text-success mt-2">Payment link sent successfully!</p>}
+        </ConfirmModal>
+      )}
+
       {/* Cancel confirmation modal */}
       {cancelModal && (
         <ConfirmModal

@@ -54,6 +54,89 @@ type DayStatus = "past" | "available" | "locked" | "booked";
 type AvailStatus = "idle" | "checking" | "available" | "unavailable";
 type PaymentMethod = "stripe" | "tara";
 
+interface Country {
+  name: string;
+  code: string;
+  dialCode: string;
+}
+
+const COUNTRIES: Country[] = [
+  { name: "India", code: "IN", dialCode: "+91" },
+  { name: "United Arab Emirates", code: "AE", dialCode: "+971" },
+  { name: "Saudi Arabia", code: "SA", dialCode: "+966" },
+  { name: "Qatar", code: "QA", dialCode: "+974" },
+  { name: "Kenya", code: "KE", dialCode: "+254" },
+  { name: "Tanzania", code: "TZ", dialCode: "+255" },
+  { name: "Uganda", code: "UG", dialCode: "+256" },
+  { name: "United States", code: "US", dialCode: "+1" },
+  { name: "United Kingdom", code: "GB", dialCode: "+44" },
+  { name: "Germany", code: "DE", dialCode: "+49" },
+  { name: "France", code: "FR", dialCode: "+33" },
+  { name: "Spain", code: "ES", dialCode: "+34" },
+  { name: "Italy", code: "IT", dialCode: "+39" },
+  { name: "Canada", code: "CA", dialCode: "+1" },
+  { name: "Australia", code: "AU", dialCode: "+61" },
+  { name: "Japan", code: "JP", dialCode: "+81" },
+  { name: "Singapore", code: "SG", dialCode: "+65" },
+  { name: "Netherlands", code: "NL", dialCode: "+31" },
+  { name: "Belgium", code: "BE", dialCode: "+32" },
+  { name: "Sweden", code: "SE", dialCode: "+46" },
+  { name: "Malta", code: "MT", dialCode: "+356" },
+  { name: "Nigeria", code: "NG", dialCode: "+234" },
+  { name: "South Africa", code: "ZA", dialCode: "+27" },
+  { name: "Ghana", code: "GH", dialCode: "+233" },
+  { name: "Bahrain", code: "BH", dialCode: "+973" },
+  { name: "Kuwait", code: "KW", dialCode: "+965" },
+  { name: "Oman", code: "OM", dialCode: "+968" },
+  { name: "Egypt", code: "EG", dialCode: "+20" },
+  { name: "Jordan", code: "JO", dialCode: "+962" },
+  { name: "Lebanon", code: "LB", dialCode: "+961" },
+  { name: "Malaysia", code: "MY", dialCode: "+60" },
+  { name: "Thailand", code: "TH", dialCode: "+66" },
+  { name: "Philippines", code: "PH", dialCode: "+63" },
+  { name: "Indonesia", code: "ID", dialCode: "+62" },
+  { name: "Vietnam", code: "VN", dialCode: "+84" },
+  { name: "Turkey", code: "TR", dialCode: "+90" },
+  { name: "Brazil", code: "BR", dialCode: "+55" },
+  { name: "Mexico", code: "MX", dialCode: "+52" },
+  { name: "Argentina", code: "AR", dialCode: "+54" },
+  { name: "New Zealand", code: "NZ", dialCode: "+64" },
+  { name: "Ireland", code: "IE", dialCode: "+353" },
+  { name: "Switzerland", code: "CH", dialCode: "+41" },
+  { name: "Austria", code: "AT", dialCode: "+43" },
+  { name: "Norway", code: "NO", dialCode: "+47" },
+  { name: "Denmark", code: "DK", dialCode: "+45" },
+  { name: "Finland", code: "FI", dialCode: "+358" },
+  { name: "Poland", code: "PL", dialCode: "+48" },
+  { name: "Greece", code: "GR", dialCode: "+30" },
+  { name: "Portugal", code: "PT", dialCode: "+351" },
+  { name: "Israel", code: "IL", dialCode: "+972" },
+];
+
+function getCountryFlag(code: string): string {
+  const codePoints = code
+    .toUpperCase()
+    .split("")
+    .map(char => 127397 + char.charCodeAt(0));
+  try {
+    return String.fromCodePoint(...codePoints);
+  } catch {
+    return "🌐";
+  }
+}
+
+interface BookingCountry {
+  name: string;
+  code: string;
+  flag: string;
+}
+
+const BOOKING_COUNTRIES: BookingCountry[] = COUNTRIES.map(c => ({
+  name: c.name,
+  code: c.code,
+  flag: getCountryFlag(c.code)
+})).sort((a, b) => a.name.localeCompare(b.name));
+
 interface PriceSummary {
   baseAmount: number;
   discount: number;
@@ -386,7 +469,11 @@ export default function ManualBookingPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState<Country>((COUNTRIES.find(c => c.code === "KE") || COUNTRIES[0]) as Country);
+  const [localPhone, setLocalPhone] = useState("");
+  const phone = `${selectedCountry.dialCode}${localPhone}`;
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
   const [nationality, setNationality] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -426,6 +513,10 @@ export default function ManualBookingPage() {
   const [listingType, setListingType] = useState<ListingType>("hotel");
   const [selectedListing, setSelectedListing] = useState<SelectedListing | null>(null);
   const [country, setCountry] = useState("");
+  const [isBookingCountryOpen, setIsBookingCountryOpen] = useState(false);
+  const [bookingCountrySearch, setBookingCountrySearch] = useState("");
+  const [isListingSelectOpen, setIsListingSelectOpen] = useState(false);
+  const [listingSelectSearch, setListingSelectSearch] = useState("");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [pickup, setPickup] = useState("");
@@ -469,7 +560,7 @@ export default function ManualBookingPage() {
     setPrice(null);
     setAvailability(null);
     setCalSelectStep("checkIn");
-  }, [listingType]);
+  }, [listingType, country]);
 
   // Fetch listings for dropdown
   const { data: listingsData, isLoading: listingsLoading } = useQuery({
@@ -481,7 +572,13 @@ export default function ManualBookingPage() {
   });
 
   const listings = Array.isArray(listingsData) ? listingsData : (Array.isArray(listingsData?.listings) ? listingsData.listings : []);
-  const listingOptions = [{ value: "", label: "Select a listing" }, ...listings.map((l: any) => ({ value: l.id, label: l.title ?? l.name ?? l.id }))];
+  const listingOptions = [
+    { value: "", label: "Select a listing" },
+    ...listings.map((l: any) => ({
+      value: l.id,
+      label: l.name ?? l.title ?? l.id
+    }))
+  ];
 
   // ── Derived values ────────────────────────────────────────────────────
   const nights = (() => {
@@ -522,7 +619,7 @@ export default function ManualBookingPage() {
     if (!firstName.trim()) e.firstName = "Required";
     if (!lastName.trim()) e.lastName = "Required";
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) e.email = "Valid email required";
-    if (!phone.trim()) e.phone = "Required";
+    if (!localPhone.trim()) e.phone = "Required";
     if (!selectedListing) e.listingName = "Please select a listing";
     if (!country.trim()) e.country = "Required";
     if (isAccommodation) {
@@ -563,8 +660,8 @@ export default function ManualBookingPage() {
         ...(isAccommodation ? { checkIn, checkOut } : { pickupDatetime: pickup, returnDatetime: returnDt }),
         guests: String(guests),
       };
-      
-    
+
+
 
       const res = await listingApi.get("/admin/bookings/availability", { params });
       const d = res.data?.data ?? res.data;
@@ -716,7 +813,7 @@ export default function ManualBookingPage() {
               setFirstName("");
               setLastName("");
               setEmail("");
-              setPhone("");
+              setLocalPhone("");
               setNationality("");
               setNotes("");
               setSelectedListing(null);
@@ -782,7 +879,7 @@ export default function ManualBookingPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <Input id={`${uid}-email`} label="Email Address" type="email" required placeholder="john@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} leftIcon={<Mail className="h-4 w-4" />} />
-                <Input id={`${uid}-phone`} label="Phone Number" type="tel" required placeholder="+254700000000" value={phone} onChange={(e) => setPhone(e.target.value)} error={errors.phone} leftIcon={<Phone className="h-4 w-4" />} />
+                <Input id={`${uid}-phone`} label="Phone Number" type="tel" required placeholder="+254700000000" value={phone} onChange={(e) => {}} error={errors.phone} leftIcon={<Phone className="h-4 w-4" />} />
               </div>
               <div className="grid grid-cols-1 gap-4">
                 <ReactSelect

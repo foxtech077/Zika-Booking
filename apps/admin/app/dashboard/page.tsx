@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   Users, Building2, CalendarDays, BadgeCheck,
-  DollarSign, TrendingUp, Clock, AlertCircle, CheckCircle2, XCircle, RotateCcw
+  DollarSign, TrendingUp, Clock, AlertCircle, CheckCircle2, XCircle, RotateCcw, RefreshCw
 } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
@@ -17,24 +17,20 @@ import { canAccess } from "@/permissions/rbac";
 import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 
-// ── Fetch helpers ─────────────────────────────────────────────────────────────
-
 const fetchUsers = (params: Record<string, string>) =>
-  api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
+  api.get("/admin/users", { params }).then((r) => r.data?.data ?? r.data);
 
 const fetchBookings = (params: Record<string, string>) =>
-  listingApi.get("/admin/bookings", { params }).then((r) => r.data.data ?? r.data);
+  listingApi.get("/admin/bookings", { params }).then((r) => r.data?.data ?? r.data);
 
 const fetchListings = (params: Record<string, string>) =>
-  listingApi.get("/admin/listings", { params }).then((r) => r.data.data ?? r.data);
+  listingApi.get("/admin/listings", { params }).then((r) => r.data?.data ?? r.data);
 
 const fetchReviewQueue = (params: Record<string, string>) =>
-  listingApi.get("/admin/listings/review-queue", { params }).then((r) => r.data.data ?? r.data);
+  listingApi.get("/admin/listings/review-queue", { params }).then((r) => r.data?.data ?? r.data);
 
 const fetchAuditLogs = () =>
-  api.get("/admin/audit-logs?limit=8").then((r) => r.data.data ?? r.data);
-
-// ── Revenue aggregator (from bookings) ───────────────────────────────────────
+  api.get("/admin/audit-logs?limit=8").then((r) => r.data?.data ?? r.data);
 
 function buildRevenueChart(bookings: any[]) {
   const byMonth: Record<string, { revenue: number; bookings: number }> = {};
@@ -56,8 +52,6 @@ function buildRevenueChart(bookings: any[]) {
   }
   return Object.entries(byMonth).map(([label, v]) => ({ label, ...v }));
 }
-
-// ── Booking status donut data ─────────────────────────────────────────────────
 
 const STATUS_COLORS_MAP: Record<string, string> = {
   confirmed:          "#3b82f6",
@@ -83,15 +77,15 @@ function buildStatusDonut(bookings: any[]) {
     .slice(0, 6);
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
-
 export default function DashboardPage() {
   const { user, _hasHydrated } = useAuthStore();
+  const isSuperAdmin = user?.role === "super_admin";
+  const queriesEnabled = _hasHydrated && isSuperAdmin;
   const isCountryManager = user?.role === "country_manager";
   const userCountryScope = user?.countryScope ?? [];
   const defaultCountry = isCountryManager && userCountryScope.length > 0 ? userCountryScope[0] : "";
-  const canViewUsers = canAccess(user?.role, "view_users");
-  const canViewAudit = canAccess(user?.role, "view_audit");
+  const canViewUsers = canAccess(user?.role as any, "view_users");
+  const canViewAudit = canAccess(user?.role as any, "view_audit");
 
   const scopedCountryParam: Record<string, string> = defaultCountry ? { country: defaultCountry } : {};
   const queueParams = { limit: "100", ...scopedCountryParam };
@@ -99,6 +93,52 @@ export default function DashboardPage() {
   const bookingsParams = { limit: "100", ...scopedCountryParam };
   const listingsParams = { limit: "1", ...scopedCountryParam };
   const scopedQueriesEnabled = _hasHydrated && (!isCountryManager || Boolean(defaultCountry));
+
+  // ── 1. Summary Query ───────────────────────────────────────────────────────
+  const {
+    data: summaryData,
+    isLoading: loadingSummary,
+    error: summaryError,
+    refetch: refetchSummary,
+  } = useQuery({
+    queryKey: ["admin-dashboard-summary"],
+    queryFn: () => api.get("/admin/dashboard/summary").then((r) => r.data?.data ?? r.data),
+    enabled: queriesEnabled,
+    retry: 1,
+  });
+
+  // ── 2. Pending Actions Query ───────────────────────────────────────────────
+  const {
+    data: pendingData,
+    isLoading: loadingPending,
+    error: pendingError,
+    refetch: refetchPending,
+  } = useQuery({
+    queryKey: ["admin-dashboard-pending"],
+    queryFn: () => api.get("/admin/dashboard/pending-actions").then((r) => r.data?.data ?? r.data),
+    enabled: queriesEnabled,
+    retry: 1,
+  });
+
+  // ── 3. Recent Activity Query ───────────────────────────────────────────────
+  const {
+    data: activityData,
+    isLoading: loadingActivity,
+    error: activityError,
+    refetch: refetchActivity,
+  } = useQuery({
+    queryKey: ["admin-dashboard-activity"],
+    queryFn: () => api.get("/admin/dashboard/recent-activity?limit=15").then((r) => r.data?.data ?? r.data),
+    enabled: queriesEnabled,
+    retry: 1,
+  });
+
+  const hasAnyError = summaryError || pendingError || activityError;
+  const handleRetryAll = () => {
+    refetchSummary();
+    refetchPending();
+    refetchActivity();
+  };
 
   const { data: usersData, isLoading: loadingUsers } = useQuery({
     queryKey: ["admin-users-count", defaultCountry],
@@ -110,6 +150,7 @@ export default function DashboardPage() {
     queryFn: () => fetchBookings(bookingsParams),
     enabled: scopedQueriesEnabled,
   });
+
   const { data: listingsData, isLoading: loadingListings } = useQuery({
     queryKey: ["admin-listings-dash", defaultCountry],
     queryFn: () => fetchListings(listingsParams),
@@ -137,11 +178,39 @@ export default function DashboardPage() {
   const auditLogs: any[] = auditData?.logs ?? [];
 
   return (
-    <div className="space-y-6 max-w-screen-2xl">
+    <div className="space-y-6 max-w-screen-2xl pb-12">
       <SectionHeader
-        title="Dashboard"
+        title="Super Admin Dashboard"
         description={`Overview · ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`}
+        action={
+          hasAnyError && (
+            <button
+              onClick={handleRetryAll}
+              className="inline-flex items-center gap-2 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-sm hover:bg-rose-100 transition-colors"
+            >
+              <RefreshCw className="h-4 w-4 animate-spin-slow" />
+              Retry Failed Widgets
+            </button>
+          )
+        }
       />
+
+      {/* Global Error Banner if Statistics fails */}
+      {summaryError && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-rose-600 flex-shrink-0" />
+          <div className="flex-1 text-sm font-medium">
+            Failed to load dashboard summary statistics. The server might be experiencing temporary downtime.
+          </div>
+          <button
+            onClick={() => refetchSummary()}
+            className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-white border border-rose-200 rounded-lg shadow-sm hover:bg-rose-50 text-rose-700 transition-all"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -395,3 +464,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

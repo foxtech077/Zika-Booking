@@ -253,34 +253,34 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         metadata: any;
       }>>`
         SELECT 
-          id, 
+          id::text as id, 
           'audit' as type, 
           action, 
           "adminId" as actor, 
           timestamp, 
-          json_build_object('role', role, 'target', "targetType") as metadata 
+          json_build_object('role', role, 'target', "targetType")::jsonb as metadata 
         FROM auth."AuditLog"
         
         UNION ALL
         
         SELECT 
-          id, 
+          id::text as id, 
           'moderation' as type, 
           action, 
           actor_id as actor, 
           created_at as timestamp, 
-          metadata 
+          metadata::jsonb as metadata 
         FROM listing.listing_moderation_log
         
         UNION ALL
         
         SELECT 
-          id, 
+          id::text as id, 
           'refund' as type, 
           'refund_issued' as action, 
           'system' as actor, 
           "createdAt" as timestamp, 
-          json_build_object('paymentId', "paymentId", 'amount', amount) as metadata 
+          json_build_object('paymentId', "paymentId", 'amount', amount)::jsonb as metadata 
         FROM payments."Refund"
         WHERE status = 'succeeded'
         

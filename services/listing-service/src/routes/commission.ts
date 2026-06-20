@@ -4,7 +4,7 @@ import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { sendCommissionRateChangeEmail } from "../lib/email.js";
 
-// ── Role helpers ───────────────────────────────────────────────────────────────
+// ── Role helpers ─────────────────────────────────────────────────────────────
 
 function isSuperAdmin(role: string) { return role === "super_admin"; }
 function canWriteCommission(role: string) { return role === "super_admin" || role === "admin"; }
@@ -227,7 +227,16 @@ export async function commissionRoutes(app: FastifyInstance) {
           });
 
           if (applyToAll) {
-            await tx.commissionRate.updateMany({ data: { rate: body.rate, setBy: admin.adminId } });
+            await tx.commissionRate.updateMany({
+              where: {},
+              data: {
+                rate: body.rate,
+                pendingRate: null,
+                pendingEffectiveFrom: null,
+                pendingReason: null,
+                setBy: admin.adminId,
+              },
+            });
           }
 
           await tx.commissionHistory.create({

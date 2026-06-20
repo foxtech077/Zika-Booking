@@ -61,7 +61,7 @@ export default function FinancePage() {
     queryFn: () => fetchBookings({ limit: "100" }),
   });
 
-  const bookings: Booking[] = Array.isArray(data?.bookings) ? data.bookings : [];
+  const bookings: Booking[] = (Array.isArray(data?.bookings) ? data.bookings : []).filter(Boolean);
   const total: number = data?.total ?? 0;
 
   const offset = (page - 1) * limit;
@@ -79,7 +79,7 @@ export default function FinancePage() {
     renderedRows,
   });
 
-  const allBookings: Booking[] = Array.isArray(allBookingsQuery.data?.bookings) ? allBookingsQuery.data.bookings : [];
+  const allBookings: Booking[] = (Array.isArray(allBookingsQuery.data?.bookings) ? allBookingsQuery.data.bookings : []).filter(Boolean);
   const confirmed = allBookings.filter((b) => ["confirmed", "completed"].includes(b?.status));
 
   const totalRevenue = confirmed.reduce((s, b) => {
