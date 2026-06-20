@@ -120,7 +120,8 @@ export async function voucherRoutes(app: FastifyInstance) {
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const body = req.body as { code: string; totalAmount: number; currency?: string; activity: string; guestId: string; guestTier?: string; guestCountry?: string };
+      try {
+        const body = req.body as { code: string; totalAmount: number; currency?: string; activity: string; guestId: string; guestTier?: string; guestCountry?: string };
 
       const now = new Date();
       // @ts-ignore - Assuming prisma schema is updated
@@ -195,6 +196,10 @@ export async function voucherRoutes(app: FastifyInstance) {
           validUntil:    voucher.validUntil.toISOString(),
         },
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to validate voucher");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while validating the voucher.");
+      }
     },
   );
 
@@ -256,8 +261,9 @@ export async function voucherRoutes(app: FastifyInstance) {
       preHandler: [requireProvider],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const guestId = (req as any).providerId as string;
-      const q = req.query as { totalAmount?: string; currency?: string };
+      try {
+        const guestId = (req as any).providerId as string;
+        const q = req.query as { totalAmount?: string; currency?: string };
       const totalAmount = parseFloat(q.totalAmount ?? "0");
       const now = new Date();
 
@@ -377,6 +383,10 @@ export async function voucherRoutes(app: FastifyInstance) {
       }
 
       return sendSuccess(reply, 200, { vouchers: result });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch applicable vouchers");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching applicable vouchers.");
+      }
     },
   );
 
@@ -426,8 +436,9 @@ export async function voucherRoutes(app: FastifyInstance) {
       preHandler: [requireAdmin],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const body = req.body as {
-        code: string;
+      try {
+        const body = req.body as {
+          code: string;
         title: string;
         description?: string;
         activityScope: string;
@@ -503,6 +514,10 @@ export async function voucherRoutes(app: FastifyInstance) {
         isActive:      voucher.isActive, // Keep for backward compatibility
         createdAt:     voucher.createdAt.toISOString(),
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to create voucher");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while creating voucher.");
+      }
     },
   );
 
@@ -544,7 +559,8 @@ export async function voucherRoutes(app: FastifyInstance) {
       preHandler: [requireAdmin],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const q = req.query as { isActive?: string; category?: string };
+      try {
+        const q = req.query as { isActive?: string; category?: string };
 
       const ids = await redis.smembers("promos:all");
       if (!ids.length) return sendSuccess(reply, 200, { promotions: [] });
@@ -571,6 +587,10 @@ export async function voucherRoutes(app: FastifyInstance) {
       );
 
       return sendSuccess(reply, 200, { promotions });
+      } catch (err) {
+        req.log.error({ err }, "Failed to list admin promotions");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while listing promotions.");
+      }
     },
   );
 
@@ -608,8 +628,9 @@ export async function voucherRoutes(app: FastifyInstance) {
       },
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const q = req.query as { category?: string };
-      const now = new Date();
+      try {
+        const q = req.query as { category?: string };
+        const now = new Date();
 
       const ids = await redis.smembers("promos:all");
       if (!ids.length) return sendSuccess(reply, 200, { promotions: [] });
@@ -631,6 +652,10 @@ export async function voucherRoutes(app: FastifyInstance) {
       }
 
       return sendSuccess(reply, 200, { promotions });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch active promotions");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching active promotions.");
+      }
     },
   );
 
@@ -660,8 +685,9 @@ export async function voucherRoutes(app: FastifyInstance) {
       preHandler: [requireAdmin],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const { id } = req.params as { id: string };
-      const { isActive } = req.body as { isActive: boolean };
+      try {
+        const { id } = req.params as { id: string };
+        const { isActive } = req.body as { isActive: boolean };
 
       const existing = await prisma.voucher.findUnique({ where: { id } });
       if (!existing) return sendError(reply, 404, "NOT_FOUND", "Voucher not found.");
@@ -692,6 +718,10 @@ export async function voucherRoutes(app: FastifyInstance) {
         createdBy:     voucher.createdBy,
         createdAt:     voucher.createdAt.toISOString(),
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to toggle voucher status");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating voucher status.");
+      }
     },
   );
 
@@ -740,8 +770,9 @@ export async function voucherRoutes(app: FastifyInstance) {
       preHandler: [requireAdmin],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const q = req.query as { isActive?: string; page?: number; limit?: number };
-      const page  = Number(q.page  ?? 1);
+      try {
+        const q = req.query as { isActive?: string; page?: number; limit?: number };
+        const page  = Number(q.page  ?? 1);
       const limit = Number(q.limit ?? 20);
       const skip  = (page - 1) * limit;
 
@@ -784,6 +815,10 @@ export async function voucherRoutes(app: FastifyInstance) {
           totalPages: Math.ceil(total / limit),
         },
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch admin vouchers list");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching vouchers.");
+      }
     },
   );
 }

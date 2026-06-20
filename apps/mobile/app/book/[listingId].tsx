@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
+import { useReleaseLock } from "../../hooks/booking";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -179,6 +180,11 @@ export default function BookingFlowScreen() {
   // Animated value for red-state pulse
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // Lock release on unmount
+  const releaseLockMutation = useReleaseLock();
+  const lockStateRef = useRef<LockState | null>(null);
+  const bookingCreatedRef = useRef(false);
+
   // ── Pending-payment bookings (shown when 429 occurs) ──────────────────────
   const [pendingBookings, setPendingBookings] = useState<PendingBooking[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
@@ -231,6 +237,21 @@ export default function BookingFlowScreen() {
       lockStartMsRef.current = Date.now();
     }
   }, [lockState]);
+
+  // Keep lockStateRef in sync so the unmount cleanup can read the latest token
+  useEffect(() => {
+    lockStateRef.current = lockState;
+  }, [lockState]);
+
+  // Release the lock if user leaves without completing a booking
+  useEffect(() => {
+    return () => {
+      if (!bookingCreatedRef.current && lockStateRef.current?.lockToken) {
+        releaseLockMutation.mutate(lockStateRef.current.lockToken);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Pulse animation — only active during red state
   useEffect(() => {
@@ -564,6 +585,7 @@ export default function BookingFlowScreen() {
       return res.data.data;
     },
     onSuccess: (data) => {
+      bookingCreatedRef.current = true;
       SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => {});
       router.push({ pathname: "/pay/[bookingId]", params: { bookingId: data.bookingId } });
     },
@@ -1247,12 +1269,19 @@ export default function BookingFlowScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.primaryBtn, !termsChecked && styles.primaryBtnDisabled]}
+              style={[
+                styles.primaryBtn,
+                (!termsChecked || isExpired || msLeft < 10_000) && styles.primaryBtnDisabled,
+              ]}
               onPress={() => {
                 if (!termsChecked) return;
+                if (isExpired || msLeft < 10_000) {
+                  setExpiredModal(true);
+                  return;
+                }
                 createBookingMutation.mutate();
               }}
-              disabled={!termsChecked || createBookingMutation.isPending}
+              disabled={!termsChecked || createBookingMutation.isPending || isExpired || msLeft < 10_000}
             >
               {createBookingMutation.isPending ? (
                 <ActivityIndicator size="small" color="#fff" />

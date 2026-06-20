@@ -375,8 +375,8 @@ function CalendarPicker({ visible, onClose, onConfirm, isCar, unavailableRanges 
   function handleConfirm() {
     if (!selStart || !selEnd) return;
     if (isCar) {
-      const pu = `${selStart}T${pickupHr.padStart(2, "0")}:${pickupMin.padStart(2, "0")}:00`;
-      const rt = `${selEnd}T${returnHr.padStart(2, "0")}:${returnMin.padStart(2, "0")}:00`;
+      const pu = new Date(`${selStart}T${pickupHr.padStart(2, "0")}:${pickupMin.padStart(2, "0")}:00`).toISOString();
+      const rt = new Date(`${selEnd}T${returnHr.padStart(2, "0")}:${returnMin.padStart(2, "0")}:00`).toISOString();
       onConfirm(pu, rt);
     } else {
       onConfirm(selStart, selEnd);

@@ -297,6 +297,7 @@ model Listing {
   reviews         ListingReview[]
   icalFeeds       IcalFeed[]
   moderationLogs  ListingModerationLog[]
+  conversations   Conversation[]
 
   @@map("listings")
   @@schema("listing")
@@ -718,6 +719,7 @@ model Conversation {
   updatedAt  DateTime           @updatedAt @map("updated_at")
 
   messages Message[]
+  listing  Listing @relation(fields: [listingId], references: [id])
 
   @@map("conversations")
   @@schema("listing")

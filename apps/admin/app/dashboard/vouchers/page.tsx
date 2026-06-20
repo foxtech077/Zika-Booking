@@ -14,7 +14,22 @@ import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Voucher } from "@/types/admin";
 
 const fetchVouchers = (params: Record<string, string>) =>
-  listingApi.get(`/admin/vouchers?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
+  listingApi.get(`/admin/vouchers?${new URLSearchParams(params)}`).then((r) => {
+    // ── DEBUG: Temporary logging — remove before production ──────────────────
+    console.group(`[Vouchers] Fetch — isActive=${params.isActive ?? "(all)"}`);
+    console.log("Params sent:", params);
+    console.log("Raw r.data:", r.data);
+    // Unwrap envelope: { success, data: { vouchers, total } } or { success, data: [...] }
+    const body = r.data?.data ?? r.data;
+    console.log("Unwrapped body:", body);
+    const vouchers: any[] = body?.vouchers ?? (Array.isArray(body) ? body : []);
+    const total: number = body?.total ?? body?.count ?? body?.pagination?.total ?? vouchers.length;
+    console.log(`Resolved vouchers (${vouchers.length}):`, vouchers);
+    console.log("Resolved total:", total);
+    console.groupEnd();
+    // ─────────────────────────────────────────────────────────────────────────
+    return { vouchers, total };
+  });
 
 export default function VouchersPage() {
   const qc = useQueryClient();
@@ -22,31 +37,41 @@ export default function VouchersPage() {
   const [isActive, setIsActive] = useState("");
   const [addModal, setAddModal] = useState(false);
   const [form, setForm] = useState({
+    title: "",
     code: "",
     discountType: "percentage" as "percentage" | "fixed",
     discountValue: "",
-    minOrderValue: "",
     maxDiscount: "",
-    usageLimit: "",
+    activityScope: "universal",
+    countryScope: "",
     validFrom: "",
     validUntil: "",
+    usageLimit: "",
+    usagePerGuest: "",
+    applicableTiers: [] as string[],
+    autoAssign: false,
+    isActive: true,
   });
 
-  const params = { ...(isActive ? { isActive } : {}), page: String(page), limit: "20" };
+  const params = { ...(isActive !== "" ? { isActive } : {}), page: String(page), limit: "20" };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-vouchers", params],
     queryFn: () => fetchVouchers(params),
   });
 
   const vouchers: Voucher[] = data?.vouchers ?? [];
-  const total: number = data?.total ?? 0;
+  const total: number = data?.total ?? vouchers.length;
 
   const createMut = useMutation({
     mutationFn: (body: any) => listingApi.post("/admin/vouchers", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
       setAddModal(false);
-      setForm({ code: "", discountType: "percentage", discountValue: "", minOrderValue: "", maxDiscount: "", usageLimit: "", validFrom: "", validUntil: "" });
+      setForm({
+        title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", activityScope: "universal",
+        countryScope: "", validFrom: "", validUntil: "", usageLimit: "",
+        usagePerGuest: "", applicableTiers: [], autoAssign: false, isActive: true
+      });
     },
   });
 
@@ -170,6 +195,7 @@ export default function VouchersPage() {
               value: isActive,
               onChange: (v) => { setIsActive(v); setPage(1); },
               options: [
+                { value: "", label: "All" },
                 { value: "true", label: "Active" },
                 { value: "false", label: "Inactive" },
               ],
@@ -202,16 +228,22 @@ export default function VouchersPage() {
               size="sm"
               loading={createMut.isPending}
               onClick={() => createMut.mutate({
+                title: form.title,
                 code: form.code.toUpperCase(),
                 discountType: form.discountType,
                 discountValue: parseFloat(form.discountValue),
-                minOrderValue: form.minOrderValue ? parseFloat(form.minOrderValue) : undefined,
                 maxDiscount: form.maxDiscount ? parseFloat(form.maxDiscount) : undefined,
+                activityScope: form.activityScope,
+                countryScope: form.countryScope || undefined,
+                validFrom: form.validFrom ? new Date(form.validFrom).toISOString() : undefined,
+                validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
                 usageLimit: form.usageLimit ? parseInt(form.usageLimit) : undefined,
-                validFrom: form.validFrom,
-                validUntil: form.validUntil,
+                usagePerGuest: form.usagePerGuest ? parseInt(form.usagePerGuest) : undefined,
+                applicableTiers: form.applicableTiers.length > 0 ? form.applicableTiers : undefined,
+                autoAssign: form.autoAssign,
+                isActive: form.isActive,
               })}
-              disabled={!form.code || !form.discountValue || !form.validFrom || !form.validUntil}
+              disabled={!form.title || !form.code || !form.discountValue || !form.validFrom || !form.validUntil}
             >
               Create Voucher
             </Button>
@@ -219,6 +251,16 @@ export default function VouchersPage() {
         }
       >
         <div className="grid grid-cols-2 gap-4">
+          <div className="col-span-2">
+            <Input
+              id="voucher-title"
+              label="Voucher Title"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Summer Special 20%"
+              required
+            />
+          </div>
           <div className="col-span-2">
             <Input
               id="voucher-code"
@@ -250,25 +292,35 @@ export default function VouchersPage() {
             required
           />
           <Input
-            id="min-order"
-            label="Min. Order Value"
+            id="max-discount"
+            label="Max Discount Amount"
             type="number"
-            value={form.minOrderValue}
-            onChange={(e) => setForm((f) => ({ ...f, minOrderValue: e.target.value }))}
-            placeholder="0"
-            hint="Leave empty for no minimum"
+            value={form.maxDiscount}
+            onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
+            placeholder="e.g. 100"
+            hint="Only for percentage discounts"
+            disabled={form.discountType !== "percentage"}
           />
-          {form.discountType === "percentage" && (
-            <Input
-              id="max-discount"
-              label="Max. Discount Amount"
-              type="number"
-              value={form.maxDiscount}
-              onChange={(e) => setForm((f) => ({ ...f, maxDiscount: e.target.value }))}
-              placeholder="100"
-              hint="Cap for percentage discounts"
-            />
-          )}
+          <Select
+            id="activity-scope"
+            label="Applicable For"
+            value={form.activityScope}
+            onChange={(e) => setForm((f) => ({ ...f, activityScope: e.target.value }))}
+            options={[
+              { value: "universal", label: "Universal" },
+              { value: "hotels", label: "Hotels" },
+              { value: "apartments", label: "Apartments" },
+              { value: "cars", label: "Cars" },
+              { value: "hotels_apartments", label: "Hotels & Apartments" },
+            ]}
+          />
+          <Input
+            id="country-scope"
+            label="Country Scope"
+            value={form.countryScope}
+            onChange={(e) => setForm((f) => ({ ...f, countryScope: e.target.value }))}
+            placeholder="e.g. US, GB (leave empty for Universal)"
+          />
           <Input
             id="usage-limit"
             label="Usage Limit"
@@ -279,21 +331,83 @@ export default function VouchersPage() {
             hint="Leave empty for unlimited"
           />
           <Input
-            id="valid-from"
-            label="Valid From"
-            type="datetime-local"
-            value={form.validFrom}
-            onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
-            required
+            id="usage-per-guest"
+            label="Usage Per Guest"
+            type="number"
+            value={form.usagePerGuest}
+            onChange={(e) => setForm((f) => ({ ...f, usagePerGuest: e.target.value }))}
+            placeholder="1"
+            hint="Max redemptions per user"
           />
-          <Input
-            id="valid-until"
-            label="Valid Until"
-            type="datetime-local"
-            value={form.validUntil}
-            onChange={(e) => setForm((f) => ({ ...f, validUntil: e.target.value }))}
-            required
-          />
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label htmlFor="valid-from" className="block text-sm font-medium text-slate-700">Valid From <span className="text-danger ml-0.5">*</span></label>
+              {form.validFrom && <button type="button" onClick={() => setForm((f) => ({ ...f, validFrom: "" }))} className="text-xs text-slate-400 hover:text-slate-600 focus:outline-none">Clear</button>}
+            </div>
+            <Input
+              id="valid-from"
+              type="datetime-local"
+              value={form.validFrom}
+              onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
+              required
+            />
+          </div>
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label htmlFor="valid-until" className="block text-sm font-medium text-slate-700">Valid Until <span className="text-danger ml-0.5">*</span></label>
+              {form.validUntil && <button type="button" onClick={() => setForm((f) => ({ ...f, validUntil: "" }))} className="text-xs text-slate-400 hover:text-slate-600 focus:outline-none">Clear</button>}
+            </div>
+            <Input
+              id="valid-until"
+              type="datetime-local"
+              value={form.validUntil}
+              onChange={(e) => setForm((f) => ({ ...f, validUntil: e.target.value }))}
+              min={form.validFrom || undefined}
+              required
+            />
+          </div>
+          <div className="col-span-2">
+            <p className="block text-sm font-medium text-slate-700 mb-1">Applicable Tiers</p>
+            <div className="flex gap-4">
+              {["bronze", "silver", "gold", "diamond"].map((tier) => (
+                <label key={tier} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.applicableTiers.includes(tier)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setForm((f) => ({ ...f, applicableTiers: [...f.applicableTiers, tier] }));
+                      } else {
+                        setForm((f) => ({ ...f, applicableTiers: f.applicableTiers.filter((t) => t !== tier) }));
+                      }
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm capitalize text-slate-700">{tier}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="col-span-2 flex gap-6 mt-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.autoAssign}
+                onChange={(e) => setForm((f) => ({ ...f, autoAssign: e.target.checked }))}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-medium text-slate-700">Auto Assign</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+                className="w-4 h-4"
+              />
+              <span className="text-sm font-medium text-slate-700">Active Status</span>
+            </label>
+          </div>
         </div>
       </ActionModal>
     </div>

@@ -18,6 +18,7 @@ import { icalRoutes, startIcalPoller } from "./routes/ical.js";
 import { messagingRoutes } from "./routes/messaging.js";
 import { startCommissionScheduler } from "./lib/commissionScheduler.js";
 import { bookingDocumentRoutes } from "./routes/booking-documents.js";
+import { loyaltyRoutes } from "./routes/loyalty.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
@@ -65,6 +66,8 @@ async function build() {
         { name: "Admin Reviews", description: "Admin user review feed review and moderation" },
         { name: "Admin Commission", description: "Admin commission rates management per country scope" },
         { name: "Admin Vouchers", description: "Admin voucher code generation and validation rules management" },
+        { name: "Loyalty", description: "AfriPoints loyalty programme — tier profile, points history for guests" },
+        { name: "Admin Loyalty", description: "Admin manual points adjustment and guest loyalty history" },
       ],
       components: {
         securitySchemes: {
@@ -136,6 +139,7 @@ async function build() {
   await app.register(icalRoutes);
   await app.register(messagingRoutes);
   await app.register(bookingDocumentRoutes);
+  await app.register(loyaltyRoutes);
 
   app.setErrorHandler((error: { statusCode?: number; message: string }, _req, reply) => {
     app.log.error(error);
@@ -151,8 +155,6 @@ async function build() {
 
   return app;
 }
-
-import { startNightlyJob } from "./services/cron.service.js";
 
 async function main() {
   const app = await build();

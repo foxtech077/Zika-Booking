@@ -12,7 +12,7 @@ async function main() {
 
   const user = await p.user.findUnique({ where: { email: TARGET_EMAIL } });
   if (!user) {
-    console.log("[Reset] ❌ User not found:", TARGET_EMAIL);
+    console.log("[Reset]  User not found:", TARGET_EMAIL);
     return;
   }
 
@@ -22,7 +22,7 @@ async function main() {
     data: { passwordHash, status: "active", emailVerified: true, emailVerifiedAt: new Date() },
   });
 
-  console.log("[Reset] ✅ Password reset for:", TARGET_EMAIL);
+  console.log("[Reset]  Password reset for:", TARGET_EMAIL);
   console.log("[Reset] New password:", NEW_PASSWORD);
   console.log("[Reset] Status set to: active, emailVerified: true");
 }
