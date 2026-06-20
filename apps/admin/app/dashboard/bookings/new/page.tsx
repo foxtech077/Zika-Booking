@@ -371,7 +371,7 @@ export default function ManualBookingPage() {
         </div>
         <h2 className="text-lg font-semibold text-slate-900">Access Restricted</h2>
         <p className="text-sm text-slate-500 max-w-xs">
-          Manual booking is available to Super Admin, Admin, and Country Manager roles only.
+          Manual booking is restricted to authorized roles only.
         </p>
         <Link href="/dashboard/bookings">
           <Button variant="secondary" leftIcon={<ArrowLeft className="h-4 w-4" />}>
@@ -649,7 +649,7 @@ export default function ManualBookingPage() {
         ...(isAccommodation ? { checkIn: new Date(checkIn).toISOString(), checkOut: new Date(checkOut).toISOString(), rooms, units } : { pickupDatetime: pickup, returnDatetime: returnDt }),
         notes,
       });
-      return res.data as { bookingId: string; draftId: string };
+      return res.data.data as { bookingId: string; draftId: string };
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.error?.message ?? "Failed to create draft booking.";
@@ -659,6 +659,7 @@ export default function ManualBookingPage() {
 
   const paymentLinkMut = useMutation({
     mutationFn: async (bookingId: string) => {
+      console.log("Generating payment link for bookingId:", bookingId);
       const endpoint = paymentMethod === "stripe" ? "/stripe/payment-link" : "/tara/payment-link";
       const res = await paymentApi.post(endpoint, { bookingId });
       return res.data as { paymentLink: string };
@@ -703,14 +704,7 @@ export default function ManualBookingPage() {
           <InfoRow label="Booking Reference" value={bookingRef} />
           <InfoRow label="Guest" value={`${firstName} ${lastName}`} />
           <InfoRow label="Payment Method" value={paymentMethod === "stripe" ? "Stripe" : "Tara"} />
-          <InfoRow
-            label="Payment Link"
-            value={
-              <a href={paymentLink} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                Open Link
-              </a>
-            }
-          />
+
           <InfoRow label="Created By" value={user?.name ?? "—"} />
         </div>
         <div className="flex gap-3">

@@ -16,6 +16,8 @@ import MessagingPage from "@/app/dashboard/messaging/page";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
+import { StatusTimeline } from "@/components/StatusTimeline";
+import { CurrencySymbol } from "@/components/CurrencySymbol";
 
 import { canAccess } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
@@ -36,7 +38,6 @@ export default function BookingsPage() {
   const role = user?.role as AdminRole | undefined;
   const isAdminOrSuperAdmin = user?.role === "super_admin" || user?.role === "admin";
   const isCountryManager = user?.role === "country_manager";
-  const canManualBook = canAccess(role, "manage_manual_booking");
   // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
   const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
 
@@ -237,8 +238,11 @@ export default function BookingsPage() {
       align: "right",
       render: (b) => (
         <div className="text-right">
-          <p className="font-semibold text-sm tabular">{formatCurrency(Number(b.totalAmount), b.currency)}</p>
-          <p className="text-xs text-slate-500">Commission: {formatCurrency(Number(b.commissionAmount), b.currency)}</p>
+          <p className="font-semibold text-sm tabular">
+            <CurrencySymbol currency={b.currency} className="mr-0.5 text-slate-500" />
+            {Number(b.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+          <p className="text-xs text-slate-500">Commission: <CurrencySymbol currency={b.currency} className="mr-0.5" />{Number(b.commissionAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
         </div>
       ),
     },
@@ -259,7 +263,7 @@ export default function BookingsPage() {
       width: "80px",
       render: (b) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-            {["pending_payment", "confirmed"].includes(b.status) && (
+            {["pending_payment", "confirmed"].includes(b.status) && canAccess(role as AdminRole, "manage_bookings") && (
               <button
                 onClick={() => setCancelModal(b)}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
@@ -268,7 +272,7 @@ export default function BookingsPage() {
                 <XCircle className="h-3.5 w-3.5" />
               </button>
             )}
-          {["pending_payment", "draft"].includes(b.status) && (
+          {["pending_payment", "draft"].includes(b.status) && canAccess(role as AdminRole, "manage_bookings") && (
             <button
               onClick={() => resendLinkMut.mutate(b.id)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
@@ -288,7 +292,7 @@ export default function BookingsPage() {
         title="Bookings"
         description={`${total.toLocaleString()} total bookings`}
         action={
-          canManualBook ? (
+          canCreateManualBooking ? (
             <Link href="/dashboard/bookings/new">
               <Button leftIcon={<Plus className="h-4 w-4" />}>
                 Manual Booking
@@ -299,11 +303,29 @@ export default function BookingsPage() {
       />
 
       <Card padding="none">
+        <div className="flex items-center gap-2 px-5 pt-5 pb-1 overflow-x-auto no-scrollbar">
+          {[
+            { label: "All", value: "" },
+            { label: "Draft", value: "draft" },
+            { label: "Pending Payment", value: "pending_payment" },
+            { label: "Confirmed", value: "confirmed" },
+            { label: "Cancelled", value: "cancelled" },
+          ].map((f) => (
+            <Button
+              key={f.label}
+              variant={status === f.value || (f.value === 'cancelled' && status.startsWith('cancelled')) ? "primary" : "secondary"}
+              size="sm"
+              onClick={() => { setStatus(f.value); setPage(1); }}
+            >
+              {f.label}
+            </Button>
+          ))}
+        </div>
         <FilterBar 
         
           search={q}
           onSearchChange={(v) => { setQ(v); setPage(1); }}
-          searchPlaceholder="Search reference, email…"
+          searchPlaceholder="Search reference, guest name, email, phone..."
           filters={filterItems}
           limit={limit}
           onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
@@ -330,86 +352,87 @@ export default function BookingsPage() {
           {loadingDetail ? (
             <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading…</div>
           ) : detailData ? (
-            <div className="space-y-4 p-5">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6 p-5">
+              <StatusTimeline currentStatus={detailData.status} />
+              
+              <div className="grid grid-cols-2 gap-y-6 gap-x-4">
                 <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Guest</p>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Reference</p>
+                  <p className="text-sm font-semibold text-slate-900 font-mono">{detailData.reference}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Booking Status</p>
+                  <Badge label={detailData.status} status={detailData.status} />
+                </div>
+                
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Payment Status</p>
+                  <Badge label={detailData.paymentStatus || "unpaid"} status={detailData.paymentStatus || "unpaid"} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Payment Paid Date</p>
+                  <p className="text-sm text-slate-900">{detailData.paymentPaidAt ? formatDate(detailData.paymentPaidAt, "MMM d, yyyy HH:mm") : "N/A"}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Guest Information</p>
                   <p className="text-sm font-semibold text-slate-900">{detailData.guestFirstName} {detailData.guestLastName}</p>
                   <p className="text-xs text-slate-500">{detailData.guestEmail}</p>
                   {detailData.guestPhone && <p className="text-xs text-slate-500">{detailData.guestPhone}</p>}
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Status</p>
-                  <Badge label={detailData.status} status={detailData.status} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Listing</p>
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Listing Information</p>
                   <p className="text-sm text-slate-800">{detailData.listing?.name ?? detailData.listingId}</p>
                   <p className="text-xs text-slate-500 capitalize">{detailData.listingType}</p>
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Dates</p>
+
+                <div className="col-span-2">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Check-in / Check-out</p>
                   {detailData.checkIn ? (
                     <p className="text-sm text-slate-800">
                       {formatDate(detailData.checkIn, "MMM d, yyyy")} → {formatDate(detailData.checkOut, "MMM d, yyyy")}
+                      <span className="text-slate-500 ml-2">({detailData.nightsOrDays} {detailData.listingType === "car" ? "day(s)" : "night(s)"})</span>
                     </p>
                   ) : (
                     <p className="text-sm text-slate-800">
                       {formatDate(detailData.pickupDatetime, "MMM d HH:mm")}
                     </p>
                   )}
-                  <p className="text-xs text-slate-500">{detailData.nightsOrDays} {detailData.listingType === "car" ? "day(s)" : "night(s)"}</p>
                 </div>
-              </div>
-
-              <div className="border-t border-border pt-4">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">Financials</p>
-                <div className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-600">Subtotal</span>
-                    <span>{formatCurrency(Number(detailData.subtotal), detailData.currency)}</span>
-                  </div>
-                  {Number(detailData.discountAmount) > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-600">Discount</span>
-                      <span className="text-green-600">−{formatCurrency(Number(detailData.discountAmount), detailData.currency)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm font-semibold border-t border-border pt-1 mt-1">
-                    <span>Total</span>
-                    <span>{formatCurrency(Number(detailData.totalAmount), detailData.currency)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>Commission</span>
-                    <span>{formatCurrency(Number(detailData.commissionAmount), detailData.currency)}</span>
-                  </div>
-                  <div className="flex justify-between text-xs text-slate-500">
-                    <span>Provider Payout</span>
-                    <span>{formatCurrency(Number(detailData.providerPayout), detailData.currency)}</span>
+                
+                <div className="col-span-2 bg-slate-50 rounded-lg p-3 flex justify-between items-center border border-slate-100">
+                  <p className="text-sm font-medium text-slate-600">Total Amount</p>
+                  <div className="text-right flex items-baseline gap-1">
+                    <CurrencySymbol currency={detailData.currency} className="text-slate-500 font-medium" />
+                    <p className="text-lg font-bold text-slate-900 tabular-nums">
+                      {Number(detailData.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-slate-500 font-semibold uppercase ml-1">{detailData.currency}</p>
                   </div>
                 </div>
               </div>
 
                 {"pending_payment".includes(detailData.status) && (
                   <div className="border-t border-border pt-4 flex gap-2">
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={() => { setCancelModal(selected); setSelected(null); }}
-                    >
-                      Cancel Booking
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      leftIcon={<MessageSquare className="h-3 w-3" />}
-                      onClick={() => setShowMessagingDrawer(true)}
-                    >
-                      Message Guest
-                    </Button>
+                    {canAccess(role as AdminRole, "manage_bookings") && (
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => { setCancelModal(selected); setSelected(null); }}
+                      >
+                        Cancel Booking
+                      </Button>
+                    )}
+                    {canAccess(role as AdminRole, "view_messaging") && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        leftIcon={<MessageSquare className="h-3 w-3" />}
+                        onClick={() => setShowMessagingDrawer(true)}
+                      >
+                        Message Guest
+                      </Button>
+                    )}
                   </div>
                 )}
             </div>

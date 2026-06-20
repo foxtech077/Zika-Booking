@@ -3,14 +3,16 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   Users, Building2, CalendarDays, BadgeCheck,
-  DollarSign, TrendingUp, Clock, AlertCircle,
+  DollarSign, TrendingUp, Clock, AlertCircle, CheckCircle2, XCircle, RotateCcw
 } from "lucide-react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { listingApi } from "@/lib/listing-api";
 import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Charts";
 import { Card, CardHeader, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 import { canAccess } from "@/permissions/rbac";
 import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -129,6 +131,7 @@ export default function DashboardPage() {
   const confirmedBookings = bookings.filter((b) => ["confirmed", "completed"].includes(b.status));
   const totalRevenue = confirmedBookings.reduce((s, b) => s + Number(b.totalAmount ?? 0), 0);
   const totalCommission = confirmedBookings.reduce((s, b) => s + Number(b.commissionAmount ?? 0), 0);
+  const totalPayout = confirmedBookings.reduce((s, b) => s + Number(b.providerPayout ?? 0), 0);
   const revenueChart = buildRevenueChart(bookings);
   const statusDonut = buildStatusDonut(bookings);
   const auditLogs: any[] = auditData?.logs ?? [];
@@ -142,205 +145,252 @@ export default function DashboardPage() {
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Bookings"
-          value={bookingsData?.total ?? 0}
-          change={3.4}
-          icon={<CalendarDays className="h-4 w-4 text-primary" />}
-          iconBg="bg-primary/10"
-          loading={loadingBookings}
-        />
-        {role !== "sales" && (
+        {role !== "finance" && (
           <StatCard
-            title="Total Revenue"
-            value={totalRevenue}
-            currency="USD"
-            change={7.2}
-            icon={<DollarSign className="h-4 w-4 text-success" />}
-            iconBg="bg-success/10"
+            title="Total Bookings"
+            value={bookingsData?.total ?? 0}
+            change={3.4}
+            icon={<CalendarDays className="h-4 w-4 text-primary" />}
+            iconBg="bg-primary/10"
             loading={loadingBookings}
           />
         )}
-        {role !== "sales" && (
-          <StatCard
-            title="Platform Commission"
-            value={totalCommission}
-            currency="USD"
-            change={5.1}
-            icon={<TrendingUp className="h-4 w-4 text-info" />}
-            iconBg="bg-info/10"
-            loading={loadingBookings}
-          />
-        )}
-        {role !== "sales" && (
-          <StatCard
-            title="Total Users"
-            value={usersTotal}
-            change={12.8}
-            icon={<Users className="h-4 w-4 text-purple-600" />}
-            iconBg="bg-purple-100"
-            loading={loadingUsers}
-          />
-        )}
-        {role !== "sales" && (
-          <StatCard
-            title="Total Listings"
-            value={listingsData?.total ?? 0}
-            change={2.1}
-            icon={<Building2 className="h-4 w-4 text-teal-600" />}
-            iconBg="bg-teal-100"
-            loading={loadingListings}
-          />
-        )}
-        {role !== "sales" && (
-          <StatCard
-            title="Pending Accreditation"
-            value={queueData?.total ?? 0}
-            icon={<BadgeCheck className="h-4 w-4 text-warning" />}
-            iconBg="bg-warning/10"
-            loading={loadingQueue}
-          />
-        )}
-
         <StatCard
-          title="Confirmed Bookings"
-          value={confirmedBookings.length}
-          subValue={`of ${bookings.length} total`}
-          icon={<CalendarDays className="h-4 w-4 text-green-600" />}
-          iconBg="bg-green-100"
+          title="Pending Payments"
+          value={bookings.filter((b) => b.status === "pending_payment").length}
+          change={0}
+          icon={<Clock className="h-4 w-4 text-warning" />}
+          iconBg="bg-warning/10"
           loading={loadingBookings}
         />
-        <StatCard
-          title="Conversion Rate"
-          value={bookings.length > 0 ? Math.round((confirmedBookings.length / bookings.length) * 100) : 0}
-          subValue="confirmed / total"
-          icon={<TrendingUp className="h-4 w-4 text-indigo-600" />}
-          iconBg="bg-indigo-100"
-          loading={loadingBookings}
-        />
+        {role !== "finance" && (
+          <>
+            <StatCard
+              title="Confirmed Bookings"
+              value={bookings.filter((b) => ["confirmed", "completed"].includes(b.status)).length}
+              change={0}
+              icon={<CheckCircle2 className="h-4 w-4 text-success" />}
+              iconBg="bg-success/10"
+              loading={loadingBookings}
+            />
+            <StatCard
+              title="Cancelled Bookings"
+              value={bookings.filter((b) => b.status.startsWith("cancelled")).length}
+              change={0}
+              icon={<XCircle className="h-4 w-4 text-danger" />}
+              iconBg="bg-danger/10"
+              loading={loadingBookings}
+            />
+          </>
+        )}
+        
+        {role === "finance" && (
+          <>
+            <StatCard
+              title="Successful Payments"
+              value={bookings.filter((b) => ["confirmed", "completed"].includes(b.status) || b.paymentStatus === "paid").length}
+              icon={<CheckCircle2 className="h-4 w-4 text-success" />}
+              iconBg="bg-success/10"
+              loading={loadingBookings}
+            />
+            <StatCard
+              title="Failed Payments"
+              value={bookings.filter((b) => b.paymentStatus === "failed" || b.status === "failed").length}
+              icon={<XCircle className="h-4 w-4 text-danger" />}
+              iconBg="bg-danger/10"
+              loading={loadingBookings}
+            />
+            <StatCard
+              title="Refunded Payments"
+              value={bookings.filter((b) => b.paymentStatus === "refunded" || b.status === "refunded").length}
+              icon={<RotateCcw className="h-4 w-4 text-purple-600" />}
+              iconBg="bg-purple-100"
+              loading={loadingBookings}
+            />
+          </>
+        )}
+        {role !== "sales" && role !== "support" && (
+          <>
+            <StatCard
+              title="Total Revenue"
+              value={totalRevenue}
+              currency="USD"
+              change={7.2}
+              icon={<DollarSign className="h-4 w-4 text-success" />}
+              iconBg="bg-success/10"
+              loading={loadingBookings}
+            />
+            <StatCard
+              title="Platform Commission"
+              value={totalCommission}
+              currency="USD"
+              change={5.1}
+              icon={<TrendingUp className="h-4 w-4 text-info" />}
+              iconBg="bg-info/10"
+              loading={loadingBookings}
+            />
+            {role === "finance" && (
+              <StatCard
+                title="Provider Payouts"
+                value={totalPayout}
+                currency="USD"
+                icon={<DollarSign className="h-4 w-4 text-warning" />}
+                iconBg="bg-warning/10"
+                loading={loadingBookings}
+              />
+            )}
+            {role !== "finance" && (
+              <>
+                <StatCard
+                  title="Total Listings"
+                  value={listingsData?.total ?? 0}
+                  change={2.1}
+                  icon={<Building2 className="h-4 w-4 text-teal-600" />}
+                  iconBg="bg-teal-100"
+                  loading={loadingListings}
+                />
+                <StatCard
+                  title="Pending Accreditation"
+                  value={queueData?.total ?? 0}
+                  icon={<BadgeCheck className="h-4 w-4 text-warning" />}
+                  iconBg="bg-warning/10"
+                  loading={loadingQueue}
+                />
+              </>
+            )}
+          </>
+        )}
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2" padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Monthly Revenue" description="Last 6 months — confirmed + completed bookings" />
-          </div>
-          <div className="p-5">
-            {loadingBookings ? (
-              <div className="h-[220px] bg-slate-100 rounded-lg animate-shimmer" />
-            ) : (
-              <RevenueBarChart data={revenueChart} />
-            )}
-          </div>
-        </Card>
+      <div className={`grid grid-cols-1 ${role !== "sales" && role !== "support" ? "lg:grid-cols-3" : ""} gap-4`}>
+        {role !== "sales" && role !== "support" && (
+          <Card className={role === "finance" ? "lg:col-span-3" : "lg:col-span-2"} padding="none">
+            <div className="p-5 border-b border-border">
+              <CardHeader title="Monthly Revenue" description="Last 6 months — confirmed + completed bookings" />
+            </div>
+            <div className="p-5">
+              {loadingBookings ? (
+                <div className="h-[220px] bg-slate-100 rounded-lg animate-shimmer" />
+              ) : (
+                <RevenueBarChart data={revenueChart} />
+              )}
+            </div>
+          </Card>
+        )}
 
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Booking Status" description="Distribution across all bookings" />
-          </div>
-          <div className="p-5">
-            {loadingBookings ? (
-              <div className="h-[220px] bg-slate-100 rounded-lg animate-shimmer" />
-            ) : statusDonut.length > 0 ? (
-              <DonutChart data={statusDonut} />
-            ) : (
-              <div className="h-[220px] flex items-center justify-center text-slate-400 text-sm">
-                No booking data
-              </div>
-            )}
-          </div>
-        </Card>
+        {role !== "finance" && (
+          <Card padding="none" className={role === "sales" || role === "support" ? "lg:col-span-1" : ""}>
+            <div className="p-5 border-b border-border">
+              <CardHeader title="Booking Status" description="Distribution across all bookings" />
+            </div>
+            <div className="p-5">
+              {loadingBookings ? (
+                <div className="h-[220px] bg-slate-100 rounded-lg animate-shimmer" />
+              ) : statusDonut.length > 0 ? (
+                <DonutChart data={statusDonut} />
+              ) : (
+                <div className="h-[220px] flex items-center justify-center text-slate-400 text-sm">
+                  No booking data
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Bottom row — Recent activity + pending queue */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className={`grid grid-cols-1 ${role !== "sales" && role !== "support" && role !== "finance" ? "lg:grid-cols-2" : ""} gap-4`}>
         {/* Recent bookings */}
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Recent Bookings" description="Latest activity" />
-          </div>
-          <div className="divide-y divide-border">
-            {loadingBookings ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 p-4">
-                  <div className="h-8 w-8 bg-slate-200 rounded-full animate-shimmer" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3 bg-slate-200 rounded w-3/4 animate-shimmer" />
-                    <div className="h-3 bg-slate-200 rounded w-1/2 animate-shimmer" />
-                  </div>
-                </div>
-              ))
-            ) : bookings.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">No bookings yet</div>
-            ) : (
-              bookings.slice(0, 6).map((b: any) => (
-                <div key={b.id} className="flex items-center gap-3 px-5 py-3">
-                  <Avatar
-                    name={`${b.guestFirstName ?? "G"} ${b.guestLastName ?? ""}`}
-                    size="sm"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">
-                      {b.guestFirstName} {b.guestLastName}
-                    </p>
-                    <p className="text-xs text-slate-500 truncate">
-                      {b.reference} · {b.listing?.name ?? b.listingId}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-semibold text-slate-900 tabular">
-                      {formatCurrency(Number(b.totalAmount), b.currency)}
-                    </p>
-                    <Badge label={b.status} status={b.status} />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
-
-        {/* Audit activity feed */}
-        <Card padding="none">
-          <div className="p-5 border-b border-border">
-            <CardHeader title="Audit Activity" description="Recent admin actions" />
-          </div>
-          <div className="divide-y divide-border">
-            {loadingAudit ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex gap-3 p-4">
-                  <div className="h-2 w-2 bg-slate-200 rounded-full mt-2 animate-shimmer flex-shrink-0" />
-                  <div className="flex-1 space-y-1.5">
-                    <div className="h-3 bg-slate-200 rounded w-full animate-shimmer" />
-                    <div className="h-3 bg-slate-200 rounded w-2/3 animate-shimmer" />
-                  </div>
-                </div>
-              ))
-            ) : auditLogs.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">No audit entries</div>
-            ) : (
-              auditLogs.map((log: any) => (
-                <div key={log.id} className="flex gap-3 px-5 py-3">
-                  <div className="mt-1.5 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-900">
-                      <span className="font-medium">{slugToLabel(log.action)}</span>
-                      {log.targetType && (
-                        <span className="text-slate-500"> on {slugToLabel(log.targetType)}</span>
-                      )}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <Badge label={log.role} status={log.role} size="sm" />
-                      <span className="text-xs text-slate-400">
-                        {formatRelativeTime(log.timestamp)}
-                      </span>
+        {role !== "finance" && (
+          <Card padding="none" className={role === "sales" || role === "support" ? "lg:col-span-1" : ""}>
+            <div className="p-5 border-b border-border">
+              <CardHeader title="Recent Bookings" description="Latest activity" />
+            </div>
+            <div className="divide-y divide-border">
+              {loadingBookings ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-4">
+                    <div className="h-8 w-8 bg-slate-200 rounded-full animate-shimmer" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 bg-slate-200 rounded w-3/4 animate-shimmer" />
+                      <div className="h-3 bg-slate-200 rounded w-1/2 animate-shimmer" />
                     </div>
                   </div>
-                </div>
-              ))
-            )}
-          </div>
-        </Card>
+                ))
+              ) : bookings.length === 0 ? (
+                <div className="p-8 text-center text-sm text-slate-400">No bookings yet</div>
+              ) : (
+                bookings.slice(0, 6).map((b: any) => (
+                  <div key={b.id} className="flex items-center gap-3 px-5 py-3">
+                    <Avatar
+                      name={`${b.guestFirstName ?? "G"} ${b.guestLastName ?? ""}`}
+                      size="sm"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-900 truncate">
+                        {b.guestFirstName} {b.guestLastName}
+                      </p>
+                      <p className="text-xs text-slate-500 truncate">
+                        {b.reference} · {b.listing?.name ?? b.listingId}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-semibold text-slate-900 tabular">
+                        {formatCurrency(Number(b.totalAmount), b.currency)}
+                      </p>
+                      <Badge label={b.status} status={b.status} />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Audit activity feed */}
+        {role !== "sales" && role !== "support" && (
+          <Card padding="none" className={role === "finance" ? "lg:col-span-2" : ""}>
+            <div className="p-5 border-b border-border">
+              <CardHeader title="Audit Activity" description="Recent admin actions" />
+            </div>
+            <div className="divide-y divide-border">
+              {loadingAudit ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex gap-3 p-4">
+                    <div className="h-2 w-2 bg-slate-200 rounded-full mt-2 animate-shimmer flex-shrink-0" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 bg-slate-200 rounded w-full animate-shimmer" />
+                      <div className="h-3 bg-slate-200 rounded w-2/3 animate-shimmer" />
+                    </div>
+                  </div>
+                ))
+              ) : auditLogs.length === 0 ? (
+                <div className="p-8 text-center text-sm text-slate-400">No audit entries</div>
+              ) : (
+                auditLogs.map((log: any) => (
+                  <div key={log.id} className="flex gap-3 px-5 py-3">
+                    <div className="mt-1.5 h-2 w-2 rounded-full bg-primary flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-slate-900">
+                        <span className="font-medium">{slugToLabel(log.action)}</span>
+                        {log.targetType && (
+                          <span className="text-slate-500"> on {slugToLabel(log.targetType)}</span>
+                        )}
+                      </p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge label={log.role} status={log.role} size="sm" />
+                        <span className="text-xs text-slate-400">
+                          {formatRelativeTime(log.timestamp)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );

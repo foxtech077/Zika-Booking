@@ -9,10 +9,21 @@ import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
+import ReactSelect from "react-select";
+import countries from "i18n-iso-countries";
+import enLocale from "i18n-iso-countries/langs/en.json";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Voucher } from "@/types/admin";
 
+countries.registerLocale(enLocale);
+function codeToFlag(code: string) {
+  return code.toUpperCase().replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
+const COUNTRY_OPTIONS = Object.keys(countries.getAlpha2Codes()).map((c) => ({
+  value: c,
+  label: `${codeToFlag(c)} ${c} - ${countries.getName(c, "en")}`,
+}));
 const fetchVouchers = (params: Record<string, string>) =>
   listingApi.get(`/admin/vouchers?${new URLSearchParams(params)}`).then((r) => {
     // ── DEBUG: Temporary logging — remove before production ──────────────────
@@ -247,7 +258,7 @@ export default function VouchersPage() {
                 discountValue: parseFloat(form.discountValue),
                 maxDiscount: form.maxDiscount ? parseFloat(form.maxDiscount) : undefined,
                 activityScope: form.activityScope,
-                countryScope: form.countryScope || undefined,
+                countryScope: form.countryScope ? form.countryScope : undefined,
                 validFrom: form.validFrom ? new Date(form.validFrom).toISOString() : undefined,
                 validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
                 usageLimit: form.usageLimit ? parseInt(form.usageLimit) : undefined,
@@ -327,13 +338,28 @@ export default function VouchersPage() {
               { value: "hotels_apartments", label: "Hotels & Apartments" },
             ]}
           />
-          <Input
-            id="country-scope"
-            label="Country Scope"
-            value={form.countryScope}
-            onChange={(e) => setForm((f) => ({ ...f, countryScope: e.target.value }))}
-            placeholder="e.g. US, GB (leave empty for Universal)"
-          />
+          <div className="col-span-2">
+            <label className="block text-sm font-medium text-slate-700 mb-1">Country Scope</label>
+            <ReactSelect
+              isClearable
+              closeMenuOnSelect={false}
+              menuPosition="fixed"
+              menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
+              styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
+              options={COUNTRY_OPTIONS}
+              // Single value handling
+              value={form.countryScope ? { value: form.countryScope, label: `${codeToFlag(form.countryScope)} ${form.countryScope} - ${countries.getName(form.countryScope, "en")}` } : null}
+              onChange={(selected) => setForm((f) => ({ ...f, countryScope: selected ? selected.value : "" }))}
+              // Remove chip remove icons (not needed for single select)
+              components={{ MultiValueRemove: () => null }}
+              formatOptionLabel={(opt: any) => (
+                <div className="flex items-center space-x-2">
+                  <span>{opt.label}</span>
+                </div>
+              )}
+              getOptionLabel={(opt: any) => opt.label}
+            />
+          </div>
           <Input
             id="usage-limit"
             label="Usage Limit"
