@@ -294,5 +294,275 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
       return sendError(reply, 500, "INTERNAL_ERROR", "Failed to fetch recent activity");
     }
   });
+
+  // ── GET /admin/dashboard/country-manager/summary ───────────────────────────
+  app.get("/admin/dashboard/country-manager/summary", {
+    schema: {
+      tags: ["Admin Dashboard"],
+      description: "Get dashboard summary for Country Managers",
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                totalListings: { type: "number" },
+                totalBookings: { type: "number" },
+                totalRevenue: { type: "number" },
+                totalPayments: { type: "number" },
+                totalAccreditations: { type: "number" },
+                totalProviders: { type: "number" },
+                totalUsers: { type: "number" },
+                totalReports: { type: "number" },
+              }
+            }
+          }
+        }
+      }
+    },
+    preHandler: [requireAdminSession],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const adminId = (req as any).adminId;
+      const adminRole = (req as any).adminRole;
+      if (adminRole !== "country_manager") {
+        return sendError(reply, 403, "FORBIDDEN", "Only Country Managers can access this summary.");
+      }
+
+      const adminUser = await prisma.adminUser.findUnique({
+        where: { id: adminId },
+        select: { countryScope: true }
+      });
+      const countryScope = adminUser?.countryScope ?? [];
+
+      if (countryScope.length === 0) {
+        return sendSuccess(reply, 200, {
+          totalListings: 0,
+          totalBookings: 0,
+          totalRevenue: 0,
+          totalPayments: 0,
+          totalAccreditations: 0,
+          totalProviders: 0,
+          totalUsers: 0,
+          totalReports: 0,
+        });
+      }
+
+      const [listingData] = await prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM listing.listings 
+        WHERE country = ANY(${countryScope}) AND deleted_at IS NULL
+      `;
+      const totalListings = Number(listingData?.count || 0);
+
+      const [bookingData] = await prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM listing.bookings b
+        JOIN listing.listings l ON b.listing_id = l.id
+        WHERE l.country = ANY(${countryScope})
+      `;
+      const totalBookings = Number(bookingData?.count || 0);
+
+      const [revenueData] = await prisma.$queryRaw<[{ total: number | null, count: bigint }]>`
+        SELECT SUM(p.amount) as total, COUNT(*) as count 
+        FROM payments."Payment" p
+        JOIN listing.bookings b ON p."bookingId" = b.id
+        JOIN listing.listings l ON b.listing_id = l.id
+        WHERE p.status = 'captured' AND l.country = ANY(${countryScope})
+      `;
+      const totalRevenue = Number(revenueData?.total || 0);
+      const totalPayments = Number(revenueData?.count || 0);
+
+      const totalAccreditations = await prisma.accreditation.count({
+        where: {
+          user: {
+            country: { in: countryScope },
+          }
+        }
+      });
+
+      const totalProviders = await prisma.user.count({
+        where: {
+          userType: "provider",
+          country: { in: countryScope },
+        }
+      });
+
+      const [reportData] = await prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM listing.reports r
+        LEFT JOIN listing.listings l ON r.target_id = l.id AND r.target_type = 'listing'
+        WHERE (r.target_type = 'listing' AND l.country = ANY(${countryScope})) OR r.target_type != 'listing'
+      `;
+      const totalReports = Number(reportData?.count || 0);
+
+      return sendSuccess(reply, 200, {
+        totalListings,
+        totalBookings,
+        totalRevenue,
+        totalPayments,
+        totalAccreditations,
+        totalProviders,
+        totalUsers: totalProviders,
+        totalReports,
+      });
+    } catch (err: any) {
+      req.log.error({ err }, "Failed to fetch Country Manager summary");
+      return sendError(reply, 500, "INTERNAL_ERROR", "Failed to fetch Country Manager summary");
+    }
+  });
+
+  // ── GET /admin/dashboard/sales/summary ─────────────────────────────────────
+  app.get("/admin/dashboard/sales/summary", {
+    schema: {
+      tags: ["Admin Dashboard"],
+      description: "Get dashboard summary for Sales Agents",
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                totalBookings: { type: "number" },
+              }
+            }
+          }
+        }
+      }
+    },
+    preHandler: [requireAdminSession],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const adminId = (req as any).adminId;
+      const adminRole = (req as any).adminRole;
+      if (adminRole !== "sales") {
+        return sendError(reply, 403, "FORBIDDEN", "Only Sales Agents can access this summary.");
+      }
+
+      const adminUser = await prisma.adminUser.findUnique({
+        where: { id: adminId },
+        select: { countryScope: true }
+      });
+      const countryScope = adminUser?.countryScope ?? [];
+
+      if (countryScope.length === 0) {
+        return sendSuccess(reply, 200, { totalBookings: 0 });
+      }
+
+      const [bookingData] = await prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM listing.bookings b
+        JOIN listing.listings l ON b.listing_id = l.id
+        WHERE l.country = ANY(${countryScope})
+      `;
+      const totalBookings = Number(bookingData?.count || 0);
+
+      return sendSuccess(reply, 200, { totalBookings });
+    } catch (err: any) {
+      req.log.error({ err }, "Failed to fetch Sales Agent summary");
+      return sendError(reply, 500, "INTERNAL_ERROR", "Failed to fetch Sales Agent summary");
+    }
+  });
+
+  // ── GET /admin/dashboard/support/summary ───────────────────────────────────
+  app.get("/admin/dashboard/support/summary", {
+    schema: {
+      tags: ["Admin Dashboard"],
+      description: "Get dashboard summary for Support Agents",
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                totalBookings: { type: "number" },
+                totalPayments: { type: "number" },
+              }
+            }
+          }
+        }
+      }
+    },
+    preHandler: [requireAdminSession],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const adminRole = (req as any).adminRole;
+      if (adminRole !== "support") {
+        return sendError(reply, 403, "FORBIDDEN", "Only Support Agents can access this summary.");
+      }
+
+      const [bookingData] = await prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM listing.bookings
+      `;
+      const totalBookings = Number(bookingData?.count || 0);
+
+      const [revenueData] = await prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM payments."Payment" WHERE status = 'captured'
+      `;
+      const totalPayments = Number(revenueData?.count || 0);
+
+      return sendSuccess(reply, 200, {
+        totalBookings,
+        totalPayments,
+      });
+    } catch (err: any) {
+      req.log.error({ err }, "Failed to fetch Support Agent summary");
+      return sendError(reply, 500, "INTERNAL_ERROR", "Failed to fetch Support Agent summary");
+    }
+  });
+
+  // ── GET /admin/dashboard/finance/summary ───────────────────────────────────
+  app.get("/admin/dashboard/finance/summary", {
+    schema: {
+      tags: ["Admin Dashboard"],
+      description: "Get dashboard summary for Finance Agents",
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                totalRevenue: { type: "number" },
+                totalPayments: { type: "number" },
+                totalReports: { type: "number" },
+              }
+            }
+          }
+        }
+      }
+    },
+    preHandler: [requireAdminSession],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    try {
+      const adminRole = (req as any).adminRole;
+      if (adminRole !== "finance") {
+        return sendError(reply, 403, "FORBIDDEN", "Only Finance Agents can access this summary.");
+      }
+
+      const [revenueData] = await prisma.$queryRaw<[{ total: number | null, count: bigint }]>`
+        SELECT SUM(amount) as total, COUNT(*) as count FROM payments."Payment" WHERE status = 'captured'
+      `;
+      const totalRevenue = Number(revenueData?.total || 0);
+      const totalPayments = Number(revenueData?.count || 0);
+
+      const [reportData] = await prisma.$queryRaw<[{ count: bigint }]>`
+        SELECT COUNT(*) as count FROM listing.reports
+      `;
+      const totalReports = Number(reportData?.count || 0);
+
+      return sendSuccess(reply, 200, {
+        totalRevenue,
+        totalPayments,
+        totalReports,
+      });
+    } catch (err: any) {
+      req.log.error({ err }, "Failed to fetch Finance Agent summary");
+      return sendError(reply, 500, "INTERNAL_ERROR", "Failed to fetch Finance Agent summary");
+    }
+  });
 }
 
