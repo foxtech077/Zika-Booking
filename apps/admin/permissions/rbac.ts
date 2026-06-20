@@ -29,7 +29,8 @@ export type Permission =
   | "view_settings"
   | "manage_settings"
   | "view_roles"
-  | "manage_roles";
+  | "manage_roles"
+  | "view_refunds";
 
 // Role → set of permissions
 const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
@@ -46,6 +47,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_channel", "manage_channel",
     "view_audit",
     "view_reports",
+    "view_refunds",
     "view_settings", "manage_settings",
     "view_roles", "manage_roles",
   ],
@@ -62,6 +64,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_channel", "manage_channel",
     "view_audit",
     "view_reports",
+    "view_refunds",
     // "view_settings" removed — global platform settings is super_admin only
     "view_roles",
   ],
@@ -79,22 +82,21 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
   sales: [
     "view_dashboard",
     "view_bookings",
+    "manage_manual_booking",
+    "view_messaging",
   ],
   support: [
     "view_dashboard",
-    "view_users",
-    "view_bookings", "manage_bookings",
-    "view_listings",
-    "view_reviews", "manage_reviews",
+    "view_bookings",
     "view_messaging",
+    "view_refunds",
   ],
   finance: [
     "view_dashboard",
     "view_finance", "manage_finance",
     "view_commission", "manage_commission",
-    "view_bookings",
-    "view_reports",
     "view_audit",
+    "view_refunds",
   ],
 };
 
@@ -165,13 +167,14 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Payment Dashboard", href: "/dashboard/finance", icon: "LayoutDashboard", permission: "view_finance" },
       { label: "Booking Payments", href: "/dashboard/finance/payments", icon: "CreditCard", permission: "view_finance" },
       { label: "Payout Management", href: "/dashboard/finance/payouts", icon: "Coins", permission: "view_finance" },
-      { label: "Refund Management", href: "/dashboard/finance/refunds", icon: "RotateCcw", permission: "view_finance" },
       { label: "Commission Settings", href: "/dashboard/commission", icon: "Percent", permission: "view_commission" },
       { label: "Commission History", href: "/dashboard/commission/history", icon: "History", permission: "view_commission" },
       { label: "Financial Reports", href: "/dashboard/finance/reports", icon: "BarChart3", permission: "view_finance" },
+      { label: "Refund Management", href: "/dashboard/finance/refunds", icon: "RotateCcw", permission: "view_refunds" },
       { label: "Vouchers", href: "/dashboard/vouchers", icon: "Ticket", permission: "view_vouchers" },
     ],
   },
+
   {
     group: "Administration",
     items: [

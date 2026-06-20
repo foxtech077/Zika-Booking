@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/Badge";
 import { ConfirmModal, ActionModal } from "@/components/modals/Modals";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
-import type { CommissionRate, CommissionRatesResponse } from "@/types/admin";
+import { canAccess } from "@/permissions/rbac";
+import type { CommissionRate, CommissionRatesResponse, AdminRole } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 
 const fetchRates = () =>
@@ -25,7 +26,7 @@ export default function CommissionPage() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
   const role = user?.role;
-  const isSuperAdmin = role === "super_admin";
+  const canManageCommission = role === "super_admin";
 
   const [addModal, setAddModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<CommissionRate | null>(null);
@@ -162,13 +163,15 @@ export default function CommissionPage() {
       label: "",
       align: "right",
       render: (r) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); setDeleteConfirm(r); }}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
-          title="Remove override"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        canManageCommission ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(r); }}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
+            title="Remove override"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        ) : null
       ),
     },
   ];
@@ -179,14 +182,16 @@ export default function CommissionPage() {
         title="Commission Rates"
         description="Configure platform commission per country"
         action={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setAddModal(true)}
-            leftIcon={<Plus className="h-4 w-4" />}
-          >
-            Add Override
-          </Button>
+          canManageCommission && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setAddModal(true)}
+              leftIcon={<Plus className="h-4 w-4" />}
+            >
+              Add Override
+            </Button>
+          )
         }
       />
 
@@ -204,7 +209,7 @@ export default function CommissionPage() {
             </p>
           </div>
         </div>
-        {isSuperAdmin && (
+        {canManageCommission && (
           <Button
             variant="secondary"
             size="sm"
@@ -329,7 +334,7 @@ export default function CommissionPage() {
         </div>
       </ActionModal>
 
-      {/* Edit Global Commission Modal */}
+      {/* Edit Global Commission Modal */} 
       <ActionModal
         open={globalModal}
         onClose={() => {

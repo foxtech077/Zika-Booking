@@ -27,6 +27,7 @@ export default function CommissionHistoryPage() {
 
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -66,11 +67,10 @@ export default function CommissionHistoryPage() {
   }, [commissionHistory, user, countryFilter, startDate, endDate, searchQuery]);
 
   // Paginate records
-  const limit = 10;
   const paginatedHistory = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredHistory.slice(start, start + limit);
-  }, [filteredHistory, page]);
+  }, [filteredHistory, page, limit]);
 
   // CSV Export Action
   const handleExportCsv = () => {
@@ -192,6 +192,8 @@ export default function CommissionHistoryPage() {
               options: CM_OPTIONS,
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         >
           <div className="flex items-center gap-2">
             <input
@@ -237,19 +239,7 @@ export default function CommissionHistoryPage() {
         />
       </Card>
 
-      {/* Informational notice */}
-      <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 flex items-start gap-2">
-        <Info className="h-4.5 w-4.5 text-blue-600 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="font-semibold">Missing API Dependencies Documented</p>
-          <p className="text-[11px] text-blue-700 mt-0.5 leading-snug">
-            This audit trail is backed by client local storage persistence. Production rollout requires introducing:
-            <code className="bg-blue-100/60 px-1 py-0.5 rounded text-[10px] ml-1 font-mono">
-              GET /admin/commission-rates/audit-trail
-            </code>
-          </p>
-        </div>
-      </div>
+
     </div>
   );
 }

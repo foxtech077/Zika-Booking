@@ -34,6 +34,8 @@ export default function FinancialReportsPage() {
   const { user } = useAuthStore();
   const { transactions, payouts, refunds, commissionRules } = useMockFinanceStore();
 
+  const canExportFinancialData = user?.role === "super_admin" || user?.role === "finance";
+
   const [mounted, setMounted] = useState(false);
   const [activeReport, setActiveReport] = useState<ReportTab>("revenue");
   const [countryFilter, setCountryFilter] = useState("");
@@ -450,32 +452,34 @@ export default function FinancialReportsPage() {
           </div>
 
           {/* Export Actions Panel */}
-          <div className="flex gap-2 self-end mt-4 sm:mt-0">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => triggerExport("csv")}
-              leftIcon={<Download className="h-4 w-4" />}
-            >
-              Export CSV
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => triggerExport("excel")}
-              leftIcon={<FileSpreadsheet className="h-4 w-4 text-emerald-700" />}
-            >
-              Export Excel
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handlePrintPDF}
-              leftIcon={<Printer className="h-4 w-4" />}
-            >
-              Print Report (PDF)
-            </Button>
-          </div>
+          {canExportFinancialData && (
+            <div className="flex gap-2 self-end mt-4 sm:mt-0">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => triggerExport("csv")}
+                leftIcon={<Download className="h-4 w-4" />}
+              >
+                Export CSV
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => triggerExport("excel")}
+                leftIcon={<FileSpreadsheet className="h-4 w-4 text-emerald-700" />}
+              >
+                Export Excel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handlePrintPDF}
+                leftIcon={<Printer className="h-4 w-4" />}
+              >
+                Print Report (PDF)
+              </Button>
+            </div>
+          )}
         </div>
       </Card>
 

@@ -149,6 +149,7 @@ interface PaginationProps {
   onLimitChange?: (limit: number) => void;
 }
 
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 export function Pagination({ page, limit, total, onPageChange, onLimitChange }: PaginationProps) {
   const totalPages = Math.ceil(total / limit);
   const from = (page - 1) * limit + 1;
@@ -158,10 +159,12 @@ export function Pagination({ page, limit, total, onPageChange, onLimitChange }: 
 
   return (
     <div className="flex items-center justify-between px-4 py-3 border-t border-border">
-      <p className="text-xs text-slate-500">
-        Showing <span className="font-medium">{from}–{to}</span> of{" "}
-        <span className="font-medium">{total.toLocaleString()}</span> results
-      </p>
+      <div className="flex items-center gap-3">
+        <p className="text-xs text-slate-500">
+          Showing <span className="font-medium">{from}–{to}</span> of{" "}
+          <span className="font-medium">{total.toLocaleString()}</span> results
+        </p>
+      </div>
       <div className="flex gap-1 items-center">
         <button
           onClick={() => onPageChange(page - 1)}
@@ -204,18 +207,6 @@ export function Pagination({ page, limit, total, onPageChange, onLimitChange }: 
           ›
         </button>
       </div>
-{onLimitChange && (
-  <select
-    value={limit}
-    onChange={(e) => onLimitChange(Number(e.target.value))}
-    className="ml-2 rounded border border-border bg-white px-2 py-1 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25"
-  >
-    <option value={10}>10 / page</option>
-    <option value={20}>20 / page</option>
-    <option value={50}>50 / page</option>
-    <option value={100}>100 / page</option>
-  </select>
-)}
     </div>
   );
 }
@@ -240,6 +231,8 @@ interface FilterBarProps {
   }[];
   actions?: ReactNode;
   children?: ReactNode;
+  limit?: number;
+  onLimitChange?: (limit: number) => void;
 }
 
 export function FilterBar({
@@ -249,6 +242,8 @@ export function FilterBar({
   filters,
   actions,
   children,
+  limit,
+  onLimitChange,
 }: FilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">
@@ -283,8 +278,35 @@ export function FilterBar({
           ))}
         </select>
       ))}
-      {actions && <div className="ml-auto flex gap-2">{actions}</div>}
       {children}
+      {(onLimitChange !== undefined || actions !== undefined) && (
+        <div className="ml-auto flex items-center gap-3">
+          {onLimitChange && limit !== undefined && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Rows:</span>
+              <select
+                value={limit}
+                onChange={(e) => onLimitChange(Number(e.target.value))}
+                className="py-1.5 pl-3 pr-8 text-xs bg-white border border-border rounded-lg text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary appearance-none cursor-pointer transition-colors"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
+                  backgroundRepeat: "no-repeat",
+                  backgroundPosition: "right 0.5rem center",
+                  backgroundSize: "1em"
+                }}
+                aria-label="Rows per page"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {actions}
+        </div>
+      )}
     </div>
   );
 }

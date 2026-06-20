@@ -14,6 +14,10 @@ import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency } from "@/lib/utils";
 import type { Listing } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
+import countries from "i18n-iso-countries";
+import enLocale from "i18n-iso-countries/langs/en.json";
+
+countries.registerLocale(enLocale);
 
 function CategoryIcon({ category }: { category: string }) {
   if (category === "hotel") return <Hotel className="w-4 h-4 text-blue-500" />;
@@ -27,20 +31,18 @@ const fetchListings = (params: Record<string, string>) =>
 export default function ListingsPage() {
   const { token, user, _hasHydrated } = useAuthStore();
   const isCountryManager = user?.role === "country_manager";
-  const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
-  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
+  const [country, setCountry] = useState("");
+  const countryOptions = isCountryManager
+    ? scopedCountries.map((c) => ({ value: c, label: countries.getName(c, "en") || c }))
+    : Object.keys(countries.getAlpha2Codes()).map((c) => ({ value: c, label: countries.getName(c, "en") || c }));
 
-  // Sync country selection after auth store hydration
-  useEffect(() => {
-    if (scopedCountries.length > 0 && !country) {
-      setCountry(scopedCountries[0] ?? "");
-    }
-  }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Listing | null>(null);
   const [suspendModal, setSuspendModal] = useState<Listing | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
@@ -48,13 +50,12 @@ export default function ListingsPage() {
   const [starModal, setStarModal] = useState<Listing | null>(null);
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
-
-  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
-  const params = { q, status, category, country: effectiveCountry, page: String(page), limit: "20" };
+ 
+  const params = { q, status, category, country, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-listings", page, "20", q, status, category, effectiveCountry],
+    queryKey: ["admin-listings", page, limit, q, status, category, country],
     queryFn: () => fetchListings(params),
-    enabled: !!token && _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
+    enabled: !!token && _hasHydrated,
   });
 
   const rawListings: Listing[] = data?.listings ?? [];
@@ -65,6 +66,21 @@ export default function ListingsPage() {
       })
     : rawListings;
   const total: number = data?.total ?? 0;
+
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/listings?${new URLSearchParams(params)}`;
+  const responseCount = data?.listings?.length ?? 0;
+  const renderedRows = listings.length;
+  console.log("ListingsPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-listings", page, limit, q, status, category, country],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
 
   const suspendMut = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
@@ -219,7 +235,16 @@ export default function ListingsPage() {
                 { value: "car", label: "Car" },
               ],
             },
+            {
+              key: "country",
+              label: "All Countries",
+              value: country,
+              onChange: (v) => { setCountry(v); setPage(1); },
+              options: countryOptions,
+            },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -230,7 +255,7 @@ export default function ListingsPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<Building2 className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Detail drawer */}

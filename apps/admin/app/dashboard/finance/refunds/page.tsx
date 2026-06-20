@@ -15,6 +15,8 @@ import { Input, Select, Textarea } from "@/components/ui/Input";
 import { useMockFinanceStore, type Refund, type Transaction } from "@/lib/mock-finance-store";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { canAccess } from "@/permissions/rbac";
+import type { AdminRole } from "@/types/admin";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "MT" },
@@ -88,12 +90,11 @@ export default function RefundManagementPage() {
     });
   }, [refunds, user, countryFilter, statusFilter, searchQuery]);
 
-  // Paginated list
-  const limit = 10;
+  const [limit, setLimit] = useState(10);
   const paginatedRefunds = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredRefunds.slice(start, start + limit);
-  }, [filteredRefunds, page]);
+  }, [filteredRefunds, page, limit]);
 
   // Find eligible transactions for refund (successful ones that aren't already refunded or fully escrowed for refund)
   const eligibleTransactions = useMemo(() => {
@@ -123,7 +124,7 @@ export default function RefundManagementPage() {
     return selectedTxDetails.amount - alreadyRefunded;
   }, [selectedTxDetails, refunds]);
 
-  const canModifyRefunds = user?.role === "super_admin" || user?.role === "finance";
+  const canModifyRefunds = canAccess(user?.role as AdminRole, "manage_finance");
 
   // Actions Handlers
   const handleInitiateRefund = () => {
@@ -256,12 +257,11 @@ export default function RefundManagementPage() {
             Details
           </Button>
 
-          {r.status === "pending_approval" && (
+          {r.status === "pending_approval" && canModifyRefunds && (
             <>
               <Button
                 variant="primary"
                 size="sm"
-                disabled={!canModifyRefunds}
                 onClick={() => setApproveConfirm(r)}
                 leftIcon={<Check className="h-3 w-3" />}
               >
@@ -270,7 +270,6 @@ export default function RefundManagementPage() {
               <Button
                 variant="danger"
                 size="sm"
-                disabled={!canModifyRefunds}
                 onClick={() => setRejectConfirm(r)}
                 leftIcon={<X className="h-3 w-3" />}
               >
@@ -279,11 +278,10 @@ export default function RefundManagementPage() {
             </>
           )}
 
-          {r.status === "approved" && (
+          {r.status === "approved" && canModifyRefunds && (
             <Button
               variant="secondary"
               size="sm"
-              disabled={!canModifyRefunds}
               onClick={() => setProcessConfirm(r)}
               leftIcon={<RotateCcw className="h-3 w-3 animate-spin-slow" />}
             >
@@ -316,15 +314,16 @@ export default function RefundManagementPage() {
         title="Refund Management"
         description="Oversee guest cancel compensations, full booking reversals, and trigger payment gateway credit releases."
         action={
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!canModifyRefunds}
-            onClick={() => setIsInitiating(true)}
-            leftIcon={<Plus className="h-4 w-4" />}
-          >
-            Initiate Refund
-          </Button>
+          canModifyRefunds ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setIsInitiating(true)}
+              leftIcon={<Plus className="h-4 w-4" />}
+            >
+              Initiate Refund
+            </Button>
+          ) : undefined
         }
       />
 
@@ -355,6 +354,8 @@ export default function RefundManagementPage() {
               options: CM_OPTIONS,
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
 
         <DataTable
@@ -450,58 +451,43 @@ export default function RefundManagementPage() {
               </div>
             )}
 
-            {/* Document missing API endpoints */}
-            <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800">
-              <div className="flex gap-2 items-start">
-                <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-semibold">Missing API Dependencies Documented</p>
-                  <p className="text-[11px] text-blue-700 mt-0.5 leading-snug font-mono">
-                    POST /admin/refunds/request<br />
-                    POST /admin/refunds/:id/approve<br />
-                    POST /admin/refunds/:id/reject<br />
-                    POST /admin/refunds/:id/process
-                  </p>
-                </div>
-              </div>
-            </div>
+
 
             {/* Actions panel */}
-            <div className="flex gap-2 pt-4 border-t border-slate-100">
-              {selectedRefund.status === "pending_approval" && (
-                <>
+            {canModifyRefunds && (
+              <div className="flex gap-2 pt-4 border-t border-slate-100">
+                {selectedRefund.status === "pending_approval" && (
+                  <>
+                    <Button
+                      className="flex-1"
+                      variant="primary"
+                      onClick={() => { setApproveConfirm(selectedRefund); setSelectedRefund(null); }}
+                      leftIcon={<Check className="h-4 w-4" />}
+                    >
+                      Approve Request
+                    </Button>
+                    <Button
+                      className="flex-1"
+                      variant="danger"
+                      onClick={() => { setRejectConfirm(selectedRefund); setSelectedRefund(null); }}
+                      leftIcon={<X className="h-4 w-4" />}
+                    >
+                      Reject Request
+                    </Button>
+                  </>
+                )}
+                {selectedRefund.status === "approved" && (
                   <Button
-                    className="flex-1"
-                    variant="primary"
-                    disabled={!canModifyRefunds}
-                    onClick={() => { setApproveConfirm(selectedRefund); setSelectedRefund(null); }}
-                    leftIcon={<Check className="h-4 w-4" />}
+                    className="w-full"
+                    variant="secondary"
+                    onClick={() => { setProcessConfirm(selectedRefund); setSelectedRefund(null); }}
+                    leftIcon={<RotateCcw className="h-4 w-4 animate-spin-slow" />}
                   >
-                    Approve Request
+                    Clear funds to Guest Gateway
                   </Button>
-                  <Button
-                    className="flex-1"
-                    variant="danger"
-                    disabled={!canModifyRefunds}
-                    onClick={() => { setRejectConfirm(selectedRefund); setSelectedRefund(null); }}
-                    leftIcon={<X className="h-4 w-4" />}
-                  >
-                    Reject Request
-                  </Button>
-                </>
-              )}
-              {selectedRefund.status === "approved" && (
-                <Button
-                  className="w-full"
-                  variant="secondary"
-                  disabled={!canModifyRefunds}
-                  onClick={() => { setProcessConfirm(selectedRefund); setSelectedRefund(null); }}
-                  leftIcon={<RotateCcw className="h-4 w-4 animate-spin-slow" />}
-                >
-                  Clear funds to Guest Gateway
-                </Button>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </SlideDrawer>

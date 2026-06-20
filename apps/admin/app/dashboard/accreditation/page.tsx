@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
+import { api } from "@/lib/api";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +13,6 @@ import { Textarea, Select } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatRelativeTime } from "@/lib/utils";
-import { api } from "@/lib/api";
 import type { ListingReviewTask, PlatformUser } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 
@@ -173,6 +173,7 @@ export default function AccreditationPage() {
   const qc = useQueryClient();
   
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [selectedTask, setSelectedTask] = useState<ListingReviewTask | null>(null);
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -189,48 +190,43 @@ export default function AccreditationPage() {
   }, []);
 
   const prevPhoto = useCallback(() =>
-    setPhotoLightbox((s) => s && s.index > 0 ? { ...s, index: s.index - 1 } : s), []);
+    setPhotoLightbox((s) => {
+      if (!s) return s;
+      return s.index > 0 ? { ...s, index: s.index - 1 } : s;
+    }), []);
 
   const nextPhoto = useCallback(() =>
-    setPhotoLightbox((s) => s && s.index < s.photos.length - 1 ? { ...s, index: s.index + 1 } : s), []);
+    setPhotoLightbox((s) => {
+      if (!s) return s;
+      return s.index < s.photos.length - 1 ? { ...s, index: s.index + 1 } : s;
+    }), []);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  // const params = { page: String(page), limit: "20" };
+  // const params = { page: String(page), limit: String(limit) };
 
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [docUrl, setDocUrl] = useState<{ url: string; fileType: string } | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
 
-  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin" || (user?.role === "country_manager" && userCountryScope.length > 1);
   const countryOptions = userCountryScope.length > 0
     ? userCountryScope.map((c) => ({ value: c, label: c }))
     : [
-      "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
-    ].map((c) => ({ value: c, label: c }));
+        "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
+      ].map((c) => ({ value: c, label: c }));
 
-  const [country, setCountry] = useState(() => userCountryScope[0] ?? "");
+  const [country, setCountry] = useState("");
 
-  // Sync country selection after auth store hydration
-  useEffect(() => {
-    if (userCountryScope.length > 0 && !country) {
-      setCountry(userCountryScope[0] ?? "");
-    }
-  }, [userCountryScope, country]);
-
-  // For country managers, always send their first scoped country as the filter.
-  // Previously this was set to "" which caused the API to return all countries.
-  const effectiveCountry = isCountryManager ? (country || userCountryScope[0] || "") : country;
   const params = Object.fromEntries(
     Object.entries({
       page: String(page),
-      limit: "20",
-      country: effectiveCountry,
+      limit: String(limit),
+      country,
     }).filter(([, v]) => v !== "")
   );
   const { data, isLoading } = useQuery({
-    queryKey: ["accreditation-queue", params],
+    queryKey: ["accreditation-queue", page, limit, country],
     queryFn: () => fetchQueue(params),
     // Wait for auth store to rehydrate so userCountryScope/effectiveCountry are correct
     enabled: !!token && _hasHydrated,
@@ -266,7 +262,22 @@ export default function AccreditationPage() {
       return inScope && (!selectedCountry || selectedCountry === listingCountry);
     })
     : rawTasks;
-  const total: number = isCountryManager ? tasks.length : (data?.total ?? 0);
+  const total: number = data?.total ?? tasks.length;
+
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/listings/review-queue?${new URLSearchParams(params)}`;
+  const responseCount = data?.tasks?.length ?? 0;
+  const renderedRows = tasks.length;
+  console.log("AccreditationPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["accreditation-queue", page, limit, country],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ["listing-review-detail", selectedTask?.listing?.id],
@@ -391,22 +402,26 @@ export default function AccreditationPage() {
       />
 
       <Card padding="none">
-        {canShowCountryFilter && (
-          <FilterBar
-            filters={[
-              {
-                key: "country",
-                label: "All Countries",
-                value: country,
-                onChange: (v: string) => {
-                  setCountry(v);
-                  setPage(1);
-                },
-                options: countryOptions,
-              },
-            ]}
-          />
-        )}
+        <FilterBar
+          filters={
+            canShowCountryFilter
+              ? [
+                  {
+                    key: "country",
+                    label: "All Countries",
+                    value: country,
+                    onChange: (v: string) => {
+                      setCountry(v);
+                      setPage(1);
+                    },
+                    options: countryOptions,
+                  },
+                ]
+              : undefined
+          }
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
+        />
         <DataTable
           columns={columns}
           data={tasks}
@@ -416,7 +431,7 @@ export default function AccreditationPage() {
           emptyDescription="All hotel listings have been reviewed."
           emptyIcon={<BadgeCheck className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* ── Review detail drawer ─────────────────────────────────────────── */}

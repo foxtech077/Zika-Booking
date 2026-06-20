@@ -9,10 +9,21 @@ import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
+import countries from "i18n-iso-countries";
+import enLocale from "i18n-iso-countries/langs/en.json";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Voucher } from "@/types/admin";
+import ReactSelect from "react-select";
 
+countries.registerLocale(enLocale);
+function codeToFlag(code: string) {
+  return code.toUpperCase().replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
+const COUNTRY_OPTIONS = Object.keys(countries.getAlpha2Codes()).map((c) => ({
+  value: c,
+  label: `${codeToFlag(c)} ${c} - ${countries.getName(c, "en")}`,
+}));
 const fetchVouchers = (params: Record<string, string>) =>
   listingApi.get(`/admin/vouchers?${new URLSearchParams(params)}`).then((r) => {
     // ── DEBUG: Temporary logging — remove before production ──────────────────
@@ -34,6 +45,7 @@ const fetchVouchers = (params: Record<string, string>) =>
 export default function VouchersPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [isActive, setIsActive] = useState("");
   const [addModal, setAddModal] = useState(false);
   const [form, setForm] = useState({
@@ -53,14 +65,24 @@ export default function VouchersPage() {
     isActive: true,
   });
 
-  const params = { ...(isActive !== "" ? { isActive } : {}), page: String(page), limit: "20" };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-vouchers", params],
-    queryFn: () => fetchVouchers(params),
+    queryKey: ["admin-vouchers"],
+    queryFn: () => fetchVouchers({}), // Fetch all
   });
 
-  const vouchers: Voucher[] = data?.vouchers ?? [];
-  const total: number = data?.total ?? vouchers.length;
+  const allVouchers: Voucher[] = data?.vouchers ?? [];
+
+  // Frontend filtering
+  const filteredVouchers = allVouchers.filter((v) => {
+    if (isActive === "true" && !v.isActive) return false;
+    if (isActive === "false" && v.isActive) return false;
+    return true;
+  });
+
+  // Frontend pagination
+  const total = filteredVouchers.length;
+  const offset = (page - 1) * limit;
+  const paginatedVouchers = filteredVouchers.slice(offset, offset + limit);
 
   const createMut = useMutation({
     mutationFn: (body: any) => listingApi.post("/admin/vouchers", body),
@@ -200,16 +222,18 @@ export default function VouchersPage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
-          data={vouchers}
+          data={paginatedVouchers}
           loading={isLoading}
           emptyTitle="No vouchers found"
           emptyDescription="Create your first promotional voucher."
           emptyIcon={<Ticket className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Create voucher modal */}
@@ -233,7 +257,7 @@ export default function VouchersPage() {
                 discountValue: parseFloat(form.discountValue),
                 maxDiscount: form.maxDiscount ? parseFloat(form.maxDiscount) : undefined,
                 activityScope: form.activityScope,
-                countryScope: form.countryScope || undefined,
+                countryScope: form.countryScope ? form.countryScope : undefined,
                 validFrom: form.validFrom ? new Date(form.validFrom).toISOString() : undefined,
                 validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
                 usageLimit: form.usageLimit ? parseInt(form.usageLimit) : undefined,
@@ -313,13 +337,47 @@ export default function VouchersPage() {
               { value: "hotels_apartments", label: "Hotels & Apartments" },
             ]}
           />
-          <Input
-            id="country-scope"
-            label="Country Scope"
-            value={form.countryScope}
-            onChange={(e) => setForm((f) => ({ ...f, countryScope: e.target.value }))}
-            placeholder="e.g. US, GB (leave empty for Universal)"
-          />
+         
+
+<div className="col-span-2">
+  <label className="block text-sm font-medium text-slate-700 mb-1">
+    Country Scope
+  </label>
+
+  <ReactSelect
+    isClearable
+    menuPosition="fixed"
+    menuPortalTarget={
+      typeof window !== "undefined" ? document.body : undefined
+    }
+    styles={{
+      menuPortal: (base: any) => ({
+        ...base,
+        zIndex: 9999,
+      }),
+    }}
+    options={COUNTRY_OPTIONS}
+    value={
+      form.countryScope
+        ? COUNTRY_OPTIONS.find(
+            (option) => option.value === form.countryScope
+          ) ?? null
+        : null
+    }
+    onChange={(selected: any) =>
+      setForm((f) => ({
+        ...f,
+        countryScope: selected?.value ?? "",
+      }))
+    }
+    formatOptionLabel={(option: any) => (
+      <div className="flex items-center gap-2">
+        <span>{option.label}</span>
+      </div>
+    )}
+    getOptionLabel={(option: any) => option.label}
+  />
+</div>
           <Input
             id="usage-limit"
             label="Usage Limit"

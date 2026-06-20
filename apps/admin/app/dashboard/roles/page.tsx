@@ -12,6 +12,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Select } from "@/components/ui/Input";
 import { Avatar } from "@/components/ui/Avatar";
+import countries from "i18n-iso-countries";
+import enLocale from "i18n-iso-countries/langs/en.json";
+import ReactSelect from "react-select";
+
+// Register English locale for country names
+countries.registerLocale(enLocale);
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, slugToLabel } from "@/lib/utils";
@@ -47,6 +53,16 @@ const changeRole = ({ id, role, countryScope }: { id: string; role: string; coun
   api.patch(`/admin/operators/${id}/role`, { role, countryScope }).then((r) => r.data.data ?? r.data);
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+function codeToFlag(code: string) {
+  return code.toUpperCase().replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const COUNTRY_OPTIONS = Object.keys(countries.getAlpha2Codes()).map((c) => ({
+  value: c,
+  label: `${codeToFlag(c)} ${c}`,
+}));
 
 const ROLE_OPTIONS: { value: AdminRole; label: string }[] = [
   { value: "admin", label: "Admin" },
@@ -88,8 +104,13 @@ export default function RolesPage() {
   const qc = useQueryClient();
   const canManage = canAccess(user?.role, "manage_roles");
 
+  // Admin's own country scope (for restricting country picker)
+  const adminCountries: string[] = user?.countryScope ?? [];
+  const isScopedAdmin = user?.role === "admin" && adminCountries.length > 0;
+
   // List state
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
 
@@ -102,12 +123,13 @@ export default function RolesPage() {
   const [form, setForm] = useState({
     name: "", email: "", password: "", role: "admin" as AdminRole, countryScope: ""
   });
+  const [createCountries, setCreateCountries] = useState<string[]>([]);
 
   // Edit form
   const [editRole, setEditRole] = useState<AdminRole>("admin");
-  const [editScope, setEditScope] = useState("");
+  const [editCountries, setEditCountries] = useState<string[]>([]);
 
-  const params = { q, ...(roleFilter ? { role: roleFilter } : {}), page: String(page), limit: "20" };
+  const params = { q, ...(roleFilter ? { role: roleFilter } : {}), page: String(page), limit: String(limit) };
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-operators", params],
@@ -123,6 +145,7 @@ export default function RolesPage() {
       qc.invalidateQueries({ queryKey: ["admin-operators"] });
       setCreateModal(false);
       setForm({ name: "", email: "", password: "", role: "admin", countryScope: "" });
+      setCreateCountries([]);
     },
   });
 
@@ -144,7 +167,7 @@ export default function RolesPage() {
 
   const openEdit = (op: Operator) => {
     setEditRole(op.role);
-    setEditScope(op.countryScope?.join(", ") ?? "");
+    setEditCountries(op.countryScope ?? []);
     setEditModal(op);
   };
 
@@ -293,6 +316,8 @@ export default function RolesPage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -302,48 +327,7 @@ export default function RolesPage() {
           emptyDescription="Create your first admin account using the button above."
           emptyIcon={<Users2 className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
-      </Card>
-
-      {/* Permission matrix */}
-      <Card padding="none">
-        <div className="p-5 border-b border-border">
-          <CardHeader title="Permission Matrix" description="Module access by role" />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="border-b border-border bg-surface-subtle">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide w-40">Module</th>
-                {[{ value: "super_admin", label: "Super Admin" }, ...ROLE_OPTIONS].map((r) => (
-                  <th key={r.value} className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    <Badge label={r.label} status={r.value} size="sm" />
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {PERMISSION_MATRIX.map((row) => (
-                <tr key={row.module} className="hover:bg-slate-50/50">
-                  <td className="px-4 py-3 text-sm font-medium text-slate-900">{row.module}</td>
-                  {(["super_admin", "admin", "country_manager", "sales", "support", "finance"] as const).map((r) => {
-                    const perm = (row as any)[r];
-                    return (
-                      <td key={r} className="px-4 py-3 text-center">
-                        <span className={`text-xs font-medium ${
-                          perm === "Full" || perm === "✓" ? "text-success-dark" :
-                          perm === "View" ? "text-info-dark" : "text-slate-300"
-                        }`}>
-                          {perm}
-                        </span>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* ── Create Admin Modal ── */}
@@ -366,8 +350,8 @@ export default function RolesPage() {
                 email: form.email,
                 password: form.password,
                 role: form.role,
-                countryScope: form.countryScope
-                  ? form.countryScope.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)
+                countryScope: form.role === "country_manager" || form.role === "sales"
+                  ? createCountries
                   : [],
               })}
               disabled={!form.name || !form.email || !form.password || form.password.length < 8}
@@ -421,14 +405,29 @@ export default function RolesPage() {
             />
           </div>
 
-          {form.role === "country_manager" && (
-            <Input
-              id="country-scope"
-              label="Country Scope (comma-separated)"
-              value={form.countryScope}
-              onChange={(e) => setForm((f) => ({ ...f, countryScope: e.target.value }))}
-              placeholder="MT, GB, DE"
-              hint="Countries this manager will have access to"
+          {(form.role === "country_manager" || form.role === "sales") && (
+            <ReactSelect
+              aria-label="Country Scope"
+              placeholder="Select countries..."
+              isMulti
+              isClearable
+              closeMenuOnSelect={false}
+              menuPosition="fixed"
+              menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
+              styles={{
+                menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+              }}
+              options={COUNTRY_OPTIONS}
+              value={createCountries.map((c) => ({ value: c, label: `${codeToFlag(c)} ${c}` }))}
+              onChange={(selected) =>
+                setCreateCountries(selected ? selected.map((s: any) => s.value) : [])
+              }
+              formatOptionLabel={(opt: any) => (
+                <div className="flex items-center space-x-2">
+                  <span>{codeToFlag(opt.value)} {opt.value}</span>
+                </div>
+              )}
+              getOptionLabel={(opt: any) => `${codeToFlag(opt.value)} ${opt.value}`}
             />
           )}
 
@@ -456,7 +455,7 @@ export default function RolesPage() {
               onClick={() => editModal && editMut.mutate({
                 id: editModal.id,
                 role: editRole,
-                countryScope: editScope ? editScope.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean) : [],
+                countryScope: editCountries,
               })}
             >
               Save Changes
@@ -472,13 +471,29 @@ export default function RolesPage() {
             onChange={(e) => setEditRole(e.target.value as AdminRole)}
             options={ROLE_OPTIONS}
           />
-          {editRole === "country_manager" && (
-            <Input
-              id="edit-scope"
-              label="Country Scope"
-              value={editScope}
-              onChange={(e) => setEditScope(e.target.value)}
-              placeholder="MT, GB, DE"
+          {(editRole === "country_manager" || editRole === "sales") && (
+            <ReactSelect
+              aria-label="Country Scope"
+              placeholder="Select countries..."
+              isMulti
+              isClearable
+              closeMenuOnSelect={false}
+              menuPosition="fixed"
+              menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
+              styles={{
+                menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+              }}
+              options={COUNTRY_OPTIONS}
+              value={editCountries.map((c) => ({ value: c, label: `${codeToFlag(c)} ${c}` }))}
+              onChange={(selected) =>
+                setEditCountries(selected ? selected.map((s: any) => s.value) : [])
+              }
+              formatOptionLabel={(opt: any) => (
+                <div className="flex items-center space-x-2">
+                  <span>{codeToFlag(opt.value)} {opt.value}</span>
+                </div>
+              )}
+              getOptionLabel={(opt: any) => `${codeToFlag(opt.value)} ${opt.value}`}
             />
           )}
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">

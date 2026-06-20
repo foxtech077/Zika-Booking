@@ -75,12 +75,11 @@ export default function PayoutManagementPage() {
     });
   }, [payouts, activeTab, user, countryFilter, searchQuery]);
 
-  // Paginated data
-  const limit = 10;
+  const [limit, setLimit] = useState(10);
   const paginatedPayouts = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredPayouts.slice(start, start + limit);
-  }, [filteredPayouts, page]);
+  }, [filteredPayouts, page, limit]);
 
   // Total summary by status for badge counts
   const tabCounts = useMemo(() => {
@@ -277,6 +276,8 @@ export default function PayoutManagementPage() {
               options: CM_OPTIONS,
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
 
         <DataTable
@@ -371,19 +372,7 @@ export default function PayoutManagementPage() {
               </div>
             </div>
 
-            {/* Documentation of missing API */}
-            <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800">
-              <div className="flex gap-2 items-start">
-                <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-semibold">Missing API Dependencies Documented</p>
-                  <p className="text-[11px] text-blue-700 mt-0.5 leading-snug font-mono">
-                    POST /admin/payouts/:id/approve<br />
-                    POST /admin/payouts/:id/retry
-                  </p>
-                </div>
-              </div>
-            </div>
+
 
             {/* Drawer Actions */}
             <div className="flex gap-2 pt-4 border-t border-slate-100">

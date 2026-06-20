@@ -36,11 +36,9 @@ export default function BookingsPage() {
   const isAdminOrSuperAdmin = user?.role === "super_admin" || user?.role === "admin";
   const isCountryManager = user?.role === "country_manager";
   const canManualBook = canAccess(role, "manage_manual_booking");
-  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
-
   // scopedCountries only applies to country_manager (not admin — admin sees all)
   const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin" || (user?.role === "country_manager" && scopedCountries.length > 1);
   const countryOptions = scopedCountries.length > 0
     ? scopedCountries.map((c) => ({ value: c, label: c }))
     : COUNTRY_OPTIONS;
@@ -50,16 +48,10 @@ export default function BookingsPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [listingType, setListingType] = useState("");
-  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
+  const [country, setCountry] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // Sync country selection after auth store hydration
-  useEffect(() => {
-    if (scopedCountries.length > 0 && !country) {
-      setCountry(scopedCountries[0] ?? "");
-    }
-  }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
@@ -68,14 +60,12 @@ export default function BookingsPage() {
   const [resendError, setResendError] = useState("");
   const [resendSuccess, setResendSuccess] = useState(false);
 
-  // For country managers, always enforce their scoped country
-  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
   const params = Object.fromEntries(
     Object.entries({
       q,
       status,
       listingType,
-      country: effectiveCountry,
+      country,
       page: String(page),
       limit: String(limit),
     }).filter(([, v]) => v !== "")
@@ -83,7 +73,7 @@ export default function BookingsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-bookings", params],
     queryFn: () => fetchBookings(params),
-    // Wait for auth store to rehydrate so scopedCountries/effectiveCountry are correct
+    // Wait for auth store to rehydrate so scopedCountries are correct
     enabled: !!token && _hasHydrated,
   });
 
