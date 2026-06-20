@@ -49,7 +49,7 @@ export default function ReviewsPage() {
 
   const hideMut = useMutation({
     mutationFn: ({ id, hide, reason }: { id: string; hide: boolean; reason?: string }) =>
-      listingApi.patch(`/reviews/${id}/hide`, { hide, reason }),
+      listingApi.patch(`/reviews/${id}/hide`, { hidden: hide, reason }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-reviews"] });
       setHideModal(null);

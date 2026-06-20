@@ -367,7 +367,7 @@ export default function RolesPage() {
                 password: form.password,
                 role: form.role,
                 countryScope: form.countryScope
-                  ? form.countryScope.split(",").map((s) => s.trim()).filter(Boolean)
+                  ? form.countryScope.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)
                   : [],
               })}
               disabled={!form.name || !form.email || !form.password || form.password.length < 8}
@@ -456,7 +456,7 @@ export default function RolesPage() {
               onClick={() => editModal && editMut.mutate({
                 id: editModal.id,
                 role: editRole,
-                countryScope: editScope ? editScope.split(",").map((s) => s.trim()).filter(Boolean) : [],
+                countryScope: editScope ? editScope.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean) : [],
               })}
             >
               Save Changes

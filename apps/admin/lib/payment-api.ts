@@ -1,7 +1,7 @@
 import axios from "axios";
 
 export const paymentApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_PAYMENT_API_URL || "https://api.kainook.com/payments",
+  baseURL: process.env.NEXT_PUBLIC_PAYMENT_API_URL || "https://api.kainook.com/payments/payments",
   withCredentials: true,
   timeout: 30_000,
 });

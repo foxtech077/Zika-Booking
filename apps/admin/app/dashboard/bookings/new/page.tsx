@@ -645,7 +645,7 @@ export default function ManualBookingPage() {
           setIsSending(false);
           return;
         }
-        await paymentApi.post(`/payments/${paymentMethod}/payment-link`, { bookingId });
+        await paymentApi.post(`/${paymentMethod}/payment-link`, { bookingId });
         setSubmitted(true);
         setLinkSent(true);
       } catch (err: any) {

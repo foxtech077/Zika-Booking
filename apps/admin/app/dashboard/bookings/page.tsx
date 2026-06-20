@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle, Eye, Plus, Send } from "lucide-react";
+import { CalendarDays, XCircle, Eye, Plus, Send, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
+import { paymentApi } from "@/lib/payment-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -62,6 +63,10 @@ export default function BookingsPage() {
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [resendModal, setResendModal] = useState<Booking | null>(null);
+  const [resendGateway, setResendGateway] = useState<"stripe" | "tara">("stripe");
+  const [resendError, setResendError] = useState("");
+  const [resendSuccess, setResendSuccess] = useState(false);
 
   // For country managers, always enforce their scoped country
   const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
@@ -125,10 +130,21 @@ export default function BookingsPage() {
 
   // Resend payment link for draft bookings
   const resendLinkMut = useMutation({
-    mutationFn: (id: string) => listingApi.post(`/admin/bookings/${id}/send-link`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-bookings"] });
+    mutationFn: async ({ id, gateway }: { id: string; gateway: "stripe" | "tara" }) => {
+      setResendError("");
+      setResendSuccess(false);
+      const res = await paymentApi.post(`/${gateway}/payment-link`, { bookingId: id });
+      return res.data;
     },
+    onSuccess: () => {
+      setResendSuccess(true);
+      qc.invalidateQueries({ queryKey: ["admin-bookings"] });
+      qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
+      setResendError(msg);
+    }
   });
 
   const columns: Column<Booking>[] = [
@@ -213,7 +229,7 @@ export default function BookingsPage() {
           )}
           {["pending_payment", "draft"].includes(b.status) && (
             <button
-              onClick={() => resendLinkMut.mutate(b.id)}
+              onClick={() => setResendModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
               title="Resend payment link"
             >
@@ -464,6 +480,112 @@ export default function BookingsPage() {
           required
           rows={3}
         />
+      </ActionModal>
+
+      {/* Resend payment link modal */}
+      <ActionModal
+        open={!!resendModal}
+        onClose={() => {
+          setResendModal(null);
+          setResendError("");
+          setResendSuccess(false);
+        }}
+        title="Send/Resend Payment Link"
+        description={
+          resendSuccess 
+            ? "Payment link has been successfully generated and sent to the guest."
+            : `Generate and email a secure payment link for booking ${resendModal?.reference}.`
+        }
+        size="sm"
+        footer={
+          resendSuccess ? (
+            <Button 
+              variant="primary" 
+              size="sm" 
+              onClick={() => {
+                setResendModal(null);
+                setResendSuccess(false);
+              }}
+            >
+              Close
+            </Button>
+          ) : (
+            <>
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => setResendModal(null)}
+                disabled={resendLinkMut.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={resendLinkMut.isPending}
+                onClick={() => resendModal && resendLinkMut.mutate({ id: resendModal.id, gateway: resendGateway })}
+                leftIcon={<Send className="h-4 w-4" />}
+              >
+                Send Link
+              </Button>
+            </>
+          )
+        }
+      >
+        {!resendSuccess && (
+          <div className="space-y-4 pt-2">
+            {resendError && (
+              <div className="p-3 text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-lg">
+                {resendError}
+              </div>
+            )}
+            
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-slate-700">Guest Email</label>
+              <input
+                type="text"
+                disabled
+                value={resendModal?.guestEmail ?? ""}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-500 rounded-lg px-3 py-2 text-sm cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-2">Select Payment Gateway</p>
+              <div className="grid grid-cols-2 gap-3">
+                {(["stripe", "tara"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setResendGateway(m)}
+                    className={`flex items-center gap-2.5 rounded-xl border-2 px-4 py-2.5 transition-all text-left ${
+                      resendGateway === m
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className={`h-4 w-4 rounded-full border flex items-center justify-center flex-shrink-0 ${
+                      resendGateway === m ? "border-primary" : "border-slate-300"
+                    }`}>
+                      {resendGateway === m && <div className="h-2 w-2 rounded-full bg-primary" />}
+                    </div>
+                    <span className="text-xs font-semibold capitalize">{m === "tara" ? "Tara" : "Stripe"}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {resendSuccess && (
+          <div className="py-4 text-center">
+            <div className="mx-auto w-12 h-12 bg-green-50 border border-green-200 text-green-600 rounded-full flex items-center justify-center mb-3">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-semibold text-slate-800">Email Sent Successfully</p>
+            <p className="text-xs text-slate-500 mt-1">The guest has been sent the link for {resendGateway === "stripe" ? "Stripe" : "Tara"} payment.</p>
+          </div>
+        )}
       </ActionModal>
     </div>
   );
