@@ -44,15 +44,11 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   onHover,
 }) => {
   const [isFav, setIsFav] = React.useState(listing.isFavourited ?? false);
-  const [imgFailed, setImgFailed] = React.useState(false);
   const isHovered = hoveredId === listing.id;
-
-  // Replaced direct image URL with ListingImage component
 
   const basePrice = listing.pricePerNight || 0;
   const isCar = listing.category === "car";
   const unit = isCar ? "day" : "night";
-  // Derive discount: long-stay listings get ~15% off as promotional display price
   const hasPromo = listing.longStayDiscountEnabled;
   const discountPct = hasPromo ? 15 : 0;
   const displayPrice = hasPromo ? Math.round(basePrice * (1 - discountPct / 100)) : basePrice;
@@ -69,28 +65,29 @@ export const ListingCard: React.FC<ListingCardProps> = ({
       onClick={() => onSelect(listing.id)}
       onMouseEnter={() => onHover?.(listing.id)}
       onMouseLeave={() => onHover?.(null)}
-      className={`group relative bg-white border rounded-3xl overflow-hidden cursor-pointer shadow-md hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 ${
-        isHovered ? "border-[#166534] ring-2 ring-[#166534]/20" : "border-slate-200"
+      className={`group relative bg-white border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:-translate-y-1 ${
+        isHovered
+          ? "border-[#1D8D2B] shadow-xl ring-1 ring-[#1D8D2B]/20"
+          : "border-slate-200 shadow-md hover:shadow-xl"
       }`}
     >
       {/* Badges */}
       <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">
         {listing.isAccredited && (
-          <span className="bg-[#0B1E3F]/90 backdrop-blur-sm text-white text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow flex items-center gap-1">
+          <span className="bg-[#024622]/90 backdrop-blur-sm text-white text-[9px] font-semibold uppercase tracking-widest px-2.5 py-1 rounded-full shadow flex items-center gap-1">
             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
-            Verified
+            Kainook Verified
           </span>
         )}
         {listing.instantBooking && (
-          <span className="bg-amber-500/90 backdrop-blur-sm text-white text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow">
+          <span className="bg-[#1D8D2B]/90 backdrop-blur-sm text-white text-[9px] font-semibold uppercase tracking-widest px-2.5 py-1 rounded-full shadow">
             ⚡ Instant Book
           </span>
         )}
-        {listing.longStayDiscountEnabled && (
-          <span className="bg-[#E31C5F]/90 backdrop-blur-sm text-white text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shadow flex items-center gap-1">
-            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
+        {hasPromo && (
+          <span className="bg-[#E31C5F]/90 backdrop-blur-sm text-white text-[9px] font-semibold uppercase tracking-widest px-2.5 py-1 rounded-full shadow">
             {discountPct}% OFF
           </span>
         )}
@@ -101,35 +98,38 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         onClick={(e) => { e.stopPropagation(); setIsFav((v) => !v); }}
         className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
       >
-        <svg className={`w-4 h-4 transition ${isFav ? "text-[#E31C5F] fill-current" : "text-slate-500"}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+        <svg
+          className={`w-4 h-4 transition ${isFav ? "text-[#E31C5F] fill-current" : "text-slate-500"}`}
+          fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+        >
           <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
         </svg>
       </button>
 
-      {/* Image — only from API */}
+      {/* Image */}
       <div className="aspect-[4/3] w-full overflow-hidden relative">
         <ListingImage
           listingId={listing.id}
           alt={listing.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+          className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
           fallbackNode={<NoImage category={listing.category} />}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         {distLabel && (
-          <div className="absolute bottom-3 left-3 bg-black/50 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-1 rounded-full">
-            📍 {distLabel}
+          <div className="absolute bottom-3 left-3 bg-black/50 backdrop-blur-sm text-white text-[9px] font-semibold px-2 py-1 rounded-full tracking-wide">
+            {distLabel} away
           </div>
         )}
       </div>
 
       {/* Card body */}
-      <div className="p-4 space-y-2.5">
+      <div className="p-4 space-y-3">
         <div className="flex justify-between items-start gap-2">
           <div className="min-w-0">
-            <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">
+            <p className="text-[9px] uppercase font-bold text-[#1D8D2B] tracking-widest">
               {CAT_LABEL[listing.category] ?? listing.category}
             </p>
-            <h3 className="font-bold text-sm text-slate-900 line-clamp-1 group-hover:text-[#0B1E3F] transition mt-0.5">
+            <h3 className="font-semibold text-sm text-slate-900 line-clamp-1 group-hover:text-[#024622] transition mt-0.5">
               {listing.name}
             </h3>
             <p className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5 truncate">
@@ -141,28 +141,28 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             </p>
           </div>
           {listing.starRating ? (
-            <div className="shrink-0 flex items-center gap-0.5 text-xs font-bold text-slate-800 bg-yellow-50 border border-yellow-100 px-2 py-1 rounded-lg">
-              <span className="text-yellow-400 text-[10px]">★</span>
+            <div className="shrink-0 flex items-center gap-0.5 text-xs font-bold text-slate-800 bg-amber-50 border border-amber-100 px-2 py-1 rounded-lg">
+              <span className="text-amber-400 text-[10px]">★</span>
               {listing.starRating}
             </div>
           ) : null}
         </div>
 
-        <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between">
+        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
           <div>
-            <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Per {unit}</p>
+            <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Per {unit}</p>
             <div className="flex items-baseline gap-1.5">
-              <p className="text-base font-black text-[#0B1E3F]">
+              <p className="text-base font-bold text-[#024622]">
                 {listing.currency} {displayPrice > 0 ? displayPrice.toLocaleString() : "—"}
               </p>
               {hasPromo && basePrice > 0 && (
-                <p className="text-[10px] text-slate-400 line-through font-medium">
+                <p className="text-[10px] text-slate-400 line-through">
                   {basePrice.toLocaleString()}
                 </p>
               )}
             </div>
           </div>
-          <div className="text-[10px] font-semibold text-slate-500 bg-slate-50 border border-slate-100 px-2 py-1.5 rounded-lg">
+          <div className="text-[10px] font-medium text-slate-500 bg-slate-50 border border-slate-100 px-2 py-1.5 rounded-lg">
             {isCar ? (
               <>{listing.seats || 4} seats · {listing.transmission || "Auto"}</>
             ) : (
@@ -174,4 +174,5 @@ export const ListingCard: React.FC<ListingCardProps> = ({
     </div>
   );
 };
+
 export default ListingCard;

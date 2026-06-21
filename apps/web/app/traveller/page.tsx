@@ -119,7 +119,7 @@ function StyledDateInput({
       <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
         {label}
       </label>
-      <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 gap-2 hover:border-slate-400 focus-within:border-[#166534] transition-colors cursor-pointer">
+      <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 gap-2 hover:border-slate-400 focus-within:border-[#1D8D2B] transition-colors cursor-pointer">
         {/* Calendar icon — pointer-events-none so input behind receives the click */}
         <svg className="w-3.5 h-3.5 text-slate-400 shrink-0 pointer-events-none z-10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1261,78 +1261,73 @@ export default function TravellerDashboard() {
   if (!ready) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">
-        <div className="animate-spin h-10 w-10 border-4 border-[#166534] border-t-transparent rounded-full" />
+        <div className="animate-spin h-10 w-10 border-4 border-[#1D8D2B] border-t-transparent rounded-full" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans selection:bg-[#166534] selection:text-white antialiased">
-      {/* Dynamic Premium Header Navbar */}
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans selection:bg-[#0c2614] selection:text-white antialiased">
+      {/* Header */}
       {lockToken ? (
-        <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between shadow-sm">
+        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex items-center justify-between">
           <button
-            onClick={() => {
-              setSelectedListingId(null);
-              setDetailListing(null);
-              abandonLock();
-            }}
-            className="text-xl font-bold text-slate-900 tracking-tight hover:opacity-80 transition"
+            onClick={() => { setSelectedListingId(null); setDetailListing(null); abandonLock(); }}
+            className="text-xl font-serif font-bold text-[#0c2614] tracking-tight hover:opacity-80 transition"
           >
-            <span className="text-[#166534]">Kainook</span>
+            Kainook
           </button>
           <div className="flex items-center gap-3">
-            <div className="bg-[#F1F5F9] border border-slate-200 px-3.5 py-1.5 rounded-xl text-xs font-semibold font-mono tracking-wider flex items-center gap-2 text-[#166534] shadow-sm">
-              <svg className="w-4 h-4 text-[#166534] animate-pulse" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <div className="bg-slate-50 border border-slate-200 px-4 py-1.5 rounded-full text-xs font-mono tracking-wider flex items-center gap-2 text-[#0c2614]">
+              <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <span>
-                {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
-              </span>
+              {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
             </div>
-            <button
-              onClick={handleLogout}
-              className="rounded-full bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600 transition"
-            >
+            <button onClick={handleLogout} className="text-xs font-medium text-slate-400 hover:text-red-500 transition">
               Logout
             </button>
           </div>
         </header>
       ) : (
-        <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-3.5 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/traveller" onClick={() => { setActiveTab("home"); setSelectedListingId(null); }} className="text-xl font-bold text-slate-900 tracking-tight">
-              <span className="text-[#166534]">Kainook</span>
+        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-10">
+            <Link
+              href="/traveller"
+              onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
+              className="text-xl font-serif font-bold text-[#0c2614] tracking-tight"
+            >
+              Kainook
             </Link>
-            <nav className="hidden md:flex items-center gap-7">
+            <nav className="hidden md:flex items-center gap-8">
               <button
                 onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                className={`text-sm font-medium transition hover:text-[#166534] ${activeTab === "home" ? "text-[#166534] font-semibold" : "text-slate-600"}`}
+                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "home" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
               >
-                Explore
+                Destinations
               </button>
               <button
                 onClick={() => { setSearchCategory("hotel"); setSelectedListingId(null); handleSearch(undefined, "hotel"); }}
-                className={`text-sm font-medium transition hover:text-[#166534] ${activeTab === "search" && searchCategory === "hotel" ? "text-[#166534] font-semibold" : "text-slate-600"}`}
+                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "hotel" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
               >
                 Hotels
               </button>
               <button
                 onClick={() => { setSearchCategory("apartment"); setSelectedListingId(null); handleSearch(undefined, "apartment"); }}
-                className={`text-sm font-medium transition hover:text-[#166534] ${activeTab === "search" && searchCategory === "apartment" ? "text-[#166534] font-semibold" : "text-slate-600"}`}
+                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "apartment" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
               >
                 Apartments
               </button>
               <button
                 onClick={() => { setSearchCategory("car"); setSelectedListingId(null); handleSearch(undefined, "car"); }}
-                className={`text-sm font-medium transition hover:text-[#166534] ${activeTab === "search" && searchCategory === "car" ? "text-[#166534] font-semibold" : "text-slate-600"}`}
+                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "car" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
               >
-                Cars
+                Car Rentals
               </button>
               {user && (
                 <button
                   onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); }}
-                  className={`text-sm font-medium transition hover:text-[#166534] ${activeTab === "bookings" ? "text-[#166534] font-semibold" : "text-slate-600"}`}
+                  className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "bookings" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
                 >
                   My Reservations
                 </button>
@@ -1340,53 +1335,39 @@ export default function TravellerDashboard() {
             </nav>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Globe icon */}
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 cursor-default hover:bg-slate-100 transition" title="Language">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
-              </svg>
-            </div>
-            {/* Bell */}
-            <div className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 cursor-default hover:bg-slate-100 transition" title="Notifications coming soon">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </div>
-            {/* Mobile hamburger */}
-            <button onClick={() => setMobileNavOpen(true)} className="md:hidden flex items-center justify-center w-9 h-9 rounded-xl border border-slate-200 hover:bg-slate-50 transition" aria-label="Open menu">
+          <div className="flex items-center gap-4">
+            {/* Mobile menu */}
+            <button onClick={() => setMobileNavOpen(true)} className="md:hidden flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 hover:bg-slate-50 transition" aria-label="Open menu">
               <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
 
             {!hasAuthToken && (
               <>
-                <Link href="/auth/login" className="hidden sm:inline text-sm font-semibold text-slate-700 hover:text-[#166534] transition px-2">
+                <Link href="/auth/login" className="hidden sm:block text-sm font-medium text-slate-500 hover:text-[#0c2614] transition">
                   Sign In
                 </Link>
-                <Link href="/auth/login" className="rounded-full bg-[#22c55e] px-5 py-2 text-sm font-semibold text-white hover:bg-[#16a34a] transition shadow-sm">
+                <Link href="/auth/login" className="rounded-full bg-[#0c2614] hover:bg-[#081b0d] px-5 py-2 text-sm font-semibold text-white transition shadow-sm">
                   Sign Up
                 </Link>
               </>
             )}
 
             {(user || hasAuthToken) && !user && (
-              <button onClick={handleLogout} className="rounded-full bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 transition">
-                Logout
-              </button>
+              <button onClick={handleLogout} className="text-sm font-medium text-slate-400 hover:text-red-500 transition">Logout</button>
             )}
 
             {user && (
-              <div className="flex items-center gap-2">
-                <button onClick={handleLogout} className="hidden sm:block text-sm font-semibold text-slate-500 hover:text-red-500 transition px-2">
+              <div className="flex items-center gap-3">
+                <button onClick={handleLogout} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-red-500 transition">
                   Logout
                 </button>
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full py-1 px-3 shadow-sm">
-                  <div className="w-7 h-7 rounded-full bg-[#166534] text-white flex items-center justify-center font-bold uppercase text-xs">
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full py-1.5 px-3 shadow-sm cursor-pointer hover:shadow-md transition">
+                  <div className="w-7 h-7 rounded-full bg-[#0c2614] text-white flex items-center justify-center font-bold uppercase text-xs">
                     {user.firstName[0]}
                   </div>
                   <div className="hidden sm:block text-left">
                     <p className="text-xs font-semibold text-slate-800">{user.firstName}</p>
-                    <p className="text-[10px] text-[#166534] font-bold uppercase">{user.currentTier || "Bronze"}</p>
+                    <p className="text-[10px] text-[#1D8D2B] font-bold uppercase tracking-widest">{user.currentTier || "Bronze"}</p>
                   </div>
                 </div>
               </div>
@@ -1406,14 +1387,14 @@ export default function TravellerDashboard() {
                 setDetailListing(null);
                 abandonLock();
               }}
-              className="lg:col-span-12 flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#166534] transition shrink-0 uppercase tracking-wide"
+              className="lg:col-span-12 flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#1D8D2B] transition shrink-0 uppercase tracking-wide"
             >
               <span>←</span> Back to Search Results
             </button>
 
             {loadingDetail ? (
               <div className="lg:col-span-12 py-32 flex justify-center">
-                <div className="animate-spin h-8 w-8 border-4 border-[#166534] border-t-transparent rounded-full" />
+                <div className="animate-spin h-8 w-8 border-4 border-[#1D8D2B] border-t-transparent rounded-full" />
               </div>
             ) : detailListing ? (
               <>
@@ -1424,7 +1405,7 @@ export default function TravellerDashboard() {
                   </h1>
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-3 text-sm font-semibold text-slate-700">
-                      {detailListing.starRating && <span className="flex items-center gap-1"><span className="text-[#166534]">⭐</span> {detailListing.starRating}</span>}
+                      {detailListing.starRating && <span className="flex items-center gap-1"><span className="text-[#1D8D2B]">⭐</span> {detailListing.starRating}</span>}
                       <span className="text-slate-400">•</span>
                       <span className="underline cursor-pointer hover:text-slate-900">{detailListing.address}, {detailListing.town}, {detailListing.country}</span>
                     </div>
@@ -1703,7 +1684,7 @@ export default function TravellerDashboard() {
                           <button
                             onClick={handleInitiateLock}
                             disabled={lockingListing || availabilityStatus === "unavailable" || availabilityStatus === "checking"}
-                            className="w-full py-3.5 bg-[#166534] hover:bg-[#14532d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm"
+                            className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm"
                           >
                             {lockingListing ? "Securing your dates…" : "Reserve — You won't be charged yet"}
                           </button>
@@ -1743,8 +1724,8 @@ export default function TravellerDashboard() {
                               {steps.map((s, i) => (
                                 <React.Fragment key={s.key}>
                                   {i > 0 && <div className="flex-1 h-px bg-slate-200" />}
-                                  <div className={`flex items-center gap-1 shrink-0 ${i < currentIdx ? "text-emerald-600" : i === currentIdx ? "text-[#166534]" : "text-slate-300"}`}>
-                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${i < currentIdx ? "bg-emerald-500 text-white" : i === currentIdx ? "bg-[#166534] text-white" : "bg-slate-200 text-slate-400"}`}>
+                                  <div className={`flex items-center gap-1 shrink-0 ${i < currentIdx ? "text-emerald-600" : i === currentIdx ? "text-[#1D8D2B]" : "text-slate-300"}`}>
+                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${i < currentIdx ? "bg-emerald-500 text-white" : i === currentIdx ? "bg-[#0c2614] text-white" : "bg-slate-200 text-slate-400"}`}>
                                       {i < currentIdx ? (
                                         <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                                       ) : i + 1}
@@ -1849,7 +1830,7 @@ export default function TravellerDashboard() {
                                       onChange={(e) => setVoucherCode(e.target.value)}
                                       className="bg-transparent border-0 focus:ring-0 focus:outline-none text-xs text-slate-800 flex-1 min-w-0" />
                                     <button type="button" onClick={handleVoucherApply}
-                                      className="text-[10px] font-bold text-[#166534] border border-[#166534] px-2.5 py-1 rounded-lg hover:bg-[#166534] hover:text-white transition shrink-0">Apply</button>
+                                      className="text-[10px] font-bold text-[#1D8D2B] border border-[#1D8D2B] px-2.5 py-1 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
                                   </div>
                                 )}
                                 {voucherApplied && <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied</p>}
@@ -1872,7 +1853,7 @@ export default function TravellerDashboard() {
                               </div>
 
                               <button type="button" onClick={() => { setCheckoutStep("details"); fetchSavedMethods(); }}
-                                className="w-full py-3.5 bg-[#166534] hover:bg-[#14532d] text-white font-bold rounded-xl transition text-sm">
+                                className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-xl transition text-sm">
                                 Continue to Guest Details →
                               </button>
                               <button type="button" onClick={abandonLock}
@@ -1887,21 +1868,21 @@ export default function TravellerDashboard() {
                         {checkoutStep === "details" && (<>
                           <div className="space-y-2.5">
                             <div className="grid grid-cols-2 gap-2">
-                              <input type="text" required placeholder="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534]" />
-                              <input type="text" required placeholder="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534]" />
+                              <input type="text" required placeholder="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                              <input type="text" required placeholder="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
                             </div>
-                            <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534]" />
-                            <input type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534]" />
-                            <textarea placeholder="Special requests (optional)" value={specialRequests} onChange={(e) => setSpecialRequests(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534] resize-none" />
+                            <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                            <input type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                            <textarea placeholder="Special requests (optional)" value={specialRequests} onChange={(e) => setSpecialRequests(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B] resize-none" />
                             {detailListing.category === "car" && (
-                              <input type="number" required min="18" max="99" placeholder="Driver Age" value={driverAge} onChange={(e) => setDriverAge(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534]" />
+                              <input type="number" required min="18" max="99" placeholder="Driver Age" value={driverAge} onChange={(e) => setDriverAge(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
                             )}
                           </div>
 
                           {/* Voucher */}
                           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex gap-2 items-center">
                             <input type="text" placeholder="Promo / voucher code" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0" />
-                            <button type="button" onClick={handleVoucherApply} className="text-xs font-bold text-[#166534] border border-[#166534] px-3 py-1.5 rounded-lg hover:bg-[#166534] hover:text-white transition shrink-0">Apply</button>
+                            <button type="button" onClick={handleVoucherApply} className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-1.5 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
                           </div>
                           {voucherApplied && <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied — {detailListing.currency} {voucherDiscount.toLocaleString()} off</p>}
                           {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
@@ -1935,7 +1916,7 @@ export default function TravellerDashboard() {
                                           setSelectedMethodId(m.id);
                                           setPaymentProvider(m.paymentProvider);
                                         }}
-                                        className={`w-full flex items-center gap-3 px-3 py-2.5 border rounded-xl text-xs font-semibold transition ${isSelected ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"}`}
+                                        className={`w-full flex items-center gap-3 px-3 py-2.5 border rounded-xl text-xs font-semibold transition ${isSelected ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"}`}
                                       >
                                         {m.paymentProvider === "stripe" ? (
                                           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
@@ -1951,7 +1932,7 @@ export default function TravellerDashboard() {
                                   <button
                                     type="button"
                                     onClick={() => { setSelectedMethodId(null); setPaymentProvider("stripe"); }}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 border rounded-xl text-xs font-semibold transition ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-600 border-dashed border-slate-300 hover:border-slate-500"}`}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 border rounded-xl text-xs font-semibold transition ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-dashed border-slate-300 hover:border-slate-500"}`}
                                   >
                                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
                                     Add new card
@@ -1965,12 +1946,12 @@ export default function TravellerDashboard() {
                                   {savedMethods.length === 0 && (
                                     <div className="flex gap-2">
                                       <button type="button" onClick={() => { setPaymentProvider("stripe"); setSelectedMethodId(null); }}
-                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
+                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                                         Card
                                       </button>
                                       <button type="button" onClick={() => { setPaymentProvider("tara"); setSelectedMethodId(null); }}
-                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${!selectedMethodId && paymentProvider === "tara" ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
+                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${!selectedMethodId && paymentProvider === "tara" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                                         M-Pesa
                                       </button>
@@ -1979,7 +1960,7 @@ export default function TravellerDashboard() {
                                   {paymentProvider === "tara" && !selectedMethodId && (
                                     <input type="tel" required placeholder="Mobile number e.g. +254712345678" value={mobileNumber}
                                       onChange={(e) => setMobileNumber(e.target.value)}
-                                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534]" />
+                                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
                                   )}
                                   {paymentProvider === "stripe" && !selectedMethodId && (
                                     <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
@@ -2060,7 +2041,7 @@ export default function TravellerDashboard() {
                               )}
                             </div>
                           )}
-                          <button type="button" onClick={handleContinueToReview} className="w-full py-3.5 bg-[#166534] hover:bg-[#14532d] text-white font-bold rounded-xl transition text-sm mt-1">
+                          <button type="button" onClick={handleContinueToReview} className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-xl transition text-sm mt-1">
                             Continue to Review →
                           </button>
                           <button type="button" onClick={abandonLock} className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition mt-1">
@@ -2194,7 +2175,7 @@ export default function TravellerDashboard() {
                 <p className="mt-2 text-sm">Please go back to search or select a different listing.</p>
                 <button
                   onClick={() => { setSelectedListingId(null); setActiveTab("home"); }}
-                  className="mt-6 inline-flex items-center justify-center rounded-full bg-[#166534] px-6 py-3 text-sm font-semibold text-white hover:bg-[#14532d] transition"
+                  className="mt-6 inline-flex items-center justify-center rounded-full bg-[#0c2614] px-6 py-3 text-sm font-semibold text-white hover:bg-[#081b0d] transition"
                 >
                   Return to Search
                 </button>
@@ -2202,76 +2183,65 @@ export default function TravellerDashboard() {
             )}
           </div>
         ) : activeTab === "home" ? (
-          // VIEW 1: FULL HOME PAGE — Hero + Popular Destinations + Featured + Promotions + Why Us + Footer
+          // VIEW 1: FULL HOME PAGE
           <div>
-            {/* Hero — height = viewport minus navbar (68px) and ticker (40px) so ticker is always in-frame */}
-            <div className="relative w-full bg-slate-900 flex items-center justify-center overflow-hidden" style={{ height: "calc(100vh - 108px)", minHeight: "400px", maxHeight: "720px" }}>
+            {/* Hero */}
+            <div className="relative w-full flex items-center justify-center overflow-hidden" style={{ height: "85vh", minHeight: "480px" }}>
               <img
-                src="https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?w=1920&q=95"
-                alt="Stunning alpine lake surrounded by mountains"
-                className="absolute inset-0 w-full h-full object-cover"
+                src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1920&q=95"
+                alt="Lakeside hotel at evening"
+                className="absolute inset-0 w-full h-full object-cover object-center"
               />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/20 to-black/55"></div>
+              {/* Dark cinematic overlay */}
+              <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/35 to-black/75" />
+              {/* Bottom blend — fades hero into the dark-green ticker below */}
+              <div className="absolute bottom-0 left-0 right-0 h-36 bg-gradient-to-t from-[#0c2614] to-transparent pointer-events-none" />
 
-              <div className="relative z-10 max-w-4xl mx-auto px-6 text-center space-y-5 py-10">
-                <h1 className="text-4xl md:text-5xl font-bold text-white leading-tight drop-shadow-lg">
-                  Find your perfect stay, anywhere.
+              <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center">
+                <p className="text-white/55 text-[10px] font-semibold tracking-[0.4em] uppercase mb-3">Private Collections 2026</p>
+                <h1 className="text-4xl md:text-6xl lg:text-7xl font-serif italic font-light text-white leading-tight drop-shadow-xl mb-5 md:mb-7">
+                  Extraordinary Stays,<br />Unforgettable Journeys
                 </h1>
-                <p className="text-white/80 text-base md:text-lg font-light drop-shadow">
-                  From high-end jungle retreats to sleek urban apartments, experience travel redesigned for the modern explorer.
-                </p>
 
-                {/* Search Card */}
-                <div className="bg-white rounded-2xl p-5 shadow-2xl max-w-4xl mx-auto">
-                  {/* Tabs: Stays / Apartments / Cars */}
-                  <div className="flex border-b border-slate-200 pb-3 mb-4 gap-6">
+                {/* Category pills */}
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  {([
+                    { key: "hotel" as const, label: "Hotels", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg> },
+                    { key: "apartment" as const, label: "Apartments", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg> },
+                    { key: "car" as const, label: "Cars", icon: <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" /><circle cx="7" cy="17" r="2" /><path d="M9 17h6" /><circle cx="17" cy="17" r="2" /></svg> },
+                  ] as const).map(({ key, label, icon }) => (
                     <button
-                      onClick={() => { setSearchCategory("hotel"); loadQuickResults("hotel"); }}
-                      className={`flex items-center gap-2 pb-2 text-sm font-semibold border-b-2 transition ${searchCategory === "hotel" ? "border-[#166534] text-[#166534]" : "border-transparent text-slate-400 hover:text-[#166534]"}`}
+                      key={key}
+                      onClick={() => { setSearchCategory(key); }}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition border ${
+                        searchCategory === key
+                          ? "bg-white text-[#0c2614] border-white shadow-md"
+                          : "bg-white/15 text-white border-white/30 hover:bg-white/25 backdrop-blur-sm"
+                      }`}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                      </svg>
-                      <span>Stays</span>
+                      {icon}
+                      {label}
                     </button>
-                    <button
-                      onClick={() => { setSearchCategory("apartment"); loadQuickResults("apartment"); }}
-                      className={`flex items-center gap-2 pb-2 text-sm font-semibold border-b-2 transition ${searchCategory === "apartment" ? "border-[#166534] text-[#166534]" : "border-transparent text-slate-400 hover:text-[#166534]"}`}
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                      </svg>
-                      <span>Apartments</span>
-                    </button>
-                    <button
-                      onClick={() => { setSearchCategory("car"); loadQuickResults("car"); }}
-                      className={`flex items-center gap-2 pb-2 text-sm font-semibold border-b-2 transition ${searchCategory === "car" ? "border-[#166534] text-[#166534]" : "border-transparent text-slate-400 hover:text-[#166534]"}`}
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" />
-                        <circle cx="7" cy="17" r="2" />
-                        <path d="M9 17h6" />
-                        <circle cx="17" cy="17" r="2" />
-                      </svg>
-                      <span>Cars</span>
-                    </button>
-                  </div>
+                  ))}
+                </div>
 
-                  {/* Search Form — single horizontal row */}
-                  <form onSubmit={handleSearch} className="text-left">
-                    <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
-                      {/* Destination */}
-                      <div className="relative flex-[2] min-w-0">
-                        <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Destination</label>
-                        <div className="relative flex items-center">
-                          <svg className="absolute left-3 w-3.5 h-3.5 text-slate-400 shrink-0 z-10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
+                {/* Unified flat search bar */}
+                <form onSubmit={handleSearch}>
+                  <div className="relative bg-white rounded-2xl shadow-2xl flex flex-col md:flex-row items-stretch overflow-visible">
+
+                    {/* Destination */}
+                    <div className="relative flex-[2] min-w-0">
+                      <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200">
+                        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Where to?</p>
                           <input
                             type="text"
                             required
-                            placeholder="Where are you going?"
+                            placeholder="Destination"
                             value={searchDestination}
                             onChange={(e) => {
                               const val = e.target.value;
@@ -2295,68 +2265,92 @@ export default function TravellerDashboard() {
                             }}
                             onFocus={() => setShowSuggestions(true)}
                             onBlur={() => setTimeout(() => { setShowSuggestions(false); setNominatimResults([]); }, 220)}
-                            className="w-full pl-8 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#166534]"
+                            className="w-full bg-transparent border-none outline-none text-sm font-semibold text-slate-800 placeholder-slate-400"
                           />
                         </div>
-                        {/* Autocomplete dropdown */}
-                        {showSuggestions && (nominatimResults.length > 0 || apiSuggestions.filter(s => s.toLowerCase().includes(searchDestination.toLowerCase())).length > 0) && (
-                          <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200/80 rounded-xl shadow-2xl z-50 overflow-hidden max-h-56 overflow-y-auto">
-                            {nominatimResults.length > 0 ? nominatimResults.map((r, i) => (
-                              <button key={i} type="button"
-                                onMouseDown={() => { setSearchDestination(r.display_name.split(",").slice(0, 2).join(",").trim()); setShowSuggestions(false); setNominatimResults([]); }}
-                                className="w-full px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-[#166534] hover:text-white transition-colors text-left flex items-center gap-2"
-                              >
-                                <svg className="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                <span className="truncate">{r.display_name.split(",").slice(0, 3).join(", ")}</span>
-                              </button>
-                            )) : apiSuggestions.filter(s => s.toLowerCase().includes(searchDestination.toLowerCase())).map((s, i) => (
-                              <button key={i} type="button" onMouseDown={() => { setSearchDestination(s); setShowSuggestions(false); }}
-                                className="w-full px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-[#166534] hover:text-white transition-colors text-left flex items-center gap-2">
-                                <svg className="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                                <span className="truncate">{s}</span>
-                              </button>
-                            ))}
+                      </div>
+                      {/* Autocomplete dropdown */}
+                      {showSuggestions && (nominatimResults.length > 0 || apiSuggestions.filter(s => s.toLowerCase().includes(searchDestination.toLowerCase())).length > 0) && (
+                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200/80 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-56 overflow-y-auto">
+                          {nominatimResults.length > 0 ? nominatimResults.map((r, i) => (
+                            <button key={i} type="button"
+                              onMouseDown={() => { setSearchDestination(r.display_name.split(",").slice(0, 2).join(",").trim()); setShowSuggestions(false); setNominatimResults([]); }}
+                              className="w-full px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-[#0c2614] hover:text-white transition-colors text-left flex items-center gap-2"
+                            >
+                              <svg className="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                              <span className="truncate">{r.display_name.split(",").slice(0, 3).join(", ")}</span>
+                            </button>
+                          )) : apiSuggestions.filter(s => s.toLowerCase().includes(searchDestination.toLowerCase())).map((s, i) => (
+                            <button key={i} type="button" onMouseDown={() => { setSearchDestination(s); setShowSuggestions(false); }}
+                              className="w-full px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-[#0c2614] hover:text-white transition-colors text-left flex items-center gap-2">
+                              <svg className="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                              <span className="truncate">{s}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Date fields */}
+                    {searchCategory === "car" ? (
+                      <>
+                        <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
+                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { const el = document.getElementById("hero-pickup") as HTMLInputElement; el?.showPicker?.(); el?.focus(); }}>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Pickup</p>
+                            <p className={`text-sm font-semibold ${searchPickupDate ? "text-slate-800" : "text-slate-400"}`}>
+                              {searchPickupDate ? new Date(searchPickupDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "Add date"}
+                            </p>
+                            <input id="hero-pickup" type="date" min={getTodayString()} value={searchPickupDate} onChange={e => setSearchPickupDate(e.target.value)} className="sr-only" />
                           </div>
-                        )}
-                      </div>
+                        </div>
+                        <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
+                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { const el = document.getElementById("hero-return") as HTMLInputElement; el?.showPicker?.(); el?.focus(); }}>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Return</p>
+                            <p className={`text-sm font-semibold ${searchReturnDate ? "text-slate-800" : "text-slate-400"}`}>
+                              {searchReturnDate ? new Date(searchReturnDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "Add date"}
+                            </p>
+                            <input id="hero-return" type="date" min={searchPickupDate || getTodayString()} value={searchReturnDate} onChange={e => setSearchReturnDate(e.target.value)} className="sr-only" />
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
+                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { const el = document.getElementById("hero-checkin") as HTMLInputElement; el?.showPicker?.(); el?.focus(); }}>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Check-in</p>
+                            <p className={`text-sm font-semibold ${searchCheckIn ? "text-slate-800" : "text-slate-400"}`}>
+                              {searchCheckIn ? new Date(searchCheckIn + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "Add date"}
+                            </p>
+                            <input id="hero-checkin" type="date" min={getTodayString()} value={searchCheckIn} onChange={e => setSearchCheckIn(e.target.value)} className="sr-only" />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
+                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { const el = document.getElementById("hero-checkout") as HTMLInputElement; el?.showPicker?.(); el?.focus(); }}>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Check-out</p>
+                            <p className={`text-sm font-semibold ${searchCheckOut ? "text-slate-800" : "text-slate-400"}`}>
+                              {searchCheckOut ? new Date(searchCheckOut + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "Add date"}
+                            </p>
+                            <input id="hero-checkout" type="date" min={searchCheckIn || getTodayString()} value={searchCheckOut} onChange={e => setSearchCheckOut(e.target.value)} className="sr-only" />
+                          </div>
+                        </div>
 
-                      {/* Dates — two labelled fields side by side, same row level as Destination */}
-                      <div className="flex-[2] min-w-0 grid grid-cols-2 gap-2">
-                        {searchCategory === "car" ? (
-                          <>
-                            <StyledDateInput label="Pickup" value={searchPickupDate} onChange={setSearchPickupDate} min={getTodayString()} required />
-                            <StyledDateInput label="Return" value={searchReturnDate} onChange={setSearchReturnDate} min={searchPickupDate || getTodayString()} required />
-                          </>
-                        ) : (
-                          <>
-                            <StyledDateInput label="Check-in" value={searchCheckIn} onChange={setSearchCheckIn} min={getTodayString()} required />
-                            <StyledDateInput label="Check-out" value={searchCheckOut} onChange={setSearchCheckOut} min={searchCheckIn || getTodayString()} required />
-                          </>
-                        )}
-                      </div>
-
-                      {/* Guests — stays only */}
-                      {searchCategory !== "car" && (
-                        <div className="relative flex-1 min-w-0">
-                          <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Guests</label>
-                          <button
-                            type="button"
-                            onClick={() => setShowGuestPicker((v) => !v)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-[#166534] flex items-center justify-between"
-                          >
-                            <span className="flex items-center gap-2">
-                              <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
-                              <span className="truncate">{searchAdults} adult{searchAdults !== 1 ? "s" : ""}{searchChildren > 0 ? `, ${searchChildren} child${searchChildren !== 1 ? "ren" : ""}` : ""}</span>
-                            </span>
-                            <svg className={`w-3 h-3 text-slate-400 transition-transform shrink-0 ${showGuestPicker ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                            </svg>
+                        {/* Guests */}
+                        <div className="relative flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
+                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <button type="button" onClick={() => setShowGuestPicker((v) => !v)} className="flex-1 min-w-0 text-left">
+                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Guests</p>
+                            <p className="text-sm font-semibold text-slate-800 truncate">
+                              {searchAdults} Adult{searchAdults !== 1 ? "s" : ""}{searchChildren > 0 ? `, ${searchChildren} Child${searchChildren !== 1 ? "ren" : ""}` : ""}
+                            </p>
                           </button>
-
                           {showGuestPicker && (
-                            <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 w-64 p-4 space-y-1">
+                            <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 w-72 p-4 space-y-1">
                               <div className="flex items-center justify-between py-3 border-b border-slate-100">
                                 <div><p className="text-sm font-semibold text-slate-800">Adults</p><p className="text-[10px] text-slate-400">Age 13+</p></div>
                                 <div className="flex items-center gap-3">
@@ -2381,150 +2375,134 @@ export default function TravellerDashboard() {
                                   <button type="button" onClick={() => setSearchRooms((r) => Math.min(8, r + 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 text-lg font-light">+</button>
                                 </div>
                               </div>
-                              <button type="button" onClick={() => setShowGuestPicker(false)} className="w-full py-2 bg-[#166534] text-white text-xs font-bold rounded-xl mt-2">Done</button>
+                              <button type="button" onClick={() => setShowGuestPicker(false)} className="w-full py-2 bg-[#0c2614] text-white text-xs font-bold rounded-xl mt-2">Done</button>
                             </div>
                           )}
                         </div>
-                      )}
+                      </>
+                    )}
 
-                      {/* Search button */}
+                    {/* Explore Now button */}
+                    <div className="p-2 flex items-center shrink-0">
                       <button
                         type="submit"
                         disabled={searching}
-                        className="shrink-0 py-2.5 px-6 bg-[#166534] hover:bg-[#14532d] disabled:opacity-60 text-white font-bold rounded-xl transition shadow-md flex items-center justify-center gap-2 text-xs uppercase tracking-wider"
+                        className="h-full w-full md:w-auto px-6 py-3 bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-60 text-white font-semibold rounded-xl transition flex items-center justify-center gap-2 text-sm whitespace-nowrap"
                       >
                         {searching ? (
-                          <><div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Searching</>
+                          <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Searching</>
                         ) : (
-                          <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> Search</>
+                          <><svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg> Explore Now</>
                         )}
                       </button>
                     </div>
-                  </form>
+                  </div>
 
-                  {/* Popular quick chips */}
-                  {!showQuickDrop && (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                      <span className="font-semibold">Popular:</span>
-                      {[["Cape Town", "South Africa"], ["Marrakesh", "Morocco"], ["Nairobi", "Kenya"], ["Lagos", "Nigeria"]].map(([city, country]) => (
-                        <button key={city} type="button"
-                          onClick={() => { const full = `${city}, ${country}`; setSearchDestination(full); handleSearch(undefined, searchCategory !== "car" ? "hotel" : "car", full); }}
-                          className="px-3 py-1 rounded-full border border-slate-300 hover:border-[#166534] hover:text-[#166534] transition bg-slate-50 hover:bg-green-50 font-medium">
-                          {city}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Quick-result dropdown */}
-                  {showQuickDrop && (
-                    <div className="mt-4 border-t border-slate-200/60 pt-4">
-                      {loadingQuickDrop ? (
-                        <div className="py-5 flex items-center justify-center gap-2 text-xs text-slate-500">
-                          <div className="w-4 h-4 border-2 border-[#166534] border-t-transparent rounded-full animate-spin" />
-                          Loading {searchCategory === "car" ? "cars" : searchCategory + "s"}…
-                        </div>
-                      ) : quickResults.length === 0 ? (
-                        <p className="py-4 text-center text-xs text-slate-400">No listings found — try a different location.</p>
-                      ) : (
-                        <>
-                          <div className="flex items-center justify-between mb-3">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                              Top {searchCategory === "car" ? "Car Rentals" : searchCategory === "apartment" ? "Apartments" : "Hotels"}
-                            </p>
-                            <div className="flex items-center gap-3">
-                              <button type="button" onClick={() => { setShowQuickDrop(false); handleSearch(undefined, searchCategory); }} className="text-[10px] font-bold text-[#166534] hover:underline uppercase tracking-wide">View all →</button>
-                              <button type="button" onClick={() => setShowQuickDrop(false)} className="text-slate-400 hover:text-slate-600 transition">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                              </button>
-                            </div>
-                          </div>
-                          <div className="space-y-1 max-h-72 overflow-y-auto">
-                            {quickResults.map((listing) => (
-                              <button key={listing.id} type="button" onClick={() => { setShowQuickDrop(false); handleSelectListing(listing.id); }}
-                                className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-[#166534]/5 transition-colors text-left group"
-                              >
-                                <div className="w-12 h-12 bg-slate-200 rounded-xl overflow-hidden shrink-0">
-                                  <ListingImage listingId={listing.id} alt={listing.name} className="w-full h-full object-cover"
-                                    fallbackNode={<div className="w-full h-full flex items-center justify-center text-xl text-slate-400">{searchCategory === "car" ? "🚗" : searchCategory === "apartment" ? "🏠" : "🏨"}</div>}
-                                  />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-bold text-slate-800 truncate group-hover:text-[#166534] transition-colors">{listing.name}</p>
-                                  <p className="text-[10px] text-slate-400 truncate mt-0.5">📍 {listing.town}{listing.country ? `, ${listing.country}` : ""}{listing.starRating ? `  ·  ⭐ ${listing.starRating}` : ""}</p>
-                                </div>
-                                <div className="shrink-0 text-right">
-                                  <p className="text-sm font-black text-[#166534]">{listing.currency} {(listing.pricePerNight || 0).toLocaleString()}</p>
-                                  <p className="text-[10px] text-slate-400">/{searchCategory === "car" ? "day" : "night"}</p>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
+                  {/* Trending chips */}
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
+                    <span className="text-white/50 font-medium tracking-wide">Trending:</span>
+                    {[["Cape Town", "South Africa"], ["Marrakesh", "Morocco"], ["Nairobi", "Kenya"], ["Lagos", "Nigeria"]].map(([city, country]) => (
+                      <button key={city} type="button"
+                        onClick={() => { const full = `${city}, ${country}`; setSearchDestination(full); handleSearch(undefined, searchCategory !== "car" ? "hotel" : "car", full); }}
+                        className="px-3 py-1 rounded-full border border-white/25 text-white/70 hover:border-white hover:text-white hover:bg-white/10 transition font-medium backdrop-blur-sm">
+                        {city}
+                      </button>
+                    ))}
+                  </div>
+                </form>
               </div>
             </div>
 
-            {/* ── PROMO TICKER ── */}
-            <div className="bg-[#c2410c] overflow-hidden py-2.5">
-              <div className="flex items-center gap-12 animate-[marquee_20s_linear_infinite] whitespace-nowrap">
+            {/* ── TICKER ── */}
+            <div className="bg-[#0c2614] overflow-hidden py-2">
+              <div className="flex items-center gap-16 animate-[marquee_25s_linear_infinite] whitespace-nowrap">
                 {Array.from({ length: 8 }).map((_, i) => (
-                  <span key={i} className="text-white text-xs font-bold tracking-widest flex items-center gap-3">
-                    <span className="text-yellow-300">⚡</span> 30% OFF ALL HOTELS THIS WEEK
+                  <span key={i} className="text-green-300/80 text-[10px] font-medium tracking-[0.25em] uppercase flex items-center gap-4">
+                    <span className="text-[#58B430]">✦</span> Exclusive Member Rates · Private Collections 2026 · Complimentary Concierge
                   </span>
                 ))}
               </div>
             </div>
 
-            {/* ── DISCOVER THE CONTINENT ── */}
-            <section className="max-w-7xl mx-auto px-4 sm:px-6 py-14">
-              <div className="mb-8">
-                <p className="text-xs font-bold text-[#166534] uppercase tracking-widest mb-1">Explore</p>
-                <h2 className="text-3xl font-bold text-slate-900">Discover the Continent</h2>
+            {/* ── CURATED WORLDS ── */}
+            <section className="max-w-7xl mx-auto px-4 sm:px-6 py-16">
+              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
+                <div>
+                  <p className="text-[10px] font-semibold text-[#1D8D2B] uppercase tracking-[0.3em] mb-2">Curated Worlds</p>
+                  <h2 className="text-3xl md:text-4xl font-serif text-slate-900 leading-snug">
+                    Discover Destinations<br className="hidden sm:block" /> Selected for the<br className="hidden sm:block" /> Discerning Traveler.
+                  </h2>
+                </div>
+                <button
+                  onClick={() => handleSearch(undefined, "hotel")}
+                  className="text-sm font-semibold text-[#0c2614] hover:text-[#1D8D2B] transition underline underline-offset-4 shrink-0"
+                >
+                  View All Destinations
+                </button>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {[
-                  { name: "Cape Town", country: "South Africa", img: "https://images.unsplash.com/photo-1580060839134-75a5edca2e99?w=600&q=80" },
-                  { name: "Marrakesh", country: "Morocco", img: "https://images.unsplash.com/photo-1539020140153-e479b8c22e70?w=600&q=80" },
-                  { name: "Nairobi", country: "Kenya", img: "https://images.unsplash.com/photo-1611348586304-df4ef5b9b7e9?w=600&q=80" },
-                  { name: "Zanzibar", country: "Tanzania", img: "https://images.unsplash.com/photo-1503614472-8c93d56e92ce?w=600&q=80" },
-                ].map((dest) => (
-                  <button
-                    key={dest.name}
-                    type="button"
-                    onClick={() => { setSearchDestination(`${dest.name}, ${dest.country}`); handleSearch(undefined, "hotel", `${dest.name}, ${dest.country}`); }}
-                    className="group relative aspect-[4/3] rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
-                  >
-                    <img src={dest.img} alt={dest.name} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-500" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-                    <div className="absolute bottom-0 left-0 p-4 text-left">
-                      <p className="text-white font-bold text-lg leading-tight drop-shadow">{dest.name}</p>
-                      <p className="text-white/75 text-xs font-medium">{dest.country}</p>
-                    </div>
-                  </button>
-                ))}
+
+              {/* Asymmetric grid: 1 large left + 2 stacked right */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Large left */}
+                <button
+                  type="button"
+                  onClick={() => { setSearchDestination("Amalfi Coast, Italy"); handleSearch(undefined, "hotel", "Amalfi Coast, Italy"); }}
+                  className="group relative rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all duration-300"
+                  style={{ minHeight: "420px" }}
+                >
+                  <img
+                    src="https://images.unsplash.com/photo-1533104816931-20fa691ff6ca?w=900&q=85"
+                    alt="Amalfi Coast, Italy"
+                    className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-700"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+                  <div className="absolute bottom-0 left-0 p-6 text-left">
+                    <p className="text-white font-serif text-2xl font-light leading-snug">Amalfi Coast, Italy</p>
+                    <p className="text-white/65 text-xs font-medium mt-1 tracking-wide">120+ Exclusive Properties</p>
+                  </div>
+                </button>
+
+                {/* Right column — 2 stacked */}
+                <div className="grid grid-rows-2 gap-4">
+                  {[
+                    { name: "Kyoto", country: "Japan", img: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600&q=85", props: "80+" },
+                    { name: "Santorini", country: "Greece", img: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=85", props: "95+" },
+                  ].map((dest) => (
+                    <button
+                      key={dest.name}
+                      type="button"
+                      onClick={() => { setSearchDestination(`${dest.name}, ${dest.country}`); handleSearch(undefined, "hotel", `${dest.name}, ${dest.country}`); }}
+                      className="group relative rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all duration-300"
+                      style={{ minHeight: "198px" }}
+                    >
+                      <img src={dest.img} alt={`${dest.name}, ${dest.country}`} className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition duration-700" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+                      <div className="absolute bottom-0 left-0 p-5 text-left">
+                        <p className="text-white font-serif text-xl font-light">{dest.name}, {dest.country}</p>
+                        <p className="text-white/65 text-xs font-medium mt-0.5 tracking-wide">{dest.props} Exclusive Properties</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
             </section>
 
-            {/* ── HIGHLY RATED STAYS ── */}
-            <section className="bg-slate-100 py-14 border-y border-slate-200">
+            {/* ── STAY IN EXCELLENCE ── */}
+            <section className="bg-[#f7f6f3] py-16 border-y border-slate-200/60">
               <div className="max-w-7xl mx-auto px-4 sm:px-6">
-                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-8">
+                <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-10">
                   <div>
-                    <p className="text-xs font-bold text-[#166534] uppercase tracking-widest mb-1">Top picks</p>
-                    <h2 className="text-3xl font-bold text-slate-900">Highly Rated Stays</h2>
+                    <p className="text-[10px] font-semibold text-[#1D8D2B] uppercase tracking-[0.3em] mb-2">Top Picks</p>
+                    <h2 className="text-3xl md:text-4xl font-serif text-slate-900">Stay in Excellence</h2>
                   </div>
                   <div className="flex gap-2">
                     {([{ key: "hotel", label: "Hotels" }, { key: "apartment", label: "Apartments" }, { key: "car", label: "Cars" }] as const).map(({ key, label }) => (
                       <button
                         key={key}
                         onClick={() => loadFeaturedListings(key)}
-                        className={`px-4 py-2 rounded-full text-sm font-semibold border transition ${featuredCategory === key
-                          ? "bg-[#166534] text-white border-[#166534]"
-                          : "bg-white text-slate-600 border-slate-300 hover:border-[#166534] hover:text-[#166534]"
+                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition ${featuredCategory === key
+                          ? "bg-[#0c2614] text-white border-[#0c2614]"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-[#0c2614] hover:text-[#0c2614]"
                           }`}
                       >
                         {label}
@@ -2566,7 +2544,7 @@ export default function TravellerDashboard() {
                   <div className="text-center mt-8">
                     <button
                       onClick={() => { setSearchCategory(featuredCategory); setActiveTab("search"); handleSearch(undefined, featuredCategory); }}
-                      className="inline-flex items-center gap-2 px-6 py-3 border-2 border-[#166534] text-[#166534] font-bold text-sm rounded-xl hover:bg-[#166534] hover:text-white transition"
+                      className="inline-flex items-center gap-2 px-6 py-3 border border-[#0c2614] text-[#0c2614] font-semibold text-sm rounded-full hover:bg-[#0c2614] hover:text-white transition"
                     >
                       View all {featuredCategory === "car" ? "cars" : featuredCategory + "s"}
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
@@ -2576,70 +2554,105 @@ export default function TravellerDashboard() {
               </div>
             </section>
 
-            {/* ── REWARDS SECTION ── */}
-            <section className="py-10 px-4 sm:px-6">
-              <div className="max-w-7xl mx-auto bg-[#024622] rounded-3xl py-14 px-8 sm:px-14 lg:px-16">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-stretch">
-                  {/* Left — text */}
-                  <div className="text-white space-y-6 flex flex-col justify-center">
-                    <h2 className="text-3xl lg:text-4xl font-bold leading-tight">Earn rewards on every booking</h2>
-                    <p className="text-green-300 text-sm leading-relaxed max-w-md">Unlock exclusive member rates, free upgrades, and priority support as you climb through our tiers.</p>
-                    <button
-                      onClick={() => { if (!user) { window.location.href = "/auth/login"; } }}
-                      className="self-start bg-[#1D8D2B] hover:bg-[#58B430] text-white font-bold px-8 py-3.5 rounded-full text-sm transition shadow-lg"
+            {/* ── ELEVATE YOUR EVERY EXPERIENCE ── */}
+            <section className="bg-[#0c2614] py-16 px-4 sm:px-6">
+              <div className="max-w-7xl mx-auto">
+                <div className="text-center mb-12">
+                  <p className="text-[10px] font-semibold text-[#58B430] uppercase tracking-[0.35em] mb-3">Kainook Privilege</p>
+                  <h2 className="text-3xl md:text-4xl font-serif font-light text-white leading-snug">Elevate Your Every Experience</h2>
+                  <p className="text-green-300/70 text-sm mt-3 max-w-md mx-auto">
+                    Join our membership programme to unlock exclusive rates, personal concierges, and first-class transfers.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+                  {[
+                    {
+                      tier: "Bronze",
+                      label: "THE ENTRY",
+                      level: "1 Stay",
+                      perks: ["Access to member-only pricing", "Welcome amenities"],
+                      border: "border-amber-700/30",
+                      iconBg: "bg-amber-700/20",
+                      popular: false,
+                      icon: (
+                        <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      tier: "Silver",
+                      label: "ACHIEVEMENT",
+                      level: "5 Stays",
+                      perks: ["Early check-in, late check-out", "Luxury suite upgrades"],
+                      border: "border-slate-400/25",
+                      iconBg: "bg-slate-400/15",
+                      popular: false,
+                      icon: (
+                        <svg className="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      tier: "Gold",
+                      label: "ACHIEVEMENT",
+                      level: "10 Stays",
+                      perks: ["Personal travel designer", "Sustainable breakfast"],
+                      border: "border-[#58B430]/50",
+                      iconBg: "bg-[#58B430]/15",
+                      popular: true,
+                      icon: (
+                        <svg className="w-6 h-6 text-[#58B430]" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 007.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 002.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 012.916.52 6.003 6.003 0 01-5.395 4.972m0 0a6.726 6.726 0 01-2.749 1.35m0 0a6.772 6.772 0 01-3.044 0" />
+                        </svg>
+                      ),
+                    },
+                    {
+                      tier: "Diamond",
+                      label: "REQUIREMENT",
+                      level: "Invitation Only",
+                      perks: ["24/7 dedicated butler", "Private jet transfers"],
+                      border: "border-cyan-400/25",
+                      iconBg: "bg-cyan-400/10",
+                      popular: false,
+                      icon: (
+                        <svg className="w-6 h-6 text-cyan-300" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                        </svg>
+                      ),
+                    },
+                  ].map((t) => (
+                    <div
+                      key={t.tier}
+                      className={`bg-[#0a1f0d] ${t.border} border rounded-2xl pt-6 pb-8 px-4 text-center text-white flex flex-col items-center gap-4 relative`}
                     >
-                      Join Kainook Plus
-                    </button>
-                  </div>
-                  {/* Right — tier cards fill full column width */}
-                  <div className="grid grid-cols-2 gap-4 w-full">
-                    {[
-                      {
-                        tier: "Bronze", level: "Level 1",
-                        icon: (
-                          <svg className="w-8 h-8 mx-auto text-amber-400" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 01-8 0M5 7H3a2 2 0 000 4h.5M19 7h2a2 2 0 010 4h-.5M12 16v5m-4 0h8M8 21H5m14 0h-3M12 3v4" />
-                          </svg>
-                        ),
-                        border: "border-amber-500/50", bg: "bg-[#015428]"
-                      },
-                      {
-                        tier: "Silver", level: "Level 2",
-                        icon: (
-                          <svg className="w-8 h-8 mx-auto text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 01-8 0M5 7H3a2 2 0 000 4h.5M19 7h2a2 2 0 010 4h-.5M12 16v5m-4 0h8M8 21H5m14 0h-3M12 3v4" />
-                          </svg>
-                        ),
-                        border: "border-slate-400/50", bg: "bg-[#015428]"
-                      },
-                      {
-                        tier: "Gold", level: "Level 3",
-                        icon: (
-                          <svg className="w-8 h-8 mx-auto text-yellow-400" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                          </svg>
-                        ),
-                        border: "border-yellow-500/50", bg: "bg-[#015428]"
-                      },
-                      {
-                        tier: "Diamond", level: "Elite",
-                        icon: (
-                          <svg className="w-8 h-8 mx-auto text-cyan-300" fill="none" stroke="currentColor" strokeWidth="1.6" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                          </svg>
-                        ),
-                        border: "border-cyan-400/50", bg: "bg-[#015428]"
-                      },
-                    ].map((t) => (
-                      <div key={t.tier} className={`${t.bg} ${t.border} border rounded-2xl py-8 px-4 text-center text-white flex flex-col items-center justify-center gap-3`}>
+                      {t.popular && (
+                        <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#58B430] text-white text-[9px] font-bold uppercase tracking-widest px-3 py-1 rounded-full whitespace-nowrap">
+                          Most Popular
+                        </span>
+                      )}
+                      <div className={`w-12 h-12 ${t.iconBg} rounded-2xl flex items-center justify-center`}>
                         {t.icon}
-                        <div>
-                          <p className="font-bold text-base">{t.tier}</p>
-                          <p className="text-green-400 text-xs mt-0.5">{t.level}</p>
-                        </div>
                       </div>
-                    ))}
-                  </div>
+                      <div>
+                        <p className="font-semibold text-base tracking-wide">{t.tier}</p>
+                        <p className="text-green-300/50 text-[10px] font-medium mt-0.5 tracking-widest uppercase">{t.perks[0]}</p>
+                      </div>
+                      <div className="border-t border-white/10 w-full pt-3 space-y-1">
+                        <p className="text-[9px] font-bold text-green-400/60 uppercase tracking-widest">{t.label}</p>
+                        <p className="text-white font-semibold text-sm">{t.level}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-center">
+                  <button
+                    onClick={() => { if (!user) { window.location.href = "/auth/login"; } }}
+                    className="bg-white hover:bg-green-50 text-[#0c2614] font-semibold px-8 py-3 rounded-full text-sm transition shadow-lg"
+                  >
+                    Join Kainook Privilege
+                  </button>
                 </div>
               </div>
             </section>
@@ -2659,8 +2672,8 @@ export default function TravellerDashboard() {
                         <ListingImage listingId={item.id} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-[#166534] uppercase tracking-wider">{item.category}</p>
-                        <p className="text-sm font-bold text-slate-900 line-clamp-1 group-hover:text-[#166534] transition">{item.name}</p>
+                        <p className="text-xs font-bold text-[#1D8D2B] uppercase tracking-wider">{item.category}</p>
+                        <p className="text-sm font-bold text-slate-900 line-clamp-1 group-hover:text-[#1D8D2B] transition">{item.name}</p>
                         <p className="text-[10px] text-slate-400 mt-0.5">{item.currency} {item.pricePerNight.toLocaleString()} / {item.category === "car" ? "day" : "night"}</p>
                       </div>
                     </button>
@@ -2670,21 +2683,21 @@ export default function TravellerDashboard() {
             )}
 
             {/* ── BENEFITS ── */}
-            <section className="bg-slate-50 py-16 border-t border-slate-100">
+            <section className="bg-white py-16 border-t border-slate-100">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 text-center">
-                <p className="text-xs font-bold text-[#166534] uppercase tracking-widest mb-2">BENEFITS</p>
-                <h2 className="text-3xl font-bold text-slate-900 mb-12">Travel with Confidence</h2>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+                <p className="text-[10px] font-semibold text-[#1D8D2B] uppercase tracking-[0.3em] mb-2">Why Kainook</p>
+                <h2 className="text-3xl md:text-4xl font-serif text-slate-900 mb-12">Crafted for the Discerning Traveler</h2>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-10">
                   {[
-                    { icon: "⚡", title: "Instant Booking", desc: "No waiting for approvals. Book your stay and receive confirmation in seconds." },
-                    { icon: "🛡️", title: "Secure Payments", desc: "Industry-standard encryption ensures your transactions are always safe." },
-                    { icon: "🌍", title: "Global Access", desc: "Over 10,000 properties curated across 40 countries and counting." },
-                    { icon: "🎧", title: "24/7 Concierge", desc: "Our team is always awake and ready to help with any part of your journey." },
+                    { icon: "⚡", title: "Instant Booking", desc: "Confirmed in seconds, no approval delays." },
+                    { icon: "🛡️", title: "Secure Payments", desc: "Bank-grade encryption on every transaction." },
+                    { icon: "🌍", title: "Global Portfolio", desc: "10,000+ curated properties across 40 countries." },
+                    { icon: "🎧", title: "24/7 Concierge", desc: "Personal support at every step of your journey." },
                   ].map((item) => (
                     <div key={item.title} className="flex flex-col items-center gap-3 text-center">
-                      <div className="w-14 h-14 bg-[#166534]/10 rounded-2xl flex items-center justify-center text-2xl">{item.icon}</div>
-                      <p className="text-slate-900 font-bold text-sm">{item.title}</p>
-                      <p className="text-slate-500 text-xs leading-relaxed">{item.desc}</p>
+                      <div className="w-14 h-14 bg-[#0c2614]/8 rounded-2xl flex items-center justify-center text-2xl border border-[#0c2614]/10">{item.icon}</div>
+                      <p className="text-slate-900 font-semibold text-sm">{item.title}</p>
+                      <p className="text-slate-400 text-xs leading-relaxed">{item.desc}</p>
                     </div>
                   ))}
                 </div>
@@ -2692,24 +2705,24 @@ export default function TravellerDashboard() {
             </section>
 
             {/* ── TESTIMONIALS ── */}
-            <section className="bg-white py-16 border-t border-slate-100">
+            <section className="bg-[#f7f6f3] py-16 border-t border-slate-100">
               <div className="max-w-7xl mx-auto px-4 sm:px-6">
-                <p className="text-xs font-bold text-[#166534] uppercase tracking-widest mb-2">VOICES</p>
-                <h2 className="text-3xl font-bold text-slate-900 mb-10">What Our Guests Say</h2>
+                <p className="text-[10px] font-semibold text-[#1D8D2B] uppercase tracking-[0.3em] mb-2">Guest Voices</p>
+                <h2 className="text-3xl md:text-4xl font-serif text-slate-900 mb-10">What Our Guests Say</h2>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {[
                     { rating: 5, text: "The curation of hotels on Kainook is unmatched. I found a boutique hotel in Morocco that I couldn't find anywhere else. Flawless experience!", name: "Amara Nwosu", location: "Lagos, Nigeria", initials: "AN" },
                     { rating: 5, text: "Easy, fast, and secure. The VIP rewards program actually delivers real value from the first booking. Highly recommended.", name: "Kofi Danku", location: "Accra, Ghana", initials: "KD" },
                     { rating: 5, text: "Travelling across Africa has never been this organised. The car rental feature integrated with my hotel booking saved me so much time.", name: "Sarah Louw", location: "Cape Town, SA", initials: "SL" },
                   ].map((t) => (
-                    <div key={t.name} className="bg-slate-50 rounded-2xl p-6 space-y-4 border border-slate-100">
-                      <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className="text-amber-400 text-sm">★</span>)}</div>
-                      <p className="text-slate-700 text-sm leading-relaxed">&ldquo;{t.text}&rdquo;</p>
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-[#166534] text-white flex items-center justify-center text-xs font-bold shrink-0">{t.initials}</div>
+                    <div key={t.name} className="bg-white rounded-2xl p-6 space-y-4 border border-slate-100 shadow-sm">
+                      <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className="text-amber-400 text-base">★</span>)}</div>
+                      <p className="text-slate-600 text-sm leading-relaxed font-light">&ldquo;{t.text}&rdquo;</p>
+                      <div className="flex items-center gap-3 pt-1 border-t border-slate-100">
+                        <div className="w-9 h-9 rounded-full bg-[#0c2614] text-white flex items-center justify-center text-[10px] font-bold shrink-0">{t.initials}</div>
                         <div>
-                          <p className="text-sm font-bold text-slate-900">{t.name}</p>
-                          <p className="text-xs text-slate-400">{t.location}</p>
+                          <p className="text-sm font-semibold text-slate-900">{t.name}</p>
+                          <p className="text-[10px] text-slate-400 tracking-wide">{t.location}</p>
                         </div>
                       </div>
                     </div>
@@ -2719,13 +2732,14 @@ export default function TravellerDashboard() {
             </section>
 
             {/* ── FOOTER ── */}
-            <footer className="bg-[#024622] text-green-300 py-14">
+            <footer className="bg-[#0c2614] text-green-300/70 py-14">
               <div className="max-w-7xl mx-auto px-4 sm:px-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
                   {/* Brand */}
                   <div className="col-span-2 md:col-span-1">
-                    <p className="text-white font-bold text-lg mb-2">Kainook</p>
-                    <p className="text-xs leading-relaxed mb-4">Premium travel experiences tailored for the global explorer. Discover, book, and enjoy the world's most unique destinations.</p>
+                    <p className="text-white font-serif text-xl font-light mb-1">Kainook</p>
+                    <p className="text-[10px] text-[#58B430]/70 uppercase tracking-[0.2em] mb-3">Private Collections</p>
+                    <p className="text-xs leading-relaxed mb-5">Redefining the standards of luxury travel through curated storytelling and architectural excellence.</p>
                     <div className="flex gap-3">
                       {[
                         { label: "Twitter/X", path: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" },
@@ -2740,30 +2754,30 @@ export default function TravellerDashboard() {
                   </div>
                   {/* Explore */}
                   <div>
-                    <p className="text-white text-xs font-bold uppercase tracking-widest mb-4">Explore</p>
-                    <ul className="space-y-2 text-xs">
-                      {["Hotels", "Apartments", "Cars", "Destinations", "List your property"].map(l => <li key={l}><a href="#" className="hover:text-white transition">{l}</a></li>)}
+                    <p className="text-white text-[10px] font-semibold uppercase tracking-[0.25em] mb-4">Explore</p>
+                    <ul className="space-y-2.5 text-xs">
+                      {["Destinations", "Hotels", "Villas", "Car Rentals", "Experiences"].map(l => <li key={l}><a href="#" className="hover:text-white transition-colors">{l}</a></li>)}
                     </ul>
                   </div>
-                  {/* Company */}
+                  {/* Legal */}
                   <div>
-                    <p className="text-white text-xs font-bold uppercase tracking-widest mb-4">Company</p>
-                    <ul className="space-y-2 text-xs">
-                      {["About Us", "Terms of Service", "Privacy Policy", "Contact Support", "Loyalty Program"].map(l => <li key={l}><a href="#" className="hover:text-white transition">{l}</a></li>)}
+                    <p className="text-white text-[10px] font-semibold uppercase tracking-[0.25em] mb-4">Kainook</p>
+                    <ul className="space-y-2.5 text-xs">
+                      {["Our Story", "Sustainability", "Rewards Program", "Press & Media", "Contact Us"].map(l => <li key={l}><a href="#" className="hover:text-white transition-colors">{l}</a></li>)}
                     </ul>
                   </div>
                   {/* Newsletter */}
                   <div>
-                    <p className="text-white text-xs font-bold uppercase tracking-widest mb-4">Newsletter</p>
-                    <p className="text-xs mb-4 leading-relaxed">Subscribe to get travel tips and exclusive deals in your inbox.</p>
+                    <p className="text-white text-[10px] font-semibold uppercase tracking-[0.25em] mb-4">Newsletter</p>
+                    <p className="text-xs mb-4 leading-relaxed">Receive curated travel inspiration and exclusive member offers.</p>
                     <div className="space-y-2">
-                      <input type="email" placeholder="Email address" className="w-full bg-[#015428] border border-[#015428] rounded-lg px-3 py-2 text-xs text-white placeholder-green-500 focus:outline-none focus:border-white" />
-                      <button className="w-full bg-white hover:bg-green-50 text-[#166534] text-xs font-bold py-2 rounded-lg transition">Subscribe</button>
+                      <input type="email" placeholder="Your email address" className="w-full bg-[#081b0d]/60 border border-[#081b0d] rounded-lg px-3 py-2 text-xs text-white placeholder-green-600 focus:outline-none focus:border-white/40" />
+                      <button className="w-full bg-white hover:bg-green-50 text-[#0c2614] text-xs font-semibold py-2 rounded-lg transition">Subscribe</button>
                     </div>
                   </div>
                 </div>
-                <div className="border-t border-[#015428] pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <p className="text-xs">© {new Date().getFullYear()} Kainook All rights reserved.</p>
+                <div className="border-t border-[#081b0d]/60 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-[10px] tracking-wide">© {new Date().getFullYear()} Kainook · All rights reserved.</p>
                   <div className="flex items-center gap-4">
                     {[
                       { label: "Twitter/X", path: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" },
@@ -2806,7 +2820,7 @@ export default function TravellerDashboard() {
                 </select>
                 <button
                   onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                  className="text-xs font-bold text-[#166534] border border-[#166534] px-3 py-2 rounded-xl hover:bg-[#166534] hover:text-white transition uppercase tracking-wide"
+                  className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-2 rounded-xl hover:bg-[#0c2614] hover:text-white transition uppercase tracking-wide"
                 >
                   New Search
                 </button>
@@ -2877,7 +2891,7 @@ export default function TravellerDashboard() {
                   </div>
                   <button
                     onClick={() => setShowInstantOnly((v) => !v)}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${showInstantOnly ? "bg-[#166534]" : "bg-slate-200"}`}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${showInstantOnly ? "bg-[#0c2614]" : "bg-slate-200"}`}
                   >
                     <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInstantOnly ? "translate-x-5" : ""}`} />
                   </button>
@@ -2917,7 +2931,7 @@ export default function TravellerDashboard() {
                         <button
                           key={star}
                           onClick={() => setSelectedRating(star === selectedRating ? null : star)}
-                          className={`flex-1 py-1.5 border rounded-xl text-xs font-semibold transition ${star === selectedRating ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+                          className={`flex-1 py-1.5 border rounded-xl text-xs font-semibold transition ${star === selectedRating ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
                         >
                           ★ {star}+
                         </button>
@@ -2948,7 +2962,7 @@ export default function TravellerDashboard() {
                                 active ? prev.filter((a) => a !== key) : [...prev, key]
                               )
                             }
-                            className={`py-1.5 px-2 border rounded-xl text-[10px] font-semibold transition text-left ${active ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+                            className={`py-1.5 px-2 border rounded-xl text-[10px] font-semibold transition text-left ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
                           >
                             {label}
                           </button>
@@ -2988,7 +3002,7 @@ export default function TravellerDashboard() {
                                 active ? prev.filter((a) => a !== t) : [...prev, t]
                               )
                             }
-                            className={`flex-1 py-1.5 border rounded-xl text-xs font-semibold capitalize transition ${active ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+                            className={`flex-1 py-1.5 border rounded-xl text-xs font-semibold capitalize transition ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
                           >
                             {t}
                           </button>
@@ -3009,7 +3023,7 @@ export default function TravellerDashboard() {
                     {listings.length}{totalCount > listings.length ? ` of ${totalCount}` : ""} {searchCategory}s found
                   </span>
                   {(showInstantOnly || selectedAmenities.length > 0 || selectedRating || priceMin > 0 || priceMax < 499999) && (
-                    <span className="text-[#166534] font-bold">Filters active</span>
+                    <span className="text-[#1D8D2B] font-bold">Filters active</span>
                   )}
                 </div>
               )}
@@ -3049,7 +3063,7 @@ export default function TravellerDashboard() {
                   </div>
                   <button
                     onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                    className="mt-2 px-6 py-2.5 bg-[#166534] text-white text-xs font-bold rounded-xl uppercase tracking-wider hover:bg-[#14532d] transition"
+                    className="mt-2 px-6 py-2.5 bg-[#0c2614] text-white text-xs font-bold rounded-xl uppercase tracking-wider hover:bg-[#081b0d] transition"
                   >
                     Try a Different Search
                   </button>
@@ -3071,7 +3085,7 @@ export default function TravellerDashboard() {
                     <button
                       onClick={loadMoreListings}
                       disabled={loadingMore}
-                      className="w-full py-3 border-2 border-[#166534] text-[#166534] text-sm font-bold rounded-2xl hover:bg-[#166534] hover:text-white transition disabled:opacity-50"
+                      className="w-full py-3 border-2 border-[#1D8D2B] text-[#1D8D2B] text-sm font-bold rounded-2xl hover:bg-[#0c2614] hover:text-white transition disabled:opacity-50"
                     >
                       {loadingMore ? "Loading..." : `Load More (${totalCount - listings.length} remaining)`}
                     </button>
@@ -3110,7 +3124,7 @@ export default function TravellerDashboard() {
               <button
                 onClick={fetchGuestBookings}
                 disabled={loadingBookings}
-                className="self-start sm:self-auto flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-[#166534] hover:border-[#166534] transition shadow-sm disabled:opacity-50 uppercase tracking-wide"
+                className="self-start sm:self-auto flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-[#1D8D2B] hover:border-[#1D8D2B] transition shadow-sm disabled:opacity-50 uppercase tracking-wide"
               >
                 <svg className={`w-3.5 h-3.5 ${loadingBookings ? "animate-spin" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -3141,7 +3155,7 @@ export default function TravellerDashboard() {
                       key={key}
                       onClick={() => setReservationStatusFilter(key)}
                       className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold border transition ${reservationStatusFilter === key
-                        ? "bg-[#166534] text-white border-[#166534]"
+                        ? "bg-[#0c2614] text-white border-[#1D8D2B]"
                         : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
                         }`}
                     >
@@ -3203,7 +3217,7 @@ export default function TravellerDashboard() {
                 {reservationStatusFilter === "all" && (
                   <button
                     onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                    className="mt-6 inline-flex items-center gap-2 bg-[#166534] text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-[#14532d] transition shadow-md"
+                    className="mt-6 inline-flex items-center gap-2 bg-[#0c2614] text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-[#081b0d] transition shadow-md"
                   >
                     Explore Listings
                   </button>
@@ -3253,14 +3267,14 @@ export default function TravellerDashboard() {
                             placeholder="Review title (optional)"
                             value={reviewTitle}
                             onChange={(e) => setReviewTitle(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534]"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]"
                           />
                           <textarea
                             placeholder="Share your experience…"
                             value={reviewBody}
                             onChange={(e) => setReviewBody(e.target.value)}
                             rows={3}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534] resize-none"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B] resize-none"
                           />
 
                           <div className="flex gap-2">
@@ -3273,7 +3287,7 @@ export default function TravellerDashboard() {
                             <button
                               onClick={() => handleSubmitReview(b.id)}
                               disabled={submittingReview}
-                              className="flex-1 py-2.5 bg-[#166534] text-white text-sm font-bold rounded-xl hover:bg-[#14532d] disabled:opacity-50 transition"
+                              className="flex-1 py-2.5 bg-[#0c2614] text-white text-sm font-bold rounded-xl hover:bg-[#081b0d] disabled:opacity-50 transition"
                             >
                               {submittingReview ? "Submitting…" : "Submit Review"}
                             </button>
@@ -3314,7 +3328,7 @@ export default function TravellerDashboard() {
           />
           <div className="relative ml-auto w-72 max-w-[85vw] bg-white h-full shadow-2xl flex flex-col">
             <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
-              <span className="text-lg font-bold text-[#166534] font-serif">Menu</span>
+              <span className="text-lg font-bold text-[#1D8D2B] font-serif">Menu</span>
               <button
                 onClick={() => setMobileNavOpen(false)}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 transition"
@@ -3327,7 +3341,7 @@ export default function TravellerDashboard() {
             <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
               <button
                 onClick={() => { setActiveTab("home"); setSelectedListingId(null); setMobileNavOpen(false); }}
-                className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "home" ? "bg-[#166534] text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "home" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
               >
                 Destinations
               </button>
@@ -3335,7 +3349,7 @@ export default function TravellerDashboard() {
                 <button
                   key={cat}
                   onClick={() => { setSearchCategory(cat); setSelectedListingId(null); handleSearch(undefined, cat); setMobileNavOpen(false); }}
-                  className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "search" && searchCategory === cat ? "bg-[#166534] text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                  className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "search" && searchCategory === cat ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   {cat === "hotel" ? "Stays" : cat === "apartment" ? "Apartments" : "Car Rentals"}
                 </button>
@@ -3343,7 +3357,7 @@ export default function TravellerDashboard() {
               {user && (
                 <button
                   onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); setMobileNavOpen(false); }}
-                  className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "bookings" ? "bg-[#166534] text-white" : "text-slate-700 hover:bg-slate-50"}`}
+                  className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "bookings" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   My Reservations
                 </button>
@@ -3352,7 +3366,7 @@ export default function TravellerDashboard() {
             {user && (
               <div className="p-4 border-t border-slate-100 space-y-3 shrink-0">
                 <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl">
-                  <div className="w-10 h-10 rounded-full bg-[#166534] text-white flex items-center justify-center font-bold uppercase text-sm shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-[#0c2614] text-white flex items-center justify-center font-bold uppercase text-sm shrink-0">
                     {user.firstName[0]}
                   </div>
                   <div className="min-w-0">
@@ -3408,7 +3422,7 @@ export default function TravellerDashboard() {
                 </div>
                 <button
                   onClick={() => setShowInstantOnly((v) => !v)}
-                  className={`relative w-11 h-6 rounded-full transition-colors ${showInstantOnly ? "bg-[#166534]" : "bg-slate-200"}`}
+                  className={`relative w-11 h-6 rounded-full transition-colors ${showInstantOnly ? "bg-[#0c2614]" : "bg-slate-200"}`}
                 >
                   <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInstantOnly ? "translate-x-5" : ""}`} />
                 </button>
@@ -3419,8 +3433,8 @@ export default function TravellerDashboard() {
                   Price per {searchCategory === "car" ? "day" : "night"}
                 </label>
                 <div className="flex gap-2">
-                  <input type="number" value={priceMin || ""} onChange={(e) => setPriceMin(e.target.value ? Number(e.target.value) : 0)} placeholder="Min" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534]" />
-                  <input type="number" value={priceMax >= 499999 ? "" : priceMax} onChange={(e) => setPriceMax(e.target.value ? Number(e.target.value) : 500000)} placeholder="Max" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#166534]" />
+                  <input type="number" value={priceMin || ""} onChange={(e) => setPriceMin(e.target.value ? Number(e.target.value) : 0)} placeholder="Min" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                  <input type="number" value={priceMax >= 499999 ? "" : priceMax} onChange={(e) => setPriceMax(e.target.value ? Number(e.target.value) : 500000)} placeholder="Max" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
                 </div>
               </div>
               {/* Rating */}
@@ -3432,7 +3446,7 @@ export default function TravellerDashboard() {
                       <button
                         key={star}
                         onClick={() => setSelectedRating(star === selectedRating ? null : star)}
-                        className={`flex-1 py-2.5 border rounded-xl text-sm font-semibold transition ${star === selectedRating ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-600 border-slate-200"}`}
+                        className={`flex-1 py-2.5 border rounded-xl text-sm font-semibold transition ${star === selectedRating ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200"}`}
                       >
                         ★ {star}+
                       </button>
@@ -3451,7 +3465,7 @@ export default function TravellerDashboard() {
                         <button
                           key={key}
                           onClick={() => setSelectedAmenities((prev) => active ? prev.filter((a) => a !== key) : [...prev, key])}
-                          className={`py-2.5 border rounded-xl text-xs font-semibold transition ${active ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-600 border-slate-200"}`}
+                          className={`py-2.5 border rounded-xl text-xs font-semibold transition ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200"}`}
                         >
                           {label}
                         </button>
@@ -3478,7 +3492,7 @@ export default function TravellerDashboard() {
                     {["automatic", "manual"].map((t) => {
                       const active = selectedAmenities.includes(t);
                       return (
-                        <button key={t} onClick={() => setSelectedAmenities((prev) => active ? prev.filter((a) => a !== t) : [...prev, t])} className={`flex-1 py-2.5 border rounded-xl text-sm font-semibold capitalize transition ${active ? "bg-[#166534] text-white border-[#166534]" : "bg-white text-slate-600 border-slate-200"}`}>
+                        <button key={t} onClick={() => setSelectedAmenities((prev) => active ? prev.filter((a) => a !== t) : [...prev, t])} className={`flex-1 py-2.5 border rounded-xl text-sm font-semibold capitalize transition ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200"}`}>
                           {t}
                         </button>
                       );
@@ -3490,7 +3504,7 @@ export default function TravellerDashboard() {
             <div className="p-5 border-t border-slate-100 shrink-0">
               <button
                 onClick={() => setShowFiltersDrawer(false)}
-                className="w-full py-3.5 bg-[#166534] text-white font-bold rounded-xl text-sm hover:bg-[#14532d] transition"
+                className="w-full py-3.5 bg-[#0c2614] text-white font-bold rounded-xl text-sm hover:bg-[#081b0d] transition"
               >
                 Show Results
               </button>
@@ -3507,7 +3521,7 @@ export default function TravellerDashboard() {
               ✓
             </div>
             <div>
-              <h3 className="text-2xl font-serif font-bold text-[#166534]">Reservation Confirmed!</h3>
+              <h3 className="text-2xl font-serif font-bold text-[#1D8D2B]">Reservation Confirmed!</h3>
               <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider pt-1">
                 Your premium experience has been secured.
               </p>
@@ -3516,11 +3530,11 @@ export default function TravellerDashboard() {
             <div className="bg-[#F8FAFC] border border-slate-200/50 p-4 rounded-2xl text-left space-y-2 text-xs shadow-inner">
               <div className="flex justify-between border-b border-slate-100 pb-2">
                 <span className="text-slate-400 font-semibold uppercase tracking-wider">Reference Code</span>
-                <span className="text-[#166534] font-bold font-mono text-sm">{bookingSuccessModal.reference}</span>
+                <span className="text-[#1D8D2B] font-bold font-mono text-sm">{bookingSuccessModal.reference}</span>
               </div>
               <div className="flex justify-between border-b border-slate-100 pb-2">
                 <span className="text-slate-400 font-semibold uppercase tracking-wider">Paid Amount</span>
-                <span className="text-[#166534] font-bold">${bookingSuccessModal.amount.toLocaleString()} {bookingSuccessModal.currency}</span>
+                <span className="text-[#1D8D2B] font-bold">${bookingSuccessModal.amount.toLocaleString()} {bookingSuccessModal.currency}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400 font-semibold uppercase tracking-wider">Loyalty Points Earned</span>
@@ -3537,7 +3551,7 @@ export default function TravellerDashboard() {
                 // Re-fetch 6s later in case webhook hasn't confirmed the booking yet
                 setTimeout(() => fetchGuestBookings(), 6000);
               }}
-              className="w-full py-4 bg-[#166534] hover:bg-[#14532d] text-white font-bold rounded-2xl transition shadow-lg shadow-blue-950/20 text-xs tracking-wider uppercase"
+              className="w-full py-4 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-2xl transition shadow-lg shadow-blue-950/20 text-xs tracking-wider uppercase"
             >
               Go to My Reservations
             </button>
@@ -3552,7 +3566,7 @@ export default function TravellerDashboard() {
             <div className="absolute right-4 bottom-4 text-9xl text-white/5 font-bold uppercase select-none pointer-events-none font-serif">ZIKA</div>
             <div className="absolute -top-12 -left-12 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-            <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-200 to-slate-100 text-[#166534] flex items-center justify-center text-3xl mx-auto shadow-xl shadow-yellow-500/10 font-bold border border-white/20">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-200 to-slate-100 text-[#1D8D2B] flex items-center justify-center text-3xl mx-auto shadow-xl shadow-yellow-500/10 font-bold border border-white/20">
               ✦
             </div>
 
@@ -3590,7 +3604,7 @@ export default function TravellerDashboard() {
 
             <button
               onClick={() => setShowRewardsModal(false)}
-              className="w-full py-3.5 bg-white text-[#166534] hover:bg-slate-100 font-bold rounded-2xl transition shadow-lg shadow-white/5 text-xs tracking-wider uppercase relative z-10 hover:scale-[1.01] active:scale-[0.99]"
+              className="w-full py-3.5 bg-white text-[#1D8D2B] hover:bg-slate-100 font-bold rounded-2xl transition shadow-lg shadow-white/5 text-xs tracking-wider uppercase relative z-10 hover:scale-[1.01] active:scale-[0.99]"
             >
               Start Earning Perks
             </button>
