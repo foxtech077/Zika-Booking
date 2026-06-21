@@ -643,14 +643,70 @@ export default function BookingDetailScreen() {
               )
             )}
 
-            {/* Share voucher button */}
+            {/* Share voucher (text) */}
             <TouchableOpacity
               style={styles.shareVoucherBtn}
               onPress={() => void shareVoucher(booking)}
             >
-              <Ionicons name="document-text-outline" size={16} color="#374151" style={{ marginRight: 6 }} />
-              <Text style={styles.shareVoucherBtnText}>Share Voucher</Text>
+              <Ionicons name="share-outline" size={16} color="#374151" style={{ marginRight: 6 }} />
+              <Text style={styles.shareVoucherBtnText}>Share Voucher (Text)</Text>
             </TouchableOpacity>
+
+            {/* Document actions — only for confirmed/active/completed bookings */}
+            {(booking.status === "confirmed" ||
+              booking.status === "active" ||
+              booking.status === "completed") && (
+              <View style={styles.docActionsSection}>
+                <Text style={styles.docActionsTitle}>Travel Documents</Text>
+
+                {/* Receipt */}
+                <TouchableOpacity
+                  style={styles.docActionBtn}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/booking/receipt/[id]",
+                      params: { id: booking.id },
+                    } as any)
+                  }
+                >
+                  <Ionicons name="receipt-outline" size={18} color="#1a73e8" style={{ marginRight: 10 }} />
+                  <Text style={styles.docActionBtnText}>View Receipt</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#9ca3af" style={{ marginLeft: "auto" }} />
+                </TouchableOpacity>
+
+                {/* QR Code */}
+                {(booking.status === "confirmed" || booking.status === "active") && (
+                  <TouchableOpacity
+                    style={styles.docActionBtn}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/booking/qr/[id]",
+                        params: { id: booking.id },
+                      } as any)
+                    }
+                  >
+                    <Ionicons name="qr-code-outline" size={18} color="#1a73e8" style={{ marginRight: 10 }} />
+                    <Text style={styles.docActionBtnText}>View QR Code</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#9ca3af" style={{ marginLeft: "auto" }} />
+                  </TouchableOpacity>
+                )}
+
+                {/* Voucher PDF */}
+                <TouchableOpacity
+                  style={styles.docActionBtn}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/booking/voucher/[id]",
+                      params: { id: booking.id },
+                    } as any)
+                  }
+                >
+                  <Ionicons name="document-text-outline" size={18} color="#1a73e8" style={{ marginRight: 10 }} />
+                  <Text style={styles.docActionBtnText}>Download Voucher PDF</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#9ca3af" style={{ marginLeft: "auto" }} />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -936,4 +992,38 @@ const styles = StyleSheet.create({
   backButtonText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   photoBg: { height: 250, backgroundColor: "#e5e7eb" },
   skeletonLine: { borderRadius: 6, backgroundColor: "#e5e7eb", marginBottom: 8 },
+
+  // Travel documents section
+  docActionsSection: {
+    marginTop: 12,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    overflow: "hidden",
+  },
+  docActionsTitle: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#6b7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  docActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#f3f4f6",
+  },
+  docActionBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+    flex: 1,
+  },
 });

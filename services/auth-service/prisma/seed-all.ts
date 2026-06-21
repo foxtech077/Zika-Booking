@@ -30,7 +30,7 @@ const authPrisma = new PrismaClient({
 // ── Listings schema client (raw SQL only — no generated types for this schema)
 const listingsDbUrl = process.env.DATABASE_URL?.replace(
   "schema=auth",
-  "schema=listings"
+  "schema=listing"
 );
 if (!listingsDbUrl) throw new Error("DATABASE_URL env variable is not set!");
 

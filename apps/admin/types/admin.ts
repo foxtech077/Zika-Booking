@@ -172,6 +172,7 @@ export interface ListingDocument {
 // ── Bookings ──────────────────────────────────────────────────────────────────
 
 export type BookingStatus =
+  | "draft"
   | "pending_payment"
   | "confirmed"
   | "completed"
@@ -217,7 +218,7 @@ export interface Booking {
   paymentId: string | null;
   createdAt: string;
   updatedAt: string;
-  listing?: { name: string | null };
+  listing?: { name: string | null; country?: string | null };
 }
 
 export interface BookingStatusLog {

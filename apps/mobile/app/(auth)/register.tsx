@@ -13,78 +13,85 @@ import {
   Dimensions,
   Modal,
   FlatList,
+  ImageBackground,
 } from "react-native";
 import { Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import { registerSchema } from "@zika/validators";
 import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
-import { K } from "../../constants/theme";
 import { handleRoleAndStatusRedirect, GoogleSignInButton } from "./login";
 import type { ApiResponse, PublicUser } from "@zika/types";
 import { ALL_COUNTRIES, POPULAR_COUNTRIES, type CountryData } from "../../constants/countries";
 
-const { height } = Dimensions.get("window");
+const { height: SCREEN_H } = Dimensions.get("window");
 
+const GREEN    = "#024622";
+const ACCENT   = "#1D8D2B";
+const TEAL     = "#0D7377";      // provider accent tint
+const TEXT     = "#111827";
+const MUTED    = "#6B7280";
+const BORDER   = "#E5E7EB";
+const INPUT_BG = "#F3F4F6";
+const ERR      = "#EF4444";
 
 interface FieldErrors {
-  firstName?: string;
-  lastName?: string;
-  email?: string;
-  password?: string;
+  firstName?:      string;
+  lastName?:       string;
+  email?:          string;
+  password?:       string;
   confirmPassword?: string;
-  businessName?: string;
-  country?: string;
-  general?: string;
+  businessName?:   string;
+  country?:        string;
+  general?:        string;
 }
 
 export default function RegisterScreen() {
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const setAuth          = useAuthStore((s) => s.setAuth);
   const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
 
   const [userType, setUserType] = useState<"guest" | "provider">("guest");
-
   const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
+    firstName:       "",
+    lastName:        "",
+    email:           "",
+    password:        "",
     confirmPassword: "",
-    businessName: "",
-    country: "",
+    businessName:    "",
+    country:         "",
   });
-
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [showPass, setShowPass] = useState(false);
-
-  // Country modal state
+  const [errors,             setErrors]             = useState<FieldErrors>({});
+  const [showPass,           setShowPass]           = useState(false);
+  const [showConfirm,        setShowConfirm]        = useState(false);
   const [countryModalVisible, setCountryModalVisible] = useState(false);
-  const [countrySearchQuery, setCountrySearchQuery] = useState("");
-  const [selectedCountry, setSelectedCountry] = useState<CountryData | null>(null);
+  const [countrySearch,      setCountrySearch]      = useState("");
+  const [selectedCountry,    setSelectedCountry]    = useState<CountryData | null>(null);
 
-  const set = (key: keyof typeof form) => (val: string) =>
-    setForm((prev) => ({ ...prev, [key]: val }));
+  const set = (key: keyof typeof form) => (v: string) =>
+    setForm((prev) => ({ ...prev, [key]: v }));
 
-  const clearError = (key: keyof FieldErrors) =>
+  const clearErr = (key: keyof FieldErrors) =>
     setErrors((prev) => ({ ...prev, [key]: undefined }));
 
+  // ── Mutation ────────────────────────────────────────────────────────────────
   const registerMutation = useMutation({
     mutationFn: async () => {
       const payload = {
-        firstName: form.firstName,
-        lastName: form.lastName,
-        email: form.email,
-        password: form.password,
+        firstName:       form.firstName.trim(),
+        lastName:        form.lastName.trim(),
+        email:           form.email.trim(),
+        password:        form.password,
         confirmPassword: form.confirmPassword,
         userType,
-        businessName: userType === "provider" ? form.businessName || undefined : undefined,
-        country: form.country || undefined,
+        businessName:    userType === "provider" ? form.businessName.trim() || undefined : undefined,
+        country:         form.country || undefined,
       };
       const res = await api.post<ApiResponse<{
         message?: string;
-        user?: PublicUser;
+        user?:   PublicUser;
         tokens?: { accessToken: string };
-      }>>( "auth/register", payload);
+      }>>("auth/register", payload);
       return res.data;
     },
     onSuccess: async (data) => {
@@ -92,49 +99,50 @@ export default function RegisterScreen() {
         await setAuth(data.data.user, data.data.tokens.accessToken);
         handleRoleAndStatusRedirect(data.data.user);
       } else {
-        // Email verification required — go to verify-pending with resend capability
         router.push({ pathname: "/(auth)/verify-pending", params: { email: form.email } });
       }
     },
     onError: (err: unknown) => {
-      const axiosErr = err as { response?: { data?: ApiResponse<unknown> } };
-      const data = axiosErr.response?.data;
-      if (data && !data.success) {
-        const fields = data.error.fields ?? {};
-        setErrors({ ...fields, general: data.error.fields ? undefined : data.error.message });
+      const data = (err as any)?.response?.data;
+      if (data && !data.success && data.error && typeof data.error === "object") {
+        const e       = data.error as { code?: string; message?: string; fields?: Record<string, string> };
+        const fields  = e.fields ?? {};
+        const hasF    = Object.keys(fields).length > 0;
+        setErrors({ ...fields, general: hasF ? undefined : (e.message ?? "Something went wrong.") });
       } else {
         setErrors({ general: "Something went wrong. Please check your connection and try again." });
       }
     },
   });
 
-  const handleSelectCountry = (country: CountryData) => {
-    setSelectedCountry(country);
-    set("country")(country.code);
-    clearError("country");
-    void setLocalCurrency(country.currency);
+  // ── Country ──────────────────────────────────────────────────────────────────
+  const handleSelectCountry = (c: CountryData) => {
+    setSelectedCountry(c);
+    set("country")(c.code);
+    clearErr("country");
+    void setLocalCurrency(c.currency);
     setCountryModalVisible(false);
-    setCountrySearchQuery("");
+    setCountrySearch("");
   };
 
   const filteredCountries = ALL_COUNTRIES.filter(
     (c) =>
-      c.name.toLowerCase().includes(countrySearchQuery.toLowerCase()) ||
-      c.code.toLowerCase().includes(countrySearchQuery.toLowerCase())
+      c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+      c.code.toLowerCase().includes(countrySearch.toLowerCase()),
   );
 
-  function validate() {
+  // ── Validation ───────────────────────────────────────────────────────────────
+  function validate(): boolean {
     const payload = {
-      firstName: form.firstName,
-      lastName: form.lastName,
-      email: form.email,
-      password: form.password,
+      firstName:       form.firstName.trim(),
+      lastName:        form.lastName.trim(),
+      email:           form.email.trim(),
+      password:        form.password,
       confirmPassword: form.confirmPassword,
       userType,
-      businessName: userType === "provider" ? form.businessName || undefined : undefined,
-      country: form.country || undefined,
+      businessName:    userType === "provider" ? form.businessName.trim() || undefined : undefined,
+      country:         form.country || undefined,
     };
-
     const result = registerSchema.safeParse(payload);
     if (!result.success) {
       const fe: FieldErrors = {};
@@ -142,294 +150,361 @@ export default function RegisterScreen() {
         const k = issue.path[0] as keyof FieldErrors;
         if (k && !fe[k]) fe[k] = issue.message;
       }
+      fe.general = "Please fix the errors above and try again.";
       setErrors(fe);
       return false;
     }
-
     setErrors({});
     return true;
   }
 
   function handleSubmit() {
-    if (validate()) registerMutation.mutate();
+    try {
+      if (validate()) registerMutation.mutate();
+    } catch {
+      setErrors({ general: "An unexpected error occurred. Please try again." });
+    }
   }
 
+  // ── Hero colours change by account type ─────────────────────────────────────
+  const isProvider     = userType === "provider";
+  const heroBg         = isProvider ? "#011F2E" : GREEN;
+  const heroAccent     = isProvider ? TEAL      : ACCENT;
+  const btnColor       = isProvider ? "#0D7377" : GREEN;
+  const heroTagline    = isProvider ? "List your property, grow your business" : "Discover & book premium stays";
+  const heroTitle      = isProvider ? "Partner Host" : "Traveller";
+
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={ss.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
+      {/* ── Hero ── */}
+      <ImageBackground
+        source={require("../../assets/splash.png")}
+        style={[ss.hero, { height: Math.round(SCREEN_H * 0.36) }]}
+        resizeMode="cover"
+      >
+        <View style={[ss.heroOverlay, { backgroundColor: `${heroBg}CC` }]} />
+        {/* Back button */}
+        <TouchableOpacity style={ss.backBtn} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={20} color="#fff" />
+        </TouchableOpacity>
+        <View style={ss.heroContent}>
+          <View style={ss.logoWrap}>
+            <Image source={require("../../assets/logo.png")} style={ss.logo} resizeMode="contain" />
+          </View>
+          <Text style={ss.heroTitle}>Create Account</Text>
+          <Text style={ss.heroSub}>{heroTagline}</Text>
+        </View>
+      </ImageBackground>
+
+      {/* ── Scrollable form ── */}
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        style={[ss.formScroll, { marginTop: -24 }]}
+        contentContainerStyle={ss.formContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Brand Header */}
-        <View style={styles.brandRow}>
-          <View style={styles.logoContainer}>
-            <Image
-              source={require("../../assets/logo.png")}
-              style={styles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
-        </View>
-
-        <Text style={styles.headline}>Create{"\n"}Account</Text>
-        <Text style={styles.subheadline}>Join our premium ecosystem today</Text>
-
-        {/* Tab: Traveller / Partner Host */}
-        <View style={styles.tabContainer}>
+        {/* ── Account type tabs ── */}
+        <View style={ss.tabRow}>
           <TouchableOpacity
-            style={[styles.tabButton, userType === "guest" && styles.tabButtonActive]}
+            style={[ss.tab, userType === "guest" && ss.tabActive]}
             onPress={() => { setUserType("guest"); setErrors({}); }}
             activeOpacity={0.8}
           >
-            <Text style={[styles.tabButtonText, userType === "guest" && styles.tabButtonTextActive]}>
-              Traveller
-            </Text>
+            <Ionicons
+              name="airplane-outline"
+              size={15}
+              color={userType === "guest" ? GREEN : MUTED}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[ss.tabTxt, userType === "guest" && ss.tabTxtActive]}>Traveller</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.tabButton, userType === "provider" && styles.tabButtonActive]}
+            style={[ss.tab, userType === "provider" && [ss.tabActive, ss.tabActiveProvider]]}
             onPress={() => { setUserType("provider"); setErrors({}); }}
             activeOpacity={0.8}
           >
-            <Text style={[styles.tabButtonText, userType === "provider" && styles.tabButtonTextActive]}>
+            <Ionicons
+              name="home-outline"
+              size={15}
+              color={userType === "provider" ? TEAL : MUTED}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[ss.tabTxt, userType === "provider" && [ss.tabTxtActive, { color: TEAL }]]}>
               Partner Host
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Form Card */}
-        <View style={styles.card}>
-          {/* First / Last Name */}
-          <View style={styles.row}>
-            <View style={styles.halfField}>
-              <Text style={styles.label}>First Name</Text>
-              <TextInput
-                style={[styles.input, errors.firstName ? styles.inputError : null]}
-                value={form.firstName}
-                onChangeText={(v) => { set("firstName")(v); clearError("firstName"); }}
-                placeholder="Ada"
-                placeholderTextColor={K.colors.textLightDim}
-              />
-              {errors.firstName ? <Text style={styles.fieldError}>{errors.firstName}</Text> : null}
-            </View>
-            <View style={styles.halfField}>
-              <Text style={styles.label}>Last Name</Text>
-              <TextInput
-                style={[styles.input, errors.lastName ? styles.inputError : null]}
-                value={form.lastName}
-                onChangeText={(v) => { set("lastName")(v); clearError("lastName"); }}
-                placeholder="Okafor"
-                placeholderTextColor={K.colors.textLightDim}
-              />
-              {errors.lastName ? <Text style={styles.fieldError}>{errors.lastName}</Text> : null}
-            </View>
-          </View>
+        {/* ── Section header ── */}
+        <Text style={ss.sectionTitle}>
+          {isProvider ? "Provider Details" : "Personal Details"}
+        </Text>
 
-          {/* Email */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Email Address</Text>
+        {/* ── Name row ── */}
+        <View style={ss.nameRow}>
+          <View style={[ss.field, { flex: 1 }]}>
+            <Text style={ss.label}>First Name</Text>
+            <View style={[ss.inputBox, errors.firstName ? ss.inputErr : null]}>
+              <TextInput
+                style={ss.input}
+                value={form.firstName}
+                onChangeText={(v) => { set("firstName")(v); clearErr("firstName"); }}
+                placeholder="Ada"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            {errors.firstName ? <Text style={ss.fieldErr}>{errors.firstName}</Text> : null}
+          </View>
+          <View style={[ss.field, { flex: 1 }]}>
+            <Text style={ss.label}>Last Name</Text>
+            <View style={[ss.inputBox, errors.lastName ? ss.inputErr : null]}>
+              <TextInput
+                style={ss.input}
+                value={form.lastName}
+                onChangeText={(v) => { set("lastName")(v); clearErr("lastName"); }}
+                placeholder="Okafor"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            {errors.lastName ? <Text style={ss.fieldErr}>{errors.lastName}</Text> : null}
+          </View>
+        </View>
+
+        {/* ── Email ── */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Email Address</Text>
+          <View style={[ss.inputRow, errors.email ? ss.inputErr : null]}>
+            <Ionicons name="mail-outline" size={17} color={MUTED} style={ss.inputIcon} />
             <TextInput
-              style={[styles.input, errors.email ? styles.inputError : null]}
+              style={ss.input}
               value={form.email}
-              onChangeText={(v) => { set("email")(v); clearError("email"); }}
+              onChangeText={(v) => { set("email")(v); clearErr("email"); }}
               placeholder="you@example.com"
-              placeholderTextColor={K.colors.textLightDim}
+              placeholderTextColor="#9CA3AF"
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
             />
-            {errors.email ? <Text style={styles.fieldError}>{errors.email}</Text> : null}
           </View>
+          {errors.email ? <Text style={ss.fieldErr}>{errors.email}</Text> : null}
+        </View>
 
-          {/* Provider-only: Business Name */}
-          {userType === "provider" && (
-            <View style={styles.field}>
-              <Text style={styles.label}>Business Name</Text>
-              <TextInput
-                style={[styles.input, errors.businessName ? styles.inputError : null]}
-                value={form.businessName}
-                onChangeText={(v) => { set("businessName")(v); clearError("businessName"); }}
-                placeholder="Serena Hotels Ltd."
-                placeholderTextColor={K.colors.textLightDim}
-              />
-              {errors.businessName ? <Text style={styles.fieldError}>{errors.businessName}</Text> : null}
+        {/* ── Provider fields ── */}
+        {isProvider && (
+          <>
+            <Text style={[ss.sectionTitle, { marginTop: 4 }]}>Business Details</Text>
+
+            <View style={ss.field}>
+              <Text style={ss.label}>Business Name</Text>
+              <View style={[ss.inputRow, errors.businessName ? ss.inputErr : null]}>
+                <Ionicons name="business-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                <TextInput
+                  style={ss.input}
+                  value={form.businessName}
+                  onChangeText={(v) => { set("businessName")(v); clearErr("businessName"); }}
+                  placeholder="Serena Hotels Ltd."
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+              {errors.businessName ? <Text style={ss.fieldErr}>{errors.businessName}</Text> : null}
             </View>
-          )}
 
-          {/* Country (both roles, sets local currency) */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Country</Text>
-            <TouchableOpacity
-              style={[styles.input, styles.comboSelector, errors.country ? styles.inputError : null]}
-              onPress={() => setCountryModalVisible(true)}
-              activeOpacity={0.8}
-            >
-              {selectedCountry ? (
-                <Text style={styles.selectedCountryText}>
-                  {selectedCountry.flag} {selectedCountry.name} ({selectedCountry.code})
+            <View style={ss.field}>
+              <Text style={ss.label}>Country</Text>
+              <TouchableOpacity
+                style={[ss.inputRow, errors.country ? ss.inputErr : null]}
+                onPress={() => setCountryModalVisible(true)}
+                activeOpacity={0.75}
+              >
+                <Ionicons name="globe-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                <Text style={[ss.input, { paddingVertical: 13, color: selectedCountry ? TEXT : "#9CA3AF" }]}>
+                  {selectedCountry ? `${selectedCountry.flag}  ${selectedCountry.name}` : "Select your country"}
                 </Text>
-              ) : (
-                <Text style={styles.placeholderText}>Search or select country</Text>
-              )}
-              <Text style={styles.dropdownArrow}>▼</Text>
-            </TouchableOpacity>
-            {errors.country ? <Text style={styles.fieldError}>{errors.country}</Text> : null}
-          </View>
-
-          {/* Password */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <View style={styles.passRow}>
-              <TextInput
-                style={[styles.input, styles.inputFlex, errors.password ? styles.inputError : null]}
-                value={form.password}
-                onChangeText={(v) => { set("password")(v); clearError("password"); }}
-                placeholder="Min. 8 characters"
-                placeholderTextColor={K.colors.textLightDim}
-                secureTextEntry={!showPass}
-              />
-              <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowPass((v) => !v)}>
-                <Text style={styles.eyeIcon}>{showPass ? "🙈" : "👁️"}</Text>
+                <Ionicons name="chevron-down" size={14} color={MUTED} style={{ marginLeft: 4 }} />
               </TouchableOpacity>
+              {errors.country ? <Text style={ss.fieldErr}>{errors.country}</Text> : null}
             </View>
-            {errors.password ? <Text style={styles.fieldError}>{errors.password}</Text> : null}
-          </View>
+          </>
+        )}
 
-          {/* Confirm Password */}
-          <View style={styles.field}>
-            <Text style={styles.label}>Confirm Password</Text>
+        {/* ── Security section ── */}
+        <Text style={[ss.sectionTitle, { marginTop: 4 }]}>Security</Text>
+
+        {/* Password */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Password</Text>
+          <View style={[ss.inputRow, errors.password ? ss.inputErr : null]}>
+            <Ionicons name="lock-closed-outline" size={17} color={MUTED} style={ss.inputIcon} />
             <TextInput
-              style={[styles.input, errors.confirmPassword ? styles.inputError : null]}
-              value={form.confirmPassword}
-              onChangeText={(v) => { set("confirmPassword")(v); clearError("confirmPassword"); }}
-              placeholder="Repeat password"
-              placeholderTextColor={K.colors.textLightDim}
+              style={ss.input}
+              value={form.password}
+              onChangeText={(v) => { set("password")(v); clearErr("password"); }}
+              placeholder="Min. 8 chars, uppercase, number, symbol"
+              placeholderTextColor="#9CA3AF"
               secureTextEntry={!showPass}
+            />
+            <TouchableOpacity onPress={() => setShowPass((p) => !p)} style={ss.eye}>
+              <Ionicons name={showPass ? "eye-off-outline" : "eye-outline"} size={17} color={MUTED} />
+            </TouchableOpacity>
+          </View>
+          {errors.password ? <Text style={ss.fieldErr}>{errors.password}</Text> : null}
+        </View>
+
+        {/* Confirm Password */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Confirm Password</Text>
+          <View style={[ss.inputRow, errors.confirmPassword ? ss.inputErr : null]}>
+            <Ionicons name="lock-closed-outline" size={17} color={MUTED} style={ss.inputIcon} />
+            <TextInput
+              style={ss.input}
+              value={form.confirmPassword}
+              onChangeText={(v) => { set("confirmPassword")(v); clearErr("confirmPassword"); }}
+              placeholder="Repeat your password"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!showConfirm}
               returnKeyType="done"
               onSubmitEditing={handleSubmit}
             />
-            {errors.confirmPassword ? <Text style={styles.fieldError}>{errors.confirmPassword}</Text> : null}
+            <TouchableOpacity onPress={() => setShowConfirm((p) => !p)} style={ss.eye}>
+              <Ionicons name={showConfirm ? "eye-off-outline" : "eye-outline"} size={17} color={MUTED} />
+            </TouchableOpacity>
           </View>
-
-          {errors.general ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{errors.general}</Text>
-            </View>
-          ) : null}
-
-          {/* Submit */}
-          <TouchableOpacity
-            style={[styles.primaryBtn, registerMutation.isPending && styles.btnDisabled]}
-            onPress={handleSubmit}
-            disabled={registerMutation.isPending}
-            activeOpacity={0.85}
-          >
-            {registerMutation.isPending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.primaryBtnText}>
-                {userType === "guest" ? "Create Account" : "Register as Partner"}
-              </Text>
-            )}
-          </TouchableOpacity>
+          {errors.confirmPassword ? <Text style={ss.fieldErr}>{errors.confirmPassword}</Text> : null}
         </View>
 
-        {/* OAuth divider — only for travellers (providers must register with email) */}
-        {userType === "guest" && (
+        {/* General error */}
+        {errors.general ? (
+          <View style={ss.errBox}>
+            <Ionicons name="alert-circle-outline" size={15} color={ERR} />
+            <Text style={ss.errTxt}>{errors.general}</Text>
+          </View>
+        ) : null}
+
+        {/* Submit button */}
+        <TouchableOpacity
+          style={[ss.btn, { backgroundColor: btnColor }, registerMutation.isPending && ss.btnDim]}
+          onPress={handleSubmit}
+          disabled={registerMutation.isPending}
+          activeOpacity={0.85}
+        >
+          {registerMutation.isPending ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <>
+              <Text style={ss.btnTxt}>
+                {isProvider ? "Register as Partner Host" : "Create Traveller Account"}
+              </Text>
+              <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 8 }} />
+            </>
+          )}
+        </TouchableOpacity>
+
+        {/* Google sign-in (travellers only) */}
+        {!isProvider && (
           <>
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
+            <View style={ss.divRow}>
+              <View style={ss.divLine} />
+              <Text style={ss.divTxt}>or</Text>
+              <View style={ss.divLine} />
             </View>
             <GoogleSignInButton onError={(msg) => setErrors({ general: msg })} />
           </>
         )}
 
-        <View style={styles.loginRow}>
-          <Text style={styles.loginText}>Already a member? </Text>
+        {/* Sign in link */}
+        <View style={ss.linkRow}>
+          <Text style={ss.linkTxt}>Already have an account? </Text>
           <Link href="/(auth)/login" asChild>
             <TouchableOpacity>
-              <Text style={styles.loginLink}>Sign In</Text>
+              <Text style={ss.link}>Sign In</Text>
             </TouchableOpacity>
           </Link>
         </View>
       </ScrollView>
 
-      {/* Country Selector Modal */}
+      {/* ── Country picker modal ── */}
       <Modal
         animationType="slide"
         transparent
         visible={countryModalVisible}
         onRequestClose={() => setCountryModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Country</Text>
-              <TouchableOpacity onPress={() => setCountryModalVisible(false)}>
-                <Text style={styles.modalCloseButton}>Close</Text>
+        <View style={ss.modalBack}>
+          <View style={ss.modalSheet}>
+            {/* Handle */}
+            <View style={ss.modalHandle} />
+
+            <View style={ss.modalHeader}>
+              <Text style={ss.modalTitle}>Select Country</Text>
+              <TouchableOpacity onPress={() => setCountryModalVisible(false)} style={ss.modalClose}>
+                <Ionicons name="close" size={20} color={TEXT} />
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              style={styles.searchBar}
-              value={countrySearchQuery}
-              onChangeText={setCountrySearchQuery}
-              placeholder="Search by country name or code..."
-              placeholderTextColor={K.colors.textMuted}
-              autoCapitalize="none"
-              autoFocus
-            />
+            <View style={ss.searchBox}>
+              <Ionicons name="search-outline" size={16} color={MUTED} />
+              <TextInput
+                style={ss.searchInput}
+                value={countrySearch}
+                onChangeText={setCountrySearch}
+                placeholder="Search country name or code…"
+                placeholderTextColor="#9CA3AF"
+                autoCapitalize="none"
+                autoFocus
+              />
+            </View>
 
-            {!countrySearchQuery && (
-              <View style={styles.shortcutsWrapper}>
-                <Text style={styles.shortcutsTitle}>Popular</Text>
+            {!countrySearch && (
+              <View style={ss.popularSection}>
+                <Text style={ss.popularTitle}>Popular</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.shortcutsScroll}
+                  contentContainerStyle={{ gap: 8, paddingRight: 24 }}
                 >
-                  {POPULAR_COUNTRIES.map((item) => (
+                  {POPULAR_COUNTRIES.map((c) => (
                     <TouchableOpacity
-                      key={item.code}
-                      style={styles.shortcutBtn}
-                      onPress={() => handleSelectCountry(item)}
+                      key={c.code}
+                      style={ss.popularChip}
+                      onPress={() => handleSelectCountry(c)}
                     >
-                      <Text style={styles.shortcutText}>{item.flag} {item.name}</Text>
+                      <Text style={ss.popularChipTxt}>{c.flag}  {c.name}</Text>
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
               </View>
             )}
 
-            <Text style={styles.listSectionTitle}>
-              {countrySearchQuery ? "Search Results" : "All Countries"}
+            <Text style={ss.listLabel}>
+              {countrySearch ? "Results" : "All Countries"}
             </Text>
 
             <FlatList
               data={filteredCountries}
-              keyExtractor={(item) => item.code}
+              keyExtractor={(c) => c.code}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={styles.countryItem}
+                  style={[ss.countryRow, selectedCountry?.code === item.code && ss.countryRowActive]}
                   onPress={() => handleSelectCountry(item)}
                 >
-                  <Text style={styles.countryItemText}>
-                    <Text style={styles.countryFlag}>{item.flag}</Text> {item.name} ({item.code})
-                  </Text>
-                  <Text style={styles.countryDialCode}>{item.dialCode}</Text>
+                  <Text style={ss.countryFlag}>{item.flag}</Text>
+                  <Text style={ss.countryName}>{item.name}</Text>
+                  <Text style={ss.countryCode}>{item.code}</Text>
+                  {selectedCountry?.code === item.code && (
+                    <Ionicons name="checkmark-circle" size={18} color={TEAL} style={{ marginLeft: "auto" }} />
+                  )}
                 </TouchableOpacity>
               )}
-              ListEmptyComponent={() => (
-                <View style={styles.emptyResults}>
-                  <Text style={styles.emptyResultsText}>No countries match your search</Text>
+              ListEmptyComponent={
+                <View style={{ alignItems: "center", paddingVertical: 40 }}>
+                  <Text style={{ color: MUTED }}>No countries found</Text>
                 </View>
-              )}
+              }
             />
           </View>
         </View>
@@ -438,202 +513,163 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.colors.darkGreen },
-  scroll: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const ss = StyleSheet.create({
+  root: { flex: 1, backgroundColor: GREEN },
 
-  brandRow: { alignItems: "flex-start", marginBottom: 32 },
-  logoContainer: {
-    width: 130, height: 130, borderRadius: 20,
-    backgroundColor: "#FFFFFF",
+  // Hero
+  hero:        { width: "100%", justifyContent: "flex-end" },
+  heroOverlay: { ...StyleSheet.absoluteFillObject },
+  backBtn: {
+    position: "absolute", top: 52, left: 20,
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.18)",
     alignItems: "center", justifyContent: "center",
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
   },
-  logoImage: { width: 118, height: 118 },
+  heroContent: { paddingHorizontal: 24, paddingBottom: 36 },
+  logoWrap: {
+    width: 52, height: 52, borderRadius: 14,
+    backgroundColor: "#fff",
+    alignItems: "center", justifyContent: "center",
+    marginBottom: 14,
+    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5,
+  },
+  logo:      { width: 40, height: 40 },
+  heroTitle: { fontSize: 28, fontWeight: "800", color: "#fff", letterSpacing: -0.4 },
+  heroSub:   { fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 5 },
 
-  headline: { fontSize: K.font.xxxl, fontWeight: "800", color: "#fff", lineHeight: 38, letterSpacing: -0.5 },
-  subheadline: { fontSize: K.font.base, color: K.colors.textLightMuted, marginTop: 8, marginBottom: 28 },
+  // Form
+  formScroll:   { flex: 1, backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28 },
+  formContent:  { paddingHorizontal: 22, paddingTop: 24, paddingBottom: 40 },
 
-  tabContainer: {
-    flexDirection: "row",
-    backgroundColor: "rgba(255,255,255,0.06)",
-    borderRadius: K.radius.md,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    padding: 4,
-    marginBottom: 24,
+  // Tab row
+  tabRow: {
+    flexDirection: "row", gap: 10, marginBottom: 22,
+    backgroundColor: INPUT_BG, borderRadius: 12, padding: 4,
   },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: K.radius.sm,
+  tab: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
+    paddingVertical: 10, borderRadius: 10,
   },
-  tabButtonActive: { backgroundColor: K.colors.accent },
-  tabButtonText: { color: K.colors.textLightMuted, fontWeight: "600", fontSize: K.font.sm },
-  tabButtonTextActive: { color: "#fff", fontWeight: "700" },
+  tabActive:         { backgroundColor: "#fff", shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 2 },
+  tabActiveProvider: { },
+  tabTxt:            { fontSize: 13, fontWeight: "600", color: MUTED },
+  tabTxtActive:      { color: GREEN },
 
-  card: {
-    backgroundColor: K.colors.glassBg,
-    borderRadius: K.radius.xxl,
-    borderWidth: 1,
-    borderColor: K.colors.glassBorder,
-    padding: 24,
+  // Section header
+  sectionTitle: {
+    fontSize: 11, fontWeight: "700", color: MUTED,
+    textTransform: "uppercase", letterSpacing: 1.2,
+    marginBottom: 12,
   },
-  row: { flexDirection: "row", gap: 12 },
-  halfField: { flex: 1, marginBottom: 16 },
-  field: { marginBottom: 16 },
-  label: {
-    fontSize: K.font.sm,
-    fontWeight: "600",
-    color: K.colors.textLightMuted,
-    marginBottom: 8,
-    letterSpacing: 0.3,
-  },
-  input: {
-    backgroundColor: K.colors.glassInput,
-    borderWidth: 1,
-    borderColor: K.colors.glassInputBorder,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: K.font.base,
-    color: K.colors.textLight,
-    flex: 1,
-  },
-  inputFlex: { flex: 1 },
-  inputError: { borderColor: K.colors.error },
-  passRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  eyeBtn: {
-    backgroundColor: K.colors.glassInput,
-    borderWidth: 1,
-    borderColor: K.colors.glassInputBorder,
-    borderRadius: K.radius.md,
+
+  // Name row
+  nameRow: { flexDirection: "row", gap: 10 },
+
+  // Fields
+  field:    { marginBottom: 14 },
+  label:    { fontSize: 13, fontWeight: "600", color: TEXT, marginBottom: 7 },
+  inputBox: {
+    backgroundColor: INPUT_BG, borderRadius: 12,
+    borderWidth: 1.5, borderColor: BORDER,
     paddingHorizontal: 14,
-    paddingVertical: 14,
   },
-  eyeIcon: { fontSize: 16 },
-  fieldError: { fontSize: 12, color: "#FCA5A5", marginTop: 4 },
-
-  comboSelector: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    height: 52,
-  },
-  selectedCountryText: { color: "#fff", fontSize: K.font.base, fontWeight: "600" },
-  placeholderText: { color: K.colors.textLightDim, fontSize: K.font.base },
-  dropdownArrow: { color: K.colors.textLightDim, fontSize: 10 },
-
-  errorBox: {
-    backgroundColor: "rgba(239,68,68,0.15)",
-    borderRadius: K.radius.md,
-    borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.30)",
+  inputRow: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: INPUT_BG, borderRadius: 12,
+    borderWidth: 1.5, borderColor: BORDER,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 16,
   },
-  errorText: { color: "#FCA5A5", fontSize: K.font.sm, lineHeight: 20 },
+  inputErr:  { borderColor: ERR },
+  inputIcon: { marginRight: 10 },
+  input:     { flex: 1, paddingVertical: 13, fontSize: 15, color: TEXT },
+  eye:       { paddingVertical: 13, paddingLeft: 8 },
+  fieldErr:  { fontSize: 12, color: ERR, marginTop: 5 },
 
-  primaryBtn: {
-    backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    paddingVertical: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    height: 54,
-    marginTop: 8,
+  // Error banner
+  errBox: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "#FEF2F2", borderRadius: 10,
+    borderWidth: 1.5, borderColor: "#FECACA",
+    paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16,
   },
-  btnDisabled: { opacity: 0.6 },
-  primaryBtnText: { color: "#fff", fontSize: K.font.lg, fontWeight: "700", letterSpacing: 0.3 },
+  errTxt: { flex: 1, color: "#DC2626", fontSize: 13, lineHeight: 18 },
 
-  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: 20 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.12)" },
-  dividerText: { marginHorizontal: 16, color: K.colors.textLightMuted, fontSize: K.font.sm },
+  // Button
+  btn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    borderRadius: 14, height: 52,
+  },
+  btnDim: { opacity: 0.6 },
+  btnTxt: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
-  loginRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 24 },
-  loginText: { color: K.colors.textLightMuted, fontSize: K.font.sm },
-  loginLink: { color: K.colors.accentLight, fontSize: K.font.sm, fontWeight: "700" },
+  // Divider
+  divRow:  { flexDirection: "row", alignItems: "center", marginVertical: 20 },
+  divLine: { flex: 1, height: 1, backgroundColor: BORDER },
+  divTxt:  { marginHorizontal: 12, color: MUTED, fontSize: 12 },
 
-  modalOverlay: {
+  // Link row
+  linkRow: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: 22 },
+  linkTxt: { color: MUTED, fontSize: 14 },
+  link:    { color: ACCENT, fontSize: 14, fontWeight: "700" },
+
+  // Country modal
+  modalBack: {
     flex: 1,
-    backgroundColor: "rgba(9,43,30,0.85)",
+    backgroundColor: "rgba(0,0,0,0.45)",
     justifyContent: "flex-end",
   },
-  modalContent: {
-    backgroundColor: K.colors.darkGreen,
-    borderTopLeftRadius: K.radius.xxl,
-    borderTopRightRadius: K.radius.xxl,
-    height: height * 0.75,
-    paddingTop: 20,
-    paddingHorizontal: 24,
-    borderWidth: 1,
-    borderColor: K.colors.glassBorder,
+  modalSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    height: SCREEN_H * 0.78,
+    paddingTop: 12,
+  },
+  modalHandle: {
+    width: 36, height: 4, backgroundColor: BORDER,
+    borderRadius: 2, alignSelf: "center", marginBottom: 16,
   },
   modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
+    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+    paddingHorizontal: 20, marginBottom: 16,
   },
-  modalTitle: { color: "#fff", fontSize: K.font.xl, fontWeight: "800" },
-  modalCloseButton: { color: K.colors.accentLight, fontSize: K.font.base, fontWeight: "700" },
-  searchBar: {
-    backgroundColor: K.colors.glassInput,
-    borderWidth: 1,
-    borderColor: K.colors.glassInputBorder,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: "#fff",
-    fontSize: K.font.base,
-    marginBottom: 20,
+  modalTitle: { fontSize: 18, fontWeight: "800", color: TEXT },
+  modalClose: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: INPUT_BG, alignItems: "center", justifyContent: "center",
   },
-  countryItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: K.colors.borderDark,
-  },
-  countryItemText: { color: "#fff", fontSize: K.font.base, fontWeight: "500" },
-  countryFlag: { fontSize: 20 },
-  countryDialCode: { color: K.colors.accentLight, fontSize: K.font.sm, fontWeight: "700" },
-  emptyResults: { alignItems: "center", paddingVertical: 40 },
-  emptyResultsText: { color: K.colors.textLightDim, fontSize: K.font.base },
 
-  shortcutsWrapper: { marginBottom: 16 },
-  shortcutsTitle: {
-    color: K.colors.textLightMuted,
-    fontSize: K.font.xs,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 8,
+  searchBox: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    marginHorizontal: 20, backgroundColor: INPUT_BG,
+    borderRadius: 12, borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, paddingVertical: 11, marginBottom: 16,
   },
-  shortcutsScroll: { gap: 8, paddingRight: 24 },
-  shortcutBtn: {
-    backgroundColor: K.colors.glassInput,
-    borderWidth: 1,
-    borderColor: K.colors.glassInputBorder,
-    borderRadius: K.radius.full,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  searchInput: { flex: 1, fontSize: 15, color: TEXT },
+
+  popularSection: { paddingLeft: 20, marginBottom: 14 },
+  popularTitle:   { fontSize: 11, fontWeight: "700", color: MUTED, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 },
+  popularChip: {
+    backgroundColor: INPUT_BG, borderRadius: 20,
+    borderWidth: 1.5, borderColor: BORDER,
+    paddingHorizontal: 14, paddingVertical: 8,
   },
-  shortcutText: { color: "#fff", fontSize: 13, fontWeight: "600" },
-  listSectionTitle: {
-    color: K.colors.textLightMuted,
-    fontSize: K.font.xs,
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 10,
-    marginTop: 8,
+  popularChipTxt: { fontSize: 13, fontWeight: "600", color: TEXT },
+
+  listLabel: {
+    fontSize: 11, fontWeight: "700", color: MUTED,
+    textTransform: "uppercase", letterSpacing: 1,
+    paddingHorizontal: 20, marginBottom: 6,
   },
+
+  countryRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 20, paddingVertical: 14,
+    borderBottomWidth: 1, borderBottomColor: "#F3F4F6",
+    gap: 12,
+  },
+  countryRowActive: { backgroundColor: "#F0FDF4" },
+  countryFlag:      { fontSize: 22 },
+  countryName:      { flex: 1, fontSize: 15, color: TEXT, fontWeight: "500" },
+  countryCode:      { fontSize: 12, color: MUTED, fontWeight: "600" },
 });

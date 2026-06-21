@@ -4,10 +4,10 @@ import path from "path";
 import QRCode from "qrcode";
 import { uploadBuffer, cdnUrl } from "../lib/s3.js";
 
-const BOOKING_BASE_URL = process.env["BOOKING_PUBLIC_URL"] ?? "https://zikabooking.com/bookings";
+const BOOKING_BASE_URL = process.env["BOOKING_PUBLIC_URL"] ?? "https://kainook.com/bookings";
 
 export async function generateVoucherPDF(booking: any, invoice: any) {
-  const fileName = `ZikaBooking-${booking.code}.pdf`;
+  const fileName = `KAINOOK-${booking.code}.pdf`;
   const filePath = `/tmp/${fileName}`;
 
   const doc = new PDFDocument({ size: "A4", margin: 40 });
@@ -15,13 +15,13 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   doc.pipe(stream);
 
   // ── HEADER (Logo + Reference) ────────────────────────────────────────
-  const logoPath = path.join(process.cwd(), "assets", "zika-logo.png");
+  const logoPath = path.join(process.cwd(), "assets", "kainook-logo.png");
 
   if (fs.existsSync(logoPath)) {
     doc.image(logoPath, 40, 40, { width: 80 });
   } else {
     // fallback if logo file not present
-    doc.fontSize(18).fillColor("#1e3a8a").text("ZikaBooking", 40, 45);
+    doc.fontSize(18).fillColor("#16a34a").text("Kainook", 40, 45);
   }
 
   doc.fontSize(20).fillColor("#000000").text("BOOKING VOUCHER", 0, 45, { align: "center" });
@@ -96,7 +96,7 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   doc.moveDown(2);
 
   // ── FOOTER ────────────────────────────────────────────────────────────
-  doc.fontSize(10).text("Thank you for booking with Zika.", { align: "center" });
+  doc.fontSize(10).text("Thank you for booking with Kainook.", { align: "center" });
 
   doc.end();
 

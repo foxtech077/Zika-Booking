@@ -41,6 +41,7 @@ export const useAuthStore = create<AuthState>()(
       setHasHydrated: (val) => set({ _hasHydrated: val }),
 
       setSession: (token, user) => {
+        // Write to both localStorage (via persist) and sessionStorage (fast access by interceptors)
         if (typeof window !== "undefined") {
           sessionStorage.setItem(TOKEN_KEY, token);
         }
@@ -50,6 +51,7 @@ export const useAuthStore = create<AuthState>()(
       clearSession: () => {
         if (typeof window !== "undefined") {
           sessionStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(TOKEN_KEY);
         }
         set({ token: null, user: null, isAuthenticated: false });
       },
@@ -61,9 +63,12 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "zika:web_auth",
+      // Use localStorage so session survives tab close and hard refresh.
+      // Previously this used sessionStorage which caused auto-logout on any
+      // page refresh or new tab, even while the refresh token was still valid.
       storage: createJSONStorage(() =>
         typeof window !== "undefined"
-          ? sessionStorage
+          ? localStorage
           : {
               getItem: () => null,
               setItem: () => undefined,
@@ -77,6 +82,8 @@ export const useAuthStore = create<AuthState>()(
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
+        // Also write the persisted token into sessionStorage so axios interceptors
+        // can read it synchronously before the store rehydration completes.
         if (state?.token && typeof window !== "undefined") {
           sessionStorage.setItem(TOKEN_KEY, state.token);
         }

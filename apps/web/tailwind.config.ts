@@ -14,19 +14,19 @@ const config: Config = {
       },
       colors: {
         primary: {
-          50:  "#f0f9ff",
-          100: "#e0f2fe",
-          200: "#bae6fd",
-          300: "#7dd3fc",
-          400: "#38bdf8",
-          500: "#0ea5e9",
-          600: "#0284c7",
-          700: "#0369a1",
-          800: "#075985",
-          900: "#0c4a6e",
-          DEFAULT: "#0284c7",
-          dark:    "#0369a1",
-          light:   "#38bdf8",
+          50:  "#f0fdf4",
+          100: "#dcfce7",
+          200: "#bbf7d0",
+          300: "#86efac",
+          400: "#4ade80",
+          500: "#22c55e",
+          600: "#16a34a",
+          700: "#15803d",
+          800: "#166534",
+          900: "#14532d",
+          DEFAULT: "#16a34a",
+          dark:    "#15803d",
+          light:   "#4ade80",
         },
         accent: {
           DEFAULT: "#7c3aed",
@@ -47,12 +47,12 @@ const config: Config = {
         },
         surface: {
           DEFAULT: "#ffffff",
-          subtle:  "#f8fafc",
+          subtle:  "#f4faf7",
           muted:   "#f1f5f9",
           dark:    "#0f172a",
         },
         border: {
-          DEFAULT: "#e2e8f0",
+          DEFAULT: "#e8f0ec",
           strong:  "#cbd5e1",
         },
         success: {
@@ -84,7 +84,7 @@ const config: Config = {
         "card-md":      "0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.07)",
         "card-lg":      "0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.07)",
         drawer:         "rgba(0, 0, 0, 0.15) -4px 0 20px",
-        "glow-primary": "0 0 0 3px rgb(2 132 199 / 0.2)",
+        "glow-primary": "0 0 0 3px rgb(22 163 74 / 0.2)",
       },
       keyframes: {
         "slide-in-right": {

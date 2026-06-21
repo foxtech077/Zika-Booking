@@ -80,7 +80,7 @@ const AMENITY_LABELS: Record<string, string> = {
 
 const POPULAR_DESTINATIONS = [
   { name: "Nairobi", country: "Kenya", icon: "🏙️", from: "from-emerald-500", to: "to-teal-700" },
-  { name: "Mombasa", country: "Kenya", icon: "🏖️", from: "from-blue-400", to: "to-cyan-600" },
+  { name: "Mombasa", country: "Kenya", icon: "🏖️", from: "from-green-400", to: "to-teal-600" },
   { name: "Dubai", country: "UAE", icon: "🌇", from: "from-amber-400", to: "to-orange-600" },
   { name: "Cape Town", country: "South Africa", icon: "🏔️", from: "from-slate-500", to: "to-slate-800" },
   { name: "Zanzibar", country: "Tanzania", icon: "🌴", from: "from-teal-400", to: "to-emerald-700" },
@@ -2112,7 +2112,7 @@ export default function TravellerDashboard() {
                               <p className="font-bold text-slate-800">Check your phone!</p>
                               <p className="text-xs text-slate-500">A payment prompt has been sent to your M-Pesa number. Please approve it to complete your booking.</p>
                             </>) : (<>
-                              <div className="w-14 h-14 rounded-full bg-blue-50 border border-blue-200 flex items-center justify-center mx-auto">
+                              <div className="w-14 h-14 rounded-full bg-green-50 border border-green-200 flex items-center justify-center mx-auto">
                                 <div className="w-6 h-6 border-3 border-[#635BFF] border-t-transparent rounded-full animate-spin" />
                               </div>
                               <p className="font-bold text-slate-800">Processing payment…</p>
@@ -3564,7 +3564,7 @@ export default function TravellerDashboard() {
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-300">
           <div className="bg-gradient-to-br from-[#166534] via-[#0E1E38] to-[#040D1D] border border-white/10 rounded-3xl max-w-md w-full p-8 shadow-2xl space-y-6 text-center animate-scale-in relative overflow-hidden">
             <div className="absolute right-4 bottom-4 text-9xl text-white/5 font-bold uppercase select-none pointer-events-none font-serif">ZIKA</div>
-            <div className="absolute -top-12 -left-12 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
+            <div className="absolute -top-12 -left-12 w-32 h-32 bg-green-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
             <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-amber-400 via-yellow-200 to-slate-100 text-[#1D8D2B] flex items-center justify-center text-3xl mx-auto shadow-xl shadow-yellow-500/10 font-bold border border-white/20">
               ✦

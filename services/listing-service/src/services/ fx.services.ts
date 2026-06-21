@@ -8,7 +8,7 @@ export async function convertCurrency(
   from: string,
   to: string
 ): Promise<number> {
-  const key = `${from}_${to}`;
+  const key = `${from.toUpperCase()}_${to.toUpperCase()}`;;
   const now = Date.now();
 
   const cached = cache.get(key);
@@ -46,7 +46,7 @@ async function getRate(from: string, to: string): Promise<number> {
       throw new Error(`Failed to fetch FX rates: ${response.statusText}`);
     }
     const data = await response.json();
-    const rate = data.rates[to];
+    const rate = data?.rates?.[to];
     if (rate === undefined) {
       throw new Error(`Currency ${to} not found in rates`);
     }

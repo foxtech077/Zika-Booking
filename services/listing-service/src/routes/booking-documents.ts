@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { prisma } from "../lib/prisma.js";
@@ -257,81 +257,86 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
       const guestId = (req as ProviderRequest).providerId;
       const { id } = req.params as { id: string };
 
-      const booking = await prisma.booking.findUnique({
-        where: { id },
-        include: {
-          listing: {
-            select: { id: true, name: true, address: true, town: true, country: true },
+      try {
+        const booking = await prisma.booking.findUnique({
+          where: { id },
+          include: {
+            listing: {
+              select: { id: true, name: true, address: true, town: true, country: true },
+            },
           },
-        },
-      });
-
-      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-      if (booking.guestId !== guestId)
-        return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
-      if (booking.status !== "confirmed")
-        return sendError(reply, 409, "NOT_CONFIRMED", "Receipt is only available for confirmed bookings.");
-
-      const isCar = booking.listingType === "car";
-      const lineItems: { label: string; amount: number; type: string }[] = [];
-
-      if (isCar) {
-        lineItems.push({ label: `Daily rate × ${booking.nightsOrDays} days`, amount: Number(booking.subtotal), type: "subtotal" });
-        if (Number(booking.deliveryFee) > 0)
-          lineItems.push({ label: "Delivery fee", amount: Number(booking.deliveryFee), type: "fee" });
-      } else {
-        lineItems.push({ label: `Nightly rate × ${booking.nightsOrDays} nights`, amount: Number(booking.subtotal), type: "subtotal" });
-        if (Number(booking.discountAmount) > 0)
-          lineItems.push({ label: "Long-stay discount", amount: -Number(booking.discountAmount), type: "discount" });
-      }
-      if (Number(booking.voucherDiscount) > 0) {
-        lineItems.push({
-          label: `Voucher (${booking.voucherCode ?? ""})`,
-          amount: -Number(booking.voucherDiscount),
-          type: "voucher",
         });
-      }
 
-      return sendSuccess(reply, 200, {
-        receiptNumber:    `RCP-${booking.reference}`,
-        bookingReference: booking.reference,
-        bookingId:        booking.id,
-        issuedAt:         (booking.confirmedAt ?? booking.createdAt).toISOString(),
-        status:           booking.status,
-        guest: {
-          name:  `${booking.guestFirstName} ${booking.guestLastName}`,
-          email: booking.guestEmail,
-          phone: booking.guestPhone ?? null,
-        },
-        listing: {
-          id:      booking.listing.id,
-          title:   booking.listing.name ?? null,
-          type:    booking.listingType,
-          address: booking.listing.address ?? null,
-          town:    booking.listing.town ?? null,
-          country: booking.listing.country ?? null,
-        },
-        period: {
-          checkIn:        booking.checkIn?.toISOString().slice(0, 10) ?? null,
-          checkOut:       booking.checkOut?.toISOString().slice(0, 10) ?? null,
-          pickupDatetime: booking.pickupDatetime?.toISOString() ?? null,
-          returnDatetime: booking.returnDatetime?.toISOString() ?? null,
-          nightsOrDays:   booking.nightsOrDays,
-        },
-        lineItems,
-        totals: {
-          subtotal:        Number(booking.subtotal),
-          discountAmount:  Number(booking.discountAmount),
-          deliveryFee:     Number(booking.deliveryFee),
-          voucherDiscount: Number(booking.voucherDiscount),
-          total:           Number(booking.totalAmount),
-          currency:        booking.currency,
-        },
-        payment: {
-          paymentId:   booking.paymentId ?? null,
-          confirmedAt: booking.confirmedAt?.toISOString() ?? null,
-        },
-      });
+        if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+        if (booking.guestId !== guestId)
+          return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
+        if (booking.status !== "confirmed")
+          return sendError(reply, 409, "NOT_CONFIRMED", "Receipt is only available for confirmed bookings.");
+
+        const isCar = booking.listingType === "car";
+        const lineItems: { label: string; amount: number; type: string }[] = [];
+
+        if (isCar) {
+          lineItems.push({ label: `Daily rate × ${booking.nightsOrDays} days`, amount: Number(booking.subtotal), type: "subtotal" });
+          if (Number(booking.deliveryFee) > 0)
+            lineItems.push({ label: "Delivery fee", amount: Number(booking.deliveryFee), type: "fee" });
+        } else {
+          lineItems.push({ label: `Nightly rate × ${booking.nightsOrDays} nights`, amount: Number(booking.subtotal), type: "subtotal" });
+          if (Number(booking.discountAmount) > 0)
+            lineItems.push({ label: "Long-stay discount", amount: -Number(booking.discountAmount), type: "discount" });
+        }
+        if (Number(booking.voucherDiscount) > 0) {
+          lineItems.push({
+            label: `Voucher (${booking.voucherCode ?? ""})`,
+            amount: -Number(booking.voucherDiscount),
+            type: "voucher",
+          });
+        }
+
+        return sendSuccess(reply, 200, {
+          receiptNumber:    `RCP-${booking.reference}`,
+          bookingReference: booking.reference,
+          bookingId:        booking.id,
+          issuedAt:         (booking.confirmedAt ?? booking.createdAt).toISOString(),
+          status:           booking.status,
+          guest: {
+            name:  `${booking.guestFirstName} ${booking.guestLastName}`,
+            email: booking.guestEmail,
+            phone: booking.guestPhone ?? null,
+          },
+          listing: {
+            id:      booking.listing.id,
+            title:   booking.listing.name ?? null,
+            type:    booking.listingType,
+            address: booking.listing.address ?? null,
+            town:    booking.listing.town ?? null,
+            country: booking.listing.country ?? null,
+          },
+          period: {
+            checkIn:        booking.checkIn?.toISOString().slice(0, 10) ?? null,
+            checkOut:       booking.checkOut?.toISOString().slice(0, 10) ?? null,
+            pickupDatetime: booking.pickupDatetime?.toISOString() ?? null,
+            returnDatetime: booking.returnDatetime?.toISOString() ?? null,
+            nightsOrDays:   booking.nightsOrDays,
+          },
+          lineItems,
+          totals: {
+            subtotal:        Number(booking.subtotal),
+            discountAmount:  Number(booking.discountAmount),
+            deliveryFee:     Number(booking.deliveryFee),
+            voucherDiscount: Number(booking.voucherDiscount),
+            total:           Number(booking.totalAmount),
+            currency:        booking.currency,
+          },
+          payment: {
+            paymentId:   booking.paymentId ?? null,
+            confirmedAt: booking.confirmedAt?.toISOString() ?? null,
+          },
+        });
+      } catch (err) {
+        req.log.error({ err }, "Failed to generate receipt for booking");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while generating the receipt.");
+      }
     },
   );
 
@@ -374,32 +379,47 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
       const guestId = (req as ProviderRequest).providerId;
       const { id } = req.params as { id: string };
 
-      const booking = await prisma.booking.findUnique({
-        where: { id },
-        include: { listing: { select: { name: true } } },
-      });
+      try {
+        const booking = await prisma.booking.findUnique({
+          where: { id },
+          include: { listing: { select: { name: true } } },
+        });
 
-      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-      if (booking.guestId !== guestId)
-        return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
-      if (booking.status !== "confirmed")
-        return sendError(reply, 409, "NOT_CONFIRMED", "Voucher PDF is only available for confirmed bookings.");
+        if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+        if (booking.guestId !== guestId)
+          return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
+        if (booking.status !== "confirmed")
+          return sendError(reply, 409, "NOT_CONFIRMED", "Voucher PDF is only available for confirmed bookings.");
 
-      const s3Key    = `bookings/${id}/voucher.pdf`;
-      const cacheKey = `bkdoc:pdf:${id}`;
+        const s3Key    = `bookings/${id}/voucher.pdf`;
+        const cacheKey = `bkdoc:pdf:${id}`;
 
-      // Generate and upload only once; presign freshly every request
-      const cached = await redis.get(cacheKey);
-      if (!cached) {
-        const pdfBuffer = await buildVoucherPdf(booking, booking.listing.name ?? "Your Listing");
-        await uploadBuffer(s3Key, pdfBuffer, "application/pdf");
-        await redis.set(cacheKey, "1", "EX", CACHE_TTL_SECONDS);
+        // Generate and upload only once; presign freshly every request
+        let cached: string | null = null;
+        try {
+          cached = await redis.get(cacheKey);
+        } catch (redisErr) {
+          req.log.warn({ err: redisErr }, "Redis cache read failed for booking voucher PDF");
+        }
+
+        if (!cached) {
+          const pdfBuffer = await buildVoucherPdf(booking, booking.listing.name ?? "Your Listing");
+          await uploadBuffer(s3Key, pdfBuffer, "application/pdf");
+          try {
+            await redis.set(cacheKey, "1", "EX", CACHE_TTL_SECONDS);
+          } catch (redisErr) {
+            req.log.warn({ err: redisErr }, "Redis cache write failed for booking voucher PDF");
+          }
+        }
+
+        const voucherPdfUrl = await createPresignedDownloadUrl(s3Key, PRESIGNED_URL_TTL);
+        const expiresAt     = new Date(Date.now() + PRESIGNED_URL_TTL * 1000).toISOString();
+
+        return sendSuccess(reply, 200, { voucherPdfUrl, expiresAt });
+      } catch (err) {
+        req.log.error({ err }, "Failed to generate or retrieve voucher PDF for booking");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while generating or retrieving the booking voucher PDF.");
       }
-
-      const voucherPdfUrl = await createPresignedDownloadUrl(s3Key, PRESIGNED_URL_TTL);
-      const expiresAt     = new Date(Date.now() + PRESIGNED_URL_TTL * 1000).toISOString();
-
-      return sendSuccess(reply, 200, { voucherPdfUrl, expiresAt });
     },
   );
 
@@ -443,40 +463,55 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
       const guestId = (req as ProviderRequest).providerId;
       const { id } = req.params as { id: string };
 
-      const booking = await prisma.booking.findUnique({
-        where: { id },
-        select: { id: true, guestId: true, reference: true, status: true },
-      });
-
-      if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
-      if (booking.guestId !== guestId)
-        return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
-      if (booking.status !== "confirmed")
-        return sendError(reply, 409, "NOT_CONFIRMED", "QR code is only available for confirmed bookings.");
-
-      const s3Key    = `bookings/${id}/qr.png`;
-      const cacheKey = `bkdoc:qr:${id}`;
-
-      const cached = await redis.get(cacheKey);
-      if (!cached) {
-        const qrBuffer = await QRCode.toBuffer(booking.reference, {
-          type: "png",
-          width: 400,
-          margin: 2,
-          color: { dark: "#000000ff", light: "#ffffffff" },
+      try {
+        const booking = await prisma.booking.findUnique({
+          where: { id },
+          select: { id: true, guestId: true, reference: true, status: true },
         });
-        await uploadBuffer(s3Key, qrBuffer, "image/png");
-        await redis.set(cacheKey, "1", "EX", CACHE_TTL_SECONDS);
+
+        if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+        if (booking.guestId !== guestId)
+          return sendError(reply, 403, "FORBIDDEN", "This booking does not belong to you.");
+        if (booking.status !== "confirmed")
+          return sendError(reply, 409, "NOT_CONFIRMED", "QR code is only available for confirmed bookings.");
+
+        const s3Key    = `bookings/${id}/qr.png`;
+        const cacheKey = `bkdoc:qr:${id}`;
+
+        let cached: string | null = null;
+        try {
+          cached = await redis.get(cacheKey);
+        } catch (redisErr) {
+          req.log.warn({ err: redisErr }, "Redis cache read failed for booking QR code");
+        }
+
+        if (!cached) {
+          const qrBuffer = await QRCode.toBuffer(booking.reference, {
+            type: "png",
+            width: 400,
+            margin: 2,
+            color: { dark: "#000000ff", light: "#ffffffff" },
+          });
+          await uploadBuffer(s3Key, qrBuffer, "image/png");
+          try {
+            await redis.set(cacheKey, "1", "EX", CACHE_TTL_SECONDS);
+          } catch (redisErr) {
+            req.log.warn({ err: redisErr }, "Redis cache write failed for booking QR code");
+          }
+        }
+
+        const qrCodeUrl = await createPresignedDownloadUrl(s3Key, PRESIGNED_URL_TTL);
+        const expiresAt = new Date(Date.now() + PRESIGNED_URL_TTL * 1000).toISOString();
+
+        return sendSuccess(reply, 200, {
+          qrCodeUrl,
+          bookingReference: booking.reference,
+          expiresAt,
+        });
+      } catch (err) {
+        req.log.error({ err }, "Failed to generate or retrieve QR code for booking");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while generating or retrieving the booking QR code.");
       }
-
-      const qrCodeUrl = await createPresignedDownloadUrl(s3Key, PRESIGNED_URL_TTL);
-      const expiresAt = new Date(Date.now() + PRESIGNED_URL_TTL * 1000).toISOString();
-
-      return sendSuccess(reply, 200, {
-        qrCodeUrl,
-        bookingReference: booking.reference,
-        expiresAt,
-      });
     },
   );
 }

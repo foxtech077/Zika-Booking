@@ -383,27 +383,27 @@ function OverviewCard({
 }) {
   const positive = (trend ?? 0) >= 0;
   return (
-    <Card hover>
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-5 hover:shadow-[0_6px_24px_rgba(0,0,0,0.09)] transition-shadow duration-200">
       {loading ? (
         <div className="h-20 rounded-xl bg-slate-100 animate-pulse" />
       ) : (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-slate-500">{title}</p>
-            <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
+            <p className="text-[15px] font-semibold text-slate-400 uppercase tracking-wide">{title}</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900 leading-none">{value}</p>
             {trend !== undefined && (
-              <p className={cn("mt-2 flex items-center gap-1 text-xs font-semibold", positive ? "text-emerald-600" : "text-red-600")}>
-                {positive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
-                {Math.abs(trend).toFixed(1)}% trend
+              <p className={cn("mt-2.5 flex items-center gap-1 text-[11px] font-semibold", positive ? "text-emerald-600" : "text-red-500")}>
+                {positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                {Math.abs(trend).toFixed(1)}%
               </p>
             )}
           </div>
-          <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl [&>svg]:h-5 [&>svg]:w-5", tone)}>
+          <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-sm [&>svg]:h-5 [&>svg]:w-5", tone)}>
             {icon}
           </div>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -433,26 +433,29 @@ export default function DashboardPage() {
 
   const statCards = useMemo(
     () => [
-      { title: "Total Listings", value: data.analytics.totalListings, icon: <Building2 />, trend: trend.totalListings, tone: "bg-blue-50 text-blue-700" },
-      { title: "Active Listings", value: data.analytics.activeListings, icon: <CheckCircle2 />, trend: trend.activeListings, tone: "bg-emerald-50 text-emerald-700" },
-      { title: "Total Bookings", value: data.analytics.totalBookings, icon: <BookOpen />, trend: trend.totalBookings, tone: "bg-indigo-50 text-indigo-700" },
-      { title: "Upcoming Bookings", value: data.analytics.upcomingBookings, icon: <CalendarDays />, trend: trend.upcomingBookings, tone: "bg-cyan-50 text-cyan-700" },
-      { title: "Pending Bookings", value: data.analytics.pendingBookings, icon: <Clock3 />, trend: trend.pendingBookings, tone: "bg-amber-50 text-amber-700" },
-      { title: "Cancelled Bookings", value: data.analytics.cancelledBookings, icon: <XCircle />, trend: trend.cancelledBookings, tone: "bg-red-50 text-red-700" },
-      { title: "Total Earnings", value: formatCurrency(data.analytics.totalEarnings), icon: <DollarSign />, trend: trend.totalEarnings, tone: "bg-emerald-50 text-emerald-700" },
-      { title: "This Month Earnings", value: formatCurrency(data.analytics.thisMonthEarnings), icon: <TrendingUp />, trend: trend.thisMonthEarnings, tone: "bg-violet-50 text-violet-700" },
-      { title: "Average Rating", value: data.analytics.averageRating ? data.analytics.averageRating.toFixed(1) : "0.0", icon: <Star />, trend: trend.averageRating, tone: "bg-yellow-50 text-yellow-700" },
-      { title: "Total Reviews", value: data.analytics.totalReviews, icon: <MessageSquare />, trend: trend.totalReviews, tone: "bg-rose-50 text-rose-700" },
+      { title: "Total Listings",     value: data.analytics.totalListings,                                         icon: <Building2 />,   trend: trend.totalListings,     tone: "bg-green-700 text-white" },
+      { title: "Active Listings",    value: data.analytics.activeListings,                                        icon: <CheckCircle2 />, trend: trend.activeListings,    tone: "bg-green-700 text-white" },
+      { title: "Total Bookings",     value: data.analytics.totalBookings,                                         icon: <BookOpen />,    trend: trend.totalBookings,     tone: "bg-green-700 text-white" },
+      { title: "Upcoming Bookings",  value: data.analytics.upcomingBookings,                                      icon: <CalendarDays />, trend: trend.upcomingBookings,  tone: "bg-green-700 text-white" },
+      { title: "Pending Bookings",   value: data.analytics.pendingBookings,                                       icon: <Clock3 />,      trend: trend.pendingBookings,   tone: "bg-green-700 text-white" },
+      { title: "Cancelled Bookings", value: data.analytics.cancelledBookings,                                     icon: <XCircle />,     trend: trend.cancelledBookings, tone: "bg-red-500 text-white" },
+      { title: "Total Earnings",     value: formatCurrency(data.analytics.totalEarnings),                        icon: <DollarSign />,  trend: trend.totalEarnings,     tone: "bg-green-700 text-white" },
+      { title: "This Month Earnings",value: formatCurrency(data.analytics.thisMonthEarnings),                    icon: <TrendingUp />,  trend: trend.thisMonthEarnings, tone: "bg-green-700 text-white" },
+      { title: "Average Rating",     value: data.analytics.averageRating ? data.analytics.averageRating.toFixed(1) : "0.0", icon: <Star />, trend: trend.averageRating, tone: "bg-green-700 text-white" },
+      { title: "Total Reviews",      value: data.analytics.totalReviews,                                         icon: <MessageSquare />,trend: trend.totalReviews,     tone: "bg-green-700 text-white" },
     ],
     [data.analytics, trend]
   );
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      {/* ── Greeting header ── */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Good morning, {firstName}</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Here is your provider performance overview.</p>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Good morning, {firstName} 👋
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">Here is your provider performance overview.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !isLoading} onClick={() => refetch()}>
@@ -470,7 +473,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {/* ── Stat cards ── */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => (
           <OverviewCard key={card.title} {...card} loading={isLoading} />
         ))}

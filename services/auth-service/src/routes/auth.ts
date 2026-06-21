@@ -129,125 +129,129 @@ export async function authRoutes(app: FastifyInstance) {
       country
     } = parsed.data;
 
-    const existing = await prisma.user.findUnique({
-      where: { email }
-    });
+    try {
+      const existing = await prisma.user.findUnique({
+        where: { email }
+      });
 
-    if (existing) {
-      return sendError(
-        reply,
-        409,
-        "EMAIL_EXISTS",
-        "An account with this email already exists.",
-        {
-          email: "An account with this email already exists."
-        }
-      );
-    }
-
-    const passwordHash = await hashPassword(password);
-
-    const skipVerification =
-      process.env["SKIP_EMAIL_VERIFICATION"] === "true";
-
-    const status = skipVerification
-      ? "active"
-      : "pending_verification";
-
-    const user = await prisma.user.create({
-      data: {
-        firstName,
-        lastName,
-        email,
-        passwordHash,
-        userType: userType as "guest" | "provider",
-        businessName: businessName ?? null,
-        country: country ?? null,
-        ...(skipVerification
-          ? {
-            status: "active",
-            emailVerified: true,
-            emailVerifiedAt: new Date()
+      if (existing) {
+        return sendError(
+          reply,
+          409,
+          "EMAIL_EXISTS",
+          "An account with this email already exists.",
+          {
+            email: "An account with this email already exists."
           }
-          : {
-            status: "pending_verification"
-          })
+        );
       }
-    });
 
-    // Skip email verification
-    if (skipVerification) {
-      const tokens = await issueTokens(
-        reply,
-        user.id,
-        user.userType,
-        "active"
+      const passwordHash = await hashPassword(password);
+
+      const skipVerification =
+        process.env["SKIP_EMAIL_VERIFICATION"] === "true";
+
+      const status = skipVerification
+        ? "active"
+        : "pending_verification";
+
+      const user = await prisma.user.create({
+        data: {
+          firstName,
+          lastName,
+          email,
+          passwordHash,
+          userType: userType as "guest" | "provider",
+          businessName: businessName ?? null,
+          country: country ?? null,
+          ...(skipVerification
+            ? {
+              status: "active",
+              emailVerified: true,
+              emailVerifiedAt: new Date()
+            }
+            : {
+              status: "pending_verification"
+            })
+        }
+      });
+
+      // Skip email verification
+      if (skipVerification) {
+        const tokens = await issueTokens(
+          reply,
+          user.id,
+          user.userType,
+          "active"
+        );
+
+        return sendSuccess(reply, 201, {
+          user: publicUser(user),
+          tokens
+        });
+      }
+
+      // Email verification flow
+      const plainToken = generateToken();
+
+     // console.log("EMAIL VERIFICATION TOKEN:", plainToken);
+
+      const expiresAt = new Date(
+        Date.now() + 24 * 60 * 60 * 1000
       );
+
+      await prisma.verificationToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: hashToken(plainToken),
+          tokenType: "email_verification",
+          expiresAt
+        }
+      });
+
+      try {
+        await sendVerificationEmail(email, plainToken);
+
+        await prisma.emailLog.create({
+          data: {
+            userId: user.id,
+            type: "verification",
+            recipient: email,
+            status: "sent",
+            sentAt: new Date()
+          }
+        });
+      } catch (error) {
+        console.error(
+          "[Auth] Verification email delivery failed",
+          error
+        );
+
+        await prisma.emailLog.create({
+          data: {
+            userId: user.id,
+            type: "verification",
+            recipient: email,
+            status: "failed",
+            sentAt: new Date()
+          }
+        });
+
+        return sendError(
+          reply,
+          503,
+          "EMAIL_DELIVERY_FAILED",
+          "We could not send the verification email. Please try again in a few minutes."
+        );
+      }
 
       return sendSuccess(reply, 201, {
-        user: publicUser(user),
-        tokens
+        message:
+          "Registration successful. Please check your email to verify your account."
       });
+    } catch (err) {
+      return sendError(reply, 400, "REGISTRATION_FAILED", "Registration could not be completed. Please try again.");
     }
-
-    // Email verification flow
-    const plainToken = generateToken();
-
-   // console.log("EMAIL VERIFICATION TOKEN:", plainToken);
-
-    const expiresAt = new Date(
-      Date.now() + 24 * 60 * 60 * 1000
-    );
-
-    await prisma.verificationToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: hashToken(plainToken),
-        tokenType: "email_verification",
-        expiresAt
-      }
-    });
-
-    try {
-      await sendVerificationEmail(email, plainToken);
-
-      await prisma.emailLog.create({
-        data: {
-          userId: user.id,
-          type: "verification",
-          recipient: email,
-          status: "sent",
-          sentAt: new Date()
-        }
-      });
-    } catch (error) {
-      console.error(
-        "[Auth] Verification email delivery failed",
-        error
-      );
-
-      await prisma.emailLog.create({
-        data: {
-          userId: user.id,
-          type: "verification",
-          recipient: email,
-          status: "failed",
-          sentAt: new Date()
-        }
-      });
-
-      return sendError(
-        reply,
-        503,
-        "EMAIL_DELIVERY_FAILED",
-        "We could not send the verification email. Please try again in a few minutes."
-      );
-    }
-
-    return sendSuccess(reply, 201, {
-      message:
-        "Registration successful. Please check your email to verify your account."
-    });
   });
 
   // ── GET /verify  (Email link landing — HTML page for all clients) ───────────
@@ -323,58 +327,62 @@ export async function authRoutes(app: FastifyInstance) {
 </html>`);
     }
 
-    // ── Validate token presence ────────────────────────────────────────────────
-    if (!token || token.length !== 64) {
-      return html( "Invalid Link", "This verification link is invalid or incomplete. Please request a new verification email from the app.", "#dc2626");
-    }
-
-    // ── Rate limit ─────────────────────────────────────────────────────────────
-    const ip = req.ip;
-    const rlCount = await incrementCounter(`rl:verify:${ip}`, 60);
-    if (rlCount > 10) {
-      return html( "Too Many Requests", "You've made too many requests. Please wait a moment and try again.", "#d97706");
-    }
-
-    const tokenHash = hashToken(token);
-    const record = await prisma.verificationToken.findUnique({
-      where: { tokenHash },
-      include: { user: true },
-    });
-
-    if (!record || record.tokenType !== "email_verification") {
-      return html( "Invalid Link", "This verification link is invalid. Please request a new verification email from the app.", "#dc2626");
-    }
-
-    if (record.used) {
-      return html("🔒", "Already Used", "This verification link has already been used. Your email may already be verified — please open the app and sign in.", "#7c3aed", true);
-    }
-
-    if (record.expiresAt < new Date()) {
-      return html("⌛", "Link Expired", "Your verification link has expired (links are valid for 24 hours). Please open the app and request a new verification email.", "#d97706");
-    }
-
-    // Already verified
-    if (record.user.emailVerified && record.user.status === "active") {
-      return html("✅", "Already Verified!", "Your email address is already verified. Open the app and sign in to your account.", "#16a34a", true);
-    }
-
-    // ── Perform verification ───────────────────────────────────────────────────
     try {
-      await prisma.$transaction([
-        prisma.verificationToken.update({
-          where: { id: record.id },
-          data: { used: true, usedAt: new Date() },
-        }),
-        prisma.user.update({
-          where: { id: record.userId },
-          data: { status: "active", emailVerified: true, emailVerifiedAt: new Date() },
-        }),
-      ]);
-    } catch {
+      // ── Validate token presence ────────────────────────────────────────────────
+      if (!token || token.length !== 64) {
+        return html( "Invalid Link", "This verification link is invalid or incomplete. Please request a new verification email from the app.", "#dc2626");
+      }
+
+      // ── Rate limit ─────────────────────────────────────────────────────────────
+      const ip = req.ip;
+      const rlCount = await incrementCounter(`rl:verify:${ip}`, 60);
+      if (rlCount > 10) {
+        return html( "Too Many Requests", "You've made too many requests. Please wait a moment and try again.", "#d97706");
+      }
+
+      const tokenHash = hashToken(token);
+      const record = await prisma.verificationToken.findUnique({
+        where: { tokenHash },
+        include: { user: true },
+      });
+
+      if (!record || record.tokenType !== "email_verification") {
+        return html( "Invalid Link", "This verification link is invalid. Please request a new verification email from the app.", "#dc2626");
+      }
+
+      if (record.used) {
+        return html("🔒", "Already Used", "This verification link has already been used. Your email may already be verified — please open the app and sign in.", "#7c3aed", true);
+      }
+
+      if (record.expiresAt < new Date()) {
+        return html("⌛", "Link Expired", "Your verification link has expired (links are valid for 24 hours). Please open the app and request a new verification email.", "#d97706");
+      }
+
+      // Already verified
+      if (record.user.emailVerified && record.user.status === "active") {
+        return html("✅", "Already Verified!", "Your email address is already verified. Open the app and sign in to your account.", "#16a34a", true);
+      }
+
+      // ── Perform verification ───────────────────────────────────────────────────
+      try {
+        await prisma.$transaction([
+          prisma.verificationToken.update({
+            where: { id: record.id },
+            data: { used: true, usedAt: new Date() },
+          }),
+          prisma.user.update({
+            where: { id: record.userId },
+            data: { status: "active", emailVerified: true, emailVerifiedAt: new Date() },
+          }),
+        ]);
+      } catch {
+        return html("⚠️", "Something Went Wrong", "We could not complete your verification. Please try again or contact support.", "#dc2626");
+      }
+
+      return html("🎉", "Email Verified!", "Your Kainook account is now active. Tap the button below to open the app and sign in.", "#16a34a", true);
+    } catch (err) {
       return html("⚠️", "Something Went Wrong", "We could not complete your verification. Please try again or contact support.", "#dc2626");
     }
-
-    return html("🎉", "Email Verified!", "Your Kainook account is now active. Tap the button below to open the app and sign in.", "#16a34a", true);
   });
 
   // ── GET /auth/verify  (UC-1.3) ─────────────────────────────────────────────
@@ -408,103 +416,114 @@ export async function authRoutes(app: FastifyInstance) {
         );
       }
 
-      const ip = req.ip;
-      const rlCount = await incrementCounter(`rl:verify:${ip}`, 60);
+      try {
+        const ip = req.ip;
+        const rlCount = await incrementCounter(`rl:verify:${ip}`, 60);
 
-      if (rlCount > 10) {
-        return sendError(
-          reply,
-          429,
-          "RATE_LIMITED",
-          "Too many requests. Please wait a moment and try again."
-        );
-      }
+        if (rlCount > 10) {
+          return sendError(
+            reply,
+            429,
+            "RATE_LIMITED",
+            "Too many requests. Please wait a moment and try again."
+          );
+        }
 
-      const tokenHash = hashToken(token);
+        const tokenHash = hashToken(token);
 
-      const record = await prisma.verificationToken.findUnique({
-        where: { tokenHash },
-        include: { user: true },
-      });
-
-      if (!record || record.tokenType !== "email_verification") {
-        return sendError(
-          reply,
-          400,
-          "INVALID_TOKEN",
-          "This verification link is invalid. Please request a new one."
-        );
-      }
-
-      if (record.used) {
-        return sendError(
-          reply,
-          400,
-          "TOKEN_USED",
-          "This verification link has already been used. If you need to verify your email, please request a new link."
-        );
-      }
-
-      if (record.expiresAt < new Date()) {
-        return sendError(
-          reply,
-          410,
-          "TOKEN_EXPIRED",
-          "Your verification link has expired."
-        );
-      }
-
-      // Already verified
-      if (record.user.emailVerified && record.user.status === "active") {
-        const tokens = await issueTokens(
-          reply,
-          record.user.id,
-          record.user.userType,
-          "active"
-        );
-
-        return sendSuccess(reply, 200, {
-          message: "You're already verified. Welcome back!",
-          user: publicUser(record.user),
-          tokens,
+        const record = await prisma.verificationToken.findUnique({
+          where: { tokenHash },
+          include: { user: true },
         });
+
+        if (!record || record.tokenType !== "email_verification") {
+          return sendError(
+            reply,
+            400,
+            "INVALID_TOKEN",
+            "This verification link is invalid. Please request a new one."
+          );
+        }
+
+        if (record.used) {
+          return sendError(
+            reply,
+            400,
+            "TOKEN_USED",
+            "This verification link has already been used. If you need to verify your email, please request a new link."
+          );
+        }
+
+        if (record.expiresAt < new Date()) {
+          return sendError(
+            reply,
+            410,
+            "TOKEN_EXPIRED",
+            "Your verification link has expired."
+          );
+        }
+
+        // Already verified
+        if (record.user.emailVerified && record.user.status === "active") {
+          const tokens = await issueTokens(
+            reply,
+            record.user.id,
+            record.user.userType,
+            "active"
+          );
+
+          return sendSuccess(reply, 200, {
+            message: "You're already verified. Welcome back!",
+            user: publicUser(record.user),
+            tokens,
+          });
+        }
+
+        try {
+          await prisma.$transaction([
+            prisma.verificationToken.update({
+              where: { id: record.id },
+              data: {
+                used: true,
+                usedAt: new Date(),
+              },
+            }),
+
+            prisma.user.update({
+              where: { id: record.userId },
+              data: {
+                status: "active",
+                emailVerified: true,
+                emailVerifiedAt: new Date(),
+              },
+            }),
+          ]);
+
+          const updatedUser = await prisma.user.findUniqueOrThrow({
+            where: { id: record.userId },
+          });
+
+          const tokens = await issueTokens(
+            reply,
+            updatedUser.id,
+            updatedUser.userType,
+            "active"
+          );
+
+          return sendSuccess(reply, 200, {
+            message: "Email verified — welcome to Kainook!",
+            user: publicUser(updatedUser),
+            tokens,
+          });
+        } catch (err: any) {
+          if (err?.code === "P2025") {
+            return sendError(reply, 404, "USER_NOT_FOUND", "User account not found.");
+          }
+          return sendError(reply, 400, "VERIFICATION_FAILED", "Email verification could not be completed. Please try again.");
+        }
+      } catch (err) {
+        return sendError(reply, 400, "VERIFICATION_FAILED", "Email verification could not be completed. Please try again.");
       }
-
-      await prisma.$transaction([
-        prisma.verificationToken.update({
-          where: { id: record.id },
-          data: {
-            used: true,
-            usedAt: new Date(),
-          },
-        }),
-
-        prisma.user.update({
-          where: { id: record.userId },
-          data: {
-            status: "active",
-            emailVerified: true,
-            emailVerifiedAt: new Date(),
-          },
-        }),
-      ]);
-
-      const updatedUser = await prisma.user.findUniqueOrThrow({
-        where: { id: record.userId },
-      });
-
-      const tokens = await issueTokens(
-        reply,
-        updatedUser.id,
-        updatedUser.userType,
-        "active"
-      );
-
-      return sendSuccess(reply, 200, {
-        message: "Email verified — welcome to Kainook!",
-        user: publicUser(updatedUser),
-        tokens,
-      });
     }
   );
   // ── POST /auth/resend-verification  (UC-1.4) ───────────────────────────────
@@ -524,54 +543,58 @@ export async function authRoutes(app: FastifyInstance) {
     if (!parsed.success) return sendError(reply, 422, "VALIDATION_ERROR", "Invalid email.");
     const { email } = parsed.data;
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user || user.status !== "pending_verification" || user.emailVerified) {
-      // Don't reveal account existence — return same response
-      return sendSuccess(reply, 200, { message: "If the email is pending verification, a new link has been sent." });
-    }
-
-    // 60-second cooldown (BR-1.6)
-    const cooldownKey = `cooldown:resend:${user.id}`;
-    if (await getCooldown(cooldownKey)) {
-      return sendError(reply, 429, "COOLDOWN", "Please wait before requesting another email.");
-    }
-
-    // Hourly limit: 3 resends (BR-1.6)
-    const hourlyKey = `rl:resend:${user.id}`;
-    const hourlyCount = await incrementCounter(hourlyKey, 3600);
-    if (hourlyCount > 3) {
-      return sendError(reply, 429, "RATE_LIMITED", "You've requested the maximum number of verification emails. Please wait before trying again, or contact support.");
-    }
-
-    // Invalidate old tokens
-    await prisma.verificationToken.updateMany({
-      where: { userId: user.id, used: false, tokenType: "email_verification" },
-      data: { used: true, usedAt: new Date(), invalidatedReason: "superseded" },
-    });
-
-    // New token
-    const plainToken = generateToken();
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    await prisma.verificationToken.create({
-      data: { userId: user.id, tokenHash: hashToken(plainToken), tokenType: "email_verification", expiresAt },
-    });
-
-    await setCooldown(cooldownKey, 60);
-
     try {
-      await sendVerificationEmail(email, plainToken);
-      await prisma.emailLog.create({
-        data: { userId: user.id, type: "verification_resend", recipient: email, status: "sent", sentAt: new Date() },
-      });
-    } catch (error) {
-      console.error("[Auth] Resend verification email delivery failed", error);
-      await prisma.emailLog.create({
-        data: { userId: user.id, type: "verification_resend", recipient: email, status: "failed", sentAt: new Date() },
-      });
-      return sendError(reply, 503, "EMAIL_DELIVERY_FAILED", "We could not resend the verification email. Please try again in a few minutes.");
-    }
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user || user.status !== "pending_verification" || user.emailVerified) {
+        // Don't reveal account existence — return same response
+        return sendSuccess(reply, 200, { message: "If the email is pending verification, a new link has been sent." });
+      }
 
-    return sendSuccess(reply, 200, { message: "Verification email resent. Please check your inbox." });
+      // 60-second cooldown (BR-1.6)
+      const cooldownKey = `cooldown:resend:${user.id}`;
+      if (await getCooldown(cooldownKey)) {
+        return sendError(reply, 429, "COOLDOWN", "Please wait before requesting another email.");
+      }
+
+      // Hourly limit: 3 resends (BR-1.6)
+      const hourlyKey = `rl:resend:${user.id}`;
+      const hourlyCount = await incrementCounter(hourlyKey, 3600);
+      if (hourlyCount > 3) {
+        return sendError(reply, 429, "RATE_LIMITED", "You've requested the maximum number of verification emails. Please wait before trying again, or contact support.");
+      }
+
+      // Invalidate old tokens
+      await prisma.verificationToken.updateMany({
+        where: { userId: user.id, used: false, tokenType: "email_verification" },
+        data: { used: true, usedAt: new Date(), invalidatedReason: "superseded" },
+      });
+
+      // New token
+      const plainToken = generateToken();
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await prisma.verificationToken.create({
+        data: { userId: user.id, tokenHash: hashToken(plainToken), tokenType: "email_verification", expiresAt },
+      });
+
+      await setCooldown(cooldownKey, 60);
+
+      try {
+        await sendVerificationEmail(email, plainToken);
+        await prisma.emailLog.create({
+          data: { userId: user.id, type: "verification_resend", recipient: email, status: "sent", sentAt: new Date() },
+        });
+      } catch (error) {
+        console.error("[Auth] Resend verification email delivery failed", error);
+        await prisma.emailLog.create({
+          data: { userId: user.id, type: "verification_resend", recipient: email, status: "failed", sentAt: new Date() },
+        });
+        return sendError(reply, 503, "EMAIL_DELIVERY_FAILED", "We could not resend the verification email. Please try again in a few minutes.");
+      }
+
+      return sendSuccess(reply, 200, { message: "Verification email resent. Please check your inbox." });
+    } catch (err) {
+      return sendError(reply, 400, "RESEND_FAILED", "Could not resend the verification email. Please try again.");
+    }
   });
 
   // ── POST /auth/login  (UC-1.5) ─────────────────────────────────────────────
@@ -602,68 +625,150 @@ export async function authRoutes(app: FastifyInstance) {
     const { email, password } = parsed.data;
     console.log("[Login] Normalized email from Zod:", email);
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    console.log("[Login] DB user found:", user ? "YES" : "NO");
-    if (user) {
-      console.log("[Login] user.status:", user.status);
-      console.log("[Login] user.emailVerified:", user.emailVerified);
-      console.log("[Login] user.passwordHash is null:", user.passwordHash === null);
-      console.log("[Login] user.oauthProvider:", user.oauthProvider);
+    try {
+      const user = await prisma.user.findUnique({ where: { email } });
+      console.log("[Login] DB user found:", user ? "YES" : "NO");
+      if (user) {
+        console.log("[Login] user.status:", user.status);
+        console.log("[Login] user.emailVerified:", user.emailVerified);
+        console.log("[Login] user.passwordHash is null:", user.passwordHash === null);
+        console.log("[Login] user.oauthProvider:", user.oauthProvider);
+      }
+
+      const GENERIC = "Incorrect email or password.";
+
+      // Timing-safe: always run bcrypt even if user not found (prevents timing attacks)
+      const dummyHash = "$2b$12$invalidhashfortimingprotection000000000000000000000000000";
+      const passwordOk = user?.passwordHash
+        ? await verifyPassword(password, user.passwordHash)
+        : await verifyPassword(password, dummyHash).then(() => false);
+
+      console.log("[Login] passwordOk:", passwordOk);
+
+      if (!user || !passwordOk) {
+        console.log("[Login] FAIL → INVALID_CREDENTIALS (user found:", !!user, "passwordOk:", passwordOk, ")");
+        return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
+      }
+
+      if (user.status === "pending_verification") {
+        console.log("[Login] FAIL → EMAIL_NOT_VERIFIED");
+        return sendError(
+          reply,
+          403,
+          "EMAIL_NOT_VERIFIED",
+          "Please verify your email address to sign in."
+        );
+      }
+      if (user.status === "suspended") {
+        return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended. Please contact support for assistance.");
+      }
+      if (user.status === "banned") {
+        return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
+      }
+
+      console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      return sendSuccess(reply, 200, { user: publicUser(user), tokens });
+    } catch {
+      return sendError(reply, 400, "LOGIN_FAILED", "Unable to complete sign-in. Please check your credentials and try again.");
     }
+  });
 
-    const GENERIC = "Incorrect email or password.";
-
-    // Timing-safe: always run bcrypt even if user not found (prevents timing attacks)
-    const dummyHash = "$2b$12$invalidhashfortimingprotection000000000000000000000000000";
-    const passwordOk = user?.passwordHash
-      ? await verifyPassword(password, user.passwordHash)
-      : await verifyPassword(password, dummyHash).then(() => false);
-
-    console.log("[Login] passwordOk:", passwordOk);
-
-    if (!user || !passwordOk) {
-      console.log("[Login] FAIL → INVALID_CREDENTIALS (user found:", !!user, "passwordOk:", passwordOk, ")");
-      return sendError(reply, 401, "INVALID_CREDENTIALS", GENERIC);
+  // ── GET /auth/me  (Loyalty & Profile) ──────────────────────────────────────
+  app.get("/auth/me", {
+    schema: {
+      tags: ["User Auth"],
+      summary: "Get current user profile including loyalty status",
+      security: [{ bearerAuth: [] }],
+      response: {
+        200: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            data: {
+              type: "object",
+              properties: {
+                user: {
+                  type: "object",
+                  properties: {
+                    id: { type: "string" },
+                    firstName: { type: "string" },
+                    lastName: { type: "string" },
+                    email: { type: "string" },
+                    status: { type: "string" },
+                    userType: { type: "string" },
+                    businessName: { type: "string", nullable: true },
+                    country: { type: "string", nullable: true },
+                    emailVerified: { type: "boolean" },
+                    currentTier: { type: "string" },
+                    loyaltyPoints: { type: "integer" },
+                  }
+                },
+                pointsToNextTier: { type: "integer", nullable: true },
+                nextTier: { type: "string", nullable: true },
+              }
+            }
+          }
+        },
+        401: { type: "object" },
+        404: { type: "object" }
+      }
+    },
+    preHandler: [requireAuth]
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const userId = (req as FastifyRequest & { userId: string }).userId;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      return sendError(reply, 404, "USER_NOT_FOUND", "User not found.");
     }
-
-    if (user.status === "pending_verification") {
-      console.log("[Login] FAIL → EMAIL_NOT_VERIFIED");
-      return sendError(
-        reply,
-        403,
-        "EMAIL_NOT_VERIFIED",
-        "Please verify your email address to sign in."
-      );
+    
+    let nextTier: string | null = null;
+    let pointsToNextTier: number | null = null;
+    
+    if (user.loyaltyPoints < 500) {
+      nextTier = "silver";
+      pointsToNextTier = 500 - user.loyaltyPoints;
+    } else if (user.loyaltyPoints < 2000) {
+      nextTier = "gold";
+      pointsToNextTier = 2000 - user.loyaltyPoints;
+    } else if (user.loyaltyPoints < 5000) {
+      nextTier = "diamond";
+      pointsToNextTier = 5000 - user.loyaltyPoints;
     }
-    if (user.status === "suspended") {
-      return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended. Please contact support for assistance.");
-    }
-    if (user.status === "banned") {
-      return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
-    }
-
-    console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
-    const tokens = await issueTokens(reply, user.id, user.userType, user.status);
-    return sendSuccess(reply, 200, { user: publicUser(user), tokens });
+    
+    return sendSuccess(reply, 200, {
+      user: publicUser(user),
+      nextTier,
+      pointsToNextTier
+    });
   });
 
   // ── POST /auth/logout  (UC-1.9) ────────────────────────────────────────────
   app.post("/auth/logout", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const refreshToken = req.cookies["refreshToken"];
-    if (refreshToken) {
-      const tokenHash = hashToken(refreshToken);
-      await prisma.session.updateMany({ where: { tokenHash }, data: { revoked: true } });
+    try {
+      const refreshToken = req.cookies["refreshToken"];
+      if (refreshToken) {
+        const tokenHash = hashToken(refreshToken);
+        await prisma.session.updateMany({ where: { tokenHash }, data: { revoked: true } });
+      }
+      reply.clearCookie("refreshToken", { path: "/" });
+      return sendSuccess(reply, 200, { message: "Signed out successfully." });
+    } catch {
+      return sendError(reply, 400, "LOGOUT_FAILED", "Sign-out could not be completed. Please try again.");
     }
-    reply.clearCookie("refreshToken", { path: "/" });
-    return sendSuccess(reply, 200, { message: "Signed out successfully." });
   });
 
   // ── POST /auth/logout-all  (UC-1.9 A2) ────────────────────────────────────
   app.post("/auth/logout-all", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const userId = (req as FastifyRequest & { userId: string }).userId;
-    await prisma.session.updateMany({ where: { userId }, data: { revoked: true } });
-    reply.clearCookie("refreshToken", { path: "/" });
-    return sendSuccess(reply, 200, { message: "Signed out from all devices." });
+    try {
+      const userId = (req as FastifyRequest & { userId: string }).userId;
+      await prisma.session.updateMany({ where: { userId }, data: { revoked: true } });
+      reply.clearCookie("refreshToken", { path: "/" });
+      return sendSuccess(reply, 200, { message: "Signed out from all devices." });
+    } catch {
+      return sendError(reply, 400, "LOGOUT_FAILED", "Sign-out from all devices could not be completed. Please try again.");
+    }
   });
 
   // ── POST /auth/refresh  (UC-1.5) ───────────────────────────────────────────
@@ -671,24 +776,28 @@ export async function authRoutes(app: FastifyInstance) {
     const refreshToken = req.cookies["refreshToken"];
     if (!refreshToken) return sendError(reply, 401, "NO_TOKEN", "No refresh token.");
 
-    const tokenHash = hashToken(refreshToken);
-    const session = await prisma.session.findUnique({
-      where: { tokenHash },
-      include: { user: true },
-    });
+    try {
+      const tokenHash = hashToken(refreshToken);
+      const session = await prisma.session.findUnique({
+        where: { tokenHash },
+        include: { user: true },
+      });
 
-    if (!session || session.revoked || session.expiresAt < new Date()) {
-      reply.clearCookie("refreshToken", { path: "/" });
-      return sendError(reply, 401, "INVALID_TOKEN", "Session expired. Please sign in again.");
-    }
-    if (session.user.status !== "active") {
-      return sendError(reply, 403, "ACCOUNT_INACTIVE", "Account is not active.");
-    }
+      if (!session || session.revoked || session.expiresAt < new Date()) {
+        reply.clearCookie("refreshToken", { path: "/" });
+        return sendError(reply, 401, "INVALID_TOKEN", "Session expired. Please sign in again.");
+      }
+      if (session.user.status !== "active") {
+        return sendError(reply, 403, "ACCOUNT_INACTIVE", "Account is not active.");
+      }
 
-    // Rotate: revoke old, issue new
-    await prisma.session.update({ where: { id: session.id }, data: { revoked: true } });
-    const tokens = await issueTokens(reply, session.userId, session.user.userType, session.user.status);
-    return sendSuccess(reply, 200, { tokens });
+      // Rotate: revoke old, issue new
+      await prisma.session.update({ where: { id: session.id }, data: { revoked: true } });
+      const tokens = await issueTokens(reply, session.userId, session.user.userType, session.user.status);
+      return sendSuccess(reply, 200, { tokens });
+    } catch {
+      return sendError(reply, 400, "REFRESH_FAILED", "Token refresh failed. Please sign in again.");
+    }
   });
 
   // ── POST /auth/forgot-password  (UC-1.8) ───────────────────────────────────
@@ -709,33 +818,36 @@ export async function authRoutes(app: FastifyInstance) {
     if (!parsed.success) return sendSuccess(reply, 200, { message: "If an account with that email exists, we've sent a password reset link." });
     const { email } = parsed.data;
 
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (user && user.status === "active" && user.passwordHash) {
-      const plainToken = generateToken();
+    try {
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (user && user.status === "active" && user.passwordHash) {
+        const plainToken = generateToken();
 
-      await prisma.verificationToken.create({
-        data: {
-          userId: user.id,
-          tokenHash: hashToken(plainToken),
-          tokenType: "password_reset",
-          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-        },
-      });
+        await prisma.verificationToken.create({
+          data: {
+            userId: user.id,
+            tokenHash: hashToken(plainToken),
+            tokenType: "password_reset",
+            expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+          },
+        });
 
-      const webBase = (process.env.WEB_BASE_URL ?? "http://localhost:3000").trim().replace(/\/$/, "");
-      const resetUrl = `${webBase}/reset-password?token=${plainToken}`;
+        const webBase = (process.env.WEB_BASE_URL ?? "http://localhost:3000").trim().replace(/\/$/, "");
+        const resetUrl = `${webBase}/reset-password?token=${plainToken}`;
 
-      try {
-        await sendPasswordResetEmail(email, plainToken);
-      } catch (error) {
-        console.error("Email sending failed:", error);
+        try {
+          await sendPasswordResetEmail(email, plainToken);
+        } catch (error) {
+          console.error("Email sending failed:", error);
+        }
       }
+
+      return sendSuccess(reply, 200, {
+        message: "If an account with that email exists, we've sent a password reset link.",
+      });
+    } catch (err) {
+      return sendError(reply, 400, "FORGOT_PASSWORD_FAILED", "Unable to process password reset request. Please try again.");
     }
-
-    return sendSuccess(reply, 200, {
-      message: "If an account with that email exists, we've sent a password reset link.",
-
-    });
   });
 
   // ── POST /auth/reset-password  (UC-1.8) ────────────────────────────────────
@@ -769,32 +881,43 @@ export async function authRoutes(app: FastifyInstance) {
 
     const { token, password } = parsed.data;
 
-    const tokenHash = hashToken(token);
-    const record = await prisma.verificationToken.findUnique({
-      where: { tokenHash }, include: { user: true },
-    });
+    try {
+      const tokenHash = hashToken(token);
+      const record = await prisma.verificationToken.findUnique({
+        where: { tokenHash }, include: { user: true },
+      });
 
-    if (!record || record.tokenType !== "password_reset") {
-      return sendError(reply, 400, "INVALID_TOKEN", "This password reset link is invalid. Please request a new one.");
+      if (!record || record.tokenType !== "password_reset") {
+        return sendError(reply, 400, "INVALID_TOKEN", "This password reset link is invalid. Please request a new one.");
+      }
+      if (record.used) {
+        return sendError(reply, 400, "TOKEN_USED", "This reset link has already been used.");
+      }
+      if (record.expiresAt < new Date()) {
+        return sendError(reply, 410, "TOKEN_EXPIRED", "This password reset link has expired. Please request a new one.");
+      }
+
+      try {
+        const passwordHash = await hashPassword(password);
+        await prisma.$transaction([
+          prisma.verificationToken.update({ where: { id: record.id }, data: { used: true, usedAt: new Date() } }),
+          prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+          prisma.session.updateMany({ where: { userId: record.userId }, data: { revoked: true } }),
+        ]);
+
+        const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
+        const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status);
+
+        return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser), tokens });
+      } catch (err: any) {
+        if (err?.code === "P2025") {
+          return sendError(reply, 404, "USER_NOT_FOUND", "User account not found. The account may have been deleted.");
+        }
+        return sendError(reply, 400, "RESET_FAILED", "Password reset could not be completed. Please request a new reset link.");
+      }
+    } catch (err) {
+      return sendError(reply, 400, "RESET_FAILED", "Password reset could not be completed. Please request a new reset link.");
     }
-    if (record.used) {
-      return sendError(reply, 400, "TOKEN_USED", "This reset link has already been used.");
-    }
-    if (record.expiresAt < new Date()) {
-      return sendError(reply, 410, "TOKEN_EXPIRED", "This password reset link has expired. Please request a new one.");
-    }
-
-    const passwordHash = await hashPassword(password);
-    await prisma.$transaction([
-      prisma.verificationToken.update({ where: { id: record.id }, data: { used: true, usedAt: new Date() } }),
-      prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
-      prisma.session.updateMany({ where: { userId: record.userId }, data: { revoked: true } }),
-    ]);
-
-    const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
-    const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status);
-
-    return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser), tokens });
   });
 
   // ── POST /auth/oauth/google  (UC-1.6) ──────────────────────────────────────
@@ -836,89 +959,93 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 401, "OAUTH_FAILED", "Sign in with Google failed. Please try again.");
     }
 
-        const { email, given_name: firstName, family_name: lastName, sub: googleSub } = googlePayload;
+        try {
+      const { email, given_name: firstName, family_name: lastName, sub: googleSub } = googlePayload;
 
-    // Check if account exists
-    const existingByEmail = await prisma.user.findUnique({ where: { email } });
+      // Check if account exists
+      const existingByEmail = await prisma.user.findUnique({ where: { email } });
 
-    if (!existingByEmail) {
-      // Prevent Providers from creating new accounts through Google OAuth.
-      if (userType === "provider") {
-        return sendError(
-          reply,
-          400,
-          "REGISTRATION_DENIED",
-          "Providers are not allowed to use Google OAuth for initial registration."
-        );
-      }
+      if (!existingByEmail) {
+        // Prevent Providers from creating new accounts through Google OAuth.
+        if (userType === "provider") {
+          return sendError(
+            reply,
+            400,
+            "REGISTRATION_DENIED",
+            "Providers are not allowed to use Google OAuth for initial registration."
+          );
+        }
 
-      // Guest is allowed to register
-      const user = await prisma.user.create({
-        data: {
-          firstName: firstName ?? "User",
-          lastName: lastName ?? "",
-          email,
-          status: "active",
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
-          oauthProvider: "google",
-          oauthSub: googleSub,
-          userType: "guest",
-          businessName: businessName ?? null,
-          country: country ?? null,
-        },
-      });
-      await sendWelcomeEmail(email, user.firstName).catch(() => null);
-      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
-      return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: false });
-    }
-
-    let user = existingByEmail;
-
-    if (user.userType === "provider") {
-      // After a Provider account has been created and verified, the Provider may use "Continue with Google" to sign in
-      if (!user.emailVerified || user.status !== "active") {
-        return sendError(
-          reply,
-          403,
-          "EMAIL_NOT_VERIFIED",
-          "Please verify your email address to sign in."
-        );
-      }
-
-      // Google email exactly matches the Provider's registered email (since we did a findUnique by email).
-      // Link the oauth provider details if they are not already set.
-      if (!user.oauthProvider || user.oauthProvider !== "google") {
-        user = await prisma.user.update({
-          where: { id: user.id },
+        // Guest is allowed to register
+        const user = await prisma.user.create({
           data: {
+            firstName: firstName ?? "User",
+            lastName: lastName ?? "",
+            email,
+            status: "active",
+            emailVerified: true,
+            emailVerifiedAt: new Date(),
             oauthProvider: "google",
             oauthSub: googleSub,
+            userType: "guest",
+            businessName: businessName ?? null,
+            country: country ?? null,
           },
         });
+        await sendWelcomeEmail(email, user.firstName).catch(() => null);
+        const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+        return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: false });
       }
-    } else {
-      // Existing Guest user
-      if (!user.oauthProvider) {
-        return sendError(
-          reply,
-          409,
-          "ACCOUNT_EXISTS",
-          "An account with this email already exists. Please sign in with your password."
-        );
+
+      let user = existingByEmail;
+
+      if (user.userType === "provider") {
+        // After a Provider account has been created and verified, the Provider may use "Continue with Google" to sign in
+        if (!user.emailVerified || user.status !== "active") {
+          return sendError(
+            reply,
+            403,
+            "EMAIL_NOT_VERIFIED",
+            "Please verify your email address to sign in."
+          );
+        }
+
+        // Google email exactly matches the Provider's registered email (since we did a findUnique by email).
+        // Link the oauth provider details if they are not already set.
+        if (!user.oauthProvider || user.oauthProvider !== "google") {
+          user = await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              oauthProvider: "google",
+              oauthSub: googleSub,
+            },
+          });
+        }
+      } else {
+        // Existing Guest user
+        if (!user.oauthProvider) {
+          return sendError(
+            reply,
+            409,
+            "ACCOUNT_EXISTS",
+            "An account with this email already exists. Please sign in with your password."
+          );
+        }
       }
-    }
 
-    // Returning user
-    if (user.status === "suspended") {
-      return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
-    }
-    if (user.status === "banned") {
-      return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
-    }
+      // Returning user
+      if (user.status === "suspended") {
+        return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
+      }
+      if (user.status === "banned") {
+        return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
+      }
 
-    const tokens = await issueTokens(reply, user.id, user.userType, user.status);
-    return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
+    } catch (err) {
+      return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Google could not be completed. Please try again.");
+    }
   });
 
   // ── POST /auth/oauth/apple  (UC-1.7) ───────────────────────────────────────
@@ -973,79 +1100,49 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 401, "OAUTH_FAILED", "Sign in with Apple failed. Please try again.");
     }
 
-    // Look up by sub first, then email
-    let user = await prisma.user.findFirst({ where: { oauthProvider: "apple", oauthSub: appleSub } })
-      ?? await prisma.user.findUnique({ where: { email: appleEmail } });
+    try {
+      // Look up by sub first, then email
+      let user = await prisma.user.findFirst({ where: { oauthProvider: "apple", oauthSub: appleSub } })
+        ?? await prisma.user.findUnique({ where: { email: appleEmail } });
 
-    if (user && !user.oauthProvider) {
-      return sendError(reply, 409, "ACCOUNT_EXISTS", "An account with this email already exists. Please sign in with your password.");
-    }
+      if (user && !user.oauthProvider) {
+        return sendError(reply, 409, "ACCOUNT_EXISTS", "An account with this email already exists. Please sign in with your password.");
+      }
 
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          firstName: "User",
-          lastName: "",
-          email: appleEmail,
-          status: "active",
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
-          oauthProvider: "apple",
-          oauthSub: appleSub,
-          userType: (userType ?? "guest") as "guest" | "provider",
-          businessName: businessName ?? null,
-          country: country ?? null,
-        },
-      });
-      await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
+      if (!user) {
+        user = await prisma.user.create({
+          data: {
+            firstName: "User",
+            lastName: "",
+            email: appleEmail,
+            status: "active",
+            emailVerified: true,
+            emailVerifiedAt: new Date(),
+            oauthProvider: "apple",
+            oauthSub: appleSub,
+            userType: (userType ?? "guest") as "guest" | "provider",
+            businessName: businessName ?? null,
+            country: country ?? null,
+          },
+        });
+        await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
+        const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+        return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: !userType });
+      }
+      if (user.status === "pending_verification") {
+        return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
+      }
+      if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
+      if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
+
       const tokens = await issueTokens(reply, user.id, user.userType, user.status);
-      return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: !userType });
+      return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
+    } catch (err) {
+      return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Apple could not be completed. Please try again.");
     }
-    if (user.status === "pending_verification") {
-      return sendError(reply, 403, "EMAIL_NOT_VERIFIED", "Please verify your email address to sign in.");
-    }
-    if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
-    if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
-
-    const tokens = await issueTokens(reply, user.id, user.userType, user.status);
-    return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
   });
 
-  // ── POST /auth/account-type  (post-OAuth account type selection) ───────────
-
-
-
-  // app.post("/auth/account-type", { schema: { tags: ["User Auth"] }, preHandler: [requireAuth] }, async (req: FastifyRequest, reply: FastifyReply) => {
-  //   const parsed = accountTypeSchema.safeParse(req.body);
-  //   if (!parsed.success) {
-  //     return sendError(reply, 422, "VALIDATION_ERROR", "Validation failed",
-  //       zodFieldErrors((parsed.error as ZodError).issues));
-  //   }
-  //   const userId = (req as FastifyRequest & { userId: string }).userId;
-  //   const { userType, businessName, country } = parsed.data;
-  //   const isProvider = userType === "provider";
-  //   const updated = await prisma.user.update({
-  //     where: { id: userId },
-  //     data: {
-  //       userType: userType as "guest" | "provider",
-  //       businessName: businessName ?? null,
-  //       country: country ?? null,
-  //       status: isProvider ? "pending_verification" : undefined,
-  //     },
-  //   });
-
-  //   if (isProvider) {
-  //     await prisma.session.updateMany({
-  //       where: { userId },
-  //       data: { revoked: true },
-  //     });
-  //     reply.clearCookie("refreshToken", { path: "/" });
-  //   }
-
-  //   return sendSuccess(reply, 200, { user: publicUser(updated) });
-  // });
-
-
+  // ── POST /auth/account-type  (post-OAuth account type selection) ──────────
   app.post("/auth/account-type", {
     schema: {
       tags: ["User Auth"],
@@ -1087,55 +1184,54 @@ export async function authRoutes(app: FastifyInstance) {
       const userId = (req as FastifyRequest & { userId: string }).userId;
       const { userType, businessName, country } = parsed.data;
 
-      const updated = await prisma.user.update({
-        where: { id: userId },
-        data: {
-          userType,
-          businessName: businessName ?? null,
-          country: country ?? null,
-        },
-      });
+      try {
+        const updated = await prisma.user.update({
+          where: { id: userId },
+          data: {
+            userType,
+            businessName: businessName ?? null,
+            country: country ?? null,
+          },
+        });
 
-      return sendSuccess(reply, 200, {
-        message: "Account type updated successfully.",
-        user: publicUser(updated),
-      });
+        return sendSuccess(reply, 200, {
+          message: "Account type updated successfully.",
+          user: publicUser(updated),
+        });
+      } catch (err: any) {
+        if (err?.code === "P2025") {
+          return sendError(reply, 404, "USER_NOT_FOUND", "Your account could not be found.");
+        }
+        return sendError(reply, 400, "UPDATE_FAILED", "Account type could not be updated. Please try again.");
+      }
     }
   );
 
 
   // ── GET /auth/oauth/google/redirect (Web OAuth Start) ──────────────────────
   app.get("/auth/oauth/google/redirect", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const redirectUri = `${process.env["WEB_BASE_URL"] ?? "http://localhost:3000"}/api/auth/oauth/google/callback`;
-    const client = new OAuth2Client({
-      clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
-      clientSecret: process.env["GOOGLE_CLIENT_SECRET"],
-      redirectUri,
-    });
+    try {
+      const redirectUri = `${process.env["WEB_BASE_URL"] ?? "http://localhost:3000"}/api/auth/oauth/google/callback`;
+      const client = new OAuth2Client({
+        clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
+        clientSecret: process.env["GOOGLE_CLIENT_SECRET"],
+        redirectUri,
+      });
 
-    const authUrl = client.generateAuthUrl({
-      access_type: "offline",
-      scope: [
-        "https://www.googleapis.com/auth/userinfo.profile",
-        "https://www.googleapis.com/auth/userinfo.email",
-      ],
-      prompt: "select_account",
-    });
+      const authUrl = client.generateAuthUrl({
+        access_type: "offline",
+        scope: [
+          "https://www.googleapis.com/auth/userinfo.profile",
+          "https://www.googleapis.com/auth/userinfo.email",
+        ],
+        prompt: "select_account",
+      });
 
-    reply.redirect(authUrl);
+      reply.redirect(authUrl);
+    } catch {
+      return sendError(reply, 400, "OAUTH_INIT_FAILED", "Google sign-in could not be initiated. Please try again.");
+    }
   });
-
-
-
-  //   //-----sample---
-  // //   //app.get("/auth/oauth/google/url", async (req, reply) => {
-  //   const authUrl = client.generateAuthUrl({
-  //     access_type: "offline",
-  //     scope: ["openid", "email", "profile"],
-  //   });
-
-  //   return { authUrl };
-  // });
 
 
   // ── GET /auth/oauth/google/callback (Web OAuth Callback) ──────────────────

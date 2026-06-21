@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle, Eye } from "lucide-react";
+import { CalendarDays, XCircle, Eye, Plus, Send } from "lucide-react";
+import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -13,6 +14,13 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
+import type { AdminRole } from "@/types/admin";
+
+const COUNTRY_OPTIONS = [
+  "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
+].map((c) => ({ value: c, label: c }));
 
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -22,22 +30,81 @@ const fetchBookingDetail = (id: string) =>
 
 export default function BookingsPage() {
   const qc = useQueryClient();
+  const { token, user, _hasHydrated } = useAuthStore();
+  const role = user?.role as AdminRole | undefined;
+  const isAdminOrSuperAdmin = user?.role === "super_admin" || user?.role === "admin";
+  const isCountryManager = user?.role === "country_manager";
+  const canManualBook = canAccess(role, "manage_manual_booking");
+  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+
+  // scopedCountries only applies to country_manager (not admin — admin sees all)
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  const countryOptions = scopedCountries.length > 0
+    ? scopedCountries.map((c) => ({ value: c, label: c }))
+    : COUNTRY_OPTIONS;
+
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(20);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [listingType, setListingType] = useState("");
+  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  // Sync country selection after auth store hydration
+  useEffect(() => {
+    if (scopedCountries.length > 0 && !country) {
+      setCountry(scopedCountries[0] ?? "");
+    }
+  }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
 
-  const params = { q, status, listingType, page: String(page), limit: "20" };
+  // For country managers, always enforce their scoped country
+  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
+  const params = Object.fromEntries(
+    Object.entries({
+      q,
+      status,
+      listingType,
+      country: effectiveCountry,
+      page: String(page),
+      limit: String(limit),
+    }).filter(([, v]) => v !== "")
+  );
   const { data, isLoading } = useQuery({
     queryKey: ["admin-bookings", params],
     queryFn: () => fetchBookings(params),
+    // Wait for auth store to rehydrate so scopedCountries/effectiveCountry are correct
+    enabled: !!token && _hasHydrated,
   });
 
   const bookings: Booking[] = data?.bookings ?? [];
   const total: number = data?.total ?? 0;
+
+  const filteredBookings = bookings.filter((b) => {
+    if (!startDate && !endDate) return true;
+    const dateStr = b.checkIn || b.pickupDatetime || b.createdAt;
+    if (!dateStr) return true;
+    const bookingDate = new Date(dateStr);
+
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      if (bookingDate < start) return false;
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      if (bookingDate > end) return false;
+    }
+
+    return true;
+  });
 
   const { data: detailData, isLoading: loadingDetail } = useQuery({
     queryKey: ["admin-booking-detail", selected?.id],
@@ -53,6 +120,14 @@ export default function BookingsPage() {
       qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
       setCancelModal(null);
       setCancelReason("");
+    },
+  });
+
+  // Resend payment link for draft bookings
+  const resendLinkMut = useMutation({
+    mutationFn: (id: string) => listingApi.post(`/admin/bookings/${id}/send-link`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-bookings"] });
     },
   });
 
@@ -136,6 +211,15 @@ export default function BookingsPage() {
               <XCircle className="h-3.5 w-3.5" />
             </button>
           )}
+          {["pending_payment", "draft"].includes(b.status) && (
+            <button
+              onClick={() => resendLinkMut.mutate(b.id)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
+              title="Resend payment link"
+            >
+              <Send className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -146,10 +230,20 @@ export default function BookingsPage() {
       <SectionHeader
         title="Bookings"
         description={`${total.toLocaleString()} total bookings`}
+        action={
+          canManualBook ? (
+            <Link href="/dashboard/bookings/new">
+              <Button leftIcon={<Plus className="h-4 w-4" />}>
+                Manual Booking
+              </Button>
+            </Link>
+          ) : undefined
+        }
       />
 
       <Card padding="none">
-        <FilterBar
+        <FilterBar 
+        
           search={q}
           onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
@@ -179,18 +273,71 @@ export default function BookingsPage() {
                 { value: "car", label: "Car" },
               ],
             },
+            ...(canShowCountryFilter
+              ? [
+                {
+                  key: "country",
+                  label: "All Countries",
+                  value: country,
+                  onChange: (v: string) => {
+                    setCountry(v);
+                    setPage(1);
+                  },
+                  options: countryOptions,
+                },
+              ]
+              : []),
           ]}
-        />
+        >
+          {canShowCountryFilter && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setPage(1);
+                }}
+                className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
+                aria-label="Start Date"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setPage(1);
+                }}
+                className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
+                aria-label="End Date"
+              />
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => {
+                    setStartDate("");
+                    setEndDate("");
+                    setPage(1);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors text-xs"
+                  title="Clear date filter"
+                >
+                  Clear Dates
+                </button>
+              )}
+            </div>
+          )}
+        </FilterBar>
         <DataTable
           columns={columns}
-          data={bookings}
+          data={filteredBookings}
           loading={isLoading}
           onRowClick={(b) => setSelected(b)}
           emptyTitle="No bookings found"
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<CalendarDays className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} onLimitChange={(newL) => { setLimit(newL); setPage(1); }} />
       </Card>
 
       {/* Detail drawer */}

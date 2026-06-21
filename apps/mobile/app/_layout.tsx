@@ -15,20 +15,28 @@ const queryClient = new QueryClient({
 });
 
 const screenOptionsByName: Record<string, object> = {
-  "pending-approval":          { headerShown: false },
-  suspended:                   { headerShown: false },
-  "(provider)":                { headerShown: false },
-  wallet:                      { headerShown: false },
-  notifications:               { headerShown: false },
-  "listings/new":              { headerShown: false },
-  "listings/[id]/index":       { headerShown: false },
-  "booking/[id]":              { headerShown: false },
-  "booking/submitted":         { headerShown: false },
-  "provider/booking/[id]":     { headerShown: false },
-  search:                      { headerShown: true, title: "Search Results", headerBackTitle: "Back" },
-  "book/[listingId]":          { headerShown: true, headerBackTitle: "Back" },
-  "pay/[bookingId]":           { headerShown: true, title: "Complete Payment", headerBackTitle: "Back" },
-  "review/[bookingId]":        { headerShown: true, title: "Leave a Review", headerBackTitle: "Back" },
+  "pending-approval":               { headerShown: false },
+  suspended:                        { headerShown: false },
+  "(provider)":                     { headerShown: false },
+  wallet:                           { headerShown: false },
+  notifications:                    { headerShown: false },
+  "listings/new":                   { headerShown: false },
+  "listings/[id]/index":            { headerShown: false },
+  "booking/[id]":                   { headerShown: false },
+  "booking/submitted":              { headerShown: false },
+  "provider/booking/[id]":          { headerShown: false },
+  search:                           { headerShown: true, title: "Search Results", headerBackTitle: "Back" },
+  "book/[listingId]":               { headerShown: true, headerBackTitle: "Back" },
+  "pay/[bookingId]":                { headerShown: true, title: "Complete Payment", headerBackTitle: "Back" },
+  "review/[bookingId]":             { headerShown: true, title: "Leave a Review", headerBackTitle: "Back" },
+  // ── Booking documents ────────────────────────────────────────────────────────
+  "booking/receipt/[id]":           { headerShown: true, title: "Receipt", headerBackTitle: "Back" },
+  "booking/qr/[id]":                { headerShown: true, title: "QR Code", headerBackTitle: "Back" },
+  "booking/voucher/[id]":           { headerShown: true, title: "Voucher", headerBackTitle: "Back" },
+  // ── Payment method management ─────────────────────────────────────────────
+  "payment-methods/index":          { headerShown: true, title: "Payment Methods", headerBackTitle: "Back" },
+  "payment-methods/add-card":       { headerShown: true, title: "Add Card", headerBackTitle: "Back" },
+  "payment-methods/add-tara":       { headerShown: true, title: "Add Mobile Money", headerBackTitle: "Back" },
 };
 
 // Error codes from the auth service that mean "this account can't continue"

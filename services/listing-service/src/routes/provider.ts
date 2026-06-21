@@ -27,7 +27,8 @@ export async function providerRoutes(app: FastifyInstance) {
       preHandler: [requireProviderRole],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
+      try {
+        const providerId = (req as ProviderRequest).providerId;
       const now = new Date();
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
       const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
@@ -149,6 +150,10 @@ export async function providerRoutes(app: FastifyInstance) {
         })),
         monthlyRevenue,
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch provider dashboard summary");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching dashboard summary.");
+      }
     },
   );
 
@@ -163,9 +168,10 @@ export async function providerRoutes(app: FastifyInstance) {
       preHandler: [requireProviderRole],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
+      try {
+        const providerId = (req as ProviderRequest).providerId;
 
-      const listings = await prisma.listing.findMany({
+        const listings = await prisma.listing.findMany({
         where: { providerId, deletedAt: null },
         orderBy: { createdAt: "desc" },
         include: {
@@ -202,6 +208,10 @@ export async function providerRoutes(app: FastifyInstance) {
           };
         }),
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch provider listings summary");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching listings summary.");
+      }
     },
   );
 
@@ -232,8 +242,9 @@ export async function providerRoutes(app: FastifyInstance) {
       preHandler: [requireProviderRole],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
-      const q = req.query as Record<string, string>;
+      try {
+        const providerId = (req as ProviderRequest).providerId;
+        const q = req.query as Record<string, string>;
       const offset   = Math.max(0, parseInt(q["offset"] ?? "0", 10));
       const limit    = Math.min(50, Math.max(1, parseInt(q["limit"] ?? "20", 10)));
       const status   = q["status"];
@@ -294,6 +305,10 @@ export async function providerRoutes(app: FastifyInstance) {
           createdAt:          b.createdAt.toISOString(),
         })),
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch provider bookings");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching bookings.");
+      }
     },
   );
 
@@ -325,8 +340,9 @@ export async function providerRoutes(app: FastifyInstance) {
       preHandler: [requireProviderRole],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
-      const q = req.query as Record<string, string>;
+      try {
+        const providerId = (req as ProviderRequest).providerId;
+        const q = req.query as Record<string, string>;
       const offset   = Math.max(0, parseInt(q["offset"] ?? "0", 10));
       const limit    = Math.min(50, Math.max(1, parseInt(q["limit"] ?? "20", 10)));
       const rating   = q["rating"] ? parseInt(q["rating"], 10) : undefined;
@@ -388,6 +404,10 @@ export async function providerRoutes(app: FastifyInstance) {
           createdAt:         r.createdAt.toISOString(),
         })),
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch provider reviews");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching reviews.");
+      }
     },
   );
 
@@ -402,8 +422,9 @@ export async function providerRoutes(app: FastifyInstance) {
       preHandler: [requireProviderRole],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId = (req as ProviderRequest).providerId;
-      const now        = new Date();
+      try {
+        const providerId = (req as ProviderRequest).providerId;
+        const now        = new Date();
 
       // Last 12 months monthly breakdown
       const monthly: { month: string; revenue: number; commission: number; payout: number; bookings: number }[] = [];
@@ -473,6 +494,10 @@ export async function providerRoutes(app: FastifyInstance) {
           confirmedAt: b.confirmedAt?.toISOString() ?? null,
         })),
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch provider earnings summary");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching earnings summary.");
+      }
     },
   );
 
@@ -501,8 +526,9 @@ export async function providerRoutes(app: FastifyInstance) {
       preHandler: [requireProviderRole],
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const providerId    = (req as ProviderRequest).providerId;
-      const { listingId } = req.params as { listingId: string };
+      try {
+        const providerId    = (req as ProviderRequest).providerId;
+        const { listingId } = req.params as { listingId: string };
       const { from, to }  = req.query as { from?: string; to?: string };
 
       const listing = await prisma.listing.findFirst({
@@ -569,6 +595,10 @@ export async function providerRoutes(app: FastifyInstance) {
           type:     "ical_block",
         })),
       });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch listing availability");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching listing availability.");
+      }
     },
   );
 }

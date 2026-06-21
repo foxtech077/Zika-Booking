@@ -48,9 +48,14 @@ interface BookingDetail {
 
 interface SavedPaymentMethod {
   id: string;
-  provider: "stripe" | "tara";
-  last4: string;
-  label: string; // e.g. "Visa", "M-Pesa"
+  type: string;
+  paymentProvider: "stripe" | "tara";
+  cardBrand: string | null;
+  cardLast4: string | null;
+  cardExpMonth: number | null;
+  cardExpYear: number | null;
+  mobileNumberMasked: string | null;
+  isDefault: boolean;
 }
 
 interface InitiateResponse {
@@ -267,8 +272,8 @@ export default function PaymentScreen() {
   const { data: savedMethods } = useQuery<SavedPaymentMethod[]>({
     queryKey: ["saved-payment-methods"],
     queryFn: async () => {
-      const res = await paymentApi.get<{ data: SavedPaymentMethod[] }>("/guests/me/payment-methods");
-      return res.data.data;
+      const res = await paymentApi.get<{ success: boolean; data: { paymentMethods: SavedPaymentMethod[] } }>("/guests/me/payment-methods");
+      return res.data.data.paymentMethods ?? [];
     },
     retry: 1,
     enabled: false,
@@ -444,8 +449,8 @@ export default function PaymentScreen() {
     async function poll() {
       if (!stripePollingActiveRef.current) return;
       try {
+        // Poll payment status
         const statusRes = await paymentApi.get<PaymentStatusResponse>(`/payments/${paymentId}/status`);
-        if (!stripePollingActiveRef.current) return;
         const status = statusRes.data.data.status;
         payLog("info", "STRIPE-POLL", `status: ${status}`, { paymentId });
 
@@ -524,7 +529,6 @@ export default function PaymentScreen() {
       if (!taraPollingActiveRef.current) return;
       try {
         const statusRes = await paymentApi.get<PaymentStatusResponse>(`/payments/${paymentId}/status`);
-        if (!taraPollingActiveRef.current) return;
         const status = statusRes.data.data.status;
         payLog("info", "TARA-POLL", `status: ${status}`, { paymentId });
 
@@ -693,7 +697,7 @@ export default function PaymentScreen() {
             console.log("[PAY] New-card Stripe — POST /create-intent:", JSON.stringify(newCardPayload, null, 2));
             payLog("info", "HANDLE-PAY", "New-card Stripe — POST /create-intent", newCardPayload);
             try {
-              const res = await paymentApi.post<InitiateResponse>("/create-intent", newCardPayload);
+              const res = await paymentApi.post<InitiateResponse>("/payments/create-intent", newCardPayload);
               console.log("[PAY] /create-intent SUCCESS — status:", res.status);
               console.log("[PAY] /create-intent response:", JSON.stringify(res.data, null, 2));
 
@@ -1175,7 +1179,7 @@ export default function PaymentScreen() {
               contentContainerStyle={styles.savedMethodsScroll}
             >
               {savedMethods
-                .filter((m) => m.provider === provider)
+                .filter((m) => m.paymentProvider === provider)
                 .map((method) => (
                   <TouchableOpacity
                     key={method.id}
@@ -1191,7 +1195,7 @@ export default function PaymentScreen() {
                     activeOpacity={0.8}
                   >
                     <Ionicons
-                      name={method.provider === "stripe" ? "card-outline" : "phone-portrait-outline"}
+                      name={method.paymentProvider === "stripe" ? "card-outline" : "phone-portrait-outline"}
                       size={16}
                       color={selectedSavedMethodId === method.id ? "#1a73e8" : "#6b7280"}
                     />
@@ -1201,7 +1205,9 @@ export default function PaymentScreen() {
                         selectedSavedMethodId === method.id && styles.savedMethodChipTextSelected,
                       ]}
                     >
-                      {maskLast4(method.last4, method.provider)}
+                      {method.paymentProvider === "stripe"
+                        ? maskLast4(method.cardLast4 ?? "????", "stripe")
+                        : `•••• ${method.mobileNumberMasked ?? "????"}`}
                     </Text>
                   </TouchableOpacity>
                 ))}
