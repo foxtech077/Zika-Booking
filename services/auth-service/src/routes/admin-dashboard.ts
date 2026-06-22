@@ -1078,10 +1078,10 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         SELECT 
           m.id::text as id, 
           'moderation' as type, 
-          action, 
-          actor_id as actor, 
-          created_at as timestamp, 
-          metadata::jsonb as metadata 
+          m.action, 
+          m.actor_id as actor, 
+          m.created_at as timestamp, 
+          m.metadata::jsonb as metadata 
         FROM listing.listing_moderation_log m
         JOIN listing.listings l ON m.listing_id = l.id
         WHERE l.country = ANY(${countryScope})

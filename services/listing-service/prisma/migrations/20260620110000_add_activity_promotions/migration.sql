@@ -4,7 +4,7 @@
 
 CREATE TABLE IF NOT EXISTS listing.activity_promotions (
     id              TEXT          NOT NULL,
-    activity        VARCHAR(20)   NOT NULL,
+    activity        VARCHAR(20)   NOT NULL, 
     label_text      VARCHAR(6)    NOT NULL,
     label_colour    VARCHAR(10)   NOT NULL DEFAULT '#C84B2F',
     discount_type   VARCHAR(20)   NOT NULL DEFAULT 'label_only',

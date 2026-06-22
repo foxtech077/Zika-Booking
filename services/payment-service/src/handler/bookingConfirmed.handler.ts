@@ -4,6 +4,7 @@ import { sendGuestEmail, sendAdminAlert } from "../services/email.services.js";
 import { sendHostEmail } from "../services/hostemail.service.js";
 import { prisma } from "../lib/prisma.js";
 import { cdnUrl, downloadBuffer } from "../lib/s3.js";
+import { schedulePayout } from "../services/payout.service.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
@@ -128,6 +129,23 @@ export async function bookingConfirmedHandler(payment: any) {
   }
 
   const booking = normalizeBooking(rawBooking);
+
+  // Schedule provider payout for 24 hours after check-in (idempotent)
+  if (rawBooking.providerId && Number(rawBooking.providerPayout) > 0) {
+    const isCar = rawBooking.listingType === "car";
+    const checkInRaw = isCar ? rawBooking.pickupDatetime : rawBooking.checkIn;
+    if (checkInRaw) {
+      schedulePayout({
+        bookingId: rawBooking.id,
+        providerId: rawBooking.providerId,
+        amount: Number(rawBooking.providerPayout),
+        currency: rawBooking.currency,
+        checkInAt: new Date(checkInRaw),
+      }).catch((err: Error) =>
+        console.error(`[payout] Failed to schedule payout for booking ${rawBooking.id}:`, err.message),
+      );
+    }
+  }
 
   // Smart Idempotency:
   // If booking status = confirmed:
