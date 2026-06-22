@@ -627,7 +627,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
     if (targetType) and.push({ targetType: { equals:   targetType, mode: "insensitive" } });
     if (targetId)   and.push({ targetId });
     if (adminId)    and.push({ adminId });
-    if (role)       and.push({ role:       { equals:   role } });
+    if (role)       and.push({ role:       { equals:   role, mode: "insensitive" } });
     if (from || to) {
       const tsFilter: any = {};
       if (from) tsFilter.gte = new Date(from);
@@ -641,6 +641,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
           { targetType: { contains: q, mode: "insensitive" } },
           { targetId: { contains: q, mode: "insensitive" } },
           { ipAddress: { contains: q, mode: "insensitive" } },
+          { role: { contains: q, mode: "insensitive" } },
           { admin: { name: { contains: q, mode: "insensitive" } } },
         ],
       });
