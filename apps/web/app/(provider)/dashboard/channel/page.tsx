@@ -112,7 +112,10 @@ function unwrapList<T>(payload: unknown, keys: string[]): T[] {
 
 function normalizeStatus(value: unknown): SyncStatus {
   const status = readString(value, "connected").toLowerCase();
-  if (["syncing", "failed", "disconnected", "warning"].includes(status)) return status as SyncStatus;
+  if (status === "synced" || status === "connected") return "connected";
+  if (status === "error" || status === "failed") return "failed";
+  if (status === "pending" || status === "syncing") return "syncing";
+  if (["disconnected", "warning"].includes(status)) return status as SyncStatus;
   return "connected";
 }
 
@@ -151,14 +154,40 @@ function normalizeBlockedDate(raw: unknown, listingId: string): BlockedDate {
 }
 
 function normalizeChannelStatus(raw: unknown, listingId: string): ChannelStatus {
-  const data = ((raw as Record<string, unknown>)?.data ?? raw) as Record<string, unknown>;
+  const root = raw as Record<string, unknown>;
+  const data = (root?.data ?? root) as Record<string, unknown>;
+  const channels = (Array.isArray(data?.channels) ? data.channels : []) as any[];
+
+  const activeFeeds = channels.filter((c) => c.status === "synced" || c.status === "connected").length;
+  const failedFeeds = channels.filter((c) => c.status === "error" || c.consecutiveFailures > 0).length;
+  const pendingSyncs = channels.filter((c) => c.status === "pending" || c.status === "syncing").length;
+
+  let health: SyncStatus = "disconnected";
+  if (channels.length > 0) {
+    if (failedFeeds === channels.length) {
+      health = "failed";
+    } else if (failedFeeds > 0) {
+      health = "warning";
+    } else if (pendingSyncs > 0) {
+      health = "syncing";
+    } else {
+      health = "connected";
+    }
+  }
+
+  const lastSuccessfulSync = channels
+    .map((c) => c.lastSyncedAt)
+    .filter(Boolean)
+    .sort()
+    .at(-1) || undefined;
+
   return {
     listingId,
-    health: normalizeStatus(data.health ?? data.status),
-    activeFeeds: readNumber(data.activeFeeds),
-    failedFeeds: readNumber(data.failedFeeds),
-    pendingSyncs: readNumber(data.pendingSyncs),
-    lastSuccessfulSync: readString(data.lastSuccessfulSync ?? data.lastSuccessfulSyncAt),
+    health,
+    activeFeeds,
+    failedFeeds,
+    pendingSyncs,
+    lastSuccessfulSync,
   };
 }
 
@@ -294,6 +323,50 @@ export default function ChannelPage() {
   const [formError, setFormError] = useState("");
   const [form, setForm] = useState({ listingId: "", name: "", platform: "airbnb", feedUrl: "" });
 
+  const [exportListingId, setExportListingId] = useState("");
+  const [generatedLink, setGeneratedLink] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [exportError, setExportError] = useState("");
+
+  const handleGenerateLink = () => {
+    setExportError("");
+    if (!exportListingId) {
+      setExportError("Please select a listing.");
+      return;
+    }
+    const apiBaseUrl = process.env.NEXT_PUBLIC_LISTING_API_URL;
+    if (!apiBaseUrl) {
+      setExportError("API base URL is not configured.");
+      return;
+    }
+    
+    const cleanBaseUrl = apiBaseUrl.replace(/\/+$/, "");
+    let finalUrl = "";
+    if (cleanBaseUrl.endsWith("/listings")) {
+      finalUrl = `${cleanBaseUrl}/${exportListingId}/ical`;
+    } else {
+      finalUrl = `${cleanBaseUrl}/listings/${exportListingId}/ical`;
+    }
+    
+    setGeneratedLink(finalUrl);
+  };
+
+  const handleCopyLink = async () => {
+    if (!generatedLink) return;
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setExportError("Failed to copy link to clipboard.");
+    }
+  };
+
+  const handleOpenLink = () => {
+    if (!generatedLink) return;
+    window.open(generatedLink, "_blank");
+  };
+
   const { data: listings = [], isLoading: listingsLoading } = useQuery({
     queryKey: ["channel-listings"],
     queryFn: fetchListings,
@@ -341,6 +414,7 @@ export default function ChannelPage() {
       setForm({ listingId: "", name: "", platform: "airbnb", feedUrl: "" });
       queryClient.invalidateQueries({ queryKey: ["channel-feeds"] });
       queryClient.invalidateQueries({ queryKey: ["channel-status"] });
+      queryClient.invalidateQueries({ queryKey: ["channel-blocked-dates"] });
     },
     onError: () => setFormError("Failed to add feed. Please verify the URL and try again."),
   });
@@ -375,6 +449,7 @@ export default function ChannelPage() {
       setNotice({ type: "success", text: "Sync started for all visible feeds." });
       queryClient.invalidateQueries({ queryKey: ["channel-feeds"] });
       queryClient.invalidateQueries({ queryKey: ["channel-blocked-dates"] });
+      queryClient.invalidateQueries({ queryKey: ["channel-status"] });
     },
     onError: () => setNotice({ type: "error", text: "Some feeds could not be synced." }),
   });
@@ -552,6 +627,74 @@ export default function ChannelPage() {
               <HealthTile label="Sync Health" value={channelStatus?.health ?? (stats.failed ? "warning" : "connected")} />
               <HealthTile label="Feed Validation" value={stats.failed ? "warning" : "connected"} />
               <HealthTile label="API Response" value={feedsFetching ? "syncing" : "connected"} />
+            </div>
+          </Card>
+
+          <Card>
+            <div className="mb-4">
+              <h3 className="font-semibold text-slate-900">Export Calendar Link</h3>
+              <p className="text-xs text-slate-500 font-medium">Generate a public iCal URL to sync this listing's availability with external platforms.</p>
+            </div>
+            
+            <div className="space-y-4">
+              {exportError && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{exportError}</div>}
+              
+              <Select
+                label="Select Listing / Property"
+                value={exportListingId}
+                onChange={(event) => {
+                  setExportListingId(event.target.value);
+                  setGeneratedLink("");
+                  setExportError("");
+                }}
+                options={listings.map((listing) => ({ value: listing.id, label: listing.name ?? listing.id }))}
+                placeholder="Select listing"
+              />
+
+              <Button
+                onClick={handleGenerateLink}
+                disabled={!exportListingId}
+                className="w-full"
+                type="button"
+              >
+                Generate iCal Link
+              </Button>
+
+              {generatedLink && (
+                <div className="space-y-2 animate-fade-in">
+                  <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                    Public iCal Link
+                  </label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      readOnly
+                      value={generatedLink}
+                      className="flex-1 font-mono text-xs"
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopyLink}
+                        className="shrink-0"
+                        type="button"
+                      >
+                        {copied ? "Copied" : "Copy Link"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleOpenLink}
+                        className="shrink-0"
+                        type="button"
+                      >
+                        Open Link
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         </div>
