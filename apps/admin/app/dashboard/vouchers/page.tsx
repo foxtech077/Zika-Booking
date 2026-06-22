@@ -8,22 +8,25 @@ import { DataTable, FilterBar, Pagination, type Column } from "@/components/tabl
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input, Select } from "@/components/ui/Input";
+import { Input, Select, CustomDropdown } from "@/components/ui/Input";
 import countries from "i18n-iso-countries";
 import enLocale from "i18n-iso-countries/langs/en.json";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Voucher } from "@/types/admin";
-import ReactSelect from "react-select";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 countries.registerLocale(enLocale);
 function codeToFlag(code: string) {
   return code.toUpperCase().replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 }
-const COUNTRY_OPTIONS = Object.keys(countries.getAlpha2Codes()).map((c) => ({
-  value: c,
-  label: `${codeToFlag(c)} ${c} - ${countries.getName(c, "en")}`,
-}));
+const COUNTRY_OPTIONS = [
+  { value: "all", label: "🌍 All Countries" },
+  ...Object.keys(countries.getAlpha2Codes()).map((c) => ({
+    value: c,
+    label: `${codeToFlag(c)} ${countries.getName(c, "en")} (${c})`,
+  })),
+];
 const fetchVouchers = (params: Record<string, string>) =>
   listingApi.get(`/admin/vouchers?${new URLSearchParams(params)}`).then((r) => {
     // ── DEBUG: Temporary logging — remove before production ──────────────────
@@ -295,15 +298,16 @@ export default function VouchersPage() {
               required
             />
           </div>
-          <Select
+          <CustomDropdown
             id="discount-type"
             label="Discount Type"
-            value={form.discountType}
-            onChange={(e) => setForm((f) => ({ ...f, discountType: e.target.value as any }))}
+            placeholder="Select discount type..."
             options={[
               { value: "percentage", label: "Percentage (%)" },
               { value: "fixed", label: "Fixed Amount" },
             ]}
+            value={form.discountType}
+            onChange={(val: any) => setForm((f) => ({ ...f, discountType: val as "percentage" | "fixed" }))}
           />
           <Input
             id="discount-value"
@@ -324,11 +328,10 @@ export default function VouchersPage() {
             hint="Only for percentage discounts"
             disabled={form.discountType !== "percentage"}
           />
-          <Select
+          <CustomDropdown
             id="activity-scope"
             label="Applicable For"
-            value={form.activityScope}
-            onChange={(e) => setForm((f) => ({ ...f, activityScope: e.target.value }))}
+            placeholder="Select application scope..."
             options={[
               { value: "universal", label: "Universal" },
               { value: "hotels", label: "Hotels" },
@@ -336,48 +339,26 @@ export default function VouchersPage() {
               { value: "cars", label: "Cars" },
               { value: "hotels_apartments", label: "Hotels & Apartments" },
             ]}
+            value={form.activityScope}
+            onChange={(val: any) => setForm((f) => ({ ...f, activityScope: val }))}
           />
-         
 
-<div className="col-span-2">
-  <label className="block text-sm font-medium text-slate-700 mb-1">
-    Country Scope
-  </label>
 
-  <ReactSelect
-    isClearable
-    menuPosition="fixed"
-    menuPortalTarget={
-      typeof window !== "undefined" ? document.body : undefined
-    }
-    styles={{
-      menuPortal: (base: any) => ({
-        ...base,
-        zIndex: 9999,
-      }),
-    }}
-    options={COUNTRY_OPTIONS}
-    value={
-      form.countryScope
-        ? COUNTRY_OPTIONS.find(
-            (option) => option.value === form.countryScope
-          ) ?? null
-        : null
-    }
-    onChange={(selected: any) =>
-      setForm((f) => ({
-        ...f,
-        countryScope: selected?.value ?? "",
-      }))
-    }
-    formatOptionLabel={(option: any) => (
-      <div className="flex items-center gap-2">
-        <span>{option.label}</span>
-      </div>
-    )}
-    getOptionLabel={(option: any) => option.label}
-  />
-</div>
+          <div className="col-span-2">
+            <CustomDropdown
+              id="country-scope"
+              label="Country Scope"
+              placeholder="Select country scope..."
+              options={COUNTRY_OPTIONS}
+              value={form.countryScope || "all"}
+              onChange={(val: any) =>
+                setForm((f) => ({
+                  ...f,
+                  countryScope: val === "all" ? "" : val,
+                }))
+              }
+            />
+          </div>
           <Input
             id="usage-limit"
             label="Usage Limit"
@@ -396,33 +377,23 @@ export default function VouchersPage() {
             placeholder="1"
             hint="Max redemptions per user"
           />
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label htmlFor="valid-from" className="block text-sm font-medium text-slate-700">Valid From <span className="text-danger ml-0.5">*</span></label>
-              {form.validFrom && <button type="button" onClick={() => setForm((f) => ({ ...f, validFrom: "" }))} className="text-xs text-slate-400 hover:text-slate-600 focus:outline-none">Clear</button>}
-            </div>
-            <Input
-              id="valid-from"
-              type="datetime-local"
-              value={form.validFrom}
-              onChange={(e) => setForm((f) => ({ ...f, validFrom: e.target.value }))}
-              required
-            />
-          </div>
-          <div>
-            <div className="flex justify-between items-center mb-1">
-              <label htmlFor="valid-until" className="block text-sm font-medium text-slate-700">Valid Until <span className="text-danger ml-0.5">*</span></label>
-              {form.validUntil && <button type="button" onClick={() => setForm((f) => ({ ...f, validUntil: "" }))} className="text-xs text-slate-400 hover:text-slate-600 focus:outline-none">Clear</button>}
-            </div>
-            <Input
-              id="valid-until"
-              type="datetime-local"
-              value={form.validUntil}
-              onChange={(e) => setForm((f) => ({ ...f, validUntil: e.target.value }))}
-              min={form.validFrom || undefined}
-              required
-            />
-          </div>
+          <DatePicker
+            id="valid-from"
+            label="Valid From"
+            placeholder="Select start date"
+            value={form.validFrom}
+            onChange={(val) => setForm((f) => ({ ...f, validFrom: val }))}
+            required
+          />
+          <DatePicker
+            id="valid-until"
+            label="Valid Until"
+            placeholder="Select end date"
+            value={form.validUntil}
+            onChange={(val) => setForm((f) => ({ ...f, validUntil: val }))}
+            minDate={form.validFrom || undefined}
+            required
+          />
           <div className="col-span-2">
             <p className="block text-sm font-medium text-slate-700 mb-1">Applicable Tiers</p>
             <div className="flex gap-4">

@@ -32,6 +32,7 @@ export interface AuditLog {
   id: string;
   adminId: string;
   adminName?: string;
+  adminEmail?: string;
   role: string;
   action: string;
   targetType: string | null;

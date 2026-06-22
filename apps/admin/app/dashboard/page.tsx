@@ -58,6 +58,14 @@ export default function DashboardPage() {
     retry: 1,
   });
 
+  // ── 4. Operators Query (for resolving names in activity feed) ───────────────
+  const { data: operatorsData } = useQuery({
+    queryKey: ["admin-dashboard-operators"],
+    queryFn: () => api.get("/admin/operators?limit=1000").then((r) => r.data?.data?.operators ?? r.data?.operators ?? []),
+    enabled: queriesEnabled,
+    retry: 1,
+  });
+
   // Non-Super Admin access restriction
   if (_hasHydrated && !isSuperAdmin) {
     return (
@@ -178,6 +186,14 @@ export default function DashboardPage() {
     (pendingData?.pendingRefundRequests ?? 0);
 
   const activities = activityData ?? [];
+
+  const operators = operatorsData ?? [];
+  const operatorMap = new Map<string, string>();
+  operators.forEach((op: any) => {
+    if (op.id && op.name) {
+      operatorMap.set(op.id, op.name);
+    }
+  });
 
   return (
     <div className="space-y-6 max-w-screen-2xl pb-12">
@@ -364,6 +380,22 @@ export default function DashboardPage() {
                 let badgeStyle = "bg-slate-100 text-slate-700";
                 let actionLabel = slugToLabel(item.action);
 
+                if (item.action === "admin_login" || item.action === "admin_login_attempt") {
+                  const roleMap: Record<string, string> = {
+                    super_admin: "Super Admin",
+                    admin: "Admin",
+                    country_manager: "Country Manager",
+                    sales: "Sales Agent",
+                    support: "Support Agent",
+                    finance: "Finance Manager",
+                  };
+                  const role = item.metadata?.role;
+                  if (role && roleMap[role]) {
+                    const suffix = item.action === "admin_login" ? "Login" : "Login Attempt";
+                    actionLabel = `${roleMap[role]} ${suffix}`;
+                  }
+                }
+
                 if (item.type === "refund") {
                   badgeStyle = "bg-rose-100 text-rose-700 border-rose-200";
                 } else if (item.type === "moderation") {
@@ -371,6 +403,8 @@ export default function DashboardPage() {
                 } else if (item.type === "audit") {
                   badgeStyle = "bg-purple-100 text-purple-700 border-purple-200";
                 }
+
+                const displayName = item.actor === "system" ? "system" : (operatorMap.get(item.actor) || item.actor);
 
                 return (
                   <div key={item.id} className="flex gap-4 px-5 py-3.5 hover:bg-slate-50/40 transition-colors">
@@ -394,7 +428,7 @@ export default function DashboardPage() {
                         </span>
                         
                         <span className="text-xs text-slate-500">
-                          by <span className="font-medium text-slate-700">{item.actor}</span>
+                          by <span className="font-medium text-slate-700 cursor-help" title={item.actor && item.actor !== "system" ? `User ID: ${item.actor}` : undefined}>{displayName}</span>
                         </span>
                       </div>
 

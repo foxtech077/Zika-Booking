@@ -101,8 +101,8 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60">
+    <div className="bg-white rounded-xl border border-border shadow-card">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60 rounded-t-xl">
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white text-xs font-bold flex-shrink-0">
           {step}
         </div>
@@ -398,6 +398,20 @@ export default function ManualBookingPage() {
   const [country, setCountry] = useState("");
   const [isBookingCountryOpen, setIsBookingCountryOpen] = useState(false);
   const [bookingCountrySearch, setBookingCountrySearch] = useState("");
+
+  const isCountryManager = user?.role === "country_manager";
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  const allowedBookingCountries = BOOKING_COUNTRIES.filter(c => {
+    if (!isCountryManager) return true;
+    return scopedCountries.some(sc => sc.toUpperCase() === c.code.toUpperCase());
+  });
+
+  useEffect(() => {
+    if (isCountryManager && scopedCountries && scopedCountries.length === 1 && scopedCountries[0]) {
+      setCountry(scopedCountries[0].toUpperCase());
+    }
+  }, [isCountryManager, scopedCountries]);
+
   const [isListingSelectOpen, setIsListingSelectOpen] = useState(false);
   const [listingSelectSearch, setListingSelectSearch] = useState("");
   const [checkIn, setCheckIn] = useState("");
@@ -428,6 +442,62 @@ export default function ManualBookingPage() {
   // ── Shared state ──────────────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
+
+  const getSelectedRangeStatus = (availData = availability) => {
+    const startStr = isAccommodation ? checkIn : (pickup ? pickup.slice(0, 10) : "");
+    const endStr = isAccommodation ? checkOut : (returnDt ? returnDt.slice(0, 10) : "");
+    
+    if (!startStr || !endStr) return "idle";
+    if (!availData) return "available";
+    
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return "idle";
+    
+    let hasBooked = false;
+    let hasLocked = false;
+    
+    // For hotels/apartments, the checkout day itself is not a booked night
+    const limit = isAccommodation ? new Date(end.getTime() - 86400000) : end;
+    
+    const curr = new Date(start);
+    while (curr <= limit) {
+      const ds = toYMD(curr);
+      const dayStatus = getDayStatus(ds, availData);
+      if (dayStatus === "booked") {
+        hasBooked = true;
+      } else if (dayStatus === "locked") {
+        hasLocked = true;
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    
+    if (hasBooked && hasLocked) return "partially_available";
+    if (hasBooked) return "fully_booked";
+    if (hasLocked) return "reserved";
+    return "available";
+  };
+
+  const getAvailabilityDescription = () => {
+    if (availStatus === "idle") return "The system will verify existing bookings, reservation locks, and available inventory.";
+    if (availStatus === "checking") return "Checking availability...";
+    
+    const rangeStatus = getSelectedRangeStatus();
+    if (rangeStatus === "fully_booked") {
+      return "Not available for the selected dates - Fully Booked";
+    }
+    if (rangeStatus === "reserved") {
+      return "Not available for the selected dates - Reserved / Locked";
+    }
+    if (rangeStatus === "partially_available") {
+      return "Not available for the selected dates - Partially Available";
+    }
+    if (availStatus === "unavailable") {
+      return "Not available for the selected dates";
+    }
+    return "Available for the selected dates";
+  };
 
   const isAccommodation = listingType !== "car";
   const bookingRef = submitted ? `MBK-${Date.now().toString(36).toUpperCase()}` : "";
@@ -581,7 +651,28 @@ export default function ManualBookingPage() {
       }
     } catch {
       // Mock fallback
-      setAvailStatus("available");
+      const today = new Date();
+      const rel = (startOffset: number, endOffset: number) => {
+        const s = new Date(today);
+        s.setDate(s.getDate() + startOffset);
+        const e = new Date(today);
+        e.setDate(e.getDate() + endOffset);
+        return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) };
+      };
+
+      const mockAvail = {
+        bookedRanges: [rel(2, 5), rel(10, 14), rel(22, 25)],
+        lockedRanges: [rel(7, 9), rel(18, 20)],
+      };
+
+      if (!availability) {
+        setAvailability(mockAvail);
+      }
+
+      const activeAvail = availability || mockAvail;
+      const rangeStatus = getSelectedRangeStatus(activeAvail);
+      setAvailStatus(rangeStatus === "available" ? "available" : "unavailable");
+
       const base = nights * 120;
       setPrice({
         baseAmount: base,
@@ -591,20 +682,6 @@ export default function ManualBookingPage() {
         total: Math.round(base * 1.15),
         currency: getCurrencyForCountry(country),
       });
-      if (!availability) {
-        const today = new Date();
-        const rel = (startOffset: number, endOffset: number) => {
-          const s = new Date(today);
-          s.setDate(s.getDate() + startOffset);
-          const e = new Date(today);
-          e.setDate(e.getDate() + endOffset);
-          return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) };
-        };
-        setAvailability({
-          bookedRanges: [rel(2, 5), rel(10, 14), rel(22, 25)],
-          lockedRanges: [rel(7, 9), rel(18, 20)],
-        });
-      }
     }
   }
 
@@ -893,75 +970,88 @@ export default function ManualBookingPage() {
                   <label htmlFor={`${uid}-country`} className="block text-sm font-medium text-slate-700">
                     Country <span className="text-danger ml-0.5">*</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setIsBookingCountryOpen(!isBookingCountryOpen)}
-                    className={cn(
-                      "w-full flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-slate-900",
-                      "transition-colors duration-150 h-[38px] mt-0.5",
-                      "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
-                      errors.country ? "border-danger" : "border-border hover:border-slate-400"
-                    )}
-                  >
-                    <span>
-                      {country ? (
-                        (() => {
-                          const found = BOOKING_COUNTRIES.find(c => c.code === country);
+                  {isCountryManager && scopedCountries.length === 1 ? (
+                    <div className="w-full flex items-center justify-between rounded-lg border border-border bg-slate-50 px-3 py-2 text-sm text-slate-500 h-[38px] mt-0.5 cursor-not-allowed">
+                      <span>
+                        {(() => {
+                          const found = allowedBookingCountries.find(c => c.code === country);
                           return found ? `${found.flag} ${found.name} (${found.code})` : country;
-                        })()
-                      ) : (
-                        "Select country…"
-                      )}
-                    </span>
-                    <ChevronDown className="h-4 w-4 text-slate-400 ml-1 flex-shrink-0" />
-                  </button>
-
-                  {isBookingCountryOpen && (
-                    <div className="absolute left-0 mt-1 w-full rounded-lg border border-border bg-white shadow-lg z-50 p-2 space-y-1.5 max-h-[300px] overflow-y-auto">
-                      <div className="relative">
-                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                        <input
-                          type="text"
-                          placeholder="Search country or code..."
-                          value={bookingCountrySearch}
-                          onChange={(e) => setBookingCountrySearch(e.target.value)}
-                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                      <div className="overflow-y-auto max-h-[200px]">
-                        {BOOKING_COUNTRIES.filter(
-                          (c) =>
-                            c.name.toLowerCase().includes(bookingCountrySearch.toLowerCase()) ||
-                            c.code.toLowerCase().includes(bookingCountrySearch.toLowerCase())
-                        ).map((c) => (
-                          <button
-                            key={c.code}
-                            type="button"
-                            onClick={() => {
-                              setCountry(c.code);
-                              setIsBookingCountryOpen(false);
-                              setBookingCountrySearch("");
-                            }}
-                            className={cn(
-                              "w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 transition-colors flex items-center gap-2",
-                              country === c.code ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
-                            )}
-                          >
-                            <span>{c.flag}</span>
-                            <span className="truncate">{c.name}</span>
-                            <span className="text-slate-400 font-mono flex-shrink-0 ml-auto">{c.code}</span>
-                          </button>
-                        ))}
-                        {BOOKING_COUNTRIES.filter(
-                          (c) =>
-                            c.name.toLowerCase().includes(bookingCountrySearch.toLowerCase()) ||
-                            c.code.toLowerCase().includes(bookingCountrySearch.toLowerCase())
-                        ).length === 0 && (
-                          <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
-                        )}
-                      </div>
+                        })()}
+                      </span>
                     </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setIsBookingCountryOpen(!isBookingCountryOpen)}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-slate-900",
+                          "transition-colors duration-150 h-[38px] mt-0.5",
+                          "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
+                          errors.country ? "border-danger" : "border-border hover:border-slate-400"
+                        )}
+                      >
+                        <span>
+                          {country ? (
+                            (() => {
+                              const found = allowedBookingCountries.find(c => c.code === country);
+                              return found ? `${found.flag} ${found.name} (${found.code})` : country;
+                            })()
+                          ) : (
+                            "Select country…"
+                          )}
+                        </span>
+                        <ChevronDown className="h-4 w-4 text-slate-400 ml-1 flex-shrink-0" />
+                      </button>
+
+                      {isBookingCountryOpen && (
+                        <div className="absolute left-0 mt-1 w-full rounded-lg border border-border bg-white shadow-lg z-50 p-2 space-y-1.5 max-h-[300px] overflow-y-auto">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Search country or code..."
+                              value={bookingCountrySearch}
+                              onChange={(e) => setBookingCountrySearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="overflow-y-auto max-h-[200px]">
+                            {allowedBookingCountries.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(bookingCountrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(bookingCountrySearch.toLowerCase())
+                            ).map((c) => (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => {
+                                  setCountry(c.code);
+                                  setIsBookingCountryOpen(false);
+                                  setBookingCountrySearch("");
+                                }}
+                                className={cn(
+                                  "w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 transition-colors flex items-center gap-2",
+                                  country === c.code ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
+                                )}
+                              >
+                                <span>{c.flag}</span>
+                                <span className="truncate">{c.name}</span>
+                                <span className="text-slate-400 font-mono flex-shrink-0 ml-auto">{c.code}</span>
+                              </button>
+                            ))}
+                            {allowedBookingCountries.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(bookingCountrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(bookingCountrySearch.toLowerCase())
+                            ).length === 0 && (
+                              <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                   {errors.country && <p className="text-xs text-danger mt-1">{errors.country}</p>}
                 </div>
@@ -1224,13 +1314,13 @@ export default function ManualBookingPage() {
               {availStatus === "available" && (
                 <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
                   <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
-                  <p className="text-sm font-medium text-green-700">Available for the selected dates</p>
+                  <p className="text-sm font-medium text-green-700">{getAvailabilityDescription()}</p>
                 </div>
               )}
               {availStatus === "unavailable" && (
                 <div className="flex items-center gap-2 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
                   <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
-                  <p className="text-sm font-medium text-danger">Not available for the selected dates</p>
+                  <p className="text-sm font-medium text-danger">{getAvailabilityDescription()}</p>
                 </div>
               )}
               {errors._avail && (
@@ -1368,7 +1458,24 @@ export default function ManualBookingPage() {
                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Assigned Country</p>
                 <div className="flex items-center gap-1.5">
                   <MapPin className="h-4 w-4 text-slate-400" />
-                  <p className="text-sm text-slate-700">{country || "-"}</p>
+                  <p className="text-sm text-slate-700">
+                    {(() => {
+                      if (role === "super_admin" || role === "admin") {
+                        return "All Countries";
+                      }
+                      if (user?.countryScope && user.countryScope.length > 0) {
+                        return user.countryScope
+                          .map((code) => {
+                            const found = BOOKING_COUNTRIES.find(
+                              (c) => c.code.toUpperCase() === code.toUpperCase()
+                            );
+                            return found ? found.name : code;
+                          })
+                          .join(", ");
+                      }
+                      return "-";
+                    })()}
+                  </p>
                 </div>
               </div>
               {role && (

@@ -1,5 +1,8 @@
+import { useState, useRef, useEffect } from "react";
 import type { InputHTMLAttributes, TextareaHTMLAttributes, SelectHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { ChevronDown, Search } from "lucide-react";
+import { createPortal } from "react-dom";
 
 // ── Input ─────────────────────────────────────────────────────────────────────
 
@@ -151,3 +154,200 @@ export function Select({
     </div>
   );
 }
+
+export interface DropdownOption {
+  value: string;
+  label: string;
+}
+
+interface CustomDropdownProps {
+  label: string;
+  options: DropdownOption[];
+  value: string | string[];
+  onChange: (value: any) => void;
+  isMulti?: boolean;
+  placeholder?: string;
+  id?: string;
+  required?: boolean;
+}
+
+export function CustomDropdown({
+  label,
+  options,
+  value,
+  onChange,
+  isMulti = false,
+  placeholder = "Select...",
+  id,
+  required,
+}: CustomDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [menuCoords, setMenuCoords] = useState({ top: 0, left: 0, width: 0 });
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        const portalMenu = document.getElementById("custom-dropdown-portal-menu");
+        if (portalMenu && portalMenu.contains(e.target as Node)) {
+          return;
+        }
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleToggle = () => {
+    if (!isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setMenuCoords({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width
+      });
+    }
+    setIsOpen(!isOpen);
+    setSearch("");
+  };
+
+  useEffect(() => {
+    if (!isOpen || !buttonRef.current) return;
+    const updateCoords = () => {
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        setMenuCoords({
+          top: rect.bottom + window.scrollY,
+          left: rect.left + window.scrollX,
+          width: rect.width
+        });
+      }
+    };
+    window.addEventListener("scroll", updateCoords, true);
+    window.addEventListener("resize", updateCoords);
+    return () => {
+      window.removeEventListener("scroll", updateCoords, true);
+      window.removeEventListener("resize", updateCoords);
+    };
+  }, [isOpen]);
+
+  const filteredOptions = options.filter((o) =>
+    o.label.toLowerCase().includes(search.toLowerCase()) ||
+    o.value.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const isSelected = (val: string) => {
+    if (isMulti) {
+      return Array.isArray(value) && value.includes(val);
+    }
+    return value === val;
+  };
+
+  const handleSelect = (val: string) => {
+    if (isMulti) {
+      const current = Array.isArray(value) ? value : [];
+      const next = current.includes(val)
+        ? current.filter((v) => v !== val)
+        : [...current, val];
+      onChange(next);
+    } else {
+      onChange(val);
+      setIsOpen(false);
+    }
+  };
+
+  const displayValue = () => {
+    if (isMulti) {
+      const current = Array.isArray(value) ? value : [];
+      if (current.length === 0) return placeholder;
+      if (current.length <= 2) {
+        return options
+          .filter((o) => current.includes(o.value))
+          .map((o) => {
+            const firstWord = o.label.split(" ")[0];
+            return firstWord + (o.value && o.value !== "all" ? " " + o.value : "");
+          })
+          .join(", ");
+      }
+      return `${current.length} selected`;
+    } else {
+      const found = options.find((o) => o.value === value);
+      return found ? found.label : placeholder;
+    }
+  };
+
+  const menuContent = isOpen && (
+    <div
+      id="custom-dropdown-portal-menu"
+      className="absolute rounded-lg border border-border bg-white shadow-lg z-[9999] p-2 space-y-1.5 max-h-[260px] overflow-y-auto"
+      style={{
+        position: "absolute",
+        top: `${menuCoords.top}px`,
+        left: `${menuCoords.left}px`,
+        width: `${menuCoords.width}px`,
+      }}
+    >
+      {options.length > 5 && (
+        <div className="relative">
+          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+      <div className="overflow-y-auto max-h-[180px] space-y-0.5">
+        {filteredOptions.map((o) => {
+          const selected = isSelected(o.value);
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => handleSelect(o.value)}
+              className={cn(
+                "w-full text-left px-2.5 py-2 text-xs rounded hover:bg-slate-100 transition-colors flex items-center justify-between",
+                selected ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
+              )}
+            >
+              <span className="truncate">{o.label}</span>
+              {selected && (
+                <span className="text-primary font-semibold">✓</span>
+              )}
+            </button>
+          );
+        })}
+        {filteredOptions.length === 0 && (
+          <p className="text-xs text-slate-400 text-center py-2">No results found</p>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-1 relative" ref={containerRef} id={id}>
+      <label className="block text-sm font-medium text-slate-700">
+        {label}
+        {required && <span className="text-danger ml-0.5">*</span>}
+      </label>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={handleToggle}
+        className="w-full py-2 pl-3 pr-10 text-sm text-left bg-white border border-border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors flex items-center justify-between min-h-[38px] cursor-pointer relative"
+      >
+        <span className="truncate">{displayValue()}</span>
+        <ChevronDown className="h-4 w-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      </button>
+
+      {isOpen && typeof window !== "undefined" && createPortal(menuContent, document.body)}
+    </div>
+  );
+}
+
