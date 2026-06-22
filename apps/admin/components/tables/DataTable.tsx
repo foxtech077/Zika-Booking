@@ -1,10 +1,10 @@
 "use client";
 
-import type { ReactNode, CSSProperties } from "react";
+import { ReactNode, CSSProperties, useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/Avatar";
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown, Search } from "lucide-react";
 
 // ── Column definition ─────────────────────────────────────────────────────────
 
@@ -245,6 +245,24 @@ export function FilterBar({
   limit,
   onLimitChange,
 }: FilterBarProps) {
+  const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
+  const [filterSearches, setFilterSearches] = useState<Record<string, string>>({});
+  const [isLimitOpen, setIsLimitOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".filter-dropdown-container")) {
+        setOpenFilterKey(null);
+      }
+      if (!target.closest(".limit-dropdown-container")) {
+        setIsLimitOpen(false);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, []);
+
   return (
     <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border">
       {onSearchChange && (
@@ -264,44 +282,131 @@ export function FilterBar({
           />
         </div>
       )}
-      {filters?.map((f) => (
-        <select
-          key={f.key}
-          value={f.value}
-          onChange={(e) => f.onChange(e.target.value)}
-          className="py-1.5 pl-3 pr-7 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary appearance-none transition-colors"
-          aria-label={f.label}
-        >
-          <option value="">{f.label}</option>
-          {f.options.map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      ))}
+      {filters?.map((f) => {
+        const isOpen = openFilterKey === f.key;
+        const searchVal = filterSearches[f.key] || "";
+        const selectedOption = f.options.find((o) => o.value === f.value);
+        
+        // Filter options based on search query
+        const filteredOptions = f.options.filter((o) =>
+          o.label.toLowerCase().includes(searchVal.toLowerCase()) ||
+          o.value.toLowerCase().includes(searchVal.toLowerCase())
+        );
+
+        // Show search bar if options list is long (more than 5 options)
+        const showSearch = f.options.length > 5;
+
+        return (
+          <div key={f.key} className="relative filter-dropdown-container">
+            <button
+              type="button"
+              onClick={() => {
+                setOpenFilterKey(isOpen ? null : f.key);
+                // Reset search when opening/closing
+                setFilterSearches((prev) => ({ ...prev, [f.key]: "" }));
+              }}
+              className="py-1.5 pl-3 pr-8 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors flex items-center justify-between min-w-[140px] max-w-[200px] h-[38px] relative cursor-pointer"
+            >
+              <span className="truncate">
+                {selectedOption ? selectedOption.label : f.label}
+              </span>
+              <ChevronDown className="h-4 w-4 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </button>
+
+            {isOpen && (
+              <div className="absolute left-0 mt-1 w-[260px] rounded-lg border border-border bg-white shadow-lg z-50 p-2 space-y-1.5 max-h-[300px] overflow-y-auto">
+                {showSearch && (
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search..."
+                      value={searchVal}
+                      onChange={(e) =>
+                        setFilterSearches((prev) => ({ ...prev, [f.key]: e.target.value }))
+                      }
+                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+                )}
+                <div className="overflow-y-auto max-h-[200px] space-y-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      f.onChange("");
+                      setOpenFilterKey(null);
+                    }}
+                    className={cn(
+                      "w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 transition-colors",
+                      !f.value ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                  {filteredOptions.map((o) => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => {
+                        f.onChange(o.value);
+                        setOpenFilterKey(null);
+                      }}
+                      className={cn(
+                        "w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 transition-colors flex items-center justify-between",
+                        f.value === o.value ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
+                      )}
+                    >
+                      <span className="truncate">{o.label}</span>
+                      {f.key === "country" && (
+                        <span className="text-slate-400 font-mono text-[10px] ml-1">{o.value}</span>
+                      )}
+                    </button>
+                  ))}
+                  {filteredOptions.length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-2">No results found</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
       {children}
       {(onLimitChange !== undefined || actions !== undefined) && (
         <div className="ml-auto flex items-center gap-3">
           {onLimitChange && limit !== undefined && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 limit-dropdown-container relative">
               <span className="text-xs text-slate-500 font-medium">Rows:</span>
-              <select
-                value={limit}
-                onChange={(e) => onLimitChange(Number(e.target.value))}
-                className="py-1.5 pl-3 pr-8 text-xs bg-white border border-border rounded-lg text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary appearance-none cursor-pointer transition-colors"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>")`,
-                  backgroundRepeat: "no-repeat",
-                  backgroundPosition: "right 0.5rem center",
-                  backgroundSize: "1em"
-                }}
-                aria-label="Rows per page"
+              <button
+                type="button"
+                onClick={() => setIsLimitOpen(!isLimitOpen)}
+                className="py-1.5 pl-3 pr-8 text-xs bg-white border border-border rounded-lg text-slate-600 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[32px] min-w-[64px] flex items-center justify-between cursor-pointer relative"
               >
-                {PAGE_SIZE_OPTIONS.map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </select>
+                <span>{limit}</span>
+                <ChevronDown className="h-3 w-3 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </button>
+
+              {isLimitOpen && (
+                <div className="absolute right-0 top-full mt-1 w-20 rounded-lg border border-border bg-white shadow-lg z-50 p-1 space-y-0.5 max-h-[200px] overflow-y-auto">
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => {
+                        onLimitChange(size);
+                        setIsLimitOpen(false);
+                      }}
+                      className={cn(
+                        "w-full text-center py-1 text-xs rounded hover:bg-slate-100 transition-colors block font-medium",
+                        limit === size ? "bg-primary/5 text-primary font-bold" : "text-slate-600"
+                      )}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           {actions}
@@ -310,3 +415,5 @@ export function FilterBar({
     </div>
   );
 }
+
+

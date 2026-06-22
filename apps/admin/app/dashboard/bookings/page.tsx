@@ -18,10 +18,18 @@ import type { Booking } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
 
 const COUNTRY_OPTIONS = [
   "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
-].map((c) => ({ value: c, label: c }));
+].map((code) => {
+  const found = SYSTEM_COUNTRIES.find((sc) => sc.code === code);
+  return {
+    value: code,
+    label: found ? `${found.flag} ${found.name}` : code,
+  };
+});
 
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -40,7 +48,10 @@ export default function BookingsPage() {
   const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
   const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin" || (user?.role === "country_manager" && scopedCountries.length > 1);
   const countryOptions = scopedCountries.length > 0
-    ? scopedCountries.map((c) => ({ value: c, label: c }))
+    ? scopedCountries.map((c) => {
+        const found = SYSTEM_COUNTRIES.find((sc) => sc.code === c);
+        return { value: c, label: found ? `${found.flag} ${found.name}` : c };
+      })
     : COUNTRY_OPTIONS;
 
   const [page, setPage] = useState(1);
@@ -297,26 +308,24 @@ export default function BookingsPage() {
         >
           {canShowCountryFilter && (
             <div className="flex items-center gap-2">
-              <input
-                type="date"
+              <DatePicker
                 value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
+                onChange={(val) => {
+                  setStartDate(val);
                   setPage(1);
                 }}
-                className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
-                aria-label="Start Date"
+                placeholder="Start Date"
+                className="w-40"
               />
               <span className="text-xs text-slate-400">to</span>
-              <input
-                type="date"
+              <DatePicker
                 value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
+                onChange={(val) => {
+                  setEndDate(val);
                   setPage(1);
                 }}
-                className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
-                aria-label="End Date"
+                placeholder="End Date"
+                className="w-40"
               />
               {(startDate || endDate) && (
                 <button

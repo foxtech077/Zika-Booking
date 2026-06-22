@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
+import { Search, ChevronDown, Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -11,13 +11,10 @@ import { Button } from "@/components/ui/Button";
 import { Select, Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
-import { formatDate, formatRelativeTime, formatCurrency } from "@/lib/utils";
+import { formatDate, formatRelativeTime, formatCurrency, cn } from "@/lib/utils";
 import type { Listing } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
-import countries from "i18n-iso-countries";
-import enLocale from "i18n-iso-countries/langs/en.json";
-
-countries.registerLocale(enLocale);
+import { SYSTEM_COUNTRIES, getCountryFlag } from "@/lib/countries";
 
 function CategoryIcon({ category }: { category: string }) {
   if (category === "hotel") return <Hotel className="w-4 h-4 text-blue-500" />;
@@ -39,9 +36,27 @@ export default function ListingsPage() {
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
   const [country, setCountry] = useState("");
-  const countryOptions = isCountryManager
-    ? scopedCountries.map((c) => ({ value: c, label: countries.getName(c, "en") || c }))
-    : Object.keys(countries.getAlpha2Codes()).map((c) => ({ value: c, label: countries.getName(c, "en") || c }));
+
+  const [isCountryOpen, setIsCountryOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".listings-country-dropdown")) {
+        setIsCountryOpen(false);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, []);
+
+  const filteredCountries = SYSTEM_COUNTRIES.filter((c) => {
+    if (isCountryManager) {
+      return scopedCountries.some((sc) => sc.toUpperCase() === c.code.toUpperCase());
+    }
+    return true;
+  });
 
   const [selected, setSelected] = useState<Listing | null>(null);
   const [suspendModal, setSuspendModal] = useState<Listing | null>(null);
@@ -240,7 +255,10 @@ export default function ListingsPage() {
               label: "All Countries",
               value: country,
               onChange: (v) => { setCountry(v); setPage(1); },
-              options: countryOptions,
+              options: filteredCountries.map((c) => ({
+                value: c.code,
+                label: `${c.flag} ${c.name}`,
+              })),
             },
           ]}
           limit={limit}
