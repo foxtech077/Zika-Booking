@@ -1,7 +1,10 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
+import { stripe } from "../lib/stripe.js";
 import { requireUser, requireAdmin, type GuestRequest, type AdminRequest } from "../middleware/auth.js";
 import { sendError } from "../lib/errors.js";
+
+const PROVIDER_BASE_URL = process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005";
 
 export async function merchantRoutes(app: FastifyInstance) {
   // ── GET /merchant/me ────────────────────────────────────────────────────────
@@ -165,5 +168,135 @@ export async function merchantRoutes(app: FastifyInstance) {
     });
 
     reply.send({ success: true, data: updated });
+  });
+
+  // ── POST /merchant/me/stripe/connect ────────────────────────────────────────
+  // Step 1 of Stripe Connect onboarding:
+  // Creates a Stripe Express account (idempotent) and returns a hosted onboarding URL.
+  // The provider is redirected to Stripe to fill in their bank details / KYC.
+  app.post("/merchant/me/stripe/connect", {
+    schema: {
+      tags: ["Merchants"],
+      description: "Start Stripe Connect onboarding — returns a Stripe-hosted onboarding URL",
+      security: [{ bearerAuth: [] }],
+    },
+    preHandler: [requireUser],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { userId, userType } = req as GuestRequest;
+    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
+
+    // Upsert merchant row so we always have one to update
+    let merchant = await prisma.merchant.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
+    });
+
+    // Re-use existing Stripe Connect account if already created
+    let stripeAccountId = merchant.stripeConnectAccountId;
+
+    if (!stripeAccountId) {
+      const account = await stripe.accounts.create({
+        type: "express",
+        metadata: { userId },
+      });
+      stripeAccountId = account.id;
+
+      // Persist the account ID immediately so we can re-use it on refresh
+      merchant = await prisma.merchant.update({
+        where: { userId },
+        data: { stripeConnectAccountId: stripeAccountId },
+      });
+      console.log(`[stripe-connect] Created Express account ${stripeAccountId} for provider ${userId}`);
+    } else {
+      console.log(`[stripe-connect] Re-using existing Express account ${stripeAccountId} for provider ${userId}`);
+    }
+
+    // Generate a fresh onboarding link (they expire after a few minutes)
+    const accountLink = await stripe.accountLinks.create({
+      account: stripeAccountId,
+      refresh_url: `${PROVIDER_BASE_URL}/stripe/connect/refresh`,
+      return_url:  `${PROVIDER_BASE_URL}/stripe/connect/complete`,
+      type: "account_onboarding",
+    });
+
+    reply.send({ success: true, data: { onboardingUrl: accountLink.url } });
+  });
+
+  // ── GET /merchant/me/stripe/connect/refresh ─────────────────────────────────
+  // Called when Stripe redirects back with ?expired=true (link expired mid-flow).
+  // Generates a new onboarding link for the existing Stripe account.
+  app.get("/merchant/me/stripe/connect/refresh", {
+    schema: {
+      tags: ["Merchants"],
+      description: "Re-generate an expired Stripe Connect onboarding link",
+      security: [{ bearerAuth: [] }],
+    },
+    preHandler: [requireUser],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { userId, userType } = req as GuestRequest;
+    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
+
+    const merchant = await prisma.merchant.findUnique({ where: { userId } });
+    if (!merchant?.stripeConnectAccountId) {
+      return sendError(reply, 400, "NO_STRIPE_ACCOUNT", "No Stripe Connect account found. Call POST /merchant/me/stripe/connect first.");
+    }
+
+    const accountLink = await stripe.accountLinks.create({
+      account: merchant.stripeConnectAccountId,
+      refresh_url: `${PROVIDER_BASE_URL}/stripe/connect/refresh`,
+      return_url:  `${PROVIDER_BASE_URL}/stripe/connect/complete`,
+      type: "account_onboarding",
+    });
+
+    reply.send({ success: true, data: { onboardingUrl: accountLink.url } });
+  });
+
+  // ── GET /merchant/me/stripe/connect/status ──────────────────────────────────
+  // Called after the provider returns from Stripe's onboarding page.
+  // Checks whether onboarding is fully complete; if so, sets payoutMethod = stripe_connect.
+  app.get("/merchant/me/stripe/connect/status", {
+    schema: {
+      tags: ["Merchants"],
+      description: "Check Stripe Connect onboarding status and activate the payout method if complete",
+      security: [{ bearerAuth: [] }],
+    },
+    preHandler: [requireUser],
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { userId, userType } = req as GuestRequest;
+    if (userType !== "provider") return sendError(reply, 403, "FORBIDDEN", "Provider access required.");
+
+    const merchant = await prisma.merchant.findUnique({ where: { userId } });
+    if (!merchant?.stripeConnectAccountId) {
+      return sendError(reply, 400, "NO_STRIPE_ACCOUNT", "No Stripe Connect account found. Call POST /merchant/me/stripe/connect first.");
+    }
+
+    // Fetch the live account status from Stripe
+    const account = await stripe.accounts.retrieve(merchant.stripeConnectAccountId);
+
+    const chargesEnabled   = account.charges_enabled   ?? false;
+    const payoutsEnabled   = account.payouts_enabled   ?? false;
+    const detailsSubmitted = account.details_submitted ?? false;
+
+    // Only activate automatic payouts once the account is fully onboarded
+    if (chargesEnabled && payoutsEnabled && detailsSubmitted) {
+      await prisma.merchant.update({
+        where: { userId },
+        data: { payoutMethod: "stripe_connect", updatedAt: new Date() },
+      });
+      console.log(`[stripe-connect] Account ${merchant.stripeConnectAccountId} fully onboarded — payoutMethod set to stripe_connect`);
+    }
+
+    reply.send({
+      success: true,
+      data: {
+        stripeAccountId: merchant.stripeConnectAccountId,
+        chargesEnabled,
+        payoutsEnabled,
+        detailsSubmitted,
+        onboardingComplete: chargesEnabled && payoutsEnabled && detailsSubmitted,
+        payoutMethod: merchant.payoutMethod,
+      },
+    });
   });
 }
