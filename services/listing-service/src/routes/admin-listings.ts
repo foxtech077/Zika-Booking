@@ -38,6 +38,7 @@ const HOTEL_REQUIRED_DOC_GROUPS: Array<{ label: string; types: string[] }> = [
 
 const VALID_ADMIN_ROLES = new Set(["super_admin", "admin", "country_manager", "sales", "support", "finance"]);
 const MODERATOR_ROLES = new Set(["super_admin", "admin", "country_manager"]);
+const BOOKING_REQUEST_ROLES = new Set(["super_admin", "admin", "country_manager", "sales"]);
 
 const VALID_LISTING_STATUSES = new Set(Object.values(ListingStatus));
 const VALID_LISTING_CATEGORIES = new Set(Object.values(ListingCategory));
@@ -2827,7 +2828,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
@@ -2885,7 +2886,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
@@ -2903,6 +2904,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
         if (!admin.countryScope.includes(booking.listing.country ?? "")) {
           return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
         }
+      }
+
+      if (admin.adminRole === "sales" && booking.listing.instantBooking) {
+        return sendError(reply, 403, "FORBIDDEN", "Sales Agents cannot approve instant-confirm bookings.");
       }
 
       await prisma.booking.update({
@@ -2971,7 +2976,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reason } = req.body as { reason: string };
@@ -2994,6 +2999,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
         if (!admin.countryScope.includes(booking.listing.country ?? "")) {
           return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
         }
+      }
+
+      if (admin.adminRole === "sales" && booking.listing.instantBooking) {
+        return sendError(reply, 403, "FORBIDDEN", "Sales Agents cannot decline instant-confirm bookings.");
       }
 
       await prisma.booking.update({
@@ -3061,7 +3070,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { message } = req.body as { message: string };
@@ -3081,6 +3090,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
         if (!admin.countryScope.includes(booking.listing.country ?? "")) {
           return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
         }
+      }
+
+      if (admin.adminRole === "sales" && booking.listing.instantBooking) {
+        return sendError(reply, 403, "FORBIDDEN", "Sales Agents cannot request information on instant-confirm bookings.");
       }
 
       let conversation = await prisma.conversation.findUnique({
@@ -3139,7 +3152,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
@@ -3154,6 +3167,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
         if (!admin.countryScope.includes(booking.listing.country ?? "")) {
           return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
         }
+      }
+
+      if (admin.adminRole === "sales" && booking.listing.instantBooking) {
+        return sendError(reply, 403, "FORBIDDEN", "Sales Agents cannot escalate instant-confirm bookings.");
       }
 
       await prisma.auditLog.create({

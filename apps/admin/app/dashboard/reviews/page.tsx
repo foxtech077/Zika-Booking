@@ -11,7 +11,10 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatDate, truncate } from "@/lib/utils";
-import type { ListingReview } from "@/types/admin";
+import type { ListingReview, AdminRole } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const fetchReviews = (params: Record<string, string>) =>
   listingApi.get(`/admin/reviews?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -30,6 +33,15 @@ function StarDisplay({ rating }: { rating: number }) {
 }
 
 export default function ReviewsPage() {
+  const { user, _hasHydrated } = useAuthStore();
+  
+  if (_hasHydrated && !canAccess(user?.role as any, "view_reviews")) {
+    return <AccessDenied />;
+  }
+
+  const role = user?.role as AdminRole | undefined;
+  const canManageReviews = canAccess(role, "manage_reviews");
+
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -134,22 +146,24 @@ export default function ReviewsPage() {
       align: "right",
       render: (r) => (
         <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
-          {r.isHidden ? (
-            <button
-              onClick={() => hideMut.mutate({ id: r.id, hide: false })}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-success hover:bg-success/5 transition-colors"
-              title="Unhide"
-            >
-              <Eye className="h-3.5 w-3.5" />
-            </button>
-          ) : (
-            <button
-              onClick={() => setHideModal(r)}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-warning hover:bg-warning/5 transition-colors"
-              title="Hide review"
-            >
-              <EyeOff className="h-3.5 w-3.5" />
-            </button>
+          {canManageReviews && (
+            r.isHidden ? (
+              <button
+                onClick={() => hideMut.mutate({ id: r.id, hide: false })}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-success hover:bg-success/5 transition-colors"
+                title="Unhide"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => setHideModal(r)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-warning hover:bg-warning/5 transition-colors"
+                title="Hide review"
+              >
+                <EyeOff className="h-3.5 w-3.5" />
+              </button>
+            )
           )}
         </div>
       ),

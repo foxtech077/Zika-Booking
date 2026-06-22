@@ -15,6 +15,8 @@ import { DataTable, type Column } from "@/components/tables/DataTable";
 import { useMockFinanceStore } from "@/lib/mock-finance-store";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency, slugToLabel } from "@/lib/utils";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "Malta (MT)" },
@@ -31,7 +33,12 @@ const COUNTRY_OPTIONS = [
 type ReportTab = "revenue" | "payment" | "payout" | "refund" | "commission";
 
 export default function FinancialReportsPage() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_finance")) {
+    return <AccessDenied />;
+  }
+
   const { transactions, payouts, refunds, commissionRules } = useMockFinanceStore();
 
   const canExportFinancialData = user?.role === "super_admin" || user?.role === "finance";

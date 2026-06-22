@@ -15,6 +15,9 @@ import enLocale from "i18n-iso-countries/langs/en.json";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Voucher } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 countries.registerLocale(enLocale);
 function codeToFlag(code: string) {
@@ -43,6 +46,12 @@ const fetchVouchers = (params: Record<string, string>) =>
   });
 
 export default function VouchersPage() {
+  const { user, _hasHydrated } = useAuthStore();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_vouchers")) {
+    return <AccessDenied />;
+  }
+
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);

@@ -11,6 +11,6 @@ test('Check finance page error', async ({ page }) => {
     console.log(`STACK: ${error.stack}`);
   });
   
-  await page.goto('http://localhost:3002/dashboard/finance', { waitUntil: 'networkidle', timeout: 30000 });
+  await page.goto('http://localhost:3002/admin/dashboard/finance', { waitUntil: 'networkidle', timeout: 30000 });
   await page.waitForTimeout(2000);
 });

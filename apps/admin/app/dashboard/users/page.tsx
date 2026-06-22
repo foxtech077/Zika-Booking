@@ -14,13 +14,19 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import type { PlatformUser } from "@/types/admin";
-// import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const fetchUsers = (params: Record<string, string>) =>
   api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
 
 export default function UsersPage() {
   const { user, _hasHydrated } = useAuthStore();
+  
+  if (_hasHydrated && !canAccess(user?.role as any, "view_users")) {
+    return <AccessDenied />;
+  }
+
   const isCountryManager = user?.role === "country_manager";
   const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
 

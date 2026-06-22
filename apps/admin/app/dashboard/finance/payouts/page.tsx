@@ -14,6 +14,8 @@ import { ConfirmModal } from "@/components/modals/Modals";
 import { useMockFinanceStore, type Payout } from "@/lib/mock-finance-store";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "MT" },
@@ -28,7 +30,12 @@ const COUNTRY_OPTIONS = [
 ];
 
 export default function PayoutManagementPage() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_finance")) {
+    return <AccessDenied />;
+  }
+
   const { payouts, approvePayout, retryPayout } = useMockFinanceStore();
 
   const [mounted, setMounted] = useState(false);

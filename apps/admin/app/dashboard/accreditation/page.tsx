@@ -15,7 +15,8 @@ import { ActionModal } from "@/components/modals/Modals";
 import { formatRelativeTime } from "@/lib/utils";
 import type { ListingReviewTask, PlatformUser } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
-
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 // ── Spec-defined rejection reasons ────────────────────────────────────────────
 const REJECTION_REASONS = [
   "Insufficient documentation",
@@ -168,6 +169,11 @@ function PhotoLightbox({
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function AccreditationPage() {
   const { token, user, _hasHydrated } = useAuthStore();
+  
+  if (_hasHydrated && !canAccess(user?.role as any, "view_accreditation")) {
+    return <AccessDenied />;
+  }
+
   const isCountryManager = user?.role === "country_manager";
   const userCountryScope = user?.countryScope ?? [];
   const qc = useQueryClient();

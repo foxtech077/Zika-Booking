@@ -12,10 +12,21 @@ const { chromium } = require('playwright');
     console.log(`[PAGE ERROR]: ${err.message}`);
     console.log(err.stack);
   });
+
+  page.on('response', response => {
+    const status = response.status();
+    if (status >= 400) {
+      console.log(`[RESPONSE ERROR] ${status}: ${response.url()}`);
+    }
+  });
+
+  page.on('requestfailed', request => {
+    console.log(`[REQUEST FAILED]: ${request.url()} - ${request.failure() ? request.failure().errorText : 'unknown'}`);
+  });
   
   console.log("Navigating to dashboard/finance...");
   try {
-    await page.goto('http://localhost:3002/dashboard/finance', { waitUntil: 'networkidle', timeout: 15000 });
+    await page.goto('http://localhost:3002/admin/dashboard/finance', { waitUntil: 'networkidle', timeout: 15000 });
   } catch (e) {
     console.log("Navigation ended/failed:", e.message);
   }

@@ -18,14 +18,21 @@ import { useAuthStore } from "@/stores/auth";
 const fetchRates = () =>
   listingApi.get("/admin/commission-rates").then((r) => r.data.data ?? r.data);
 
+import { AccessDenied } from "@/components/ui/AccessDenied";
+
 const COUNTRY_OPTIONS = [
   "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE",
 ].map((c) => ({ value: c, label: c }));
 
 export default function CommissionPage() {
   const qc = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
   const role = user?.role;
+
+  if (_hasHydrated && !canAccess(role as any, "view_commission")) {
+    return <AccessDenied />;
+  }
+
   const canManageCommission = role === "super_admin";
 
   const [addModal, setAddModal] = useState(false);

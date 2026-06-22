@@ -14,6 +14,8 @@ import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency } from "@/lib/utils";
 import type { Listing } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 function CategoryIcon({ category }: { category: string }) {
   if (category === "hotel") return <Hotel className="w-4 h-4 text-blue-500" />;
@@ -26,6 +28,11 @@ const fetchListings = (params: Record<string, string>) =>
 
 export default function ListingsPage() {
   const { token, user, _hasHydrated } = useAuthStore();
+  
+  if (_hasHydrated && !canAccess(user?.role as any, "view_listings")) {
+    return <AccessDenied />;
+  }
+
   const isCountryManager = user?.role === "country_manager";
   const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
   const qc = useQueryClient();

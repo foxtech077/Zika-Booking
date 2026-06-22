@@ -90,6 +90,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_bookings",
     "view_messaging",
     "view_refunds",
+    "view_reviews",
   ],
   finance: [
     "view_dashboard",

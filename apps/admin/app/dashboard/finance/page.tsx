@@ -12,6 +12,8 @@ import { StatCard, RevenueBarChart } from "@/components/charts/Charts";
 import { formatDate, formatCurrency, formatNumber } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -42,7 +44,12 @@ function buildRevenueChart(bookings: Booking[]) {
 }
 
 export default function FinancePage() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_finance")) {
+    return <AccessDenied />;
+  }
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [status, setStatus] = useState("confirmed");

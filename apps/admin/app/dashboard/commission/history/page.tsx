@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { useMockFinanceStore, type CommissionHistoryEntry } from "@/lib/mock-finance-store";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate } from "@/lib/utils";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "MT" },
@@ -22,7 +24,12 @@ const COUNTRY_OPTIONS = [
 ];
 
 export default function CommissionHistoryPage() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_commission")) {
+    return <AccessDenied />;
+  }
+
   const { commissionHistory } = useMockFinanceStore();
 
   const [mounted, setMounted] = useState(false);

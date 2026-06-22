@@ -199,14 +199,12 @@ export async function adminAuthRoutes(app: FastifyInstance) {
       });
 
       if (admin.totpEnabled) {
-        await writeAudit(admin.id, admin.role, "admin_login_attempt", req);
         return sendSuccess(reply, 200, {
           totpRequired: true,
           setupRequired: false,
           intermediateToken,
         });
       } else {
-        await writeAudit(admin.id, admin.role, "admin_login_attempt_setup_required", req);
         return sendSuccess(reply, 200, {
           totpRequired: true,
           setupRequired: true,
@@ -600,6 +598,8 @@ export async function adminUserRoutes(app: FastifyInstance) {
           adminId:    { type: "string", description: "Filter by admin user ID" },
           from:       { type: "string", format: "date-time", description: "Filter entries from this timestamp (ISO 8601)" },
           to:         { type: "string", format: "date-time", description: "Filter entries up to this timestamp (ISO 8601)" },
+          q:          { type: "string", description: "General search query across action, targetType, targetId, ipAddress, and admin name" },
+          role:       { type: "string", description: "Filter by admin user role" },
         },
       },
     },
@@ -614,6 +614,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
     const {
       page = "1", limit = "20",
       action, targetType, targetId, adminId, from, to,
+      q, role,
     } = req.query as Record<string, string>;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
@@ -626,11 +627,24 @@ export async function adminUserRoutes(app: FastifyInstance) {
     if (targetType) and.push({ targetType: { equals:   targetType, mode: "insensitive" } });
     if (targetId)   and.push({ targetId });
     if (adminId)    and.push({ adminId });
+    if (role)       and.push({ role:       { equals:   role, mode: "insensitive" } });
     if (from || to) {
       const tsFilter: any = {};
       if (from) tsFilter.gte = new Date(from);
       if (to)   tsFilter.lte = new Date(to);
       and.push({ timestamp: tsFilter });
+    }
+    if (q) {
+      and.push({
+        OR: [
+          { action: { contains: q, mode: "insensitive" } },
+          { targetType: { contains: q, mode: "insensitive" } },
+          { targetId: { contains: q, mode: "insensitive" } },
+          { ipAddress: { contains: q, mode: "insensitive" } },
+          { role: { contains: q, mode: "insensitive" } },
+          { admin: { name: { contains: q, mode: "insensitive" } } },
+        ],
+      });
     }
     if (and.length > 0) where.AND = and;
 

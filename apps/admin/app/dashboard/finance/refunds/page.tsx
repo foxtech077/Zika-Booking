@@ -17,6 +17,7 @@ import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { canAccess } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "MT" },
@@ -31,7 +32,12 @@ const COUNTRY_OPTIONS = [
 ];
 
 export default function RefundManagementPage() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_refunds")) {
+    return <AccessDenied />;
+  }
+
   const { 
     refunds, transactions, createRefund, 
     approveRefund, rejectRefund, processRefund 

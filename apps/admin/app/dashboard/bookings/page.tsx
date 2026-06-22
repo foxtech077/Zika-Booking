@@ -256,7 +256,9 @@ export default function BookingsPage() {
             <CurrencySymbol currency={b.currency} className="mr-0.5 text-slate-500" />
             {Number(b.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-xs text-slate-500">Commission: <CurrencySymbol currency={b.currency} className="mr-0.5" />{Number(b.commissionAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          {role !== "sales" && role !== "support" && (
+            <p className="text-xs text-slate-500">Commission: <CurrencySymbol currency={b.currency} className="mr-0.5" />{Number(b.commissionAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          )}
         </div>
       ),
     },
