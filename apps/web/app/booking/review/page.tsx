@@ -27,6 +27,8 @@ interface CheckoutCtx {
   lockExpiresAt: string;
   voucherCode?: string;
   voucherDiscount?: number;
+  promotionId?: string;
+  discountSource?: "voucher" | "promotion";
   firstName: string;
   lastName: string;
   email: string;
@@ -283,7 +285,8 @@ export default function BookingReviewPage() {
         body.deliveryRequested = ctx.deliveryRequested;
         body.deliveryAddress = ctx.deliveryAddress;
       }
-      if (ctx.voucherCode) body.voucherCode = ctx.voucherCode;
+      if (ctx.discountSource === "voucher" && ctx.voucherCode) body.voucherCode = ctx.voucherCode;
+      if (ctx.discountSource === "promotion" && ctx.promotionId) body.promotionId = ctx.promotionId;
 
       const bookRes = await listingApi.post<any>("/bookings", body);
       if (!bookRes.data.success || !bookRes.data.data?.bookingId) {
@@ -791,7 +794,7 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: ReturnType<
           </div>
           {pricing.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
-              <span>Voucher discount</span>
+              <span>{ctx.discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
               <span>−{fmt(pricing.discount)}</span>
             </div>
           )}
@@ -881,7 +884,7 @@ function ConfirmedView({
           </div>
           {confirmed.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
-              <span>Discount</span>
+              <span>{ctx.discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
               <span>−{fmt(confirmed.discount)}</span>
             </div>
           )}

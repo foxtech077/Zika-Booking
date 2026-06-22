@@ -45,6 +45,22 @@ interface Booking {
   canCancel: boolean;
 }
 
+interface ActivePromotion {
+  id: string;
+  name: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  description?: string;
+  category?: string;
+}
+
+interface ApplicableVoucher {
+  id: string;
+  code: string;
+  description?: string;
+  discountAmount: number;
+}
+
 
 // Countries where Tara Mobile Money is the recommended payment method
 const AFRICAN_COUNTRIES = new Set([
@@ -214,6 +230,15 @@ export default function TravellerDashboard() {
   const [voucherDiscount, setVoucherDiscount] = useState<number>(0);
   const [voucherApplied, setVoucherApplied] = useState<boolean>(false);
   const [voucherError, setVoucherError] = useState<string>("");
+
+  // Promotion state
+  const [activePromotion, setActivePromotion] = useState<ActivePromotion | null>(null);
+  const [promotionDiscount, setPromotionDiscount] = useState<number>(0);
+  const [discountSource, setDiscountSource] = useState<"voucher" | "promotion" | null>(null);
+
+  // Auto-applicable vouchers (auto-assigned, shown during checkout)
+  const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucher[]>([]);
+  const [loadingApplicableVouchers, setLoadingApplicableVouchers] = useState(false);
 
   // Checkout inputs
   const [firstName, setFirstName] = useState("");
@@ -702,6 +727,11 @@ export default function TravellerDashboard() {
     setVoucherApplied(false);
     setVoucherDiscount(0);
     setVoucherCode("");
+    setVoucherError("");
+    setActivePromotion(null);
+    setPromotionDiscount(0);
+    setDiscountSource(null);
+    setApplicableVouchers([]);
     setDetailCheckIn("");
     setDetailCheckOut("");
     setDetailPickupDate("");
@@ -748,6 +778,7 @@ export default function TravellerDashboard() {
         setDetailListing(details);
         addToRecentlyViewed(details);
         listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
+        fetchActivePromotion(details.category);
       } else {
         setDetailListing(null);
       }
@@ -800,6 +831,29 @@ export default function TravellerDashboard() {
     checkAvailability(detailListing.id, detailListing.category);
   }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
 
+  // Recompute promotion discount whenever dates or active promotion changes.
+  // Auto-sets discountSource to "promotion" when no voucher is applied and promotion beats zero.
+  useEffect(() => {
+    if (!activePromotion || !detailListing) { setPromotionDiscount(0); return; }
+    const isCar = detailListing.category === "car";
+    const start = isCar ? detailPickupDate : detailCheckIn;
+    const end = isCar ? detailReturnDate : detailCheckOut;
+    const days = calcDays(start, end);
+    if (days <= 0) { setPromotionDiscount(0); return; }
+    const base = detailListing.pricePerNight * days;
+    const pDiscount = activePromotion.discountType === "percentage"
+      ? Math.round(base * activePromotion.discountValue / 100)
+      : Math.round(activePromotion.discountValue);
+    setPromotionDiscount(pDiscount);
+    if (!voucherApplied) {
+      setDiscountSource(pDiscount > 0 ? "promotion" : null);
+    } else {
+      // Keep whichever is higher — never stack
+      setDiscountSource(pDiscount > voucherDiscount ? "promotion" : "voucher");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePromotion, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
+
   // Helper: calculate nights/days between two date strings
   function calcDays(start: string, end: string): number {
     if (!start || !end) return 0;
@@ -845,6 +899,7 @@ export default function TravellerDashboard() {
         setCheckoutStep("review");
         setPaymentId(null);
         if (paymentPollRef.current) clearInterval(paymentPollRef.current);
+        fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country);
       } else {
         const msg = res.data?.error?.message ?? (res.data as any)?.message ?? "Unable to hold these dates. Please try again.";
         setBookingError(msg);
@@ -874,24 +929,70 @@ export default function TravellerDashboard() {
     setSavedMethods([]);
   }
 
-  // 6. Voucher Discount Validation
-  async function handleVoucherApply() {
-    if (!voucherCode) return;
+  // 6. Voucher Discount Validation — sends full booking context for tier/scope/country checks
+  async function handleVoucherApply(codeOverride?: string) {
+    const code = codeOverride ?? voucherCode;
+    if (!code || !detailListing) return;
+    if (codeOverride) setVoucherCode(codeOverride);
     setVoucherError("");
+
+    const isCar = detailListing.category === "car";
+    const start = isCar ? detailPickupDate : detailCheckIn;
+    const end = isCar ? detailReturnDate : detailCheckOut;
+    const days = calcDays(start, end);
+    const orderValue = detailListing.pricePerNight * Math.max(1, days);
 
     try {
       const res = await listingApi.post<any>("/vouchers/validate", {
-        code: voucherCode,
-        orderValue: detailListing?.pricePerNight || 0
+        code,
+        orderValue,
+        listingId: detailListing.id,
+        category: detailListing.category,
+        country: detailListing.country,
+        tier: user?.currentTier,
       });
       if (res.data.success) {
+        const vDiscount = res.data.data.discountAmount || 0;
         setVoucherApplied(true);
-        setVoucherDiscount(res.data.data.discountAmount || 0);
+        setVoucherDiscount(vDiscount);
+        // Apply only the highest-value discount — never stack
+        setDiscountSource(vDiscount >= promotionDiscount ? "voucher" : "promotion");
       } else {
-        setVoucherError("Invalid voucher code");
+        setVoucherError(res.data?.error?.message ?? "Invalid voucher code");
+      }
+    } catch (err: any) {
+      setVoucherError(err?.response?.data?.error?.message ?? "Invalid voucher code");
+    }
+  }
+
+  // Fetch active promotions for a listing category
+  async function fetchActivePromotion(category: string) {
+    try {
+      const res = await listingApi.get<any>("/promotions/active", { params: { category } });
+      if (res.data.success) {
+        const promos: ActivePromotion[] = res.data.data ?? [];
+        setActivePromotion(promos.length > 0 ? (promos[0] ?? null) : null);
       }
     } catch {
-      setVoucherError("Invalid voucher code");
+      setActivePromotion(null);
+    }
+  }
+
+  // Fetch auto-assigned vouchers applicable to the current booking context
+  async function fetchApplicableVouchers(listingId: string, category: string, country: string) {
+    if (!isAuthenticated) return;
+    setLoadingApplicableVouchers(true);
+    try {
+      const res = await listingApi.get<any>("/vouchers/applicable", {
+        params: { listingId, category, country },
+      });
+      if (res.data.success) {
+        setApplicableVouchers(res.data.data ?? []);
+      }
+    } catch {
+      setApplicableVouchers([]);
+    } finally {
+      setLoadingApplicableVouchers(false);
     }
   }
 
@@ -955,7 +1056,8 @@ export default function TravellerDashboard() {
       body.deliveryRequested = deliveryRequested;
       body.deliveryAddress = deliveryAddress;
     }
-    if (voucherApplied) body.voucherCode = voucherCode;
+    if (discountSource === "voucher" && voucherApplied) body.voucherCode = voucherCode;
+    if (discountSource === "promotion" && activePromotion) body.promotionId = activePromotion.id;
 
     try {
       // Step 1: Create booking
@@ -1125,8 +1227,10 @@ export default function TravellerDashboard() {
       children: searchChildren,
       lockToken,
       lockExpiresAt: new Date(Date.now() + (secondsLeft ?? 0) * 1000).toISOString(),
-      voucherCode: voucherApplied ? voucherCode : undefined,
-      voucherDiscount,
+      voucherCode: discountSource === "voucher" && voucherApplied ? voucherCode : undefined,
+      voucherDiscount: discountSource === "voucher" ? voucherDiscount : discountSource === "promotion" ? promotionDiscount : 0,
+      promotionId: discountSource === "promotion" && activePromotion ? activePromotion.id : undefined,
+      discountSource: discountSource ?? undefined,
       firstName, lastName, email, phone, specialRequests,
       driverFirstName: isCar ? (driverFirstName || firstName) : undefined,
       driverLastName: isCar ? (driverLastName || lastName) : undefined,
@@ -1535,7 +1639,7 @@ export default function TravellerDashboard() {
                 <div className="lg:col-span-4 relative lg:sticky lg:top-28 top-4 self-start">
                   <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
                     {/* Price header */}
-                    <div className="flex justify-between items-baseline mb-5">
+                    <div className="flex justify-between items-baseline mb-3">
                       <div className="text-2xl font-bold text-slate-900">
                         {detailListing.currency} {detailListing.pricePerNight.toLocaleString()}
                         <span className="text-sm font-normal text-slate-500 ml-1">/ {detailListing.category === "car" ? "day" : "night"}</span>
@@ -1547,6 +1651,22 @@ export default function TravellerDashboard() {
                       )}
                     </div>
 
+                    {/* Best Offer banner — shown when an active promotion exists */}
+                    {activePromotion && (
+                      <div className="mb-4 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                        <span className="text-base shrink-0">🏷️</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Best Offer</p>
+                          <p className="text-xs font-semibold text-emerald-800 truncate">{activePromotion.name}</p>
+                        </div>
+                        <span className="shrink-0 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+                          {activePromotion.discountType === "percentage"
+                            ? `${activePromotion.discountValue}% off`
+                            : `${detailListing.currency} ${activePromotion.discountValue} off`}
+                        </span>
+                      </div>
+                    )}
+
                     {!lockToken ? (() => {
                       const isCar = detailListing.category === "car";
                       const start = isCar ? detailPickupDate : detailCheckIn;
@@ -1554,7 +1674,8 @@ export default function TravellerDashboard() {
                       const days = calcDays(start, end);
                       const baseTotal = detailListing.pricePerNight * days;
                       const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
-                      const grandTotal = baseTotal + serviceFee;
+                      const sidebarDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
+                      const grandTotal = Math.max(0, baseTotal + serviceFee - sidebarDiscount);
 
                       return (
                         <div className="space-y-4">
@@ -1700,6 +1821,12 @@ export default function TravellerDashboard() {
                                 <span>Service fee (5%)</span>
                                 <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
                               </div>
+                              {sidebarDiscount > 0 && (
+                                <div className="flex justify-between text-emerald-600 font-semibold">
+                                  <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                  <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
+                                </div>
+                              )}
                               <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
                                 <span>Total</span>
                                 <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
@@ -1761,7 +1888,8 @@ export default function TravellerDashboard() {
                           const serviceFee = Math.ceil(base * 0.05);
                           const taxRate = TAX_RATES[detailListing.country] ?? 0;
                           const taxAmount = Math.ceil(base * taxRate);
-                          const grandTotal = base + serviceFee + taxAmount - voucherDiscount;
+                          const bestDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
+                          const grandTotal = Math.max(0, base + serviceFee + taxAmount - bestDiscount);
                           const fmt = (d: string | null | undefined) =>
                             d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
                           return (
@@ -1818,26 +1946,35 @@ export default function TravellerDashboard() {
                                     <span>{detailListing.currency} {taxAmount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                {voucherDiscount > 0 && (
-                                  <div className="flex justify-between text-emerald-600">
-                                    <span>Voucher discount</span>
-                                    <span>−{detailListing.currency} {voucherDiscount.toLocaleString()}</span>
+                                {bestDiscount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                    <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                {!voucherApplied && (
+                                {/* Voucher input — hide if promotion already applied or voucher already applied */}
+                                {!voucherApplied && discountSource !== "promotion" && (
                                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex gap-2 items-center">
                                     <input type="text" placeholder="Promo / voucher code" value={voucherCode}
                                       onChange={(e) => setVoucherCode(e.target.value)}
                                       className="bg-transparent border-0 focus:ring-0 focus:outline-none text-xs text-slate-800 flex-1 min-w-0" />
-                                    <button type="button" onClick={handleVoucherApply}
+                                    <button type="button" onClick={() => handleVoucherApply()}
                                       className="text-[10px] font-bold text-[#1D8D2B] border border-[#1D8D2B] px-2.5 py-1 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
                                   </div>
                                 )}
-                                {voucherApplied && <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied</p>}
+                                {discountSource === "promotion" && (
+                                  <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                                    <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    Promotion applied automatically
+                                  </p>
+                                )}
+                                {voucherApplied && discountSource === "voucher" && (
+                                  <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied</p>
+                                )}
                                 {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
                                   <span>Total</span>
-                                  <span>{detailListing.currency} {Math.max(0, grandTotal).toLocaleString()}</span>
+                                  <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
                                 </div>
                               </div>
 
@@ -1879,13 +2016,59 @@ export default function TravellerDashboard() {
                             )}
                           </div>
 
-                          {/* Voucher */}
-                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex gap-2 items-center">
-                            <input type="text" placeholder="Promo / voucher code" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0" />
-                            <button type="button" onClick={handleVoucherApply} className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-1.5 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
+                          {/* Discount section — auto-assigned vouchers, promotion, manual voucher entry */}
+                          <div className="space-y-2">
+                            {/* Promotion auto-applied */}
+                            {discountSource === "promotion" && activePromotion && (
+                              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
+                                <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                  {activePromotion.name} applied
+                                </span>
+                                <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {promotionDiscount.toLocaleString()}</span>
+                              </div>
+                            )}
+
+                            {/* Auto-assigned applicable vouchers (fetched after lock) */}
+                            {applicableVouchers.length > 0 && !voucherApplied && discountSource !== "promotion" && (
+                              <div className="space-y-1.5">
+                                {loadingApplicableVouchers ? (
+                                  <div className="flex items-center gap-2 text-xs text-slate-400 py-1">
+                                    <div className="w-3 h-3 border-2 border-slate-300 border-t-[#166534] rounded-full animate-spin" />
+                                    Loading your vouchers…
+                                  </div>
+                                ) : (
+                                  <>
+                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Your Vouchers</p>
+                                    {applicableVouchers.map((v) => (
+                                      <button
+                                        key={v.id}
+                                        type="button"
+                                        onClick={() => handleVoucherApply(v.code)}
+                                        className="w-full flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+                                      >
+                                        <span>{v.description || v.code}</span>
+                                        <span className="font-bold">−{detailListing.currency} {v.discountAmount.toLocaleString()}</span>
+                                      </button>
+                                    ))}
+                                  </>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Manual voucher code entry — hidden when promotion or voucher already applied */}
+                            {!voucherApplied && discountSource !== "promotion" && (
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex gap-2 items-center">
+                                <input type="text" placeholder="Promo / voucher code" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0" />
+                                <button type="button" onClick={() => handleVoucherApply()} className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-1.5 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
+                              </div>
+                            )}
+
+                            {voucherApplied && discountSource === "voucher" && (
+                              <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied — {detailListing.currency} {voucherDiscount.toLocaleString()} off</p>
+                            )}
+                            {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
                           </div>
-                          {voucherApplied && <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied — {detailListing.currency} {voucherDiscount.toLocaleString()} off</p>}
-                          {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
 
                           {/* Payment method selector */}
                           <div className="border border-slate-200 rounded-xl overflow-hidden">
@@ -1989,7 +2172,8 @@ export default function TravellerDashboard() {
                             const days = calcDays(start, end);
                             const baseTotal = detailListing.pricePerNight * days;
                             const serviceFee = Math.ceil(baseTotal * 0.05);
-                            const grandTotal = baseTotal + serviceFee - voucherDiscount;
+                            const bestDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
+                            const grandTotal = Math.max(0, baseTotal + serviceFee - bestDiscount);
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
@@ -1997,10 +2181,15 @@ export default function TravellerDashboard() {
                                   <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between"><span>Service fee (5%)</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
-                                {voucherDiscount > 0 && <div className="flex justify-between text-emerald-600"><span>Voucher discount</span><span>−{detailListing.currency} {voucherDiscount.toLocaleString()}</span></div>}
+                                {bestDiscount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                    <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
+                                  </div>
+                                )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
                                   <span>Total to pay</span>
-                                  <span>{detailListing.currency} {Math.max(0, grandTotal).toLocaleString()}</span>
+                                  <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
                                 </div>
                               </div>
                             );
