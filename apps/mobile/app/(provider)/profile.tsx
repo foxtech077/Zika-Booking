@@ -202,6 +202,14 @@ function SecurityTab() {
   );
 }
 
+function comingSoon(feature: string) {
+  Alert.alert(
+    feature,
+    "This feature is not yet available. We're working on it — check back soon.",
+    [{ text: "OK" }]
+  );
+}
+
 function AccountTab() {
   const clearAuth = useAuthStore((s) => s.clearAuth);
 
@@ -222,12 +230,48 @@ function AccountTab() {
   return (
     <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
       <View style={styles.menuCard}>
-        <MenuItem icon="📋" label="Verification Documents" sublabel="Upload required docs" onPress={() => {}} />
-        <MenuItem icon="🏦" label="Bank Details" sublabel="Payout bank account" onPress={() => {}} />
-        <MenuItem icon="💳" label="Tax Information" sublabel="Tax ID & certificates" onPress={() => {}} />
-        <MenuItem icon="🔔" label="Notifications" sublabel="Push, email preferences" onPress={() => router.push("/notifications" as any)} />
-        <MenuItem icon="🌐" label="Channel Manager" sublabel="iCal sync & integrations" onPress={() => {}} />
-        <MenuItem icon="❓" label="Help & Support" sublabel="FAQs, contact us" onPress={() => {}} />
+        <MenuItem
+          icon="⭐"
+          label="My Reviews"
+          sublabel="Guest ratings & your replies"
+          onPress={() => router.push("/(provider)/reviews" as any)}
+        />
+        <MenuItem
+          icon="📋"
+          label="Verification Documents"
+          sublabel="Upload required docs"
+          onPress={() => comingSoon("Verification Documents")}
+        />
+        <MenuItem
+          icon="🏦"
+          label="Bank Details"
+          sublabel="Payout bank account"
+          onPress={() => comingSoon("Bank Details")}
+        />
+        <MenuItem
+          icon="💳"
+          label="Tax Information"
+          sublabel="Tax ID & certificates"
+          onPress={() => comingSoon("Tax Information")}
+        />
+        <MenuItem
+          icon="🔔"
+          label="Notifications"
+          sublabel="Push, email preferences"
+          onPress={() => router.push("/notifications" as any)}
+        />
+        <MenuItem
+          icon="🌐"
+          label="Channel Manager"
+          sublabel="iCal sync & integrations"
+          onPress={() => router.push("/(provider)/channels" as any)}
+        />
+        <MenuItem
+          icon="❓"
+          label="Help & Support"
+          sublabel="FAQs, contact us"
+          onPress={() => comingSoon("Help & Support")}
+        />
       </View>
 
       <View style={[styles.menuCard, { marginTop: 16 }]}>

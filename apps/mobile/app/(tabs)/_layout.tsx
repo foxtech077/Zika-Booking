@@ -1,8 +1,7 @@
 import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
-
-const GREEN = "#024622";
+import { K } from "../../constants/theme";
 
 export default function TabLayout() {
   const user = useAuthStore((s) => s.user);
@@ -18,56 +17,70 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: GREEN,
-        tabBarInactiveTintColor: "#9CA3AF",
+        tabBarActiveTintColor: K.colors.tabActive,
+        tabBarInactiveTintColor: K.colors.tabInactive,
         tabBarStyle: {
-          backgroundColor: "#fff",
+          backgroundColor: K.colors.tabBarBg,
           borderTopWidth: 1,
-          borderTopColor: "#E5E7EB",
-          height: 64,
-          paddingBottom: 8,
-          paddingTop: 6,
+          borderTopColor: K.colors.tabBarBorder,
+          height: 68,
+          paddingBottom: 10,
+          paddingTop: 8,
+          ...K.shadow.xs,
         },
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: "600",
+          fontWeight: "700",
           marginTop: 2,
+          letterSpacing: 0.1,
+        },
+        tabBarItemStyle: {
+          paddingVertical: 2,
         },
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: "Home",
+          title: "Discover",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "home" : "home-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "compass" : "compass-outline"} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="bookings"
         options={{
-          title: "Bookings",
+          title: "Trips",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "calendar" : "calendar-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "airplane" : "airplane-outline"} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="saved"
         options={{
-          title: "Messages",
+          title: "Saved",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "chatbubble" : "chatbubble-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "bookmark" : "bookmark-outline"} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="loyalty"
+        options={{
+          title: "Rewards",
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons name={focused ? "star" : "star-outline"} size={24} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: "You",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "person" : "person-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "person-circle" : "person-circle-outline"} size={24} color={color} />
           ),
         }}
       />

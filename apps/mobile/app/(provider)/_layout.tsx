@@ -1,24 +1,9 @@
 import { Tabs, Redirect } from "expo-router";
-import { View, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
 
 const GREEN = "#024622";
 const INACTIVE = "#9CA3AF";
-
-function BadgeDot({ count }: { count: number }) {
-  if (count <= 0) return null;
-  return (
-    <View style={{
-      position: "absolute", top: -4, right: -6,
-      backgroundColor: "#EF4444", borderRadius: 8,
-      minWidth: 16, height: 16, paddingHorizontal: 3,
-      alignItems: "center", justifyContent: "center",
-    }}>
-      <Text style={{ color: "#fff", fontSize: 9, fontWeight: "700" }}>{count > 9 ? "9+" : count}</Text>
-    </View>
-  );
-}
 
 export default function ProviderLayout() {
   const user = useAuthStore((s) => s.user);
@@ -66,24 +51,23 @@ export default function ProviderLayout() {
           ),
         }}
       />
+      {/* analytics.tsx is the Earnings & Analytics screen — was mislabeled "Calendar" */}
       <Tabs.Screen
         name="analytics"
         options={{
-          title: "Calendar",
+          title: "Analytics",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "calendar-clear" : "calendar-clear-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "stats-chart" : "stats-chart-outline"} size={24} color={color} />
           ),
         }}
       />
+      {/* channels.tsx is the iCal Calendar Sync screen — was mislabeled "Messages" */}
       <Tabs.Screen
         name="channels"
         options={{
-          title: "Messages",
+          title: "Cal Sync",
           tabBarIcon: ({ color, focused }) => (
-            <View>
-              <Ionicons name={focused ? "chatbubble" : "chatbubble-outline"} size={24} color={color} />
-              <BadgeDot count={5} />
-            </View>
+            <Ionicons name={focused ? "sync-circle" : "sync-circle-outline"} size={24} color={color} />
           ),
         }}
       />
@@ -97,6 +81,7 @@ export default function ProviderLayout() {
         }}
       />
       <Tabs.Screen name="listings" options={{ href: null }} />
+      <Tabs.Screen name="reviews" options={{ href: null }} />
     </Tabs>
   );
 }

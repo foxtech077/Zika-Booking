@@ -717,7 +717,7 @@ export default function PaymentScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#1a73e8" />
+          <ActivityIndicator size="large" color="#16a34a" />
           <Text style={styles.loadingText}>Loading booking details...</Text>
         </View>
       </SafeAreaView>
@@ -746,7 +746,7 @@ export default function PaymentScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#1a73e8" />
+          <ActivityIndicator size="large" color="#16a34a" />
           <Text style={styles.pollingTitle}>Card payment is being processed...</Text>
           <Text style={styles.pollingSubtitle}>Awaiting payment confirmation...</Text>
           <Text style={styles.pollingHint}>Please do not close this screen.</Text>
@@ -762,7 +762,7 @@ export default function PaymentScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
-          <Ionicons name="phone-portrait" size={64} color="#1a73e8" />
+          <Ionicons name="phone-portrait" size={64} color="#16a34a" />
           <Text style={styles.pollingTitle}>
             Payment request sent to {maskedNumber}
           </Text>
@@ -773,7 +773,7 @@ export default function PaymentScreen() {
             <Text style={styles.countdownLabel}>Time remaining</Text>
             <Text style={styles.countdownValue}>{msToCountdown(taraCountdownMs)}</Text>
           </View>
-          <ActivityIndicator size="small" color="#1a73e8" style={{ marginTop: 8 }} />
+          <ActivityIndicator size="small" color="#16a34a" style={{ marginTop: 8 }} />
           <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
@@ -903,7 +903,7 @@ export default function PaymentScreen() {
             <Ionicons
               name="card-outline"
               size={28}
-              color={provider === "stripe" ? "#1a73e8" : "#6b7280"}
+              color={provider === "stripe" ? "#16a34a" : "#6b7280"}
             />
             <Text style={[styles.methodTileTitle, provider === "stripe" && styles.methodTileTitleSelected]}>
               Pay by Card
@@ -923,7 +923,7 @@ export default function PaymentScreen() {
             <Ionicons
               name="phone-portrait-outline"
               size={28}
-              color={provider === "tara" ? "#1a73e8" : "#6b7280"}
+              color={provider === "tara" ? "#16a34a" : "#6b7280"}
             />
             <Text style={[styles.methodTileTitle, provider === "tara" && styles.methodTileTitleSelected]}>
               Mobile Money
@@ -960,7 +960,7 @@ export default function PaymentScreen() {
                     <Ionicons
                       name={method.paymentProvider === "stripe" ? "card-outline" : "phone-portrait-outline"}
                       size={16}
-                      color={selectedSavedMethodId === method.id ? "#1a73e8" : "#6b7280"}
+                      color={selectedSavedMethodId === method.id ? "#16a34a" : "#6b7280"}
                     />
                     <Text
                       style={[
@@ -1154,7 +1154,7 @@ const styles = StyleSheet.create({
   summaryReference: { fontSize: 13, fontWeight: "600", color: "#374151", letterSpacing: 0.5 },
   summaryDivider: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 12 },
   summaryTotalLabel: { fontSize: 16, fontWeight: "600", color: "#111827" },
-  summaryTotalAmount: { fontSize: 22, fontWeight: "800", color: "#1a73e8" },
+  summaryTotalAmount: { fontSize: 22, fontWeight: "800", color: "#16a34a" },
 
   // Section label
   sectionLabel: {
@@ -1178,9 +1178,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  methodTileSelected: { borderColor: "#1a73e8", backgroundColor: "#eff6ff" },
+  methodTileSelected: { borderColor: "#16a34a", backgroundColor: "#f0fdf4" },
   methodTileTitle: { fontSize: 14, fontWeight: "700", color: "#374151", textAlign: "center" },
-  methodTileTitleSelected: { color: "#1a73e8" },
+  methodTileTitleSelected: { color: "#16a34a" },
   methodTileSubtitle: { fontSize: 11, color: "#6b7280", textAlign: "center" },
 
   // Saved methods
@@ -1197,9 +1197,9 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
     backgroundColor: "#fff",
   },
-  savedMethodChipSelected: { borderColor: "#1a73e8", backgroundColor: "#eff6ff" },
+  savedMethodChipSelected: { borderColor: "#16a34a", backgroundColor: "#f0fdf4" },
   savedMethodChipText: { fontSize: 13, fontWeight: "500", color: "#374151" },
-  savedMethodChipTextSelected: { color: "#1a73e8" },
+  savedMethodChipTextSelected: { color: "#16a34a" },
 
   // Input section
   inputSection: { marginBottom: 20 },
@@ -1281,9 +1281,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#f3f4f6",
   },
-  prefixDropdownItemSelected: { backgroundColor: "#eff6ff" },
+  prefixDropdownItemSelected: { backgroundColor: "#f0fdf4" },
   prefixDropdownText: { fontSize: 14, color: "#374151" },
-  prefixDropdownTextSelected: { color: "#1a73e8", fontWeight: "600" },
+  prefixDropdownTextSelected: { color: "#16a34a", fontWeight: "600" },
 
   // Tara note
   taraNote: {
@@ -1314,12 +1314,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  checkboxChecked: { backgroundColor: "#1a73e8", borderColor: "#1a73e8" },
+  checkboxChecked: { backgroundColor: "#16a34a", borderColor: "#16a34a" },
   checkboxLabel: { fontSize: 13, color: "#374151", flex: 1 },
 
   // Buttons
   primaryBtn: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
@@ -1404,7 +1404,7 @@ const styles = StyleSheet.create({
   countdownBox: {
     marginTop: 24,
     alignItems: "center",
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#f0fdf4",
     borderRadius: 14,
     paddingHorizontal: 28,
     paddingVertical: 16,
@@ -1412,7 +1412,7 @@ const styles = StyleSheet.create({
     borderColor: "#bfdbfe",
   },
   countdownLabel: { fontSize: 12, color: "#6b7280", marginBottom: 4 },
-  countdownValue: { fontSize: 36, fontWeight: "800", color: "#1a73e8", letterSpacing: 2 },
+  countdownValue: { fontSize: 36, fontWeight: "800", color: "#16a34a", letterSpacing: 2 },
 
   // Failure view
   failureContainer: { alignItems: "center", paddingTop: 24, paddingBottom: 16 },

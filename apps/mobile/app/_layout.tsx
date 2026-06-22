@@ -37,6 +37,8 @@ const screenOptionsByName: Record<string, object> = {
   "payment-methods/index":          { headerShown: true, title: "Payment Methods", headerBackTitle: "Back" },
   "payment-methods/add-card":       { headerShown: true, title: "Add Card", headerBackTitle: "Back" },
   "payment-methods/add-tara":       { headerShown: true, title: "Add Mobile Money", headerBackTitle: "Back" },
+  // ── Profile management ────────────────────────────────────────────────────
+  "edit-profile":                   { headerShown: false },
 };
 
 // Error codes from the auth service that mean "this account can't continue"

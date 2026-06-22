@@ -42,7 +42,7 @@ export default function ResetPasswordScreen() {
         <View style={styles.center}>
           {token ? (
             <>
-              <ActivityIndicator size="large" color="#1a73e8" style={{ marginBottom: 24 }} />
+              <ActivityIndicator size="large" color="#16a34a" style={{ marginBottom: 24 }} />
               <Text style={styles.title}>Opening Kainook…</Text>
               <Text style={styles.sub}>
                 The app should open automatically.{"\n"}

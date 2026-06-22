@@ -457,18 +457,15 @@ export default function ProviderBookingDetailScreen() {
 
         {/* ── Actions ─────────────────────────────────────────────────── */}
         <View style={s.actions}>
-          {/* Message Guest */}
+          {/* Message Guest — messaging not yet available */}
           <TouchableOpacity
-            style={s.msgBtn}
+            style={[s.msgBtn, s.msgBtnDisabled]}
             activeOpacity={0.85}
             onPress={() =>
               Alert.alert(
-                "Messaging",
-                "Open the Messages tab to communicate with your guest through in-app messaging.",
-                [
-                  { text: "Go to Messages", onPress: () => router.replace("/(provider)/messages" as any) },
-                  { text: "Stay Here", style: "cancel" },
-                ]
+                "Messaging Coming Soon",
+                "In-app guest messaging is not yet available. Please use the contact details provided at check-in to communicate with your guest.",
+                [{ text: "OK" }]
               )
             }
           >
@@ -658,6 +655,7 @@ const s = StyleSheet.create({
     backgroundColor: K.colors.darkGreen, borderRadius: K.radius.lg,
     paddingVertical: 16, ...K.shadow.md,
   },
+  msgBtnDisabled: { opacity: 0.55 },
   msgBtnText: { fontSize: K.font.base, fontWeight: "700", color: "#fff" },
   cancelBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
