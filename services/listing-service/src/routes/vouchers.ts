@@ -1043,22 +1043,48 @@ export async function voucherRoutes(app: FastifyInstance) {
           orderBy: { createdAt: "desc" },
           skip,
           take: limit,
-          include: { _count: { select: { redemptions: true } } },
+          // Note: _count removed — computed separately below with a safe fallback
+          // so the endpoint works even if the production DB is missing new columns.
         }),
         prisma.voucher.count({ where }),
       ]);
+
+      // Fetch redemption counts per voucher; fall back to 0 if table unavailable
+      const redemptionCountMap = new Map<string, number>();
+      try {
+        const voucherIds = vouchers.map((v) => v.id);
+        if (voucherIds.length > 0) {
+          const counts = await prisma.voucherRedemption.groupBy({
+            by: ["voucherId"],
+            where: { voucherId: { in: voucherIds } },
+            _count: { voucherId: true },
+          });
+          for (const c of counts) {
+            redemptionCountMap.set(c.voucherId, c._count.voucherId);
+          }
+        }
+      } catch {
+        // voucher_redemptions table not yet available on this environment — default to 0
+      }
 
       return sendSuccess(reply, 200, {
         vouchers: vouchers.map((v) => ({
           id:              v.id,
           code:            v.code,
+          title:           (v as any).title ?? "",
+          activityScope:   (v as any).activityScope ?? "universal",
           discountType:    v.discountType,
           discountValue:   Number(v.discountValue),
           minOrderValue:   v.minOrderValue ? Number(v.minOrderValue) : null,
           maxDiscount:     v.maxDiscount ? Number(v.maxDiscount) : null,
           usageLimit:      v.usageLimit,
+          usageLimitPerGuest: (v as any).usageLimitPerGuest ?? 1,
           usageCount:      v.usageCount,
-          redemptionCount: v._count.redemptions,
+          status:          (v as any).status ?? (v.isActive ? "active" : "paused"),
+          applicableTiers: (v as any).applicableTiers ?? [],
+          countryScope:    (v as any).countryScope ?? null,
+          autoAssign:      (v as any).autoAssign ?? false,
+          redemptionCount: redemptionCountMap.get(v.id) ?? 0,
           validFrom:       v.validFrom.toISOString(),
           validUntil:      v.validUntil.toISOString(),
           isActive:        v.isActive,
