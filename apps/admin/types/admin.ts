@@ -272,6 +272,12 @@ export interface Voucher {
   isActive: boolean;
   createdBy: string;
   createdAt: string;
+  title?: string;
+  activityScope?: string;
+  countryScope?: string;
+  usageLimitPerGuest?: number;
+  applicableTiers?: string[];
+  autoAssign?: boolean;
 }
 
 // ── Reviews ───────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { History, Search, Download, Globe, Calendar, Info } from "lucide-react";
+import { History, Search, Globe, Calendar, Info } from "lucide-react";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -72,30 +72,6 @@ export default function CommissionHistoryPage() {
     return filteredHistory.slice(start, start + limit);
   }, [filteredHistory, page, limit]);
 
-  // CSV Export Action
-  const handleExportCsv = () => {
-    const headers = ["ID", "Country", "Previous Rate (%)", "New Rate (%)", "Effective Date", "Changed By", "Change Reason", "Log Date"];
-    const rows = filteredHistory.map((h) => [
-      h.id,
-      h.country,
-      h.previousRate,
-      h.newRate,
-      h.effectiveDate,
-      h.changedBy,
-      h.changeReason,
-      formatDate(h.createdAt),
-    ]);
-
-    const csvContent = [headers, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `commission-audit-trail-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
   const columns: Column<CommissionHistoryEntry>[] = [
     {
       key: "country",
@@ -164,17 +140,6 @@ export default function CommissionHistoryPage() {
       <SectionHeader
         title="Commission Audit History"
         description="Comprehensive log of default commission adjustments, country-specific rate overrides, and scheduled rule additions."
-        action={
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleExportCsv}
-            disabled={filteredHistory.length === 0}
-            leftIcon={<Download className="h-4 w-4" />}
-          >
-            Export History (CSV)
-          </Button>
-        }
       />
 
       {/* Filters card */}

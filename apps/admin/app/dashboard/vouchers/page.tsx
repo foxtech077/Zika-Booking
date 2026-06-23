@@ -12,6 +12,7 @@ import { Input, Select, CustomDropdown } from "@/components/ui/Input";
 import countries from "i18n-iso-countries";
 import enLocale from "i18n-iso-countries/langs/en.json";
 import { ActionModal } from "@/components/modals/Modals";
+import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Voucher } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
@@ -45,12 +46,22 @@ const fetchVouchers = (params: Record<string, string>) =>
     return { vouchers, total };
   });
 
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className="text-sm font-medium text-slate-900">{value}</span>
+    </div>
+  );
+}
+
 export default function VouchersPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [isActive, setIsActive] = useState("");
   const [addModal, setAddModal] = useState(false);
+  const [selected, setSelected] = useState<Voucher | null>(null);
   const [form, setForm] = useState({
     title: "",
     code: "",
@@ -142,19 +153,69 @@ export default function VouchersPage() {
       ),
     },
     {
+      key: "applicableFor",
+      label: "Applicable For",
+      render: (v) => {
+        const labels: Record<string, string> = {
+          universal: "Universal",
+          hotels: "Hotels",
+          apartments: "Apartments",
+          cars: "Cars",
+          hotels_apartments: "Hotels & Apartments",
+        };
+        return <span className="capitalize text-sm text-slate-700">{labels[v.activityScope || "universal"] || v.activityScope}</span>;
+      },
+    },
+    {
+      key: "countries",
+      label: "Applicable Countries",
+      render: (v) => {
+        if (!v.countryScope) return <span className="text-sm text-slate-700">🌍 All Countries</span>;
+        const countryName = countries.getName(v.countryScope, "en");
+        return (
+          <span className="text-sm text-slate-700">
+            {codeToFlag(v.countryScope)} {countryName ? `${countryName} (${v.countryScope.toUpperCase()})` : v.countryScope.toUpperCase()}
+          </span>
+        );
+      },
+    },
+    {
+      key: "applicableTiers",
+      label: "Applicable Tiers",
+      render: (v) => {
+        const tiers = v.applicableTiers ?? [];
+        if (tiers.length === 0) return <span className="text-sm text-slate-500">All Tiers</span>;
+        const tierColors: Record<string, string> = {
+          bronze: "bg-orange-100 text-orange-700",
+          silver: "bg-slate-100 text-slate-700",
+          gold: "bg-amber-100 text-amber-700",
+          diamond: "bg-blue-100 text-blue-700 border-blue-200",
+        };
+        return (
+          <div className="flex flex-wrap gap-1">
+            {tiers.map((tier) => (
+              <span key={tier} className={`inline-flex items-center rounded-full font-medium px-2 py-0.5 text-xs capitalize ${tierColors[tier] ?? "bg-slate-100 text-slate-600"}`}>
+                {tier}
+              </span>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
       key: "usage",
       label: "Usage",
       render: (v) => (
         <div>
           <p className="text-sm font-medium">
-            {(v.usageCount ?? v.redemptionCount ?? 0).toLocaleString()}
+            {(v.redemptionCount ?? v.usageCount ?? 0).toLocaleString()}
             {v.usageLimit ? ` / ${v.usageLimit.toLocaleString()}` : ""}
           </p>
           {v.usageLimit && (
             <div className="mt-1 h-1.5 bg-slate-100 rounded-full overflow-hidden w-24">
               <div
                 className="h-full bg-primary rounded-full"
-                style={{ width: `${Math.min(((v.usageCount ?? 0) / v.usageLimit) * 100, 100)}%` }}
+                style={{ width: `${Math.min(((v.redemptionCount ?? v.usageCount ?? 0) / v.usageLimit) * 100, 100)}%` }}
               />
             </div>
           )}
@@ -232,12 +293,108 @@ export default function VouchersPage() {
           columns={columns}
           data={paginatedVouchers}
           loading={isLoading}
+          onRowClick={(v) => setSelected(v)}
           emptyTitle="No vouchers found"
           emptyDescription="Create your first promotional voucher."
           emptyIcon={<Ticket className="h-10 w-10" />}
         />
         <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
+
+      {/* Voucher Details Drawer */}
+      <SlideDrawer
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={`Voucher Details: ${selected?.code}`}
+        description={selected?.title || "Voucher configuration and usage details"}
+        width="md"
+      >
+        {selected && (
+          <div className="space-y-6">
+            {/* General Info */}
+            <div className="bg-slate-50/60 rounded-xl p-5 border border-slate-100 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Configuration Details</h3>
+              <InfoRow label="Title" value={selected.title || "—"} />
+              <InfoRow label="Voucher Code" value={<span className="font-mono font-bold text-sm tracking-wider text-slate-900 bg-slate-100 px-2 py-0.5 rounded">{selected.code}</span>} />
+              <InfoRow label="Discount Type" value={<span className="capitalize">{selected.discountType}</span>} />
+              <InfoRow label="Discount Value" value={selected.discountType === "percentage" ? `${selected.discountValue}%` : formatCurrency(selected.discountValue, "USD")} />
+              {selected.discountType === "percentage" && selected.maxDiscount && (
+                <InfoRow label="Max Discount Amount" value={formatCurrency(selected.maxDiscount, "USD")} />
+              )}
+              {selected.minOrderValue && (
+                <InfoRow label="Min Order Value" value={formatCurrency(selected.minOrderValue, "USD")} />
+              )}
+            </div>
+
+            {/* Eligibility & Target */}
+            <div className="bg-slate-50/60 rounded-xl p-5 border border-slate-100 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Target & Eligibility</h3>
+              <InfoRow
+                label="Applicable For"
+                value={(() => {
+                  const labels: Record<string, string> = {
+                    universal: "Universal (All Categories)",
+                    hotels: "Hotels Only",
+                    apartments: "Apartments Only",
+                    cars: "Car Rentals Only",
+                    hotels_apartments: "Hotels & Apartments",
+                  };
+                  return labels[selected.activityScope || "universal"] || selected.activityScope;
+                })()}
+              />
+              <InfoRow
+                label="Applicable Countries"
+                value={
+                  selected.countryScope ? (
+                    <span>
+                      {codeToFlag(selected.countryScope)} {countries.getName(selected.countryScope, "en")} ({selected.countryScope.toUpperCase()})
+                    </span>
+                  ) : (
+                    "🌍 All Countries"
+                  )
+                }
+              />
+              <InfoRow
+                label="Applicable Tiers"
+                value={
+                  selected.applicableTiers && selected.applicableTiers.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {selected.applicableTiers.map((tier) => {
+                        const tierColors: Record<string, string> = {
+                          bronze: "bg-orange-100 text-orange-700",
+                          silver: "bg-slate-100 text-slate-700",
+                          gold: "bg-amber-100 text-amber-700",
+                          diamond: "bg-blue-100 text-blue-700 border-blue-200",
+                        };
+                        return (
+                          <span key={tier} className={`inline-flex items-center rounded-full font-medium px-2 py-0.5 text-xs capitalize ${tierColors[tier] ?? "bg-slate-100 text-slate-600"}`}>
+                            {tier}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    "All Tiers"
+                  )
+                }
+              />
+              <InfoRow label="Auto Assign" value={selected.autoAssign ? "Enabled" : "Disabled"} />
+              <InfoRow label="Status" value={<Badge label={selected.isActive ? "Active" : "Inactive"} status={selected.isActive ? "active" : "deactivated"} />} />
+            </div>
+
+            {/* Limits & Validity */}
+            <div className="bg-slate-50/60 rounded-xl p-5 border border-slate-100 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Usage & Validity</h3>
+              <InfoRow label="Usage Limit" value={selected.usageLimit ? `${selected.usageLimit.toLocaleString()} total redemptions` : "Unlimited"} />
+              <InfoRow label="Usage Per Guest" value={selected.usageLimitPerGuest ? `${selected.usageLimitPerGuest.toLocaleString()} per user` : "Unlimited"} />
+              <InfoRow label="Max Redemptions Per User" value={selected.usageLimitPerGuest ? `${selected.usageLimitPerGuest.toLocaleString()} times` : "Unlimited"} />
+              <InfoRow label="Redeemed Count" value={`${(selected.redemptionCount ?? selected.usageCount ?? 0).toLocaleString()} times`} />
+              <InfoRow label="Valid From" value={formatDate(selected.validFrom)} />
+              <InfoRow label="Valid Until" value={formatDate(selected.validUntil)} />
+            </div>
+          </div>
+        )}
+      </SlideDrawer>
 
       {/* Create voucher modal */}
       <ActionModal
@@ -264,7 +421,7 @@ export default function VouchersPage() {
                 validFrom: form.validFrom ? new Date(form.validFrom).toISOString() : undefined,
                 validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
                 usageLimit: form.usageLimit ? parseInt(form.usageLimit) : undefined,
-                usagePerGuest: form.usagePerGuest ? parseInt(form.usagePerGuest) : undefined,
+                usageLimitPerGuest: form.usagePerGuest ? parseInt(form.usagePerGuest) : undefined,
                 applicableTiers: form.applicableTiers.length > 0 ? form.applicableTiers : undefined,
                 autoAssign: form.autoAssign,
                 isActive: form.isActive,

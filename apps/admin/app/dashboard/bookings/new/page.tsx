@@ -16,7 +16,7 @@ import { paymentApi } from "@/lib/payment-api";
 import { canAccess } from "@/permissions/rbac";
 import { SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea } from "@/components/ui/Input";
+import { Input, Select, Textarea, CustomDropdown } from "@/components/ui/Input";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
@@ -183,9 +183,14 @@ function AvailabilityCalendar({
     const isCheckOut = dateStr === checkOut;
     const inRange = checkIn && checkOut && dateStr > checkIn && dateStr < checkOut;
 
-    if (status === "past") return "text-slate-300 cursor-not-allowed text-xs";
+    let base = "relative flex items-center justify-center h-8 text-xs font-medium rounded-lg transition-all select-none ";
 
-    let base = "relative flex items-center justify-center h-8 text-xs font-medium rounded-lg transition-all cursor-pointer select-none ";
+    if (status === "past") {
+      return base + "text-slate-300 cursor-not-allowed ";
+    }
+
+    base += "cursor-pointer ";
+
     if (isCheckIn || isCheckOut) {
       base += "bg-primary text-white font-bold ring-2 ring-primary/40 z-10 ";
     } else if (inRange) {
@@ -261,10 +266,10 @@ function AvailabilityCalendar({
                   status === "booked"
                     ? "Fully booked"
                     : status === "locked"
-                    ? "Reserved / Locked"
-                    : status === "past"
-                    ? "Past date"
-                    : "Available"
+                      ? "Reserved / Locked"
+                      : status === "past"
+                        ? "Past date"
+                        : "Available"
                 }
                 onClick={() => !isDisabled && handleClick(date)}
                 className={getCellStyle(ds) + getRangeClass(ds)}
@@ -446,21 +451,21 @@ export default function ManualBookingPage() {
   const getSelectedRangeStatus = (availData = availability) => {
     const startStr = isAccommodation ? checkIn : (pickup ? pickup.slice(0, 10) : "");
     const endStr = isAccommodation ? checkOut : (returnDt ? returnDt.slice(0, 10) : "");
-    
+
     if (!startStr || !endStr) return "idle";
     if (!availData) return "available";
-    
+
     const start = new Date(startStr);
     const end = new Date(endStr);
-    
+
     if (isNaN(start.getTime()) || isNaN(end.getTime())) return "idle";
-    
+
     let hasBooked = false;
     let hasLocked = false;
-    
+
     // For hotels/apartments, the checkout day itself is not a booked night
     const limit = isAccommodation ? new Date(end.getTime() - 86400000) : end;
-    
+
     const curr = new Date(start);
     while (curr <= limit) {
       const ds = toYMD(curr);
@@ -472,7 +477,7 @@ export default function ManualBookingPage() {
       }
       curr.setDate(curr.getDate() + 1);
     }
-    
+
     if (hasBooked && hasLocked) return "partially_available";
     if (hasBooked) return "fully_booked";
     if (hasLocked) return "reserved";
@@ -482,7 +487,7 @@ export default function ManualBookingPage() {
   const getAvailabilityDescription = () => {
     if (availStatus === "idle") return "The system will verify existing bookings, reservation locks, and available inventory.";
     if (availStatus === "checking") return "Checking availability...";
-    
+
     const rangeStatus = getSelectedRangeStatus();
     if (rangeStatus === "fully_booked") {
       return "Not available for the selected dates - Fully Booked";
@@ -748,6 +753,9 @@ export default function ManualBookingPage() {
         return;
       }
       await paymentApi.post(`/${paymentMethod}/payment-link`, { bookingId });
+      if (paymentMethod === "tara") {
+        await paymentApi.get(`/tara/trigger/${bookingId}`);
+      }
       setSubmitted(true);
       setLinkSent(true);
     } catch (err: any) {
@@ -916,8 +924,8 @@ export default function ManualBookingPage() {
                                 c.code.toLowerCase().includes(countrySearch.toLowerCase()) ||
                                 c.dialCode.includes(countrySearch)
                             ).length === 0 && (
-                              <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
-                            )}
+                                <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
+                              )}
                           </div>
                         </div>
                       )}
@@ -954,12 +962,12 @@ export default function ManualBookingPage() {
           <SectionCard step={2} title="Booking Information" icon={Building2}>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Select
+                <CustomDropdown
                   id={`${uid}-listingType`}
                   label="Listing Type"
                   required
                   value={listingType}
-                  onChange={(e) => setListingType(e.target.value as ListingType)}
+                  onChange={(val) => setListingType(val as ListingType)}
                   options={[
                     { value: "hotel", label: "Hotel" },
                     { value: "apartment", label: "Apartment" },
@@ -1046,8 +1054,8 @@ export default function ManualBookingPage() {
                                 c.name.toLowerCase().includes(bookingCountrySearch.toLowerCase()) ||
                                 c.code.toLowerCase().includes(bookingCountrySearch.toLowerCase())
                             ).length === 0 && (
-                              <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
-                            )}
+                                <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
+                              )}
                           </div>
                         </div>
                       )}
@@ -1157,8 +1165,8 @@ export default function ManualBookingPage() {
                           (l.town?.toLowerCase().includes(query) || false)
                         );
                       }).length === 0 && (
-                        <p className="text-xs text-slate-400 text-center py-4">No listings found</p>
-                      )}
+                          <p className="text-xs text-slate-400 text-center py-4">No listings found</p>
+                        )}
                     </div>
                   </div>
                 )}
@@ -1343,11 +1351,10 @@ export default function ManualBookingPage() {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("stripe")}
-                    className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
-                      paymentMethod === "stripe"
+                    className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${paymentMethod === "stripe"
                         ? "border-primary bg-primary/5 text-primary"
                         : "border-border text-slate-600 hover:border-slate-300"
-                    }`}
+                      }`}
                   >
                     <CreditCard className="h-4 w-4" />
                     Stripe
@@ -1355,11 +1362,10 @@ export default function ManualBookingPage() {
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("tara")}
-                    className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${
-                      paymentMethod === "tara"
+                    className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${paymentMethod === "tara"
                         ? "border-primary bg-primary/5 text-primary"
                         : "border-border text-slate-600 hover:border-slate-300"
-                    }`}
+                      }`}
                   >
                     <CreditCard className="h-4 w-4" />
                     Tara
@@ -1378,12 +1384,12 @@ export default function ManualBookingPage() {
                   {/* Booking Summary */}
                   <div className="rounded-lg border border-border bg-slate-50/60 p-5 space-y-4">
                     <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Booking Summary</h3>
-                    
+
                     <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-slate-600">
                       <div><span className="font-medium text-slate-700 block mb-0.5">Listing</span> {listingName || "—"}</div>
                       <div><span className="font-medium text-slate-700 block mb-0.5">Listing Type</span> <span className="capitalize">{listingType}</span></div>
                       <div><span className="font-medium text-slate-700 block mb-0.5">Country</span> {country || "—"}</div>
-                      
+
                       {isAccommodation ? (
                         <>
                           <div><span className="font-medium text-slate-700 block mb-0.5">Check-In</span> {formatDateLabel(checkIn)}</div>
@@ -1407,7 +1413,7 @@ export default function ManualBookingPage() {
                   {/* Pricing Breakdown */}
                   <div className="rounded-lg border border-border bg-slate-50/60 p-5 space-y-4">
                     <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Pricing Breakdown</h3>
-                    
+
                     <div className="pt-2 space-y-1.5">
                       <InfoRow label="Base Booking Amount" value={formatCurrency(price.baseAmount, price.currency)} />
                       {price.voucherDiscount !== undefined && price.voucherDiscount > 0 && <InfoRow label="Voucher Discount" value={`-${formatCurrency(price.voucherDiscount, price.currency)}`} />}

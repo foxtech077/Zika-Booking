@@ -17,7 +17,10 @@ import { useAuthStore } from "@/stores/auth";
 export default function DashboardPage() {
   const { user, _hasHydrated } = useAuthStore();
   const isSuperAdmin = user?.role === "super_admin";
-  const queriesEnabled = _hasHydrated && isSuperAdmin;
+  const isAdmin = user?.role === "admin";
+  const isCountryManager = user?.role === "country_manager";
+  const isDashboardUser = isSuperAdmin || isAdmin || isCountryManager;
+  const queriesEnabled = _hasHydrated && isDashboardUser;
 
   // ── 1. Summary Query ───────────────────────────────────────────────────────
   const {
@@ -26,8 +29,15 @@ export default function DashboardPage() {
     error: summaryError,
     refetch: refetchSummary,
   } = useQuery({
-    queryKey: ["admin-dashboard-summary"],
-    queryFn: () => api.get("/admin/dashboard/summary").then((r) => r.data?.data ?? r.data),
+    queryKey: ["admin-dashboard-summary", user?.role],
+    queryFn: () => {
+      const endpoint = isSuperAdmin
+        ? "/admin/dashboard/super-admin/summary"
+        : isAdmin
+        ? "/admin/dashboard/admin/summary"
+        : "/admin/dashboard/country-manager/summary";
+      return api.get(endpoint).then((r) => r.data?.data ?? r.data);
+    },
     enabled: queriesEnabled,
     retry: 1,
   });
@@ -39,8 +49,15 @@ export default function DashboardPage() {
     error: pendingError,
     refetch: refetchPending,
   } = useQuery({
-    queryKey: ["admin-dashboard-pending"],
-    queryFn: () => api.get("/admin/dashboard/pending-actions").then((r) => r.data?.data ?? r.data),
+    queryKey: ["admin-dashboard-pending", user?.role],
+    queryFn: () => {
+      const endpoint = isSuperAdmin
+        ? "/admin/dashboard/super-admin/pending-actions"
+        : isAdmin
+        ? "/admin/dashboard/admin/pending-actions"
+        : "/admin/dashboard/country-manager/pending-actions";
+      return api.get(endpoint).then((r) => r.data?.data ?? r.data);
+    },
     enabled: queriesEnabled,
     retry: 1,
   });
@@ -52,22 +69,29 @@ export default function DashboardPage() {
     error: activityError,
     refetch: refetchActivity,
   } = useQuery({
-    queryKey: ["admin-dashboard-activity"],
-    queryFn: () => api.get("/admin/dashboard/recent-activity?limit=15").then((r) => r.data?.data ?? r.data),
+    queryKey: ["admin-dashboard-activity", user?.role],
+    queryFn: () => {
+      const endpoint = isSuperAdmin
+        ? "/admin/dashboard/super-admin/recent-activity?limit=15"
+        : isAdmin
+        ? "/admin/dashboard/admin/recent-activity?limit=15"
+        : "/admin/dashboard/country-manager/recent-activity?limit=15";
+      return api.get(endpoint).then((r) => r.data?.data ?? r.data);
+    },
     enabled: queriesEnabled,
     retry: 1,
   });
 
   // ── 4. Operators Query (for resolving names in activity feed) ───────────────
   const { data: operatorsData } = useQuery({
-    queryKey: ["admin-dashboard-operators"],
+    queryKey: ["admin-dashboard-operators", user?.role],
     queryFn: () => api.get("/admin/operators?limit=1000").then((r) => r.data?.data?.operators ?? r.data?.operators ?? []),
     enabled: queriesEnabled,
     retry: 1,
   });
 
-  // Non-Super Admin access restriction
-  if (_hasHydrated && !isSuperAdmin) {
+  // Non-Dashboard access restriction
+  if (_hasHydrated && !isDashboardUser) {
     return (
       <div className="space-y-6 max-w-screen-2xl">
         <SectionHeader
@@ -80,7 +104,7 @@ export default function DashboardPage() {
           </div>
           <h2 className="text-lg font-semibold text-slate-900 mb-2">Access Restricted</h2>
           <p className="text-sm text-slate-600 mb-4">
-            The Super Admin Dashboard is restricted to accounts with Super Administrator privileges. 
+            The Dashboard is restricted to accounts with Admin or Manager privileges. 
           </p>
           <p className="text-xs text-slate-500">
             Please use the navigation menu to access listing management, bookings, or user details assigned to your role.
@@ -198,7 +222,13 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 max-w-screen-2xl pb-12">
       <SectionHeader
-        title="Super Admin Dashboard"
+        title={
+          isSuperAdmin
+            ? "Super Admin Dashboard"
+            : isAdmin
+            ? "Admin Dashboard"
+            : "Country Manager Dashboard"
+        }
         description={`Overview · ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`}
         action={
           hasAnyError && (
