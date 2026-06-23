@@ -52,7 +52,10 @@ interface AvailabilityData {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function toYMD(d: Date) {
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function addDays(dateStr: string, n: number) {
@@ -145,9 +148,11 @@ function AvailabilityCalendar({
   // Sync calendar month to checkIn when it changes
   useEffect(() => {
     if (checkIn) {
-      const d = new Date(checkIn);
-      setViewYear(d.getFullYear());
-      setViewMonth(d.getMonth());
+      const [y, m] = checkIn.split("-").map(Number);
+      if (y && m) {
+        setViewYear(y);
+        setViewMonth(m - 1); // 0-indexed
+      }
     }
   }, [checkIn]);
 
@@ -520,6 +525,47 @@ export default function ManualBookingPage() {
     setListingId(""); setListingName("");
   }, [listingType, country]);
 
+  // ── Auto-fetch calendar data when a listing is selected ──────────────────────
+  // Uses the public /listings/:id/availability endpoint (no auth required) to
+  // pre-populate the calendar with booked ranges so all status colours are shown
+  // immediately — without waiting for the user to click "Check Availability".
+  useEffect(() => {
+    if (!listingId) {
+      setAvailability(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCalLoading(true);
+
+    const now = new Date();
+    const monthParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    listingApi
+      .get(`/listings/${listingId}/availability`, { params: { month: monthParam } })
+      .then((res) => {
+        if (cancelled) return;
+        const d = res.data?.data ?? res.data ?? {};
+        // The public endpoint returns { unavailableRanges: [{start, end}] }
+        // Map them to bookedRanges for the calendar's getDayStatus helper
+        const unavailable: { start: string | null; end: string | null }[] =
+          d.unavailableRanges ?? [];
+        const bookedRanges = unavailable
+          .filter((r) => r.start && r.end)
+          .map((r) => ({ start: r.start as string, end: r.end as string }));
+        setAvailability({ bookedRanges, lockedRanges: [] });
+      })
+      .catch(() => {
+        // Silently ignore — calendar degrades gracefully to "all available" view
+        if (!cancelled) setAvailability(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCalLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [listingId]);
+
   // Fetch listings for dropdown
   const { data: listingsData, isLoading: listingsLoading } = useQuery({
     queryKey: ['listings', listingType, country],
@@ -648,11 +694,32 @@ export default function ManualBookingPage() {
           currency: d.pricing.currency ?? getCurrencyForCountry(country),
         });
       }
+      // The admin endpoint never returns bookedRanges/lockedRanges directly.
+      // If it found conflicts (available: false), refresh the calendar from
+      // the public endpoint so the blocking ranges become visible.
       if (d.bookedRanges || d.lockedRanges) {
         setAvailability({
           bookedRanges: d.bookedRanges ?? [],
           lockedRanges: d.lockedRanges ?? [],
         });
+      } else if (!d.available && listingId) {
+        // Re-fetch public availability to reveal which dates are blocked
+        try {
+          const now = new Date();
+          const monthParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+          const calRes = await listingApi.get(`/listings/${listingId}/availability`, {
+            params: { month: monthParam },
+          });
+          const calData = calRes.data?.data ?? calRes.data ?? {};
+          const unavailable: { start: string | null; end: string | null }[] =
+            calData.unavailableRanges ?? [];
+          const bookedRanges = unavailable
+            .filter((r) => r.start && r.end)
+            .map((r) => ({ start: r.start as string, end: r.end as string }));
+          setAvailability({ bookedRanges, lockedRanges: [] });
+        } catch {
+          // ignore — calendar already has data from the initial fetch
+        }
       }
     } catch {
       // Mock fallback
@@ -662,7 +729,7 @@ export default function ManualBookingPage() {
         s.setDate(s.getDate() + startOffset);
         const e = new Date(today);
         e.setDate(e.getDate() + endOffset);
-        return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) };
+        return { start: toYMD(s), end: toYMD(e) };
       };
 
       const mockAvail = {

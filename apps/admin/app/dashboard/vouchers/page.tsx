@@ -16,6 +16,7 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Voucher } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { useAuthStore } from "@/stores/auth";
 
 countries.registerLocale(enLocale);
 function codeToFlag(code: string) {
@@ -57,6 +58,9 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function VouchersPage() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const role = user?.role;
+  const canCreateVoucher = role === "super_admin";
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [statusFilter, setStatusFilter] = useState("");
@@ -68,6 +72,7 @@ export default function VouchersPage() {
     discountType: "percentage" as "percentage" | "fixed",
     discountValue: "",
     maxDiscount: "",
+    minOrderValue: "",
     activityScope: "universal",
     countryScope: "",
     validFrom: "",
@@ -80,22 +85,21 @@ export default function VouchersPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-vouchers"],
-    queryFn: () => fetchVouchers({}), // Fetch all
+    queryKey: ["admin-vouchers", page, limit, statusFilter],
+    queryFn: () => {
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: String(limit),
+      };
+      if (statusFilter) {
+        params.status = statusFilter;
+      }
+      return fetchVouchers(params);
+    },
   });
 
-  const allVouchers: Voucher[] = data?.vouchers ?? [];
-
-  // Frontend filtering
-  const filteredVouchers = allVouchers.filter((v) => {
-    if (statusFilter && v.status !== statusFilter) return false;
-    return true;
-  });
-
-  // Frontend pagination
-  const total = filteredVouchers.length;
-  const offset = (page - 1) * limit;
-  const paginatedVouchers = filteredVouchers.slice(offset, offset + limit);
+  const vouchersList: Voucher[] = data?.vouchers ?? [];
+  const total = data?.total ?? 0;
 
   const createMut = useMutation({
     mutationFn: (body: any) => listingApi.post("/admin/vouchers", body),
@@ -103,7 +107,7 @@ export default function VouchersPage() {
       qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
       setAddModal(false);
       setForm({
-        title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", activityScope: "universal",
+        title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", minOrderValue: "", activityScope: "universal",
         countryScope: "", validFrom: "", validUntil: "", usageLimit: "",
         usagePerGuest: "", applicableTiers: [], autoAssign: false, isActive: true
       });
@@ -260,14 +264,16 @@ export default function VouchersPage() {
         title="Vouchers"
         description={`${total.toLocaleString()} vouchers`}
         action={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setAddModal(true)}
-            leftIcon={<Plus className="h-4 w-4" />}
-          >
-            Create Voucher
-          </Button>
+          canCreateVoucher && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setAddModal(true)}
+              leftIcon={<Plus className="h-4 w-4" />}
+            >
+              Create Voucher
+            </Button>
+          )
         }
       />
 
@@ -292,7 +298,7 @@ export default function VouchersPage() {
         />
         <DataTable
           columns={columns}
-          data={paginatedVouchers}
+          data={vouchersList}
           loading={isLoading}
           onRowClick={(v) => setSelected(v)}
           emptyTitle="No vouchers found"
@@ -417,6 +423,7 @@ export default function VouchersPage() {
                 discountType: form.discountType,
                 discountValue: parseFloat(form.discountValue),
                 maxDiscount: form.maxDiscount ? parseFloat(form.maxDiscount) : undefined,
+                minOrderValue: form.minOrderValue ? parseFloat(form.minOrderValue) : undefined,
                 activityScope: form.activityScope,
                 countryScope: form.countryScope ? form.countryScope : undefined,
                 validFrom: form.validFrom ? new Date(form.validFrom).toISOString() : undefined,
@@ -485,6 +492,15 @@ export default function VouchersPage() {
             placeholder="e.g. 100"
             hint="Only for percentage discounts"
             disabled={form.discountType !== "percentage"}
+          />
+          <Input
+            id="min-order-value"
+            label="Min Order Value"
+            type="number"
+            value={form.minOrderValue}
+            onChange={(e) => setForm((f) => ({ ...f, minOrderValue: e.target.value }))}
+            placeholder="e.g. 50"
+            hint="Minimum spend required"
           />
           <CustomDropdown
             id="activity-scope"
