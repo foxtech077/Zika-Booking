@@ -96,7 +96,12 @@ async function build() {
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
-  const isDev = process.env["NODE_ENV"] == "production";
+  const isDev = process.env["NODE_ENV"] !== "production";
+  const LOCALHOST_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3002",
+    "http://localhost:3005",
+  ];
   await app.register(cors, {
     // In development, allow all origins so the Expo mobile app (which sends no
     // Origin header from React Native) can reach the API.  In production, lock
@@ -108,9 +113,9 @@ async function build() {
       : [
         process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
         process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+        process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
         "https://kainook.com",
-        "http://localhost:3000",
-        "http://localhost:3002",
+        ...LOCALHOST_ORIGINS,
       ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
