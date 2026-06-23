@@ -169,6 +169,8 @@ interface CustomDropdownProps {
   placeholder?: string;
   id?: string;
   required?: boolean;
+  variant?: "primary" | "blue";
+  disabled?: boolean;
 }
 
 export function CustomDropdown({
@@ -180,6 +182,8 @@ export function CustomDropdown({
   placeholder = "Select...",
   id,
   required,
+  variant = "primary",
+  disabled = false,
 }: CustomDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -202,6 +206,7 @@ export function CustomDropdown({
   }, []);
 
   const handleToggle = () => {
+    if (disabled) return;
     if (!isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       setMenuCoords({
@@ -298,7 +303,12 @@ export function CustomDropdown({
             placeholder="Search..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+            className={cn(
+              "w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1",
+              variant === "blue"
+                ? "focus:ring-blue-500 focus:border-blue-500"
+                : "focus:ring-primary focus:border-primary"
+            )}
             onClick={(e) => e.stopPropagation()}
           />
         </div>
@@ -313,12 +323,16 @@ export function CustomDropdown({
               onClick={() => handleSelect(o.value)}
               className={cn(
                 "w-full text-left px-2.5 py-2 text-xs rounded hover:bg-slate-100 transition-colors flex items-center justify-between",
-                selected ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
+                selected
+                  ? variant === "blue"
+                    ? "bg-blue-50 text-blue-600 font-semibold"
+                    : "bg-primary/5 text-primary font-semibold"
+                  : "text-slate-700"
               )}
             >
               <span className="truncate">{o.label}</span>
               {selected && (
-                <span className="text-primary font-semibold">✓</span>
+                <span className={cn("font-semibold", variant === "blue" ? "text-blue-600" : "text-primary")}>✓</span>
               )}
             </button>
           );
@@ -339,8 +353,15 @@ export function CustomDropdown({
       <button
         ref={buttonRef}
         type="button"
+        disabled={disabled}
         onClick={handleToggle}
-        className="w-full py-2 pl-3 pr-10 text-sm text-left bg-white border border-border rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors flex items-center justify-between min-h-[38px] cursor-pointer relative"
+        className={cn(
+          "w-full py-2 pl-3 pr-10 text-sm text-left border rounded-lg text-slate-900 focus:outline-none transition-colors flex items-center justify-between min-h-[38px] relative",
+          disabled ? "bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed" : "bg-white border-border cursor-pointer",
+          !disabled && (variant === "blue"
+            ? "focus:ring-2 focus:ring-blue-500/25 focus:border-blue-500"
+            : "focus:ring-2 focus:ring-primary/25 focus:border-primary")
+        )}
       >
         <span className="truncate">{displayValue()}</span>
         <ChevronDown className="h-4 w-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />

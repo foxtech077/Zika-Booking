@@ -6,7 +6,7 @@ import { Percent, Plus, Trash2, Globe } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea } from "@/components/ui/Input";
+import { Input, Select, Textarea, CustomDropdown } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmModal, ActionModal } from "@/components/modals/Modals";
 import { DataTable, type Column } from "@/components/tables/DataTable";
@@ -15,12 +15,15 @@ import { canAccess } from "@/permissions/rbac";
 import type { CommissionRate, CommissionRatesResponse, AdminRole } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
+
 const fetchRates = () =>
   listingApi.get("/admin/commission-rates").then((r) => r.data.data ?? r.data);
 
-const COUNTRY_OPTIONS = [
-  "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE",
-].map((c) => ({ value: c, label: c }));
+const COUNTRY_OPTIONS = SYSTEM_COUNTRIES.map((c) => ({
+  value: c.code,
+  label: `${c.flag} ${c.name} (${c.code})`,
+}));
 
 export default function CommissionPage() {
   const qc = useQueryClient();
@@ -126,12 +129,17 @@ export default function CommissionPage() {
     {
       key: "country",
       label: "Country",
-      render: (r) => (
-        <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-slate-400" />
-          <span className="font-medium text-slate-900">{r.country}</span>
-        </div>
-      ),
+      render: (r) => {
+        const found = SYSTEM_COUNTRIES.find((sc) => sc.code.toUpperCase() === r.country.toUpperCase());
+        return (
+          <div className="flex items-center gap-2">
+            <span className="text-base">{found?.flag ?? "🌐"}</span>
+            <span className="font-medium text-slate-900">
+              {found ? `${found.name} (${r.country})` : r.country}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: "rate",
@@ -279,11 +287,11 @@ export default function CommissionPage() {
         }
       >
         <div className="space-y-4">
-          <Select
+          <CustomDropdown
             id="country"
             label="Country"
             value={newCountry}
-            onChange={(e) => setNewCountry(e.target.value)}
+            onChange={(val: any) => setNewCountry(val)}
             options={COUNTRY_OPTIONS}
             placeholder="Select country…"
             required

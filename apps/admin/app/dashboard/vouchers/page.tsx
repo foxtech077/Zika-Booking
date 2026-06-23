@@ -59,7 +59,7 @@ export default function VouchersPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [isActive, setIsActive] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [addModal, setAddModal] = useState(false);
   const [selected, setSelected] = useState<Voucher | null>(null);
   const [form, setForm] = useState({
@@ -88,8 +88,7 @@ export default function VouchersPage() {
 
   // Frontend filtering
   const filteredVouchers = allVouchers.filter((v) => {
-    if (isActive === "true" && !v.isActive) return false;
-    if (isActive === "false" && v.isActive) return false;
+    if (statusFilter && v.status !== statusFilter) return false;
     return true;
   });
 
@@ -276,13 +275,15 @@ export default function VouchersPage() {
         <FilterBar
           filters={[
             {
-              key: "isActive",
-              label: "Status",
-              value: isActive,
-              onChange: (v) => { setIsActive(v); setPage(1); },
+              key: "status",
+              label: "All Statuses",
+              value: statusFilter,
+              onChange: (v) => { setStatusFilter(v); setPage(1); },
               options: [
-                { value: "true", label: "Active" },
-                { value: "false", label: "Inactive" },
+                { value: "active", label: "Active" },
+                { value: "paused", label: "Paused" },
+                { value: "expired", label: "Expired" },
+                { value: "exhausted", label: "Exhausted" },
               ],
             },
           ]}
@@ -514,6 +515,7 @@ export default function VouchersPage() {
                   countryScope: val === "all" ? "" : val,
                 }))
               }
+              variant="blue"
             />
           </div>
           <Input

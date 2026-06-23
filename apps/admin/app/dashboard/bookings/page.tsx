@@ -135,6 +135,9 @@ export default function BookingsPage() {
       setResendError("");
       setResendSuccess(false);
       const res = await paymentApi.post(`/${gateway}/payment-link`, { bookingId: id });
+      if (gateway === "tara") {
+        await paymentApi.get(`/tara/trigger/${id}`);
+      }
       return res.data;
     },
     onSuccess: () => {
@@ -228,7 +231,7 @@ export default function BookingsPage() {
               <XCircle className="h-3.5 w-3.5" />
             </button>
           )}
-          {["pending_payment", "draft"].includes(b.status) && (
+          {b.status === "draft" && (
             <button
               onClick={() => setResendModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"

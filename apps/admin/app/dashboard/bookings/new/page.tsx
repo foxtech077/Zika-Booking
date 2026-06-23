@@ -732,6 +732,9 @@ export default function ManualBookingPage() {
       console.log("Generating payment link for bookingId:", bookingId);
       const endpoint = paymentMethod === "stripe" ? "/stripe/payment-link" : "/tara/payment-link";
       const res = await paymentApi.post(endpoint, { bookingId });
+      if (paymentMethod === "tara") {
+        await paymentApi.get(`/tara/trigger/${bookingId}`);
+      }
       return res.data as { paymentLink: string };
     },
     onError: (err: any) => {
