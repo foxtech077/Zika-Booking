@@ -188,7 +188,7 @@ export default function FinancePage() {
   return (
     <div className="space-y-5 max-w-screen-2xl">
       <SectionHeader
-        title="Finance"
+        title="Payment Dashboard"
         description="Revenue, commission, and provider payout overview"
         action={
           canExportFinancialData && (

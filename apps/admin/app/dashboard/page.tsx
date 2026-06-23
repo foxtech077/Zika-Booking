@@ -80,6 +80,7 @@ function buildStatusDonut(bookings: any[]) {
 export default function DashboardPage() {
   const { user, _hasHydrated } = useAuthStore();
   const isSuperAdmin = user?.role === "super_admin";
+  const isAdmin = user?.role === "admin";
   const queriesEnabled = _hasHydrated && isSuperAdmin;
   const isCountryManager = user?.role === "country_manager";
   const userCountryScope = user?.countryScope ?? [];
@@ -101,8 +102,15 @@ export default function DashboardPage() {
     error: summaryError,
     refetch: refetchSummary,
   } = useQuery({
-    queryKey: ["admin-dashboard-summary"],
-    queryFn: () => api.get("/admin/dashboard/summary").then((r) => r.data?.data ?? r.data),
+    queryKey: ["admin-dashboard-summary", user?.role],
+    queryFn: () => {
+      const endpoint = isSuperAdmin
+        ? "/admin/dashboard/super-admin/summary"
+        : isAdmin
+        ? "/admin/dashboard/admin/summary"
+        : "/admin/dashboard/country-manager/summary";
+      return api.get(endpoint).then((r) => r.data?.data ?? r.data);
+    },
     enabled: queriesEnabled,
     retry: 1,
   });
@@ -114,8 +122,15 @@ export default function DashboardPage() {
     error: pendingError,
     refetch: refetchPending,
   } = useQuery({
-    queryKey: ["admin-dashboard-pending"],
-    queryFn: () => api.get("/admin/dashboard/pending-actions").then((r) => r.data?.data ?? r.data),
+    queryKey: ["admin-dashboard-pending", user?.role],
+    queryFn: () => {
+      const endpoint = isSuperAdmin
+        ? "/admin/dashboard/super-admin/pending-actions"
+        : isAdmin
+        ? "/admin/dashboard/admin/pending-actions"
+        : "/admin/dashboard/country-manager/pending-actions";
+      return api.get(endpoint).then((r) => r.data?.data ?? r.data);
+    },
     enabled: queriesEnabled,
     retry: 1,
   });
@@ -127,8 +142,15 @@ export default function DashboardPage() {
     error: activityError,
     refetch: refetchActivity,
   } = useQuery({
-    queryKey: ["admin-dashboard-activity"],
-    queryFn: () => api.get("/admin/dashboard/recent-activity?limit=15").then((r) => r.data?.data ?? r.data),
+    queryKey: ["admin-dashboard-activity", user?.role],
+    queryFn: () => {
+      const endpoint = isSuperAdmin
+        ? "/admin/dashboard/super-admin/recent-activity?limit=15"
+        : isAdmin
+        ? "/admin/dashboard/admin/recent-activity?limit=15"
+        : "/admin/dashboard/country-manager/recent-activity?limit=15";
+      return api.get(endpoint).then((r) => r.data?.data ?? r.data);
+    },
     enabled: queriesEnabled,
     retry: 1,
   });
@@ -180,7 +202,13 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 max-w-screen-2xl pb-12">
       <SectionHeader
-        title="Super Admin Dashboard"
+        title={
+          isSuperAdmin
+            ? "Super Admin Dashboard"
+            : isAdmin
+            ? "Admin Dashboard"
+            : "Country Manager Dashboard"
+        }
         description={`Overview · ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`}
         action={
           hasAnyError && (

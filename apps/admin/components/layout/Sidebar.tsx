@@ -8,7 +8,7 @@ import {
   Star, MessageSquare, Cable, DollarSign, Percent, Ticket,
   ShieldCheck, ClipboardList, BarChart3, Settings,
   ChevronLeft, ChevronRight, LogOut,
-  CreditCard, Coins, RotateCcw, History,
+  CreditCard, Coins, RotateCcw, History, Tag,
 } from "lucide-react";
 import { cn, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
@@ -21,7 +21,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, Users, BadgeCheck, Building2, CalendarDays,
   Star, MessageSquare, Cable, DollarSign, Percent, Ticket,
   ShieldCheck, ClipboardList, BarChart3, Settings,
-  CreditCard, Coins, RotateCcw, History,
+  CreditCard, Coins, RotateCcw, History, Tag,
 };
 
 const ROLE_BADGE_COLORS: Record<AdminRole, string> = {

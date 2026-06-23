@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 
+import MessagingPage from "../messaging/page";
+import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
 import Link from 'next/link';
 import { CurrencySymbol } from "@/components/CurrencySymbol";
@@ -192,6 +194,9 @@ export default function BookingsPage() {
       setResendError("");
       setResendSuccess(false);
       const res = await paymentApi.post(`/${gateway}/payment-link`, { bookingId: id });
+      if (gateway === "tara") {
+        await paymentApi.get(`/tara/trigger/${id}`);
+      }
       return res.data;
     },
     onSuccess: () => {
@@ -290,12 +295,12 @@ export default function BookingsPage() {
               <XCircle className="h-3.5 w-3.5" />
             </button>
           )}
-          {["pending_payment", "draft"].includes(b.status) && (
+          {b.status === "draft" && (
             <button
               onClick={() => setResendModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
               title="Resend payment link"
-            
+            >
               <Send className="h-3.5 w-3.5" />
             </button>
           )}
@@ -505,11 +510,12 @@ export default function BookingsPage() {
                   </div>
                 </div>
               </div>
+            )}
           </div>
-        )}
-        </SlideDrawer>
+          ) : null}
+      </SlideDrawer>
 
-        {detailData && "pending_payment".includes(detailData.status) && (
+        {detailData && ["pending_payment", "confirmed"].includes(detailData.status) && (
           <div className="border-t border-border pt-4 flex gap-2">
             {canAccess(role as AdminRole, "manage_bookings") && selected && (
               <Button

@@ -272,6 +272,13 @@ export interface Voucher {
   isActive: boolean;
   createdBy: string;
   createdAt: string;
+  title?: string;
+  activityScope?: string;
+  countryScope?: string;
+  usageLimitPerGuest?: number;
+  applicableTiers?: string[];
+  autoAssign?: boolean;
+  status?: string;
 }
 
 // ── Reviews ───────────────────────────────────────────────────────────────────
@@ -351,4 +358,24 @@ export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: { code: string; message: string };
+}
+
+// ── Activity Promotions ───────────────────────────────────────────────────────
+
+export interface Promotion {
+  id: string;
+  activity: "hotel" | "apartment" | "car";
+  labelText: string;
+  labelColour: string;
+  discountType: "percentage" | "fixed" | "label_only";
+  discountValue: number;
+  validFrom: string;
+  validUntil: string;
+  applyToBooking: boolean;
+  bannerTitle: string;
+  bannerSubtitle: string;
+  status: "scheduled" | "active" | "paused" | "expired" | "superseded";
+  countryScope: string;
+  createdAt: string;
+  createdBy: string;
 }

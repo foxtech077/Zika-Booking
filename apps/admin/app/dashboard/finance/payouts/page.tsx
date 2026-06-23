@@ -1,17 +1,19 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { 
   Coins, Clock, Calendar, CheckCircle2, XCircle, 
-  Search, Eye, Check, RefreshCw, AlertTriangle, Info 
+  Search, Eye, Check, RefreshCw, AlertTriangle, Info, X, Play
 } from "lucide-react";
+import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
-import { useMockFinanceStore, type Payout } from "@/lib/mock-finance-store";
+import { Input } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { canAccess } from "@/permissions/rbac";
@@ -29,8 +31,41 @@ const COUNTRY_OPTIONS = [
   { value: "CA", label: "CA" },
 ];
 
+export interface Merchant {
+  id: string;
+  userId: string;
+  businessName: string | null;
+  country: string | null;
+  payoutMethod: "stripe_connect" | "mobile_money" | "bank_transfer" | "manual";
+  stripeConnectAccountId: string | null;
+  mobileMoneyNumber: string | null;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
+  isVerified: boolean;
+  isActive: boolean;
+}
+
+export interface Payout {
+  id: string;
+  merchantId: string;
+  bookingId: string;
+  providerId: string;
+  amount: number | string;
+  currency: string;
+  status: "scheduled" | "processing" | "paid" | "failed" | "cancelled";
+  scheduledAt: string;
+  processedAt?: string;
+  providerPayoutId?: string;
+  failureReason?: string;
+  createdAt: string;
+  updatedAt: string;
+  merchant?: Merchant;
+}
+
 export default function PayoutManagementPage() {
   const { user, _hasHydrated } = useAuthStore();
+  const qc = useQueryClient();
 
   if (_hasHydrated && !canAccess(user?.role as any, "view_finance")) {
     return <AccessDenied />;
@@ -39,20 +74,32 @@ export default function PayoutManagementPage() {
   const { payouts, approvePayout, retryPayout } = useMockFinanceStore();
 
   const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<Payout["status"]>("pending");
+  const [activeTab, setActiveTab] = useState<Payout["status"]>("scheduled");
   const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [selectedPayout, setSelectedPayout] = useState<Payout | null>(null);
   
   // Modals state
-  const [approveConfirm, setApproveConfirm] = useState<Payout | null>(null);
+  const [markPaidConfirm, setMarkPaidConfirm] = useState<Payout | null>(null);
+  const [cancelConfirm, setCancelConfirm] = useState<Payout | null>(null);
   const [retryConfirm, setRetryConfirm] = useState<Payout | null>(null);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [providerPayoutIdInput, setProviderPayoutIdInput] = useState("");
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Query all payouts (limit=1000) so we can do accurate tab counts & local filters
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin-payouts"],
+    queryFn: () =>
+      listingApi.get("/admin/payouts", { params: { limit: "1000" } }).then((r) => {
+        return r.data?.data ?? r.data ?? [];
+      }),
+  });
+
+  const payouts: Payout[] = Array.isArray(data) ? data : [];
 
   // Filter payouts based on activeTab, countryScope and search
   const filteredPayouts = useMemo(() => {
@@ -60,22 +107,23 @@ export default function PayoutManagementPage() {
       // 1. Status Tab filter
       if (p.status !== activeTab) return false;
 
-      // 2. Role Scope Filter
+      // 2. Role Scope Filter (Country Manager)
       if (user?.role === "country_manager") {
-        const hasScope = user.countryScope?.includes(p.country);
+        const hasScope = user.countryScope?.includes(p.merchant?.country ?? "");
         if (!hasScope) return false;
       }
 
       // 3. Country Filter
-      if (countryFilter && p.country !== countryFilter) return false;
+      if (countryFilter && p.merchant?.country !== countryFilter) return false;
 
-      // 4. Search Filter (match reference, provider, payout ID)
+      // 4. Search Filter (match bookingId, merchant name, providerId, payout ID)
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const matchesRef = p.bookingReference.toLowerCase().includes(q);
-        const matchesProvider = p.providerName.toLowerCase().includes(q);
+        const matchesBooking = p.bookingId.toLowerCase().includes(q);
+        const matchesMerchantName = (p.merchant?.businessName ?? "").toLowerCase().includes(q) || (p.merchant?.bankAccountName ?? "").toLowerCase().includes(q);
+        const matchesProvider = p.providerId.toLowerCase().includes(q);
         const matchesId = p.id.toLowerCase().includes(q);
-        if (!matchesRef && !matchesProvider && !matchesId) return false;
+        if (!matchesBooking && !matchesMerchantName && !matchesProvider && !matchesId) return false;
       }
 
       return true;
@@ -90,13 +138,15 @@ export default function PayoutManagementPage() {
 
   // Total summary by status for badge counts
   const tabCounts = useMemo(() => {
-    const counts = { pending: 0, scheduled: 0, completed: 0, failed: 0 };
+    const counts = { scheduled: 0, processing: 0, paid: 0, failed: 0, cancelled: 0 };
     payouts.forEach((p) => {
       if (user?.role === "country_manager") {
-        const hasScope = user.countryScope?.includes(p.country);
+        const hasScope = user.countryScope?.includes(p.merchant?.country ?? "");
         if (!hasScope) return;
       }
-      counts[p.status]++;
+      if (counts[p.status] !== undefined) {
+        counts[p.status]++;
+      }
     });
     return counts;
   }, [payouts, user]);
@@ -104,25 +154,39 @@ export default function PayoutManagementPage() {
   // Check roles
   const canModifyPayouts = user?.role === "super_admin" || user?.role === "finance";
 
-  const handleApprove = () => {
-    if (!approveConfirm) return;
-    setActionLoading(true);
-    setTimeout(() => {
-      approvePayout(approveConfirm.id, user?.name || "Super Admin");
-      setApproveConfirm(null);
-      setActionLoading(false);
-    }, 1000);
-  };
+  // Mutations
+  const processNowMut = useMutation({
+    mutationFn: () => listingApi.post("/admin/payouts/process-now"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-payouts"] });
+    },
+  });
 
-  const handleRetry = () => {
-    if (!retryConfirm) return;
-    setActionLoading(true);
-    setTimeout(() => {
-      retryPayout(retryConfirm.id);
+  const markPaidMut = useMutation({
+    mutationFn: ({ id, providerPayoutId }: { id: string; providerPayoutId?: string }) =>
+      listingApi.post(`/admin/payouts/${id}/mark-paid`, { providerPayoutId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-payouts"] });
+      setMarkPaidConfirm(null);
+      setProviderPayoutIdInput("");
+    },
+  });
+
+  const cancelMut = useMutation({
+    mutationFn: (id: string) => listingApi.post(`/admin/payouts/${id}/cancel`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-payouts"] });
+      setCancelConfirm(null);
+    },
+  });
+
+  const retryMut = useMutation({
+    mutationFn: (id: string) => listingApi.post(`/admin/payouts/${id}/retry`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-payouts"] });
       setRetryConfirm(null);
-      setActionLoading(false);
-    }, 1000);
-  };
+    },
+  });
 
   const columns: Column<Payout>[] = [
     {
@@ -132,13 +196,15 @@ export default function PayoutManagementPage() {
     },
     {
       key: "ref",
-      label: "Booking Ref",
+      label: "Booking ID",
       render: (p) => (
         <div>
-          <span className="font-mono text-sm font-semibold text-primary">{p.bookingReference}</span>
-          <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded ml-2">
-            {p.country}
-          </span>
+          <span className="font-mono text-sm font-semibold text-primary">{p.bookingId}</span>
+          {p.merchant?.country && (
+            <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded ml-2">
+              {p.merchant.country}
+            </span>
+          )}
         </div>
       ),
     },
@@ -147,8 +213,10 @@ export default function PayoutManagementPage() {
       label: "Provider & Method",
       render: (p) => (
         <div>
-          <p className="font-medium text-sm text-slate-900">{p.providerName}</p>
-          <p className="text-xs text-slate-500">{p.method}</p>
+          <p className="font-medium text-sm text-slate-900">
+            {p.merchant?.businessName || p.merchant?.bankAccountName || `Provider (${p.providerId.slice(0, 8)})`}
+          </p>
+          <p className="text-xs text-slate-500 capitalize">{p.merchant?.payoutMethod?.replace("_", " ") || "manual"}</p>
         </div>
       ),
     },
@@ -156,16 +224,16 @@ export default function PayoutManagementPage() {
       key: "amount",
       label: "Amount",
       align: "right",
-      render: (p) => <span className="font-bold text-sm tabular">{formatCurrency(p.amount, p.currency)}</span>,
+      render: (p) => <span className="font-bold text-sm tabular">{formatCurrency(Number(p.amount), p.currency)}</span>,
     },
     {
       key: "date",
-      label: activeTab === "completed" ? "Processed Date" : "Scheduled Date",
+      label: activeTab === "paid" ? "Processed Date" : "Scheduled Date",
       render: (p) => (
         <span className="text-xs text-slate-500">
-          {p.status === "completed" 
-            ? formatDate(p.processedDate || p.scheduledDate)
-            : formatDate(p.scheduledDate)
+          {p.status === "paid" 
+            ? formatDate(p.processedAt || p.scheduledAt)
+            : formatDate(p.scheduledAt)
           }
         </span>
       ),
@@ -185,19 +253,31 @@ export default function PayoutManagementPage() {
             Details
           </Button>
 
-          {activeTab === "pending" && (
+          {(p.status === "scheduled" || p.status === "processing" || p.status === "failed") && (
             <Button
               variant="primary"
               size="sm"
               disabled={!canModifyPayouts}
-              onClick={() => setApproveConfirm(p)}
+              onClick={() => setMarkPaidConfirm(p)}
               leftIcon={<Check className="h-3 w-3" />}
             >
-              Approve
+              Mark Paid
             </Button>
           )}
 
-          {activeTab === "failed" && (
+          {(p.status === "scheduled" || p.status === "processing" || p.status === "failed") && (
+            <Button
+              variant="danger"
+              size="sm"
+              disabled={!canModifyPayouts}
+              onClick={() => setCancelConfirm(p)}
+              leftIcon={<X className="h-3 w-3" />}
+            >
+              Cancel
+            </Button>
+          )}
+
+          {p.status === "failed" && (
             <Button
               variant="secondary"
               size="sm"
@@ -233,15 +313,29 @@ export default function PayoutManagementPage() {
       <SectionHeader
         title="Payout Management"
         description="Verify, schedule, approve and retry payouts to accommodation and vehicle rental providers."
+        action={
+          canModifyPayouts && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => processNowMut.mutate()}
+              loading={processNowMut.isPending}
+              leftIcon={<Play className="h-4 w-4" />}
+            >
+              Process Due Payouts
+            </Button>
+          )
+        }
       />
 
       {/* Tabs list */}
-      <div className="flex border-b border-border bg-white rounded-t-xl px-4 pt-3 gap-2">
+      <div className="flex border-b border-border bg-white rounded-t-xl px-4 pt-3 gap-2 overflow-x-auto">
         {([
-          { key: "pending", label: "Pending Payouts", icon: Clock, count: tabCounts.pending, color: "text-amber-500" },
           { key: "scheduled", label: "Scheduled Payouts", icon: Calendar, count: tabCounts.scheduled, color: "text-blue-500" },
-          { key: "completed", label: "Completed Payouts", icon: CheckCircle2, count: tabCounts.completed, color: "text-emerald-500" },
+          { key: "processing", label: "Processing Payouts", icon: Clock, count: tabCounts.processing, color: "text-amber-500" },
+          { key: "paid", label: "Completed Payouts", icon: CheckCircle2, count: tabCounts.paid, color: "text-emerald-500" },
           { key: "failed", label: "Failed Payouts", icon: XCircle, count: tabCounts.failed, color: "text-red-500" },
+          { key: "cancelled", label: "Cancelled Payouts", icon: XCircle, count: tabCounts.cancelled, color: "text-slate-400" },
         ] as const).map((tab) => {
           const TabIcon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -273,7 +367,7 @@ export default function PayoutManagementPage() {
         <FilterBar
           search={searchQuery}
           onSearchChange={(v) => { setSearchQuery(v); setPage(1); }}
-          searchPlaceholder="Search booking ref, provider name..."
+          searchPlaceholder="Search booking, provider, business name..."
           filters={[
             {
               key: "country",
@@ -290,7 +384,7 @@ export default function PayoutManagementPage() {
         <DataTable
           columns={columns}
           data={paginatedPayouts}
-          loading={false}
+          loading={isLoading}
           onRowClick={(p) => setSelectedPayout(p)}
           emptyTitle={`No ${activeTab} payouts`}
           emptyDescription={`There are currently no payout records in ${activeTab} status matching filters.`}
@@ -319,12 +413,12 @@ export default function PayoutManagementPage() {
               <div>
                 <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">Payout Amount</span>
                 <span className="text-xl font-bold text-slate-900 tracking-tight mt-0.5">
-                  {formatCurrency(selectedPayout.amount, selectedPayout.currency)}
+                  {formatCurrency(Number(selectedPayout.amount), selectedPayout.currency)}
                 </span>
               </div>
               <Badge 
                 label={selectedPayout.status} 
-                status={selectedPayout.status === "completed" ? "confirmed" : selectedPayout.status === "failed" ? "cancelled_by_system" : selectedPayout.status === "scheduled" ? "confirmed" : "pending_payment"} 
+                status={selectedPayout.status === "paid" ? "confirmed" : selectedPayout.status === "failed" ? "cancelled_by_system" : selectedPayout.status === "scheduled" ? "confirmed" : "pending_payment"} 
               />
             </div>
 
@@ -332,28 +426,79 @@ export default function PayoutManagementPage() {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <dt className="text-xs text-slate-400">Provider Beneficiary</dt>
-                <dd className="font-semibold text-slate-900 mt-0.5">{selectedPayout.providerName}</dd>
-                <dd className="text-xs text-slate-500 font-mono">ID: {selectedPayout.providerId}</dd>
+                <dd className="font-semibold text-slate-900 mt-0.5">
+                  {selectedPayout.merchant?.businessName || selectedPayout.merchant?.bankAccountName || "—"}
+                </dd>
+                <dd className="text-xs text-slate-500 font-mono">Provider ID: {selectedPayout.providerId}</dd>
+                <dd className="text-xs text-slate-500 font-mono">Merchant ID: {selectedPayout.merchantId}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-400">Linked Booking Reference</dt>
-                <dd className="font-semibold text-primary font-mono mt-0.5">{selectedPayout.bookingReference}</dd>
+                <dt className="text-xs text-slate-400">Linked Booking ID</dt>
+                <dd className="font-semibold text-primary font-mono mt-0.5">{selectedPayout.bookingId}</dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Settlement Method</dt>
-                <dd className="font-medium text-slate-800 mt-0.5">{selectedPayout.method}</dd>
+                <dd className="font-medium text-slate-800 mt-0.5 capitalize">
+                  {selectedPayout.merchant?.payoutMethod?.replace("_", " ") || "manual"}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-slate-400">Scheduled Date</dt>
-                <dd className="font-medium text-slate-800 mt-0.5">{formatDate(selectedPayout.scheduledDate)}</dd>
+                <dd className="font-medium text-slate-800 mt-0.5">{formatDate(selectedPayout.scheduledAt)}</dd>
               </div>
-              {selectedPayout.processedDate && (
+              {selectedPayout.processedAt && (
                 <div>
                   <dt className="text-xs text-slate-400">Settled On</dt>
-                  <dd className="font-semibold text-slate-900 mt-0.5">{formatDate(selectedPayout.processedDate)}</dd>
+                  <dd className="font-semibold text-slate-900 mt-0.5">{formatDate(selectedPayout.processedAt)}</dd>
+                </div>
+              )}
+              {selectedPayout.providerPayoutId && (
+                <div>
+                  <dt className="text-xs text-slate-400">External Transaction Ref</dt>
+                  <dd className="font-semibold font-mono text-slate-950 mt-0.5">{selectedPayout.providerPayoutId}</dd>
                 </div>
               )}
             </div>
+
+            {/* Merchant Bank / Mobile Money / Stripe Connect Credentials */}
+            {selectedPayout.merchant && (
+              <div className="bg-slate-50/60 rounded-xl p-5 border border-slate-100 space-y-4">
+                <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Merchant Payment Credentials</h3>
+                <div className="grid grid-cols-2 gap-4 text-xs">
+                  {selectedPayout.merchant.payoutMethod === "bank_transfer" && (
+                    <>
+                      <div>
+                        <span className="text-slate-400 block">Bank Name</span>
+                        <span className="font-semibold text-slate-800">{selectedPayout.merchant.bankName || "—"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">Account Name</span>
+                        <span className="font-semibold text-slate-800">{selectedPayout.merchant.bankAccountName || "—"}</span>
+                      </div>
+                      <div className="col-span-2">
+                        <span className="text-slate-400 block">Account Number / IBAN</span>
+                        <span className="font-semibold font-mono text-slate-800">{selectedPayout.merchant.bankAccountNumber || "—"}</span>
+                      </div>
+                    </>
+                  )}
+                  {selectedPayout.merchant.payoutMethod === "mobile_money" && (
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block">Mobile Money Number</span>
+                      <span className="font-semibold font-mono text-slate-800">{selectedPayout.merchant.mobileMoneyNumber || "—"}</span>
+                    </div>
+                  )}
+                  {selectedPayout.merchant.payoutMethod === "stripe_connect" && (
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block">Stripe Connect Account ID</span>
+                      <span className="font-semibold font-mono text-slate-800">{selectedPayout.merchant.stripeConnectAccountId || "—"}</span>
+                    </div>
+                  )}
+                  {(!selectedPayout.merchant.payoutMethod || selectedPayout.merchant.payoutMethod === "manual") && (
+                    <div className="col-span-2 text-slate-500 italic">No automated method configured. Manual dispatch required.</div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Error alerts if failed */}
             {selectedPayout.status === "failed" && selectedPayout.failureReason && (
@@ -379,19 +524,28 @@ export default function PayoutManagementPage() {
               </div>
             </div>
 
-
-
             {/* Drawer Actions */}
             <div className="flex gap-2 pt-4 border-t border-slate-100">
-              {selectedPayout.status === "pending" && (
+              {(selectedPayout.status === "scheduled" || selectedPayout.status === "processing" || selectedPayout.status === "failed") && (
                 <Button
                   className="flex-1"
                   variant="primary"
                   disabled={!canModifyPayouts}
-                  onClick={() => { setApproveConfirm(selectedPayout); setSelectedPayout(null); }}
+                  onClick={() => { setMarkPaidConfirm(selectedPayout); setSelectedPayout(null); }}
                   leftIcon={<Check className="h-4 w-4" />}
                 >
-                  Approve Settlement
+                  Mark as Paid
+                </Button>
+              )}
+              {(selectedPayout.status === "scheduled" || selectedPayout.status === "processing" || selectedPayout.status === "failed") && (
+                <Button
+                  className="flex-1"
+                  variant="danger"
+                  disabled={!canModifyPayouts}
+                  onClick={() => { setCancelConfirm(selectedPayout); setSelectedPayout(null); }}
+                  leftIcon={<X className="h-4 w-4" />}
+                >
+                  Cancel Payout
                 </Button>
               )}
               {selectedPayout.status === "failed" && (
@@ -402,7 +556,7 @@ export default function PayoutManagementPage() {
                   onClick={() => { setRetryConfirm(selectedPayout); setSelectedPayout(null); }}
                   leftIcon={<RefreshCw className="h-4 w-4" />}
                 >
-                  Retry Bank Transfer
+                  Retry Payout
                 </Button>
               )}
             </div>
@@ -410,29 +564,57 @@ export default function PayoutManagementPage() {
         )}
       </SlideDrawer>
 
-      {/* Approve Payout Confirmation */}
-      <ConfirmModal
-        open={!!approveConfirm}
-        onClose={() => setApproveConfirm(null)}
-        onConfirm={handleApprove}
-        loading={actionLoading}
-        title="Confirm Payout Release"
-        description={`Are you sure you want to approve this payout of ${formatCurrency(approveConfirm?.amount || 0, approveConfirm?.currency)} to ${approveConfirm?.providerName}? This will initiate an electronic funds transfer.`}
-        confirmLabel="Initiate Transfer"
-        variant="info"
-      />
+      {/* Mark Paid Confirmation */}
+      {markPaidConfirm && (
+        <ConfirmModal
+          open={!!markPaidConfirm}
+          onClose={() => { setMarkPaidConfirm(null); setProviderPayoutIdInput(""); }}
+          onConfirm={() => markPaidMut.mutate({ id: markPaidConfirm.id, providerPayoutId: providerPayoutIdInput })}
+          loading={markPaidMut.isPending}
+          title="Mark Payout as Paid"
+          description={`Are you sure you want to manually mark this payout of ${formatCurrency(Number(markPaidConfirm.amount), markPaidConfirm.currency)} to ${markPaidConfirm.merchant?.businessName || "this provider"} as paid? This should be done after executing offline transfers.`}
+          confirmLabel="Mark Paid"
+          variant="info"
+        >
+          <div className="mt-4">
+            <Input
+              id="providerPayoutIdInput"
+              label="Transaction/Bank Reference (Optional)"
+              placeholder="e.g. TXN-9988123"
+              value={providerPayoutIdInput}
+              onChange={(e) => setProviderPayoutIdInput(e.target.value)}
+            />
+          </div>
+        </ConfirmModal>
+      )}
 
-      {/* Retry Payout Confirmation */}
-      <ConfirmModal
-        open={!!retryConfirm}
-        onClose={() => setRetryConfirm(null)}
-        onConfirm={handleRetry}
-        loading={actionLoading}
-        title="Retry Failed Settlement"
-        description={`Do you want to retry processing payout ${retryConfirm?.id} for ${formatCurrency(retryConfirm?.amount || 0, retryConfirm?.currency)}? The payout will revert to a scheduled state.`}
-        confirmLabel="Retry Transfer"
-        variant="warning"
-      />
+      {/* Cancel Confirmation */}
+      {cancelConfirm && (
+        <ConfirmModal
+          open={!!cancelConfirm}
+          onClose={() => setCancelConfirm(null)}
+          onConfirm={() => cancelMut.mutate(cancelConfirm.id)}
+          loading={cancelMut.isPending}
+          title="Cancel Scheduled Payout"
+          description={`Are you sure you want to cancel this scheduled payout of ${formatCurrency(Number(cancelConfirm.amount), cancelConfirm.currency)}? Cancelled payouts cannot be automatically processed.`}
+          confirmLabel="Cancel Payout"
+          variant="danger"
+        />
+      )}
+
+      {/* Retry Confirmation */}
+      {retryConfirm && (
+        <ConfirmModal
+          open={!!retryConfirm}
+          onClose={() => setRetryConfirm(null)}
+          onConfirm={() => retryMut.mutate(retryConfirm.id)}
+          loading={retryMut.isPending}
+          title="Retry Failed Settlement"
+          description={`Do you want to retry processing payout ${retryConfirm.id} for ${formatCurrency(Number(retryConfirm.amount), retryConfirm.currency)}? The payout will revert to a scheduled state.`}
+          confirmLabel="Retry Transfer"
+          variant="warning"
+        />
+      )}
     </div>
   );
 }

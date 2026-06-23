@@ -30,7 +30,9 @@ export type Permission =
   | "manage_settings"
   | "view_roles"
   | "manage_roles"
-  | "view_refunds";
+  | "view_refunds"
+  | "view_promotions"
+  | "manage_promotions";
 
 // Role → set of permissions
 const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
@@ -42,6 +44,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_finance", "manage_finance",
     "view_commission", "manage_commission",
     "view_vouchers", "manage_vouchers",
+    "view_promotions", "manage_promotions",
     "view_reviews", "manage_reviews",
     "view_messaging",
     "view_channel", "manage_channel",
@@ -59,6 +62,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_finance",
     "view_commission", "manage_commission",
     "view_vouchers", "manage_vouchers",
+    "view_promotions", "manage_promotions",
     "view_reviews", "manage_reviews",
     "view_messaging",
     "view_channel", "manage_channel",
@@ -173,6 +177,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Financial Reports", href: "/dashboard/finance/reports", icon: "BarChart3", permission: "view_finance" },
       { label: "Refund Management", href: "/dashboard/finance/refunds", icon: "RotateCcw", permission: "view_refunds" },
       { label: "Vouchers", href: "/dashboard/vouchers", icon: "Ticket", permission: "view_vouchers" },
+      { label: "Activity Promotions", href: "/dashboard/promotions", icon: "Tag", permission: "view_promotions" },
     ],
   },
 
