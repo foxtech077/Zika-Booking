@@ -71,6 +71,11 @@ async function build() {
 
   // ── CORS ──────────────────────────────────────────────────────────────────
   const isDev = process.env["NODE_ENV"] !== "production";
+  const LOCALHOST_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3002",
+    "http://localhost:3005",
+  ];
   await app.register(cors, {
     origin: isDev
       ? true
@@ -79,9 +84,7 @@ async function build() {
         process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
         process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
         "https://kainook.com",
-        "http://localhost:3000",
-        "http://localhost:3002",
-        "http://localhost:3005",
+        ...LOCALHOST_ORIGINS,
       ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
