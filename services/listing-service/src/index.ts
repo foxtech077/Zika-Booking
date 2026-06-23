@@ -159,7 +159,13 @@ async function build() {
       }
 
       const res = await fetch(url, fetchOptions);
-      const data = await res.json() as any;
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
       
       reply.status(res.status).send(data);
     } catch (err) {
