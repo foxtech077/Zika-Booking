@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
+import { ClipboardList, ChevronDown, ChevronUp, Download } from "lucide-react";
 import { api } from "@/lib/api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -10,6 +10,9 @@ import { Badge } from "@/components/ui/Badge";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { formatDateTime, formatRelativeTime, slugToLabel } from "@/lib/utils";
 import type { AuditLog } from "@/types/admin";
+import { Button } from "@/components/ui/Button";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { useAuthStore } from "@/stores/auth";
 
 const fetchAudit = (params: Record<string, string>) =>
   api.get(`/admin/audit-logs?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -65,14 +68,27 @@ function DiffViewer({ oldVal, newVal }: { oldVal: string | null; newVal: string 
 }
 
 export default function AuditPage() {
+  const { user } = useAuthStore();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [role, setRole] = useState("");
   const [action, setAction] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [selected, setSelected] = useState<AuditLog | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
-  const params = { ...(q ? { q } : {}), ...(role ? { role } : {}), ...(action ? { action } : {}), page: String(page), limit: String(limit) };
+  const params = {
+    ...(q ? { q } : {}),
+    ...(role ? { role } : {}),
+    ...(action ? { action } : {}),
+    ...(startDate ? { from: `${startDate}T00:00:00.000Z` } : {}),
+    ...(endDate ? { to: `${endDate}T23:59:59.999Z` } : {}),
+    page: String(page),
+    limit: String(limit)
+  };
+
   const { data, isLoading } = useQuery({
     queryKey: ["admin-audit", params],
     queryFn: () => fetchAudit(params),
@@ -81,20 +97,82 @@ export default function AuditPage() {
   const logs: AuditLog[] = data?.logs ?? [];
   const total: number = data?.total ?? 0;
 
-  const offset = (page - 1) * limit;
-  const requestUrl = `/admin/audit-logs?${new URLSearchParams(params)}`;
-  const responseCount = data?.logs?.length ?? 0;
-  const renderedRows = logs.length;
-  console.log("AuditPage Pagination Debug:", {
-    page,
-    limit,
-    offset,
-    params,
-    queryKey: ["admin-audit", params],
-    requestUrl,
-    responseCount,
-    renderedRows,
-  });
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const exportParams = {
+        ...(q ? { q } : {}),
+        ...(role ? { role } : {}),
+        ...(action ? { action } : {}),
+        ...(startDate ? { from: `${startDate}T00:00:00.000Z` } : {}),
+        ...(endDate ? { to: `${endDate}T23:59:59.999Z` } : {}),
+        limit: "100000",
+        page: "1"
+      };
+
+      const res = await fetchAudit(exportParams);
+      const allLogs: AuditLog[] = res?.logs ?? [];
+
+      if (allLogs.length === 0) {
+        alert("No logs to export.");
+        return;
+      }
+
+      const CSV_HEADERS = [
+        "ID",
+        "Timestamp",
+        "Admin ID",
+        "Admin Name",
+        "Admin Email",
+        "Role",
+        "Action",
+        "Target Type",
+        "Target ID",
+        "Old Value",
+        "New Value",
+        "IP Address"
+      ];
+
+      function escapeCsv(val: any): string {
+        if (val === null || val === undefined) return "";
+        const str = String(val);
+        if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+          return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+      }
+
+      const rows = allLogs.map((l) => [
+        l.id,
+        l.timestamp,
+        l.adminId,
+        l.adminName ?? "",
+        l.adminEmail ?? "",
+        l.role,
+        l.action,
+        l.targetType ?? "",
+        l.targetId ?? "",
+        l.oldValue ?? "",
+        l.newValue ?? "",
+        l.ipAddress
+      ].map(escapeCsv).join(","));
+
+      const csvContent = [CSV_HEADERS.join(","), ...rows].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `audit-logs-${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Export failed:", err);
+      alert("Failed to export logs.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const columns: Column<AuditLog>[] = [
     {
@@ -114,9 +192,11 @@ export default function AuditPage() {
       key: "admin",
       label: "Admin",
       render: (l) => (
-        <div>
-          <p className="text-sm text-slate-700">{l.adminName ?? l.adminId.slice(0, 12) + "…"}</p>
-          <Badge label={l.role} status={l.role} size="sm" />
+        <div title={`User ID: ${l.adminId}`}>
+          <p className="text-sm text-slate-900 font-medium">{l.adminName ?? "—"}</p>
+          {l.adminEmail && <p className="text-xs text-slate-500">{l.adminEmail}</p>}
+          <p className="text-[10px] text-slate-400 font-mono mt-0.5">{l.adminId.slice(0, 12) + "…"}</p>
+          <Badge label={l.role} status={l.role} size="sm" className="mt-1" />
         </div>
       ),
     },
@@ -187,9 +267,48 @@ export default function AuditPage() {
               ],
             },
           ]}
+          actions={
+            user?.role === "super_admin" && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleExport}
+                leftIcon={<Download className="h-4 w-4" />}
+                loading={isExporting}
+              >
+                Export CSV
+              </Button>
+            )
+          }
           limit={limit}
           onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
-        />
+        >
+          <div className="flex items-center gap-2">
+            <DatePicker
+              placeholder="From Date"
+              value={startDate}
+              onChange={(val) => { setStartDate(val); setPage(1); }}
+              className="w-40"
+            />
+            <span className="text-xs text-slate-400">to</span>
+            <DatePicker
+              placeholder="To Date"
+              value={endDate}
+              onChange={(val) => { setEndDate(val); setPage(1); }}
+              minDate={startDate || undefined}
+              className="w-40"
+            />
+            {(startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => { setStartDate(""); setEndDate(""); setPage(1); }}
+                className="text-xs text-slate-400 hover:text-slate-600 font-medium"
+              >
+                Clear Dates
+              </button>
+            )}
+          </div>
+        </FilterBar>
         <DataTable
           columns={columns}
           data={logs}
@@ -213,11 +332,13 @@ export default function AuditPage() {
           <div className="space-y-5">
             <dl className="grid grid-cols-2 gap-3 text-sm">
               {[
-                ["Admin ID", selected.adminId.slice(0, 16) + "…"],
+                ["User ID", selected.adminId],
+                ["User Name", selected.adminName ?? "—"],
+                ["User Email", selected.adminEmail ?? "—"],
                 ["Role", ""],
                 ["IP Address", selected.ipAddress],
                 ["Target Type", selected.targetType ? slugToLabel(selected.targetType) : "—"],
-                ["Target ID", selected.targetId ? (selected.targetId.slice(0, 20) + "…") : "—"],
+                ["Target ID", selected.targetId ?? "—"],
                 ["Timestamp", formatDateTime(selected.timestamp)],
               ].map(([k, v]) => (
                 <div key={String(k)}>

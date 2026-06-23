@@ -10,6 +10,7 @@ import {
   XCircle,
   Plus,
   Send,
+  MessageSquare,
   ArrowLeft,
   AlertCircle,
   CheckCircle2,
@@ -19,8 +20,8 @@ import {
   CreditCard,
   FileText,
   Hash,
-  User, Building2,
   UserCircle,
+  Building2,
   Mail,
   Phone,
   MapPin,
@@ -45,6 +46,7 @@ import { ListingSearchDropdown } from "../../../../components/ui/ListingSearchDr
 import type { SelectedListing } from "../../../../components/ui/ListingSearchDropdown";
 import { formatCurrency } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -54,88 +56,7 @@ type DayStatus = "past" | "available" | "locked" | "booked";
 type AvailStatus = "idle" | "checking" | "available" | "unavailable";
 type PaymentMethod = "stripe" | "tara";
 
-interface Country {
-  name: string;
-  code: string;
-  dialCode: string;
-}
-
-const COUNTRIES: Country[] = [
-  { name: "India", code: "IN", dialCode: "+91" },
-  { name: "United Arab Emirates", code: "AE", dialCode: "+971" },
-  { name: "Saudi Arabia", code: "SA", dialCode: "+966" },
-  { name: "Qatar", code: "QA", dialCode: "+974" },
-  { name: "Kenya", code: "KE", dialCode: "+254" },
-  { name: "Tanzania", code: "TZ", dialCode: "+255" },
-  { name: "Uganda", code: "UG", dialCode: "+256" },
-  { name: "United States", code: "US", dialCode: "+1" },
-  { name: "United Kingdom", code: "GB", dialCode: "+44" },
-  { name: "Germany", code: "DE", dialCode: "+49" },
-  { name: "France", code: "FR", dialCode: "+33" },
-  { name: "Spain", code: "ES", dialCode: "+34" },
-  { name: "Italy", code: "IT", dialCode: "+39" },
-  { name: "Canada", code: "CA", dialCode: "+1" },
-  { name: "Australia", code: "AU", dialCode: "+61" },
-  { name: "Japan", code: "JP", dialCode: "+81" },
-  { name: "Singapore", code: "SG", dialCode: "+65" },
-  { name: "Netherlands", code: "NL", dialCode: "+31" },
-  { name: "Belgium", code: "BE", dialCode: "+32" },
-  { name: "Sweden", code: "SE", dialCode: "+46" },
-  { name: "Malta", code: "MT", dialCode: "+356" },
-  { name: "Nigeria", code: "NG", dialCode: "+234" },
-  { name: "South Africa", code: "ZA", dialCode: "+27" },
-  { name: "Ghana", code: "GH", dialCode: "+233" },
-  { name: "Bahrain", code: "BH", dialCode: "+973" },
-  { name: "Kuwait", code: "KW", dialCode: "+965" },
-  { name: "Oman", code: "OM", dialCode: "+968" },
-  { name: "Egypt", code: "EG", dialCode: "+20" },
-  { name: "Jordan", code: "JO", dialCode: "+962" },
-  { name: "Lebanon", code: "LB", dialCode: "+961" },
-  { name: "Malaysia", code: "MY", dialCode: "+60" },
-  { name: "Thailand", code: "TH", dialCode: "+66" },
-  { name: "Philippines", code: "PH", dialCode: "+63" },
-  { name: "Indonesia", code: "ID", dialCode: "+62" },
-  { name: "Vietnam", code: "VN", dialCode: "+84" },
-  { name: "Turkey", code: "TR", dialCode: "+90" },
-  { name: "Brazil", code: "BR", dialCode: "+55" },
-  { name: "Mexico", code: "MX", dialCode: "+52" },
-  { name: "Argentina", code: "AR", dialCode: "+54" },
-  { name: "New Zealand", code: "NZ", dialCode: "+64" },
-  { name: "Ireland", code: "IE", dialCode: "+353" },
-  { name: "Switzerland", code: "CH", dialCode: "+41" },
-  { name: "Austria", code: "AT", dialCode: "+43" },
-  { name: "Norway", code: "NO", dialCode: "+47" },
-  { name: "Denmark", code: "DK", dialCode: "+45" },
-  { name: "Finland", code: "FI", dialCode: "+358" },
-  { name: "Poland", code: "PL", dialCode: "+48" },
-  { name: "Greece", code: "GR", dialCode: "+30" },
-  { name: "Portugal", code: "PT", dialCode: "+351" },
-  { name: "Israel", code: "IL", dialCode: "+972" },
-];
-
-function getCountryFlag(code: string): string {
-  const codePoints = code
-    .toUpperCase()
-    .split("")
-    .map(char => 127397 + char.charCodeAt(0));
-  try {
-    return String.fromCodePoint(...codePoints);
-  } catch {
-    return "🌐";
-  }
-}
-
-interface BookingCountry {
-  name: string;
-  code: string;
-  flag: string;
-}
-
-const BOOKING_COUNTRIES: BookingCountry[] = COUNTRIES.map(c => ({
-  name: c.name,
-  code: c.code,
-  flag: getCountryFlag(c.code)
-})).sort((a, b) => a.name.localeCompare(b.name));
+import { COUNTRIES, BOOKING_COUNTRIES, getCountryFlag, type Country, type BookingCountry } from "@/lib/countries";
 
 interface PriceSummary {
   baseAmount: number;
@@ -205,8 +126,8 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60">
+    <div className="bg-white rounded-xl border border-border shadow-card">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60 rounded-t-xl">
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white text-xs font-bold flex-shrink-0">
           {step}
         </div>
@@ -511,10 +432,25 @@ export default function ManualBookingPage() {
 
   // ── Section 2: Booking Info ───────────────────────────────────────────────────
   const [listingType, setListingType] = useState<ListingType>("hotel");
-  const [selectedListing, setSelectedListing] = useState<SelectedListing | null>(null);
+  const [listingId, setListingId] = useState("");
+  const [listingName, setListingName] = useState("");
   const [country, setCountry] = useState("");
   const [isBookingCountryOpen, setIsBookingCountryOpen] = useState(false);
   const [bookingCountrySearch, setBookingCountrySearch] = useState("");
+
+  const isCountryManager = user?.role === "country_manager";
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  const allowedBookingCountries = BOOKING_COUNTRIES.filter(c => {
+    if (!isCountryManager) return true;
+    return scopedCountries.some(sc => sc.toUpperCase() === c.code.toUpperCase());
+  });
+
+  useEffect(() => {
+    if (isCountryManager && scopedCountries && scopedCountries.length === 1 && scopedCountries[0]) {
+      setCountry(scopedCountries[0].toUpperCase());
+    }
+  }, [isCountryManager, scopedCountries]);
+
   const [isListingSelectOpen, setIsListingSelectOpen] = useState(false);
   const [listingSelectSearch, setListingSelectSearch] = useState("");
   const [checkIn, setCheckIn] = useState("");
@@ -534,7 +470,7 @@ export default function ManualBookingPage() {
   const [calSelectStep, setCalSelectStep] = useState<"checkIn" | "checkOut">("checkIn");
 
   // ── Section 4: Price ──────────────────────────────────────────────────────────
-  const [price, setPrice] = useState<PriceSummary | null>(null);
+  const [selectedListing, setSelectedListing] = useState<SelectedListing | null>(null);
 
   // ── Section 5: Payment ────────────────────────────────────────────────────────
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("stripe");
@@ -546,12 +482,67 @@ export default function ManualBookingPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
 
+  const getSelectedRangeStatus = (availData = availability) => {
+    const startStr = isAccommodation ? checkIn : (pickup ? pickup.slice(0, 10) : "");
+    const endStr = isAccommodation ? checkOut : (returnDt ? returnDt.slice(0, 10) : "");
+    
+    if (!startStr || !endStr) return "idle";
+    if (!availData) return "available";
+    
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return "idle";
+    
+    let hasBooked = false;
+    let hasLocked = false;
+    
+    // For hotels/apartments, the checkout day itself is not a booked night
+    const limit = isAccommodation ? new Date(end.getTime() - 86400000) : end;
+    
+    const curr = new Date(start);
+    while (curr <= limit) {
+      const ds = toYMD(curr);
+      const dayStatus = getDayStatus(ds, availData);
+      if (dayStatus === "booked") {
+        hasBooked = true;
+      } else if (dayStatus === "locked") {
+        hasLocked = true;
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+    
+    if (hasBooked && hasLocked) return "partially_available";
+    if (hasBooked) return "fully_booked";
+    if (hasLocked) return "reserved";
+    return "available";
+  };
+
+  const getAvailabilityDescription = () => {
+    if (availStatus === "idle") return "The system will verify existing bookings, reservation locks, and available inventory.";
+    if (availStatus === "checking") return "Checking availability...";
+    
+    const rangeStatus = getSelectedRangeStatus();
+    if (rangeStatus === "fully_booked") {
+      return "Not available for the selected dates - Fully Booked";
+    }
+    if (rangeStatus === "reserved") {
+      return "Not available for the selected dates - Reserved / Locked";
+    }
+    if (rangeStatus === "partially_available") {
+      return "Not available for the selected dates - Partially Available";
+    }
+    if (availStatus === "unavailable") {
+      return "Not available for the selected dates";
+    }
+    return "Available for the selected dates";
+  };
+
   const isAccommodation = listingType !== "car";
   const bookingRef = submitted ? `MBK-${Date.now().toString(36).toUpperCase()}` : "";
 
   // Reset fields when listing type changes
   useEffect(() => {
-    setSelectedListing(null);
     setCheckIn("");
     setCheckOut("");
     setPickup("");
@@ -637,7 +628,7 @@ export default function ManualBookingPage() {
 
   // ── Check Availability ─────────────────────────────────────────────
   async function checkAvailability() {
-    if (!selectedListing) {
+    if (!listingId) {
       setErrors((p) => ({ ...p, listingName: "Select a listing first" }));
       return;
     }
@@ -655,8 +646,8 @@ export default function ManualBookingPage() {
     try {
       const params: Record<string, string> = {
         listingType,
-        listingId: selectedListing.id,
-        listingName: selectedListing.name,
+        listingId,
+        listingName,
         ...(isAccommodation ? { checkIn, checkOut } : { pickupDatetime: pickup, returnDatetime: returnDt }),
         guests: String(guests),
       };
@@ -686,7 +677,28 @@ export default function ManualBookingPage() {
       }
     } catch {
       // Mock fallback
-      setAvailStatus("available");
+      const today = new Date();
+      const rel = (startOffset: number, endOffset: number) => {
+        const s = new Date(today);
+        s.setDate(s.getDate() + startOffset);
+        const e = new Date(today);
+        e.setDate(e.getDate() + endOffset);
+        return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) };
+      };
+
+      const mockAvail = {
+        bookedRanges: [rel(2, 5), rel(10, 14), rel(22, 25)],
+        lockedRanges: [rel(7, 9), rel(18, 20)],
+      };
+
+      if (!availability) {
+        setAvailability(mockAvail);
+      }
+
+      const activeAvail = availability || mockAvail;
+      const rangeStatus = getSelectedRangeStatus(activeAvail);
+      setAvailStatus(rangeStatus === "available" ? "available" : "unavailable");
+
       const base = nights * 120;
       setPrice({
         baseAmount: base,
@@ -696,20 +708,6 @@ export default function ManualBookingPage() {
         total: Math.round(base * 1.15),
         currency: getCurrencyForCountry(country),
       });
-      if (!availability) {
-        const today = new Date();
-        const rel = (startOffset: number, endOffset: number) => {
-          const s = new Date(today);
-          s.setDate(s.getDate() + startOffset);
-          const e = new Date(today);
-          e.setDate(e.getDate() + endOffset);
-          return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) };
-        };
-        setAvailability({
-          bookedRanges: [rel(2, 5), rel(10, 14), rel(22, 25)],
-          lockedRanges: [rel(7, 9), rel(18, 20)],
-        });
-      }
     }
   }
 
@@ -955,8 +953,23 @@ export default function ManualBookingPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
-                  <Input id={`${uid}-pickup`} label="Pickup" type="date" required value={pickup} onChange={(e) => setPickup(e.target.value)} error={errors.pickup} rightIcon={pickup ? renderClearDate(setPickup) : undefined} />
-                  <Input id={`${uid}-return`} label="Return" type="date" required value={returnDt} onChange={(e) => setReturnDt(e.target.value)} error={errors.returnDt} rightIcon={returnDt ? renderClearDate(setReturnDt) : undefined} />
+                  <DatePicker
+                    id={`${uid}-pickup`}
+                    label="Pickup"
+                    required
+                    value={pickup}
+                    onChange={(val) => { setPickup(val); setAvailStatus("idle"); setPrice(null); }}
+                    error={errors.pickup}
+                  />
+                  <DatePicker
+                    id={`${uid}-return`}
+                    label="Return"
+                    required
+                    minDate={pickup || undefined}
+                    value={returnDt}
+                    onChange={(val) => { setReturnDt(val); setAvailStatus("idle"); setPrice(null); }}
+                    error={errors.returnDt}
+                  />
                 </div>
               )}
               <div className="grid grid-cols-2 gap-4">
@@ -986,13 +999,13 @@ export default function ManualBookingPage() {
               {availStatus === "available" && (
                 <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
                   <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
-                  <p className="text-sm font-medium text-green-700">Available for the selected dates</p>
+                  <p className="text-sm font-medium text-green-700">{getAvailabilityDescription()}</p>
                 </div>
               )}
               {availStatus === "unavailable" && (
                 <div className="flex items-center gap-2 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
                   <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
-                  <p className="text-sm font-medium text-danger">Not available for the selected dates</p>
+                  <p className="text-sm font-medium text-danger">{getAvailabilityDescription()}</p>
                 </div>
               )}
               {errors._avail && (
@@ -1052,7 +1065,7 @@ export default function ManualBookingPage() {
                     <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Booking Summary</h3>
                     
                     <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-slate-600">
-                      <div><span className="font-medium text-slate-700 block mb-0.5">Listing</span> {selectedListing?.name || "—"}</div>
+                      <div><span className="font-medium text-slate-700 block mb-0.5">Listing</span> {listingName || "—"}</div>
                       <div><span className="font-medium text-slate-700 block mb-0.5">Listing Type</span> <span className="capitalize">{listingType}</span></div>
                       <div><span className="font-medium text-slate-700 block mb-0.5">Country</span> {country || "—"}</div>
                       
@@ -1130,7 +1143,24 @@ export default function ManualBookingPage() {
                 <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Assigned Country</p>
                 <div className="flex items-center gap-1.5">
                   <MapPin className="h-4 w-4 text-slate-400" />
-                  <p className="text-sm text-slate-700">{country || "-"}</p>
+                  <p className="text-sm text-slate-700">
+                    {(() => {
+                      if (role === "super_admin" || role === "admin") {
+                        return "All Countries";
+                      }
+                      if (user?.countryScope && user.countryScope.length > 0) {
+                        return user.countryScope
+                          .map((code) => {
+                            const found = BOOKING_COUNTRIES.find(
+                              (c) => c.code.toUpperCase() === code.toUpperCase()
+                            );
+                            return found ? found.name : code;
+                          })
+                          .join(", ");
+                      }
+                      return "-";
+                    })()}
+                  </p>
                 </div>
               </div>
               {role && (

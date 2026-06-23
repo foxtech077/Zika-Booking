@@ -1,31 +1,36 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { useAuthStore } from "@/stores/auth";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, XCircle, Plus, Send, MessageSquare } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
-import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
-import MessagingPage from "@/app/dashboard/messaging/page";
-import { ConfirmModal } from "@/components/modals/Modals";
-import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
-import type { Booking } from "@/types/admin";
-import { StatusTimeline } from "@/components/StatusTimeline";
-import { CurrencySymbol } from "@/components/CurrencySymbol";
 
+import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
+import Link from 'next/link';
+import { CurrencySymbol } from "@/components/CurrencySymbol";
+import type { Booking } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
 
 const COUNTRY_OPTIONS = [
   "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
-].map((c) => ({ value: c, label: c }));
+].map((code) => {
+  const found = SYSTEM_COUNTRIES.find((sc) => sc.code === code);
+  return {
+    value: code,
+    label: found ? `${found.flag} ${found.name}` : code,
+  };
+});
 
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -39,14 +44,15 @@ export default function BookingsPage() {
   const role = user?.role as AdminRole | undefined;
   const isAdminOrSuperAdmin = user?.role === "super_admin" || user?.role === "admin";
   const isCountryManager = user?.role === "country_manager";
-  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
-
+  const canManualBook = canAccess(role, "manage_manual_booking");
   // scopedCountries only applies to country_manager (not admin — admin sees all)
-  const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
-  
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin" || (user?.role === "country_manager" && scopedCountries.length > 1);
   const countryOptions = scopedCountries.length > 0
-    ? scopedCountries.map((c) => ({ value: c, label: c }))
+    ? scopedCountries.map((c) => {
+        const found = SYSTEM_COUNTRIES.find((sc) => sc.code === c);
+        return { value: c, label: found ? `${found.flag} ${found.name}` : c };
+      })
     : COUNTRY_OPTIONS;
 
   const [page, setPage] = useState(1);
@@ -54,23 +60,17 @@ export default function BookingsPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [listingType, setListingType] = useState("");
-  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
+  const [country, setCountry] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // Sync country selection after auth store hydration
-  useEffect(() => {
-    if (scopedCountries.length > 0 && !country) {
-      setCountry(scopedCountries[0] ?? "");
-    }
-  }, [scopedCountries, country]);
-  const [showMessagingDrawer, setShowMessagingDrawer] = useState(false);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [resendModal, setResendModal] = useState<Booking | null>(null);
   const [resendError, setResendError] = useState("");
   const [resendSuccess, setResendSuccess] = useState(false);
+  const [showMessagingDrawer, setShowMessagingDrawer] = useState(false);
 
   
 
@@ -128,43 +128,45 @@ export default function BookingsPage() {
       : []),
   ];
 
-  // For country managers, always enforce their scoped country
-  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
   const params = Object.fromEntries(
     Object.entries({
       q,
       status,
       listingType,
-      country: effectiveCountry,
+      country,
       page: String(page),
       limit: String(limit),
     }).filter(([, v]) => v !== "")
   );
-
-
   const { data, isLoading } = useQuery({
     queryKey: ["admin-bookings", params],
     queryFn: () => fetchBookings(params),
-    // Wait for auth store to rehydrate so scopedCountries/effectiveCountry are correct
+    // Wait for auth store to rehydrate so scopedCountries are correct
     enabled: !!token && _hasHydrated,
   });
 
   const bookings: Booking[] = data?.bookings ?? [];
   const total: number = data?.total ?? 0;
 
-  const offset = (page - 1) * limit;
-  const requestUrl = `/admin/bookings?${new URLSearchParams(params)}`;
-  const responseCount = data?.bookings?.length ?? 0;
-  const renderedRows = bookings.length;
-  console.log("BookingsPage Pagination Debug:", {
-    page,
-    limit: limit,
-    offset,
-    params,
-    queryKey: ["admin-bookings", page, limit, q, status, listingType, effectiveCountry],
-    requestUrl,
-    responseCount,
-    renderedRows,
+  const filteredBookings = bookings.filter((b) => {
+    if (!startDate && !endDate) return true;
+    const dateStr = b.checkIn || b.pickupDatetime || b.createdAt;
+    if (!dateStr) return true;
+    const bookingDate = new Date(dateStr);
+
+    if (startDate) {
+      const start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      if (bookingDate < start) return false;
+    }
+
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+      if (bookingDate > end) return false;
+    }
+
+    return true;
   });
 
   const { data: detailData, isLoading: loadingDetail } = useQuery({
@@ -279,21 +281,21 @@ export default function BookingsPage() {
       width: "80px",
       render: (b) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-            {["pending_payment", "confirmed"].includes(b.status) && canAccess(role as AdminRole, "manage_bookings") && (
-              <button
-                onClick={() => setCancelModal(b)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
-                title="Cancel booking"
-              >
-                <XCircle className="h-3.5 w-3.5" />
-              </button>
-            )}
-          {["pending_payment", "draft"].includes(b.status) && canAccess(role as AdminRole, "manage_bookings") && (
+          {["pending_payment", "confirmed"].includes(b.status) && (
+            <button
+              onClick={() => setCancelModal(b)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
+              title="Cancel booking"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {["pending_payment", "draft"].includes(b.status) && (
             <button
               onClick={() => setResendModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
               title="Resend payment link"
-            >
+            
               <Send className="h-3.5 w-3.5" />
             </button>
           )}
@@ -308,7 +310,7 @@ export default function BookingsPage() {
         title="Bookings"
         description={`${total.toLocaleString()} total bookings`}
         action={
-          canCreateManualBooking ? (
+          canManualBook ? (
             <Link href="/dashboard/bookings/new">
               <Button leftIcon={<Plus className="h-4 w-4" />}>
                 Manual Booking
@@ -319,144 +321,217 @@ export default function BookingsPage() {
       />
 
       <Card padding="none">
-        <div className="flex items-center gap-2 px-5 pt-5 pb-1 overflow-x-auto no-scrollbar">
-          {[
-            { label: "All", value: "" },
-            { label: "Draft", value: "draft" },
-            { label: "Pending Payment", value: "pending_payment" },
-            { label: "Confirmed", value: "confirmed" },
-            { label: "Cancelled", value: "cancelled" },
-          ].map((f) => (
-            <Button
-              key={f.label}
-              variant={status === f.value || (f.value === 'cancelled' && status.startsWith('cancelled')) ? "primary" : "secondary"}
-              size="sm"
-              onClick={() => { setStatus(f.value); setPage(1); }}
-            >
-              {f.label}
-            </Button>
-          ))}
-        </div>
         <FilterBar 
         
           search={q}
           onSearchChange={(v) => { setQ(v); setPage(1); }}
-          searchPlaceholder="Search reference, guest name, email, phone..."
-          filters={filterItems}
-          limit={limit}
-          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
-        />
+          searchPlaceholder="Search reference, email…"
+          filters={[
+            {
+              key: "status",
+              label: "All Statuses",
+              value: status,
+              onChange: (v) => { setStatus(v); setPage(1); },
+              options: [
+                { value: "pending_payment", label: "Pending Payment" },
+                { value: "confirmed", label: "Confirmed" },
+                { value: "completed", label: "Completed" },
+                { value: "cancelled_by_guest", label: "Cancelled by Guest" },
+                { value: "cancelled_by_provider", label: "Cancelled by Provider" },
+                { value: "cancelled_by_system", label: "Cancelled by System" },
+              ],
+            },
+            {
+              key: "listingType",
+              label: "All Types",
+              value: listingType,
+              onChange: (v) => { setListingType(v); setPage(1); },
+              options: [
+                { value: "hotel", label: "Hotel" },
+                { value: "apartment", label: "Apartment" },
+                { value: "car", label: "Car" },
+              ],
+            },
+            ...(canShowCountryFilter
+              ? [
+                {
+                  key: "country",
+                  label: "All Countries",
+                  value: country,
+                  onChange: (v: string) => {
+                    setCountry(v);
+                    setPage(1);
+                  },
+                  options: countryOptions,
+                },
+              ]
+              : []),
+          ]}
+        >
+          {canShowCountryFilter && (
+            <div className="flex items-center gap-2">
+              <DatePicker
+                value={startDate}
+                onChange={(val) => {
+                  setStartDate(val);
+                  setPage(1);
+                }}
+                placeholder="Start Date"
+                className="w-40"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <DatePicker
+                value={endDate}
+                onChange={(val) => {
+                  setEndDate(val);
+                  setPage(1);
+                }}
+                placeholder="End Date"
+                className="w-40"
+              />
+              {(startDate || endDate) && (
+                <button
+                  onClick={() => {
+                    setStartDate("");
+                    setEndDate("");
+                    setPage(1);
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors text-xs"
+                  title="Clear date filter"
+                >
+                  Clear Dates
+                </button>
+              )}
+            </div>
+          )}
+        </FilterBar>
         <DataTable
           columns={columns}
-          data={bookings}
+          data={filteredBookings}
           loading={isLoading}
           onRowClick={(b) => setSelected(b)}
           emptyTitle="No bookings found"
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<CalendarDays className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} onLimitChange={(newL) => { setLimit(newL); setPage(1); }} />
       </Card>
 
-      {/* Booking detail drawer */}
-      {selected && (
-        <SlideDrawer
-          open={!!selected}
-          onClose={() => setSelected(null)}
-          title={`Booking ${selected.reference}`}
-        >
-          {loadingDetail ? (
-            <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading…</div>
-          ) : detailData ? (
-            <div className="space-y-6 p-5">
-              <StatusTimeline currentStatus={detailData.status} />
-              
-              <div className="grid grid-cols-2 gap-y-6 gap-x-4">
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Reference</p>
-                  <p className="text-sm font-semibold text-slate-900 font-mono">{detailData.reference}</p>
+      {/* Detail drawer */}
+      <SlideDrawer
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={`Booking ${selected?.reference}`}
+        description={`${selected?.guestFirstName} ${selected?.guestLastName} · ${selected?.guestEmail}`}
+        width="md"
+        footer={
+          selected && ["pending_payment", "confirmed"].includes(selected.status) ? (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => { setCancelModal(selected); setSelected(null); }}
+              leftIcon={<XCircle className="h-4 w-4" />}
+            >
+              Cancel Booking
+            </Button>
+          ) : undefined
+        }
+      >
+        {loadingDetail ? (
+          <div className="space-y-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-4 bg-slate-200 rounded animate-shimmer" />
+            ))}
+          </div>
+        ) : detailData ? (
+          <div className="space-y-6">
+            {/* Summary */}
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              {[
+                ["Reference", detailData.reference],
+                ["Status", ""],
+                ["Type", detailData.listingType],
+                ["Nights/Days", detailData.nightsOrDays],
+                ["Check-in", formatDate(detailData.checkIn)],
+                ["Check-out", formatDate(detailData.checkOut)],
+                ["Adults", detailData.adults ?? "—"],
+                ["Children", detailData.children ?? "—"],
+              ].map(([k, v]) => (
+                <div key={String(k)}>
+                  <dt className="text-xs text-slate-400 mb-0.5">{k}</dt>
+                  <dd className="font-medium text-slate-900">
+                    {k === "Status" ? <Badge label={detailData.status} status={detailData.status} /> : String(v)}
+                  </dd>
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Booking Status</p>
-                  <Badge label={detailData.status} status={detailData.status} />
-                </div>
-                
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Payment Status</p>
-                  <Badge label={detailData.paymentStatus || "unpaid"} status={detailData.paymentStatus || "unpaid"} />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Payment Paid Date</p>
-                  <p className="text-sm text-slate-900">{detailData.paymentPaidAt ? formatDate(detailData.paymentPaidAt, "MMM d, yyyy HH:mm") : "N/A"}</p>
-                </div>
+              ))}
+            </div>
 
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Guest Information</p>
-                  <p className="text-sm font-semibold text-slate-900">{detailData.guestFirstName} {detailData.guestLastName}</p>
-                  <p className="text-xs text-slate-500">{detailData.guestEmail}</p>
-                  {detailData.guestPhone && <p className="text-xs text-slate-500">{detailData.guestPhone}</p>}
+            {/* Financials */}
+            <div className="bg-surface-subtle rounded-xl p-4 space-y-2 text-sm border border-border">
+              <p className="font-semibold text-slate-900 mb-2">Financial Breakdown</p>
+              {[
+                ["Subtotal", formatCurrency(Number(detailData.subtotal), detailData.currency)],
+                ["Voucher Discount", `- ${formatCurrency(Number(detailData.voucherDiscount), detailData.currency)}`],
+                ["Delivery Fee", formatCurrency(Number(detailData.deliveryFee), detailData.currency)],
+                ["Total", formatCurrency(Number(detailData.totalAmount), detailData.currency)],
+                ["Commission", formatCurrency(Number(detailData.commissionAmount), detailData.currency)],
+                ["Provider Payout", formatCurrency(Number(detailData.providerPayout), detailData.currency)],
+              ].map(([k, v]) => (
+                <div key={String(k)} className="flex justify-between">
+                  <span className={k === "Total" ? "font-semibold text-slate-900" : "text-slate-500"}>{k}</span>
+                  <span className={k === "Total" ? "font-bold text-slate-900 tabular" : "tabular text-slate-700"}>{String(v)}</span>
                 </div>
-                <div>
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Listing Information</p>
-                  <p className="text-sm text-slate-800">{detailData.listing?.name ?? detailData.listingId}</p>
-                  <p className="text-xs text-slate-500 capitalize">{detailData.listingType}</p>
-                </div>
+              ))}
+            </div>
 
-                <div className="col-span-2">
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">Check-in / Check-out</p>
-                  {detailData.checkIn ? (
-                    <p className="text-sm text-slate-800">
-                      {formatDate(detailData.checkIn, "MMM d, yyyy")} → {formatDate(detailData.checkOut, "MMM d, yyyy")}
-                      <span className="text-slate-500 ml-2">({detailData.nightsOrDays} {detailData.listingType === "car" ? "day(s)" : "night(s)"})</span>
-                    </p>
-                  ) : (
-                    <p className="text-sm text-slate-800">
-                      {formatDate(detailData.pickupDatetime, "MMM d HH:mm")}
-                    </p>
-                  )}
-                </div>
-                
-                <div className="col-span-2 bg-slate-50 rounded-lg p-3 flex justify-between items-center border border-slate-100">
-                  <p className="text-sm font-medium text-slate-600">Total Amount</p>
-                  <div className="text-right flex items-baseline gap-1">
-                    <CurrencySymbol currency={detailData.currency} className="text-slate-500 font-medium" />
-                    <p className="text-lg font-bold text-slate-900 tabular-nums">
-                      {Number(detailData.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-slate-500 font-semibold uppercase ml-1">{detailData.currency}</p>
+            {/* Status log */}
+            {detailData.statusLog?.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Status History</p>
+                <div className="relative">
+                  <div className="absolute left-2 top-0 bottom-0 w-px bg-border" />
+                  <div className="space-y-3 pl-6">
+                    {detailData.statusLog.map((log: any) => (
+                      <div key={log.id} className="relative">
+                        <div className="absolute -left-4 top-1.5 h-2 w-2 rounded-full bg-primary" />
+                        <p className="text-sm font-medium text-slate-900">
+                          {log.fromStatus ? `${slugToLabel(log.fromStatus)} → ` : ""}
+                          {slugToLabel(log.toStatus)}
+                        </p>
+                        {log.reason && <p className="text-xs text-slate-500">{log.reason}</p>}
+                        <p className="text-xs text-slate-400">{formatRelativeTime(log.createdAt)}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
-
-                {"pending_payment".includes(detailData.status) && (
-                  <div className="border-t border-border pt-4 flex gap-2">
-                    {canAccess(role as AdminRole, "manage_bookings") && (
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => { setCancelModal(selected); setSelected(null); }}
-                      >
-                        Cancel Booking
-                      </Button>
-                    )}
-                    {canAccess(role as AdminRole, "view_messaging") && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        leftIcon={<MessageSquare className="h-3 w-3" />}
-                        onClick={() => setShowMessagingDrawer(true)}
-                      >
-                        Message Guest
-                      </Button>
-                    )}
-                  </div>
-                )}
-            </div>
-          ) : null}
+          </div>
+        )}
         </SlideDrawer>
-      )}
 
-        {/* Messaging Drawer */}
+        {detailData && "pending_payment".includes(detailData.status) && (
+          <div className="border-t border-border pt-4 flex gap-2">
+            {canAccess(role as AdminRole, "manage_bookings") && selected && (
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => { setCancelModal(selected); setSelected(null); }}
+              >
+                Cancel Booking
+              </Button>
+            )}
+            {canAccess(role as AdminRole, "view_messaging") && selected && (
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<MessageSquare className="h-3 w-3" />}
+                onClick={() => { setShowMessagingDrawer(true); setSelected(selected); }}
+              >
+                Message Guest
+              </Button>
+            )}
+          </div>
+        )}        {/* Messaging Drawer */}
         <SlideDrawer
           open={showMessagingDrawer}
           onClose={() => setShowMessagingDrawer(false)}

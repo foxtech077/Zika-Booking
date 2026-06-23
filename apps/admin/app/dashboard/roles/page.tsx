@@ -1,16 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldCheck, UserPlus, Trash2, Pencil, Users2,
-  AlertCircle, CheckCircle, Clock
+  AlertCircle, CheckCircle, Clock, ChevronDown, Search
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input, Select } from "@/components/ui/Input";
+import { Input, Select, CustomDropdown } from "@/components/ui/Input";
 import { Avatar } from "@/components/ui/Avatar";
 import countries from "i18n-iso-countries";
 import enLocale from "i18n-iso-countries/langs/en.json";
@@ -20,9 +20,9 @@ import ReactSelect from "react-select";
 countries.registerLocale(enLocale);
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
-import { formatDate, formatRelativeTime, slugToLabel } from "@/lib/utils";
+import { formatDate, formatRelativeTime, slugToLabel, cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
-import { canAccess } from "@/permissions/rbac";
+import { canAccess, getAllowedRolesToCreate } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -61,8 +61,11 @@ function codeToFlag(code: string) {
 // ── Constants ─────────────────────────────────────────────────────────────────
 const COUNTRY_OPTIONS = Object.keys(countries.getAlpha2Codes()).map((c) => ({
   value: c,
-  label: `${codeToFlag(c)} ${c}`,
+  label: `${codeToFlag(c)} ${countries.getName(c, "en")} (${c})`,
 }));
+
+
+
 
 const ROLE_OPTIONS: { value: AdminRole; label: string }[] = [
   { value: "admin", label: "Admin" },
@@ -102,7 +105,7 @@ const PERMISSION_MATRIX = [
 export default function RolesPage() {
   const { user } = useAuthStore();
   const qc = useQueryClient();
-  const canManage = canAccess(user?.role, "manage_roles");
+  const canManage = canAccess(user?.role, "manage_roles") || user?.role === "admin";
 
   // Admin's own country scope (for restricting country picker)
   const adminCountries: string[] = user?.countryScope ?? [];
@@ -119,14 +122,17 @@ export default function RolesPage() {
   const [editModal, setEditModal] = useState<Operator | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Operator | null>(null);
 
+  const allowedRoles = getAllowedRolesToCreate(user?.role);
+  const filteredRoleOptions = ROLE_OPTIONS.filter((opt) => allowedRoles.includes(opt.value));
+
   // Create form
   const [form, setForm] = useState({
-    name: "", email: "", password: "", role: "admin" as AdminRole, countryScope: ""
+    name: "", email: "", password: "", role: (allowedRoles[0] ?? "admin") as AdminRole, countryScope: ""
   });
   const [createCountries, setCreateCountries] = useState<string[]>([]);
 
   // Edit form
-  const [editRole, setEditRole] = useState<AdminRole>("admin");
+  const [editRole, setEditRole] = useState<AdminRole>((allowedRoles[0] ?? "admin") as AdminRole);
   const [editCountries, setEditCountries] = useState<string[]>([]);
 
   const params = { q, ...(roleFilter ? { role: roleFilter } : {}), page: String(page), limit: String(limit) };
@@ -136,18 +142,36 @@ export default function RolesPage() {
     queryFn: () => fetchOperators(params),
   });
 
-  const operators: Operator[] = data?.operators ?? [];
-  const total: number = data?.total ?? 0;
+  const rawOperators: Operator[] = data?.operators ?? [];
+  const operators: Operator[] = rawOperators.filter((op: Operator) => {
+    if (user?.role !== "super_admin" && op.role === "super_admin") {
+      return false;
+    }
+    return true;
+  });
+  const total: number = data?.total ? data.total - (rawOperators.length - operators.length) : operators.length;
 
   const createMut = useMutation({
     mutationFn: (body: any) => createOperator(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-operators"] });
       setCreateModal(false);
-      setForm({ name: "", email: "", password: "", role: "admin", countryScope: "" });
+      setForm({ name: "", email: "", password: "", role: (allowedRoles[0] ?? "admin") as AdminRole, countryScope: "" });
       setCreateCountries([]);
     },
   });
+
+  const openCreateModal = () => {
+    setForm({
+      name: "",
+      email: "",
+      password: "",
+      role: (allowedRoles[0] ?? "admin") as AdminRole,
+      countryScope: ""
+    });
+    setCreateCountries([]);
+    setCreateModal(true);
+  };
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteOperator(id),
@@ -264,7 +288,7 @@ export default function RolesPage() {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => setCreateModal(true)}
+              onClick={openCreateModal}
               leftIcon={<UserPlus className="h-4 w-4" />}
             >
               Create Admin
@@ -396,40 +420,28 @@ export default function RolesPage() {
               hint={form.password && form.password.length < 8 ? "Too short — min 8 characters" : undefined}
               required
             />
-            <Select
+            <CustomDropdown
               id="admin-role"
               label="Role"
+              placeholder="Select role..."
+              options={filteredRoleOptions}
               value={form.role}
-              onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as AdminRole }))}
-              options={ROLE_OPTIONS}
+              onChange={(val: any) => setForm((f) => ({ ...f, role: val as AdminRole }))}
             />
           </div>
 
           {(form.role === "country_manager" || form.role === "sales") && (
-            <ReactSelect
-              aria-label="Country Scope"
+            <CustomDropdown
+              id="admin-country-scope"
+              label="Country Scope"
               placeholder="Select countries..."
               isMulti
-              isClearable
-              closeMenuOnSelect={false}
-              menuPosition="fixed"
-              menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
-              styles={{
-                menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-              }}
               options={COUNTRY_OPTIONS}
-              value={createCountries.map((c) => ({ value: c, label: `${codeToFlag(c)} ${c}` }))}
-              onChange={(selected) =>
-                setCreateCountries(selected ? selected.map((s: any) => s.value) : [])
-              }
-              formatOptionLabel={(opt: any) => (
-                <div className="flex items-center space-x-2">
-                  <span>{codeToFlag(opt.value)} {opt.value}</span>
-                </div>
-              )}
-              getOptionLabel={(opt: any) => `${codeToFlag(opt.value)} ${opt.value}`}
+              value={createCountries}
+              onChange={(val: any) => setCreateCountries(val)}
             />
           )}
+
 
           <div className="bg-surface-subtle border border-border rounded-lg p-3 text-xs text-slate-600">
             <span className="font-semibold text-slate-700">{slugToLabel(form.role)}:</span>{" "}
@@ -464,38 +476,26 @@ export default function RolesPage() {
         }
       >
         <div className="space-y-3">
-          <Select
+          <CustomDropdown
             id="edit-role"
             label="New Role"
+            placeholder="Select role..."
+            options={filteredRoleOptions}
             value={editRole}
-            onChange={(e) => setEditRole(e.target.value as AdminRole)}
-            options={ROLE_OPTIONS}
+            onChange={(val: any) => setEditRole(val as AdminRole)}
           />
           {(editRole === "country_manager" || editRole === "sales") && (
-            <ReactSelect
-              aria-label="Country Scope"
+            <CustomDropdown
+              id="edit-country-scope"
+              label="Country Scope"
               placeholder="Select countries..."
               isMulti
-              isClearable
-              closeMenuOnSelect={false}
-              menuPosition="fixed"
-              menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
-              styles={{
-                menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-              }}
               options={COUNTRY_OPTIONS}
-              value={editCountries.map((c) => ({ value: c, label: `${codeToFlag(c)} ${c}` }))}
-              onChange={(selected) =>
-                setEditCountries(selected ? selected.map((s: any) => s.value) : [])
-              }
-              formatOptionLabel={(opt: any) => (
-                <div className="flex items-center space-x-2">
-                  <span>{codeToFlag(opt.value)} {opt.value}</span>
-                </div>
-              )}
-              getOptionLabel={(opt: any) => `${codeToFlag(opt.value)} ${opt.value}`}
+              value={editCountries}
+              onChange={(val: any) => setEditCountries(val)}
             />
           )}
+
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
             ⚠️ Their current session will be revoked and they must sign in again with the new role.
           </div>

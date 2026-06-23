@@ -215,35 +215,24 @@ export default function AccreditationPage() {
   const [docLoading, setDocLoading] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
 
-  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin" || (user?.role === "country_manager" && userCountryScope.length > 1);
   const countryOptions = userCountryScope.length > 0
     ? userCountryScope.map((c) => ({ value: c, label: c }))
     : [
         "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
       ].map((c) => ({ value: c, label: c }));
 
-  const [country, setCountry] = useState(() => userCountryScope[0] ?? "");
+  const [country, setCountry] = useState("");
 
-  // Sync country selection after auth store hydration
-  useEffect(() => {
-    if (userCountryScope.length > 0 && !country) {
-      setCountry(userCountryScope[0] ?? "");
-    }
-  }, [userCountryScope, country]);
-
-  // For country managers, always send their first scoped country as the filter.
-  // Previously this was set to "" which caused the API to return all countries.
-  const effectiveCountry = isCountryManager ? (country || userCountryScope[0] || "") : country;
   const params = Object.fromEntries(
     Object.entries({
       page: String(page),
       limit: String(limit),
-      country: effectiveCountry,
+      country,
     }).filter(([, v]) => v !== "")
   );
   const { data, isLoading } = useQuery({
-    queryKey: ["accreditation-queue", page, limit, effectiveCountry],
+    queryKey: ["accreditation-queue", page, limit, country],
     queryFn: () => fetchQueue(params),
     // Wait for auth store to rehydrate so userCountryScope/effectiveCountry are correct
     enabled: !!token && _hasHydrated,
@@ -290,7 +279,7 @@ export default function AccreditationPage() {
     limit,
     offset,
     params,
-    queryKey: ["accreditation-queue", page, limit, effectiveCountry],
+    queryKey: ["accreditation-queue", page, limit, country],
     requestUrl,
     responseCount,
     renderedRows,

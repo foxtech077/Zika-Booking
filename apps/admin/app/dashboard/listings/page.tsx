@@ -2,20 +2,22 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
+import { Search, ChevronDown, Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { AccessDenied } from "@/components/ui/AccessDenied";
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
 import { Button } from "@/components/ui/Button";
 import { Select, Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
-import { formatDate, formatRelativeTime, formatCurrency } from "@/lib/utils";
+import { Badge } from "@/components/ui/Badge";
+import { formatDate, formatRelativeTime, formatCurrency, cn } from "@/lib/utils";
 import type { Listing } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
-import { AccessDenied } from "@/components/ui/AccessDenied";
+
 
 function CategoryIcon({ category }: { category: string }) {
   if (category === "hotel") return <Hotel className="w-4 h-4 text-blue-500" />;
@@ -41,15 +43,29 @@ export default function ListingsPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
-  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
-  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
-  // Sync country selection after auth store hydration
+  const [country, setCountry] = useState("");
+
+  const [isCountryOpen, setIsCountryOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+
   useEffect(() => {
-    if (scopedCountries.length > 0 && !country) {
-      setCountry(scopedCountries[0] ?? "");
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".listings-country-dropdown")) {
+        setIsCountryOpen(false);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, []);
+
+  const filteredCountries = SYSTEM_COUNTRIES.filter((c) => {
+    if (isCountryManager) {
+      return scopedCountries.some((sc) => sc.toUpperCase() === c.code.toUpperCase());
     }
-  }, [scopedCountries, country]);
-  // Sync country selection moved above
+    return true;
+  });
+
   const [selected, setSelected] = useState<Listing | null>(null);
   const [suspendModal, setSuspendModal] = useState<Listing | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
@@ -57,12 +73,12 @@ export default function ListingsPage() {
   const [starModal, setStarModal] = useState<Listing | null>(null);
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
-
+ 
   const params = { q, status, category, country, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-listings", page, limit, q, status, category, effectiveCountry],
+    queryKey: ["admin-listings", page, limit, q, status, category, country],
     queryFn: () => fetchListings(params),
-    enabled: !!token && _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
+    enabled: !!token && _hasHydrated,
   });
 
   const rawListings: Listing[] = data?.listings ?? [];
@@ -83,7 +99,7 @@ export default function ListingsPage() {
     limit,
     offset,
     params,
-    queryKey: ["admin-listings", page, limit, q, status, category, effectiveCountry],
+    queryKey: ["admin-listings", page, limit, q, status, category, country],
     requestUrl,
     responseCount,
     renderedRows,
@@ -241,6 +257,16 @@ export default function ListingsPage() {
                 { value: "apartment", label: "Apartment" },
                 { value: "car", label: "Car" },
               ],
+            },
+            {
+              key: "country",
+              label: "All Countries",
+              value: country,
+              onChange: (v) => { setCountry(v); setPage(1); },
+              options: filteredCountries.map((c) => ({
+                value: c.code,
+                label: `${c.flag} ${c.name}`,
+              })),
             },
           ]}
           limit={limit}
