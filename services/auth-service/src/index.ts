@@ -146,7 +146,7 @@ async function build() {
       const subPath = (req.params as any)["*"];
       const queryParams = new URLSearchParams(req.query as Record<string, string>).toString();
       const url = `${PAYMENT_SERVICE_URL}/merchant/${subPath}${queryParams ? `?${queryParams}` : ""}`;
-      
+
       const headers: Record<string, string> = {
         "Accept": "application/json",
       };
@@ -168,7 +168,7 @@ async function build() {
 
       const res = await fetch(url, fetchOptions);
       const data = await res.json() as any;
-      
+
       reply.status(res.status).send(data);
     } catch (err) {
       req.log.error({ err }, "Failed to proxy merchant request to payment-service");
