@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
@@ -75,14 +75,14 @@ async function build() {
     origin: isDev
       ? true
       : [
-          process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
-          process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
-          "https://kainook.com",
-          "http://localhost:3000",
-          "http://localhost:3002",
-          "http://localhost:3005",
-        ],
+        process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+        process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+        process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
+        "https://kainook.com",
+        "http://localhost:3000",
+        "http://localhost:3002",
+        "http://localhost:3005",
+      ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   });

@@ -139,6 +139,43 @@ async function build() {
     timestamp: new Date().toISOString(),
   }));
 
+  // ── Proxy merchant requests to payment-service ──────────────────────────────
+  const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
+  app.all("/merchant/*", async (req, reply) => {
+    try {
+      const subPath = (req.params as any)["*"];
+      const queryParams = new URLSearchParams(req.query as Record<string, string>).toString();
+      const url = `${PAYMENT_SERVICE_URL}/merchant/${subPath}${queryParams ? `?${queryParams}` : ""}`;
+
+      const headers: Record<string, string> = {
+        "Accept": "application/json",
+      };
+      if (req.headers.authorization) {
+        headers["Authorization"] = req.headers.authorization;
+      }
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"];
+      }
+
+      const fetchOptions: any = {
+        method: req.method,
+        headers,
+      };
+
+      if (["POST", "PATCH", "PUT"].includes(req.method) && req.body) {
+        fetchOptions.body = JSON.stringify(req.body);
+      }
+
+      const res = await fetch(url, fetchOptions);
+      const data = await res.json() as any;
+
+      reply.status(res.status).send(data);
+    } catch (err) {
+      req.log.error({ err }, "Failed to proxy merchant request to payment-service");
+      reply.status(502).send({ success: false, error: { code: "BAD_GATEWAY", message: "Failed to communicate with payment service." } });
+    }
+  });
+
   // Register route modules
   await app.register(authRoutes);
   await app.register(adminAuthRoutes);
