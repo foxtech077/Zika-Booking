@@ -38,6 +38,7 @@ const HOTEL_REQUIRED_DOC_GROUPS: Array<{ label: string; types: string[] }> = [
 
 const VALID_ADMIN_ROLES = new Set(["super_admin", "admin", "country_manager", "sales", "support", "finance"]);
 const MODERATOR_ROLES = new Set(["super_admin", "admin", "country_manager"]);
+const BOOKING_REQUEST_ROLES = new Set(["super_admin", "admin", "country_manager", "sales"]);
 
 const VALID_LISTING_STATUSES = new Set(Object.values(ListingStatus));
 const VALID_LISTING_CATEGORIES = new Set(Object.values(ListingCategory));
@@ -2176,6 +2177,125 @@ export async function adminListingRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── GET /admin/bookings/availability ─────────────────────────────────────
+  // MUST be registered BEFORE /admin/bookings/:id to prevent Fastify from
+  // matching the static segment "availability" as the :id parameter.
+  app.get("/admin/bookings/availability", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Bookings"],
+      summary: "Check listing availability before creating a manual booking",
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: "object",
+        required: ["listingId", "checkIn", "checkOut"],
+        properties: {
+          listingId:   { type: "string", description: "Listing ID to check" },
+          listingType: { type: "string", description: "Listing type hint (hotel, apartment, car)" },
+          listingName: { type: "string", description: "Listing name hint (ignored; resolved from DB)" },
+          checkIn:     { type: "string", format: "date", description: "Check-in date (YYYY-MM-DD)" },
+          checkOut:    { type: "string", format: "date", description: "Check-out date (YYYY-MM-DD)" },
+          guests:      { type: "string", description: "Number of guests (informational only)" },
+        },
+      },
+      response: {
+        200: ok({
+          type: "object",
+          properties: {
+            available:       { type: "boolean" },
+            reason:          { type: "string", nullable: true },
+            listingId:       { type: "string", nullable: true },
+            listingName:     { type: "string", nullable: true },
+            listingType:     { type: "string", nullable: true },
+            checkIn:         { type: "string", nullable: true },
+            checkOut:        { type: "string", nullable: true },
+            nights:          { type: "number", nullable: true },
+            pricePerNight:   { type: "number", nullable: true },
+            subtotal:        { type: "number", nullable: true },
+            commissionRate:  { type: "number", nullable: true },
+            commissionAmount: { type: "number", nullable: true },
+            totalAmount:     { type: "number", nullable: true },
+            currency:        { type: "string", nullable: true },
+          },
+        }),
+        400: ErrorResponse,
+        404: ErrorResponse,
+        401: ErrorResponse,
+        403: ErrorResponse,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+
+    const { listingId, checkIn, checkOut } = req.query as Record<string, string>;
+
+    if (!listingId || !checkIn || !checkOut) {
+      return sendError(reply, 400, "BAD_REQUEST", "listingId, checkIn, and checkOut are required.");
+    }
+
+    try {
+      const listing = await prisma.listing.findUnique({ where: { id: listingId } });
+      if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+
+      // Reuse the same availability logic as the guest booking flow:
+      // - confirmed bookings always block the slot
+      // - pending_payment bookings only block within their 5-minute lock window
+      const LOCK_TTL_MS = 300_000;
+      const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
+      const startDate = new Date(checkIn);
+      const endDate = new Date(checkOut);
+
+      const result = await prisma.$queryRawUnsafe<{ count: bigint }[]>(`
+        SELECT COUNT(*) AS count
+        FROM listing.bookings
+        WHERE listing_id = $1
+          AND (
+            status = 'confirmed'
+            OR (status = 'pending_payment' AND created_at > $2)
+          )
+          AND check_in < $4
+          AND check_out > $3
+      `, listingId, pendingExpiry, startDate, endDate);
+
+      const count = Number(result[0]?.count ?? 0);
+      const unitCount = listing.unitCount ?? 1;
+
+      if (count >= unitCount) {
+        return sendSuccess(reply, 200, {
+          available: false,
+          reason: "No units available for the selected dates.",
+        });
+      }
+
+      // Build pricing preview for the admin
+      const nights = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000);
+      const pricePerNight = Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+      const subtotal = pricePerNight * nights;
+      const commissionRate = await getCommissionRate(listing.country ?? null);
+      const commissionAmount = Math.round(subtotal * commissionRate * 100) / 100;
+      const totalAmount = Math.round((subtotal + commissionAmount) * 100) / 100;
+
+      return sendSuccess(reply, 200, {
+        available: true,
+        listingId: listing.id,
+        listingName: listing.name,
+        listingType: listing.category,
+        checkIn,
+        checkOut,
+        nights,
+        pricePerNight,
+        subtotal,
+        commissionRate,
+        commissionAmount,
+        totalAmount,
+        currency: listing.currency ?? "USD",
+      });
+    } catch (err: any) {
+      req.log.error({ err }, "Failed to check booking availability");
+      return sendError(reply, 500, "INTERNAL_ERROR", err?.message ?? "Failed to check availability.");
+    }
+  });
+
   // ── GET /admin/bookings/:id ───────────────────────────────────────────────
   app.get("/admin/bookings/:id", {
     preHandler: [requireAdmin],
@@ -2827,7 +2947,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { page = "1", limit = "20" } = req.query as Record<string, string>;
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
@@ -2885,7 +3005,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
@@ -2903,6 +3023,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
         if (!admin.countryScope.includes(booking.listing.country ?? "")) {
           return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
         }
+      }
+
+      if (admin.adminRole === "sales" && booking.listing.instantBooking) {
+        return sendError(reply, 403, "FORBIDDEN", "Sales Agents cannot approve instant-confirm bookings.");
       }
 
       await prisma.booking.update({
@@ -2971,7 +3095,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { reason } = req.body as { reason: string };
@@ -2994,6 +3118,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
         if (!admin.countryScope.includes(booking.listing.country ?? "")) {
           return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
         }
+      }
+
+      if (admin.adminRole === "sales" && booking.listing.instantBooking) {
+        return sendError(reply, 403, "FORBIDDEN", "Sales Agents cannot decline instant-confirm bookings.");
       }
 
       await prisma.booking.update({
@@ -3061,7 +3189,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
     const { message } = req.body as { message: string };
@@ -3081,6 +3209,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
         if (!admin.countryScope.includes(booking.listing.country ?? "")) {
           return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
         }
+      }
+
+      if (admin.adminRole === "sales" && booking.listing.instantBooking) {
+        return sendError(reply, 403, "FORBIDDEN", "Sales Agents cannot request information on instant-confirm bookings.");
       }
 
       let conversation = await prisma.conversation.findUnique({
@@ -3139,7 +3271,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
     },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!checkAdminRole(req, reply)) return;
+    if (!checkAdminRole(req, reply, BOOKING_REQUEST_ROLES)) return;
     const admin = req as AdminRequest;
     const { id } = req.params as { id: string };
 
@@ -3154,6 +3286,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
         if (!admin.countryScope.includes(booking.listing.country ?? "")) {
           return sendError(reply, 403, "FORBIDDEN", "Booking is outside your country scope.");
         }
+      }
+
+      if (admin.adminRole === "sales" && booking.listing.instantBooking) {
+        return sendError(reply, 403, "FORBIDDEN", "Sales Agents cannot escalate instant-confirm bookings.");
       }
 
       await prisma.auditLog.create({

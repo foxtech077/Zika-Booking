@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
@@ -7,6 +7,9 @@ import { paymentRoutes } from "./routes/payments.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { paymentMethodRoutes } from "./routes/payment-methods.js";
 import { adminPaymentRoutes } from "./routes/admin-payments.js";
+import { merchantRoutes } from "./routes/merchants.js";
+import { payoutRoutes } from "./routes/payouts.js";
+import { startPayoutJob } from "./services/payout.service.js";
 
 const PORT = Number(process.env["PORT"] ?? 3004);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
@@ -72,11 +75,14 @@ async function build() {
     origin: isDev
       ? true
       : [
-          process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
-          process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
-          "https://kainook.com",
-        ],
+        process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+        process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+        process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
+        "https://kainook.com",
+        "http://localhost:3000",
+        "http://localhost:3002",
+        "http://localhost:3005",
+      ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   });
@@ -109,6 +115,8 @@ async function build() {
   await app.register(webhookRoutes,);
   await app.register(paymentMethodRoutes,);
   await app.register(adminPaymentRoutes,);
+  await app.register(merchantRoutes,);
+  await app.register(payoutRoutes,);
 
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler((error: any, _req, reply) => {
@@ -142,6 +150,11 @@ async function main() {
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Payment Service] listening on ${HOST}:${PORT}`);
+
+    // Start the background payout processor (every 15 minutes)
+    const payoutJobTimer = startPayoutJob(15 * 60 * 1000);
+    process.on("SIGINT", () => clearInterval(payoutJobTimer));
+    process.on("SIGTERM", () => clearInterval(payoutJobTimer));
   } catch (err) {
     app.log.error(err);
     process.exit(1);
