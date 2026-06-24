@@ -14,7 +14,7 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
-import { listingApi } from "@/lib/listing-api";
+import { getPayouts } from "@/lib/payment-api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -23,7 +23,8 @@ import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type PayoutStatus = "pending" | "scheduled" | "processing" | "completed" | "failed";
+// Backend enum: scheduled | processing | paid | failed | cancelled
+type PayoutStatus = "scheduled" | "processing" | "paid" | "failed" | "cancelled";
 type SortDir = "asc" | "desc";
 
 interface Payout {
@@ -51,72 +52,61 @@ function readString(v: unknown, fallback = ""): string {
   return typeof v === "string" && v.trim() ? v : fallback;
 }
 
-// ... helper to unwrap payload ...
-function unwrap(payload: unknown): Record<string, unknown> {
-  const root = payload as Record<string, unknown>;
-  return (root?.data as Record<string, unknown>) ?? root ?? {};
-}
+
 
 function normalizeStatus(v: unknown): PayoutStatus {
-  const s = readString(v, "pending").toLowerCase();
-  if (s === "scheduled" || s === "processing" || s === "completed" || s === "failed") return s;
-  return "pending";
+  const s = readString(v, "scheduled").toLowerCase();
+  // Backend enum values: scheduled | processing | paid | failed | cancelled
+  if (s === "scheduled" || s === "processing" || s === "paid" || s === "failed" || s === "cancelled") return s;
+  return "scheduled";
 }
 
 function normalizePayout(raw: unknown): Payout {
   const m = raw as Record<string, unknown>;
-  const booking = (m.booking ?? {}) as Record<string, unknown>;
-  const listing = (m.listing ?? m.property ?? {}) as Record<string, unknown>;
   const id = readString(m.id ?? m._id ?? m.payoutId, crypto.randomUUID());
-  const gross = readNumber(m.grossAmount ?? m.totalAmount ?? m.amount ?? booking.totalAmount);
-  const commission = readNumber(m.platformCommission ?? m.commission ?? m.fees);
-  const net = readNumber(m.netPayout ?? m.netAmount ?? m.payout, gross - commission);
+  // Backend Payout model: amount (Decimal), currency, bookingId, providerPayoutId, merchant.payoutMethod
+  const gross = readNumber(m.amount);
+  const commission = 0; // commission not stored on payout row; shown as 0
+  const net = gross - commission;
 
   return {
     id,
-    bookingReference: readString(m.bookingReference ?? m.bookingId ?? booking.reference, id.slice(0, 8).toUpperCase()),
-    listingName: readString(m.listingName ?? m.propertyName ?? listing.name ?? listing.title, "Listing"),
+    bookingReference: readString(m.bookingId, id.slice(0, 8).toUpperCase()),
+    listingName: readString(undefined, "Booking"),
     grossAmount: gross,
     platformCommission: commission,
     netPayout: net,
-    paymentMethod: readString(m.payoutMethod ?? m.paymentMethod ?? m.method, "Bank Transfer"),
-    payoutDate: readString(m.payoutDate ?? m.paidAt ?? m.processedAt ?? m.createdAt, new Date().toISOString()),
-    transactionReference: readString(m.transactionReference ?? m.transactionId ?? m.reference, "—"),
-    status: normalizeStatus(m.status ?? m.payoutStatus),
+    paymentMethod: readString(
+      (m.merchant as Record<string, unknown> | undefined)?.payoutMethod,
+      "Platform Wallet"
+    ),
+    payoutDate: readString(m.processedAt ?? m.scheduledAt ?? m.createdAt, new Date().toISOString()),
+    transactionReference: readString(m.providerPayoutId, "—"),
+    status: normalizeStatus(m.status),
     currency: readString(m.currency, "USD"),
   };
 }
 
-async function fetchPayoutHistory(): Promise<Payout[]> {
-  try {
-    const res = await listingApi.get("/provider/payments/payout-history");
-    const data = unwrap(res.data);
-    const list = Array.isArray(data.payouts)
-      ? data.payouts
-      : Array.isArray(data.history)
-        ? data.history
-        : Array.isArray(data.transactions)
-          ? data.transactions
-          : Array.isArray(res.data)
-            ? res.data
-            : [];
-    return list.map(normalizePayout);
-  } catch {
-    return [];
-  }
+async function fetchPayoutHistory(statusFilter?: string): Promise<Payout[]> {
+  // GET /provider/me/payouts — correct endpoint via paymentApi
+  const params: Record<string, string | number> = { limit: 100 };
+  if (statusFilter && statusFilter !== "all") params.status = statusFilter;
+  const res = await getPayouts(params as Parameters<typeof getPayouts>[0]);
+  return (res.data ?? []).map(normalizePayout);
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 10;
 
+// Status options match backend PayoutStatus enum exactly
 const statusOptions = [
-  { value: "all", label: "All Statuses" },
-  { value: "pending", label: "Pending" },
-  { value: "scheduled", label: "Scheduled" },
+  { value: "all",        label: "All Statuses" },
+  { value: "scheduled",  label: "Scheduled" },
   { value: "processing", label: "Processing" },
-  { value: "completed", label: "Completed" },
-  { value: "failed", label: "Failed" },
+  { value: "paid",       label: "Paid" },
+  { value: "failed",     label: "Failed" },
+  { value: "cancelled",  label: "Cancelled" },
 ];
 
 const dateRangeOptions = [
@@ -141,9 +131,9 @@ function isWithinRange(dateStr: string, range: string): boolean {
 
 function StatusSummary({ payouts }: { payouts: Payout[] }) {
   const currency = payouts[0]?.currency ?? "USD";
-  const completed = payouts.filter((p) => p.status === "completed");
-  const pending = payouts.filter((p) => p.status === "pending" || p.status === "scheduled");
-  const failed = payouts.filter((p) => p.status === "failed");
+  const completed = payouts.filter((p) => p.status === "paid");
+  const pending = payouts.filter((p) => p.status === "scheduled" || p.status === "processing");
+  const failed = payouts.filter((p) => p.status === "failed" || p.status === "cancelled");
 
   const cards = [
     {
@@ -244,9 +234,10 @@ export default function PayoutHistoryPage() {
   const [page, setPage] = useState(1);
 
   const { data = [], isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["provider-payout-history"],
-    queryFn: fetchPayoutHistory,
-    staleTime: 5 * 60_000,
+    // Include statusFilter in query key so a new request is made when filter changes
+    queryKey: ["provider-payout-history", statusFilter],
+    queryFn: () => fetchPayoutHistory(statusFilter),
+    staleTime: 2 * 60_000,
   });
 
   function handleSort(key: string) {
@@ -263,6 +254,7 @@ export default function PayoutHistoryPage() {
     const text = search.trim().toLowerCase();
     return data
       .filter((p) => !text || [p.bookingReference, p.listingName, p.transactionReference].join(" ").toLowerCase().includes(text))
+      // Status filter is applied server-side; client-side filter kept as a guard
       .filter((p) => statusFilter === "all" || p.status === statusFilter)
       .filter((p) => isWithinRange(p.payoutDate, dateRange))
       .sort((a, b) => {

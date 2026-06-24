@@ -14,7 +14,7 @@ import {
   RefreshCw,
   User,
 } from "lucide-react";
-import { listingApi } from "@/lib/listing-api";
+import { getPayoutDetail } from "@/lib/payment-api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -56,52 +56,46 @@ function readString(v: unknown, fallback = ""): string {
   return typeof v === "string" && v.trim() ? v : fallback;
 }
 
-function unwrap(payload: unknown): Record<string, unknown> {
-  const root = payload as Record<string, unknown>;
-  return (root?.data as Record<string, unknown>) ?? root ?? {};
-}
+
 
 function normalizeDetail(payload: unknown): PayoutDetail {
-  const data = unwrap(payload);
-  const m = data as Record<string, unknown>;
-  const booking = (m.booking ?? {}) as Record<string, unknown>;
-  const listing = (m.listing ?? m.property ?? {}) as Record<string, unknown>;
-  const guest = (m.guest ?? m.customer ?? {}) as Record<string, unknown>;
-  const financial = (m.financial ?? m.breakdown ?? {}) as Record<string, unknown>;
-  const transaction = (m.transaction ?? m.transactionDetails ?? {}) as Record<string, unknown>;
+  // Backend Payout response shape:
+  // { id, merchantId, bookingId, providerId, amount (Decimal), currency,
+  //   status, scheduledAt, processedAt, providerPayoutId, failureReason,
+  //   createdAt, updatedAt, merchant: { payoutMethod, isVerified } }
+  const m = (payload as Record<string, unknown>);
+  const merchant = (m.merchant ?? {}) as Record<string, unknown>;
 
-  const gross = readNumber(m.grossAmount ?? financial.grossAmount ?? m.totalAmount ?? booking.totalAmount);
-  const commissionRate = readNumber(m.commissionRate ?? financial.commissionRate ?? m.platformCommissionRate, 15);
-  const commission = readNumber(m.platformCommission ?? financial.platformCommission ?? financial.commission, (gross * commissionRate) / 100);
-  const taxes = readNumber(m.taxes ?? financial.taxes);
-  const adjustments = readNumber(m.adjustments ?? financial.adjustments);
-  const net = readNumber(m.netEarnings ?? m.netPayout ?? financial.netEarnings, gross - commission - taxes - adjustments);
+  const gross = readNumber(m.amount);
+  const commission = 0; // platform commission not stored on payout row
+  const net = gross - commission;
 
   return {
-    id: readString(m.id ?? m._id ?? m.payoutId, ""),
-    bookingReference: readString(m.bookingReference ?? booking.reference ?? booking.id ?? m.bookingId, "N/A"),
-    guestName: readString(m.guestName ?? guest.name ?? guest.fullName ?? booking.guestName, "Guest"),
-    listingName: readString(m.listingName ?? listing.name ?? listing.title ?? m.propertyName, "Listing"),
-    checkIn: readString(m.checkIn ?? booking.checkIn ?? booking.checkInDate, ""),
-    checkOut: readString(m.checkOut ?? booking.checkOut ?? booking.checkOutDate, ""),
+    id: readString(m.id, ""),
+    bookingReference: readString(m.bookingId, "N/A"),
+    guestName: readString(undefined, "Guest"),
+    listingName: readString(undefined, "Booking"),
+    checkIn: "",
+    checkOut: "",
     grossAmount: gross,
     platformCommission: commission,
-    commissionRate,
+    commissionRate: 0,
     netEarnings: net,
-    taxes,
-    adjustments,
-    adjustmentNote: readString(m.adjustmentNote ?? financial.adjustmentNote ?? financial.note),
-    transactionReference: readString(m.transactionReference ?? transaction.reference ?? transaction.id ?? m.transactionId, "—"),
-    payoutDate: readString(m.payoutDate ?? transaction.date ?? m.processedAt ?? m.createdAt, ""),
-    payoutMethod: readString(m.payoutMethod ?? transaction.method ?? transaction.paymentMethod, "Platform Wallet"),
-    status: readString(m.status ?? m.payoutStatus, "pending"),
+    taxes: 0,
+    adjustments: 0,
+    adjustmentNote: readString(m.failureReason, ""),
+    transactionReference: readString(m.providerPayoutId, "—"),
+    payoutDate: readString(m.processedAt ?? m.scheduledAt ?? m.createdAt, ""),
+    payoutMethod: readString(merchant.payoutMethod, "Platform Wallet"),
+    status: readString(m.status, "scheduled"),
     currency: readString(m.currency, "USD"),
   };
 }
 
 async function fetchPayoutDetail(id: string): Promise<PayoutDetail | null> {
   try {
-    const res = await listingApi.get(`/provider/payments/payouts/${id}`);
+    // GET /provider/me/payouts/:id — correct endpoint via paymentApi
+    const res = await getPayoutDetail(id);
     return normalizeDetail(res.data);
   } catch {
     return null;
