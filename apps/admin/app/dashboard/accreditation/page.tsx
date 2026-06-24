@@ -241,7 +241,7 @@ export default function AccreditationPage() {
   const { data: providersData } = useQuery({
     queryKey: ["admin-providers-list"],
     queryFn: () =>
-      listingApi
+      api
         .get("/admin/users", { params: { userType: "provider", limit: "1000" } })
         .then((r) => r.data.data ?? r.data),
     enabled: !!token,

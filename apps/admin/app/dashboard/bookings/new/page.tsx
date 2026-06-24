@@ -16,12 +16,10 @@ import { paymentApi } from "@/lib/payment-api";
 import { canAccess } from "@/permissions/rbac";
 import { SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea, CustomDropdown } from "@/components/ui/Input";
+import { Input, Textarea, CustomDropdown } from "@/components/ui/Input";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
-
-const UISelect = Select;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1345,35 +1343,55 @@ export default function ManualBookingPage() {
                   </div>
                 </>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <DatePicker
-                    id={`${uid}-pickup`}
-                    label="Pickup"
-                    required
-                    value={pickup}
-                    onChange={(val) => { setPickup(val); setAvailStatus("idle"); setPrice(null); }}
-                    error={errors.pickup}
-                  />
-                  <DatePicker
-                    id={`${uid}-return`}
-                    label="Return"
-                    required
-                    minDate={pickup || undefined}
-                    value={returnDt}
-                    onChange={(val) => { setReturnDt(val); setAvailStatus("idle"); setPrice(null); }}
-                    error={errors.returnDt}
-                  />
-                </div>
+                <>
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 flex items-center gap-2">
+                    <CalendarDays className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                    <p className="text-xs text-primary">
+                      You can also click dates directly on the calendar →{" "}
+                      <strong>{!pickup || (pickup && returnDt) ? "Select Pickup Date" : "Select Return Date"}</strong>
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <DatePicker
+                      id={`${uid}-pickup`}
+                      label="Pickup Date"
+                      required
+                      value={pickup}
+                      onChange={(val) => { setPickup(val); setAvailStatus("idle"); setPrice(null); }}
+                      error={errors.pickup}
+                    />
+                    <DatePicker
+                      id={`${uid}-return`}
+                      label="Return Date"
+                      required
+                      minDate={pickup || undefined}
+                      value={returnDt}
+                      onChange={(val) => { setReturnDt(val); setAvailStatus("idle"); setPrice(null); }}
+                      error={errors.returnDt}
+                    />
+                  </div>
+                  {nights > 0 && (
+                    <p className="text-xs text-slate-500">
+                      <CalendarDays className="inline h-3.5 w-3.5 mr-1 text-primary" />
+                      {nights} day{nights !== 1 ? "s" : ""} rental
+                    </p>
+                  )}
+                  <div className="space-y-1">
+                    <label htmlFor={`${uid}-car-guests`} className="block text-sm font-medium text-slate-700">
+                      Passengers <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      id={`${uid}-car-guests`}
+                      type="number" min={1} max={20}
+                      value={guests}
+                      onChange={(e) => setGuests(Math.max(1, Number(e.target.value)))}
+                      onFocus={(e) => { const t = e.target; setTimeout(() => t.select(), 0); }}
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                      className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
+                    />
+                  </div>
+                </>
               )}
-              <div className="grid grid-cols-2 gap-4">
-                <UISelect id={`${uid}-guests`} label="Guests" required value={String(guests)} onChange={(e) => setGuests(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
-                {listingType === "hotel" && (
-                  <UISelect id={`${uid}-rooms`} label="Rooms" required value={String(rooms)} onChange={(e) => setRooms(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
-                )}
-                {listingType === "apartment" && (
-                  <UISelect id={`${uid}-units`} label="Units" required value={String(units)} onChange={(e) => setUnits(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
-                )}
-              </div>
             </div>
           </SectionCard>
 
@@ -1422,8 +1440,8 @@ export default function ManualBookingPage() {
                     type="button"
                     onClick={() => setPaymentMethod("stripe")}
                     className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${paymentMethod === "stripe"
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-border text-slate-600 hover:border-slate-300"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-slate-600 hover:border-slate-300"
                       }`}
                   >
                     <CreditCard className="h-4 w-4" />
@@ -1433,8 +1451,8 @@ export default function ManualBookingPage() {
                     type="button"
                     onClick={() => setPaymentMethod("tara")}
                     className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${paymentMethod === "tara"
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-border text-slate-600 hover:border-slate-300"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-slate-600 hover:border-slate-300"
                       }`}
                   >
                     <CreditCard className="h-4 w-4" />
@@ -1601,28 +1619,92 @@ export default function ManualBookingPage() {
         </div>
 
         {/* Right column - Availability Calendar sidebar */}
-        <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-6 self-start">
+        <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-6 self-start space-y-4">
+          {/* Calendar — shown for all listing types.
+              For cars: pickup = checkIn, returnDt = checkOut, and clicking
+              dates sets pickup/return rather than checkIn/checkOut. */}
           <AvailabilityCalendar
-            checkIn={checkIn}
-            checkOut={checkOut}
+            checkIn={isAccommodation ? checkIn : pickup}
+            checkOut={isAccommodation ? checkOut : returnDt}
             availability={availability}
             loading={calLoading}
             onSelectDate={(date) => {
-              if (calSelectStep === "checkIn") {
-                setCheckIn(date);
-                setCheckOut("");
-                setCalSelectStep("checkOut");
-              } else {
-                if (date > checkIn) {
-                  setCheckOut(date);
-                  setCalSelectStep("checkIn");
-                } else {
+              if (isAccommodation) {
+                // Hotel / Apartment — two-step check-in → check-out selection
+                if (calSelectStep === "checkIn") {
                   setCheckIn(date);
                   setCheckOut("");
+                  setCalSelectStep("checkOut");
+                } else {
+                  if (date > checkIn) {
+                    setCheckOut(date);
+                    setCalSelectStep("checkIn");
+                  } else {
+                    setCheckIn(date);
+                    setCheckOut("");
+                  }
+                }
+              } else {
+                // Car rental — two-step pickup → return selection
+                if (!pickup || (pickup && returnDt)) {
+                  // Start fresh: set pickup, clear return
+                  setPickup(date);
+                  setReturnDt("");
+                  setAvailStatus("idle");
+                  setPrice(null);
+                } else {
+                  // pickup is set, no return yet
+                  if (date > pickup) {
+                    setReturnDt(date);
+                    setAvailStatus("idle");
+                    setPrice(null);
+                  } else {
+                    // Clicked before current pickup — restart
+                    setPickup(date);
+                    setReturnDt("");
+                  }
                 }
               }
             }}
           />
+
+          {/* Car rental summary card — shown below the calendar for cars only */}
+          {!isAccommodation && (
+            <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60">
+                <CalendarDays className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-semibold text-slate-900 flex-1">Rental Period</h2>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between rounded-lg border border-border bg-slate-50 px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Pickup Date</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {pickup
+                        ? new Date(pickup).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+                        : <span className="text-slate-400 italic">Click a date on the calendar</span>}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-border bg-slate-50 px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Return Date</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {returnDt
+                        ? new Date(returnDt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+                        : <span className="text-slate-400 italic">{pickup ? "Click return date" : "—"}</span>}
+                    </p>
+                  </div>
+                </div>
+                {nights > 0 && (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-0.5">Duration</p>
+                    <p className="text-sm font-bold text-primary">{nights} day{nights !== 1 ? "s" : ""}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
       </div>

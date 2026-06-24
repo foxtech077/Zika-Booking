@@ -57,7 +57,7 @@ export default function CommissionPage() {
   const defaultRate: number = (data as any)?.globalRate != null ? (data as any).globalRate * 100 : (data?.defaultRate ?? 5);
 
   const filteredRates = useMemo(() => {
-    if (role === "super_admin" || role === "finance" || role === "support") {
+    if (role === "super_admin" || role === "admin" || role === "finance" || role === "support") {
       return rates;
     }
     if (role === "country_manager" || role === "sales") {

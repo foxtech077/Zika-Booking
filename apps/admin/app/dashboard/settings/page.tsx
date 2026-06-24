@@ -63,7 +63,12 @@ export default function SettingsPage() {
     { label: "Session Type", value: "JWT Bearer Token" },
     { label: "Session Storage", value: "sessionStorage (browser)" },
     { label: "Current Role", value: user?.role ? user.role.replace(/_/g, " ") : "—" },
-    { label: "Country Scope", value: user?.countryScope?.join(", ") || "Global" },
+    {
+      label: "Country Scope",
+      value: (user?.role !== "country_manager" && user?.role !== "sales")
+        ? "Global"
+        : user?.countryScope?.join(", ") || "Global"
+    },
   ];
 
   const PLATFORM_FEATURES = [

@@ -60,6 +60,13 @@ export default function VouchersPage() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
   const role = user?.role;
+  const todayYMD = (() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  })();
   const canCreateVoucher = role === "super_admin";
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -558,6 +565,7 @@ export default function VouchersPage() {
             placeholder="Select start date"
             value={form.validFrom}
             onChange={(val) => setForm((f) => ({ ...f, validFrom: val }))}
+            minDate={todayYMD}
             required
           />
           <DatePicker
@@ -566,7 +574,7 @@ export default function VouchersPage() {
             placeholder="Select end date"
             value={form.validUntil}
             onChange={(val) => setForm((f) => ({ ...f, validUntil: val }))}
-            minDate={form.validFrom || undefined}
+            minDate={form.validFrom || todayYMD}
             required
           />
           <div className="col-span-2">

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { useMockFinanceStore, type CommissionHistoryEntry } from "@/lib/mock-finance-store";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "MT" },
@@ -82,7 +83,7 @@ export default function CommissionHistoryPage() {
     return filteredHistory.slice(start, start + limit);
   }, [filteredHistory, page, limit]);
 
-  const canExport = user?.role === "super_admin" || user?.role === "finance" || user?.role === "support" || user?.role === "admin";
+  const canExport = user?.role === "super_admin" || user?.role === "finance" || user?.role === "support";
 
   const handleExport = () => {
     const headers = ["Scope", "Previous Rate (%)", "New Rate (%)", "Effective Date", "Authorized By", "Reason", "Logged At"];
@@ -207,20 +208,19 @@ export default function CommissionHistoryPage() {
           onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         >
           <div className="flex items-center gap-2">
-            <input
-              type="date"
+            <DatePicker
+              placeholder="From Date"
               value={startDate}
-              onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-              className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
-              aria-label="Start Effective Date"
+              onChange={(val) => { setStartDate(val); setPage(1); }}
+              className="w-40"
             />
             <span className="text-xs text-slate-400">to</span>
-            <input
-              type="date"
+            <DatePicker
+              placeholder="To Date"
               value={endDate}
-              onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-              className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
-              aria-label="End Effective Date"
+              onChange={(val) => { setEndDate(val); setPage(1); }}
+              minDate={startDate || undefined}
+              className="w-40"
             />
             {(startDate || endDate) && (
               <button

@@ -218,11 +218,14 @@ export default function RolesPage() {
     {
       key: "scope",
       label: "Country Scope",
-      render: (op) => (
-        <span className="text-xs text-slate-600">
-          {op.countryScope?.length ? op.countryScope.join(", ") : "Global"}
-        </span>
-      ),
+      render: (op) => {
+        const isScopedRole = op.role === "country_manager" || op.role === "sales";
+        return (
+          <span className="text-xs text-slate-600">
+            {!isScopedRole ? "Global" : (op.countryScope?.length ? op.countryScope.join(", ") : "None")}
+          </span>
+        );
+      },
     },
     {
       key: "totp",
@@ -369,15 +372,17 @@ export default function RolesPage() {
               size="sm"
               loading={createMut.isPending}
               leftIcon={<UserPlus className="h-4 w-4" />}
-              onClick={() => createMut.mutate({
-                name: form.name,
-                email: form.email,
-                password: form.password,
-                role: form.role,
-                countryScope: form.role === "country_manager" || form.role === "sales"
-                  ? createCountries
-                  : [],
-              })}
+              onClick={() => {
+                const isScopedRole = form.role === "country_manager" || form.role === "sales";
+                const allCountries = Object.keys(countries.getAlpha2Codes()).map((c) => c.toUpperCase());
+                createMut.mutate({
+                  name: form.name,
+                  email: form.email,
+                  password: form.password,
+                  role: form.role,
+                  countryScope: isScopedRole ? createCountries : allCountries,
+                });
+              }}
               disabled={!form.name || !form.email || !form.password || form.password.length < 8}
             >
               Create Admin
@@ -464,11 +469,16 @@ export default function RolesPage() {
               variant="primary"
               size="sm"
               loading={editMut.isPending}
-              onClick={() => editModal && editMut.mutate({
-                id: editModal.id,
-                role: editRole,
-                countryScope: editCountries,
-              })}
+              onClick={() => {
+                if (!editModal) return;
+                const isScopedRole = editRole === "country_manager" || editRole === "sales";
+                const allCountries = Object.keys(countries.getAlpha2Codes()).map((c) => c.toUpperCase());
+                editMut.mutate({
+                  id: editModal.id,
+                  role: editRole,
+                  countryScope: isScopedRole ? editCountries : allCountries,
+                });
+              }}
             >
               Save Changes
             </Button>
