@@ -97,6 +97,11 @@ async function build() {
 
   await app.register(helmet, { contentSecurityPolicy: false });
   const isDev = process.env["NODE_ENV"] !== "production";
+  const LOCALHOST_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3002",
+    "http://localhost:3005",
+  ];
   await app.register(cors, {
     // In development, allow all origins so the Expo mobile app (which sends no
     // Origin header from React Native) can reach the API. In production, lock
@@ -106,10 +111,9 @@ async function build() {
       : [
           process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
           process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3004",
-          "http://localhost:3000",
-          "http://localhost:3002",
-          "http://localhost:3004",
+          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
+          "https://kainook.com",
+          ...LOCALHOST_ORIGINS,
         ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
@@ -307,18 +311,6 @@ app.all("/admin/payouts/*", async (req, reply) => {
   await app.register(messagingRoutes);
   await app.register(bookingDocumentRoutes);
   await app.register(loyaltyRoutes);
-
-  app.setErrorHandler((error: { statusCode?: number; message: string }, _req, reply) => {
-    app.log.error(error);
-    const statusCode = error.statusCode ?? 500;
-    reply.status(statusCode).send({
-      success: false,
-      error: {
-        code: "SERVER_ERROR",
-        message: statusCode === 500 ? "An unexpected error occurred." : error.message,
-      },
-    });
-  });
 
   return app;
 }
