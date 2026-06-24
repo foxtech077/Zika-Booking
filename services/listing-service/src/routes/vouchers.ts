@@ -17,8 +17,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
-import { requireProvider, requireAdmin, type ProviderRequest } from "../middleware/auth.js";
-import { getRedis } from "../lib/redis.js";
+import { requireProvider, requireAdmin } from "../middleware/auth.js";
 
 const errSchema = {
   type: "object",
@@ -61,7 +60,6 @@ const voucherItemSchema = {
 };
 
 export async function voucherRoutes(app: FastifyInstance) {
-  const redis = getRedis();
 
   // ── POST /vouchers/validate — validate a voucher code ────────────────────
   app.post(
@@ -230,29 +228,32 @@ export async function voucherRoutes(app: FastifyInstance) {
               data: {
                 type: "object",
                 properties: {
+                  bannerState: { type: "string", enum: ["active", "expiring_soon", "none"] },
+                  bestVoucher: { type: "object", nullable: true, additionalProperties: true },
                   vouchers: {
                     type: "array",
                     items: {
                       type: "object",
                       properties: {
-                        code:            { type: "string" },
-                        discountType:    { type: "string", enum: ["percentage", "fixed"] },
-                        discountValue:   { type: "number" },
-                        maxDiscount:     { type: "number", nullable: true },
-                        minOrderValue:   { type: "number", nullable: true },
+                        code:             { type: "string" },
+                        title:            { type: "string" },
+                        description:      { type: "string", nullable: true },
+                        activityScope:    { type: "string" },
+                        discountType:     { type: "string", enum: ["percentage", "fixed"] },
+                        discountValue:    { type: "number" },
+                        maxDiscount:      { type: "number", nullable: true },
+                        minOrderValue:    { type: "number", nullable: true },
                         computedDiscount: { type: "number" },
-                        validUntil:      { type: "string" },
-                        applicable:      { type: "boolean" },
-                        reason:          { type: "string", nullable: true },
+                        validUntil:       { type: "string" },
+                        hoursUntilExpiry: { type: "number" },
+                        applicable:       { type: "boolean" },
+                        reason:           { type: "string", nullable: true },
                       },
-                      required: [
-                        "code", "discountType", "discountValue",
-                        "computedDiscount", "validUntil", "applicable",
-                      ],
+                      required: ["code", "discountType", "discountValue", "computedDiscount", "validUntil", "applicable"],
                     },
                   },
                 },
-                required: ["vouchers"],
+                required: ["bannerState", "vouchers"],
               },
             },
           },
@@ -315,14 +316,14 @@ export async function voucherRoutes(app: FastifyInstance) {
         // Global usage limit
         if (v.usageLimit !== null && v.usageCount >= v.usageLimit) {
           result.push({
-            code: v.code, discountType: v.discountType,
-            discountValue: Number(v.discountValue),
-            maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
+            code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
+            activityScope: (v as any).activityScope ?? "universal",
+            discountType: v.discountType, discountValue: Number(v.discountValue),
+            maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
             minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
-            computedDiscount: 0,
-            validUntil: v.validUntil.toISOString(),
-            applicable: false,
-            reason: "Voucher usage limit has been reached.",
+            computedDiscount: 0, validUntil: v.validUntil.toISOString(),
+            hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
+            applicable: false, reason: "Voucher usage limit has been reached.",
           });
           continue;
         }
@@ -332,14 +333,14 @@ export async function voucherRoutes(app: FastifyInstance) {
         const perGuestLimit = (v as any).usageLimitPerGuest ?? 1;
         if (guestUsageCount >= perGuestLimit) {
           result.push({
-            code: v.code, discountType: v.discountType,
-            discountValue: Number(v.discountValue),
-            maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
+            code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
+            activityScope: (v as any).activityScope ?? "universal",
+            discountType: v.discountType, discountValue: Number(v.discountValue),
+            maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
             minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
-            computedDiscount: 0,
-            validUntil: v.validUntil.toISOString(),
-            applicable: false,
-            reason: "Your per-guest usage limit for this voucher has been reached.",
+            computedDiscount: 0, validUntil: v.validUntil.toISOString(),
+            hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
+            applicable: false, reason: "Your per-guest usage limit for this voucher has been reached.",
           });
           continue;
         }
@@ -347,14 +348,14 @@ export async function voucherRoutes(app: FastifyInstance) {
         // Below minimum order value
         if (v.minOrderValue !== null && totalAmount < Number(v.minOrderValue)) {
           result.push({
-            code: v.code, discountType: v.discountType,
-            discountValue: Number(v.discountValue),
-            maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
+            code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
+            activityScope: (v as any).activityScope ?? "universal",
+            discountType: v.discountType, discountValue: Number(v.discountValue),
+            maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
             minOrderValue: Number(v.minOrderValue),
-            computedDiscount: 0,
-            validUntil: v.validUntil.toISOString(),
-            applicable: false,
-            reason: `Minimum order value of ${Number(v.minOrderValue)} required.`,
+            computedDiscount: 0, validUntil: v.validUntil.toISOString(),
+            hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
+            applicable: false, reason: `Minimum order value of ${Number(v.minOrderValue)} required.`,
           });
           continue;
         }
@@ -370,22 +371,116 @@ export async function voucherRoutes(app: FastifyInstance) {
         }
         computedDiscount = Math.min(computedDiscount, totalAmount);
 
+        const hoursUntilExpiry = Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000);
         result.push({
-          code: v.code, discountType: v.discountType,
-          discountValue: Number(v.discountValue),
-          maxDiscount:   v.maxDiscount ? Number(v.maxDiscount) : null,
+          code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
+          activityScope: (v as any).activityScope ?? "universal",
+          discountType: v.discountType, discountValue: Number(v.discountValue),
+          maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
           minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
-          computedDiscount,
-          validUntil: v.validUntil.toISOString(),
-          applicable: true,
-          reason: null,
+          computedDiscount, validUntil: v.validUntil.toISOString(),
+          hoursUntilExpiry, applicable: true, reason: null,
         });
       }
 
-      return sendSuccess(reply, 200, { vouchers: result });
+      // Compute banner state: pick best applicable voucher
+      const applicable = result.filter((v) => v.applicable);
+      const bestVoucher = applicable.length > 0
+        ? applicable.reduce((a, b) => b.computedDiscount > a.computedDiscount ? b : a)
+        : null;
+      const bannerState = bestVoucher === null ? "none"
+        : bestVoucher.hoursUntilExpiry <= 48 ? "expiring_soon"
+        : "active";
+
+      return sendSuccess(reply, 200, { bannerState, bestVoucher, vouchers: result });
       } catch (err) {
         req.log.error({ err }, "Failed to fetch applicable vouchers");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching applicable vouchers.");
+      }
+    },
+  );
+
+  // ── GET /vouchers/wallet — guest's auto-assigned vouchers ────────────────
+  app.get(
+    "/vouchers/wallet",
+    {
+      schema: {
+        tags: ["Vouchers"],
+        summary: "Get the authenticated guest's voucher wallet (auto-assigned vouchers)",
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  vouchers: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        voucherId:        { type: "string" },
+                        code:             { type: "string" },
+                        title:            { type: "string" },
+                        description:      { type: "string", nullable: true },
+                        activityScope:    { type: "string" },
+                        discountType:     { type: "string" },
+                        discountValue:    { type: "number" },
+                        maxDiscount:      { type: "number", nullable: true },
+                        minOrderValue:    { type: "number", nullable: true },
+                        validUntil:       { type: "string" },
+                        hoursUntilExpiry: { type: "number" },
+                        status:           { type: "string" },
+                        assignedAt:       { type: "string" },
+                      },
+                    },
+                  },
+                },
+                required: ["vouchers"],
+              },
+            },
+          },
+        },
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const guestId = (req as any).providerId as string;
+        const now = new Date();
+
+        // Auto-assigned wallet entries use the bookingId prefix "wallet-"
+        const assignments = await prisma.voucherRedemption.findMany({
+          where: { guestId, bookingId: { startsWith: "wallet-" } },
+          include: { voucher: true },
+          orderBy: { createdAt: "desc" },
+        });
+
+        const vouchers = assignments.map((a) => {
+          const v = a.voucher;
+          return {
+            voucherId:        v.id,
+            code:             v.code,
+            title:            (v as any).title ?? "",
+            description:      (v as any).description ?? null,
+            activityScope:    (v as any).activityScope ?? "universal",
+            discountType:     v.discountType,
+            discountValue:    Number(v.discountValue),
+            maxDiscount:      v.maxDiscount ? Number(v.maxDiscount) : null,
+            minOrderValue:    v.minOrderValue ? Number(v.minOrderValue) : null,
+            validUntil:       v.validUntil.toISOString(),
+            hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
+            status:           (v as any).status ?? "active",
+            assignedAt:       a.createdAt.toISOString(),
+          };
+        });
+
+        return sendSuccess(reply, 200, { vouchers });
+      } catch (err) {
+        req.log.error({ err }, "Failed to fetch voucher wallet");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching your voucher wallet.");
       }
     },
   );
@@ -522,6 +617,88 @@ export async function voucherRoutes(app: FastifyInstance) {
   );
 
 
+  // ── POST /admin/promotions — create a promotion campaign ─────────────────
+  app.post(
+    "/admin/promotions",
+    {
+      schema: {
+        tags: ["Admin Promotions"],
+        summary: "Create an activity promotion (admin). One active promotion per category — any existing active/scheduled one is superseded.",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["activity", "labelText", "bannerTitle", "validFrom", "validUntil"],
+          properties: {
+            activity:      { type: "string", enum: ["hotel", "apartment", "car"] },
+            labelText:     { type: "string", minLength: 1, maxLength: 6 },
+            labelColour:   { type: "string", default: "#C84B2F" },
+            discountType:  { type: "string", enum: ["percentage", "fixed", "label_only"], default: "label_only" },
+            discountValue: { type: "number", minimum: 0, nullable: true },
+            validFrom:     { type: "string" },
+            validUntil:    { type: "string" },
+            applyToBooking: { type: "boolean", default: false },
+            bannerTitle:   { type: "string", maxLength: 100 },
+            bannerSubtitle: { type: "string", maxLength: 200, nullable: true },
+            status:        { type: "string", enum: ["scheduled", "active"], default: "active" },
+            countryScope:  { type: "string", nullable: true },
+          },
+        },
+        response: {
+          201: { type: "object", properties: { success: { type: "boolean" }, data: { type: "object", additionalProperties: true } } },
+          400: errSchema,
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const body = req.body as {
+          activity: string; labelText: string; labelColour?: string;
+          discountType?: string; discountValue?: number; validFrom: string;
+          validUntil: string; applyToBooking?: boolean; bannerTitle: string;
+          bannerSubtitle?: string; status?: string; countryScope?: string;
+        };
+
+        const validFrom  = new Date(body.validFrom);
+        const validUntil = new Date(body.validUntil);
+        if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime()))
+          return sendError(reply, 400, "VALIDATION_ERROR", "validFrom and validUntil must be valid ISO dates.");
+        if (validUntil <= validFrom)
+          return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be after validFrom.");
+        if ((body.discountType === "percentage" || body.discountType === "fixed") && !body.discountValue)
+          return sendError(reply, 400, "VALIDATION_ERROR", "discountValue is required when discountType is percentage or fixed.");
+
+        // Supersede any existing active or scheduled promotion for this activity
+        await (prisma as any).activityPromotion.updateMany({
+          where: { activity: body.activity, status: { in: ["active", "scheduled"] } },
+          data:  { status: "superseded" },
+        });
+
+        const promo = await (prisma as any).activityPromotion.create({
+          data: {
+            activity:       body.activity,
+            labelText:      body.labelText.toUpperCase(),
+            labelColour:    body.labelColour ?? "#C84B2F",
+            discountType:   body.discountType ?? "label_only",
+            discountValue:  body.discountValue ?? null,
+            validFrom,
+            validUntil,
+            applyToBooking: body.applyToBooking ?? false,
+            bannerTitle:    body.bannerTitle,
+            bannerSubtitle: body.bannerSubtitle ?? null,
+            status:         body.status ?? "active",
+            countryScope:   body.countryScope ?? null,
+          },
+        });
+
+        return sendSuccess(reply, 201, promo);
+      } catch (err) {
+        req.log.error({ err }, "Failed to create promotion");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while creating promotion.");
+      }
+    },
+  );
+
   // ── GET /admin/promotions — list all promotion campaigns ─────────────────
   app.get(
     "/admin/promotions",
@@ -533,8 +710,10 @@ export async function voucherRoutes(app: FastifyInstance) {
         querystring: {
           type: "object",
           properties: {
-            isActive: { type: "string", enum: ["true", "false"] },
-            category: { type: "string" },
+            status:   { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"] },
+            activity: { type: "string", enum: ["hotel", "apartment", "car"] },
+            page:     { type: "integer", minimum: 1, default: 1 },
+            limit:    { type: "integer", minimum: 1, maximum: 100, default: 20 },
           },
         },
         response: {
@@ -545,12 +724,9 @@ export async function voucherRoutes(app: FastifyInstance) {
               data: {
                 type: "object",
                 properties: {
-                  promotions: {
-                    type: "array",
-                    items: { type: "object", additionalProperties: true },
-                  },
+                  promotions: { type: "array", items: { type: "object", additionalProperties: true } },
+                  pagination: { type: "object", additionalProperties: true },
                 },
-                required: ["promotions"],
               },
             },
           },
@@ -560,36 +736,127 @@ export async function voucherRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const q = req.query as { isActive?: string; category?: string };
+        const q = req.query as { status?: string; activity?: string; page?: number; limit?: number };
+        const page  = Number(q.page  ?? 1);
+        const limit = Number(q.limit ?? 20);
+        const skip  = (page - 1) * limit;
 
-      const ids = await redis.smembers("promos:all");
-      if (!ids.length) return sendSuccess(reply, 200, { promotions: [] });
+        const where: any = {};
+        if (q.status)   where.status   = q.status;
+        if (q.activity) where.activity = q.activity;
 
-      const pipeline = redis.pipeline();
-      for (const id of ids) pipeline.get(`promo:${id}`);
-      const results = await pipeline.exec();
+        const [promotions, total] = await Promise.all([
+          (prisma as any).activityPromotion.findMany({ where, orderBy: { createdAt: "desc" }, skip, take: limit }),
+          (prisma as any).activityPromotion.count({ where }),
+        ]);
 
-      let promotions: any[] = (results ?? [])
-        .map((r) => {
-          if (!r || r[0] != null || !r[1]) return null;
-          try { return JSON.parse(r[1] as string); } catch { return null; }
-        })
-        .filter(Boolean);
-
-      if (q.isActive === "true")  promotions = promotions.filter((p) => p.isActive);
-      else if (q.isActive === "false") promotions = promotions.filter((p) => !p.isActive);
-      if (q.category) promotions = promotions.filter(
-        (p) => p.category === q.category || p.category === "all",
-      );
-
-      promotions.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
-
-      return sendSuccess(reply, 200, { promotions });
+        return sendSuccess(reply, 200, {
+          promotions,
+          pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+        });
       } catch (err) {
         req.log.error({ err }, "Failed to list admin promotions");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while listing promotions.");
+      }
+    },
+  );
+
+  // ── PATCH /admin/promotions/:id — update a promotion ─────────────────────
+  app.patch(
+    "/admin/promotions/:id",
+    {
+      schema: {
+        tags: ["Admin Promotions"],
+        summary: "Update a promotion campaign (admin). Setting status to active supersedes other active promotions for the same activity.",
+        security: [{ bearerAuth: [] }],
+        params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+        body: {
+          type: "object",
+          properties: {
+            labelText:      { type: "string", minLength: 1, maxLength: 6 },
+            labelColour:    { type: "string" },
+            discountType:   { type: "string", enum: ["percentage", "fixed", "label_only"] },
+            discountValue:  { type: "number", minimum: 0, nullable: true },
+            validFrom:      { type: "string" },
+            validUntil:     { type: "string" },
+            applyToBooking: { type: "boolean" },
+            bannerTitle:    { type: "string", maxLength: 100 },
+            bannerSubtitle: { type: "string", maxLength: 200, nullable: true },
+            status:         { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"] },
+            countryScope:   { type: "string", nullable: true },
+          },
+        },
+        response: {
+          200: { type: "object", properties: { success: { type: "boolean" }, data: { type: "object", additionalProperties: true } } },
+          404: errSchema,
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = req.params as { id: string };
+        const body = req.body as any;
+
+        const existing = await (prisma as any).activityPromotion.findUnique({ where: { id } });
+        if (!existing) return sendError(reply, 404, "NOT_FOUND", "Promotion not found.");
+
+        // If activating, supersede other active/scheduled promotions for same activity
+        if (body.status === "active") {
+          await (prisma as any).activityPromotion.updateMany({
+            where: { activity: existing.activity, status: { in: ["active", "scheduled"] }, id: { not: id } },
+            data:  { status: "superseded" },
+          });
+        }
+
+        const data: any = {};
+        if (body.labelText      !== undefined) data.labelText      = body.labelText.toUpperCase();
+        if (body.labelColour    !== undefined) data.labelColour    = body.labelColour;
+        if (body.discountType   !== undefined) data.discountType   = body.discountType;
+        if (body.discountValue  !== undefined) data.discountValue  = body.discountValue;
+        if (body.validFrom      !== undefined) data.validFrom      = new Date(body.validFrom);
+        if (body.validUntil     !== undefined) data.validUntil     = new Date(body.validUntil);
+        if (body.applyToBooking !== undefined) data.applyToBooking = body.applyToBooking;
+        if (body.bannerTitle    !== undefined) data.bannerTitle    = body.bannerTitle;
+        if (body.bannerSubtitle !== undefined) data.bannerSubtitle = body.bannerSubtitle;
+        if (body.status         !== undefined) data.status         = body.status;
+        if (body.countryScope   !== undefined) data.countryScope   = body.countryScope;
+
+        const promo = await (prisma as any).activityPromotion.update({ where: { id }, data });
+        return sendSuccess(reply, 200, promo);
+      } catch (err) {
+        req.log.error({ err }, "Failed to update promotion");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating promotion.");
+      }
+    },
+  );
+
+  // ── DELETE /admin/promotions/:id — remove a promotion ────────────────────
+  app.delete(
+    "/admin/promotions/:id",
+    {
+      schema: {
+        tags: ["Admin Promotions"],
+        summary: "Delete a promotion campaign (admin)",
+        security: [{ bearerAuth: [] }],
+        params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+        response: {
+          200: { type: "object", properties: { success: { type: "boolean" } } },
+          404: errSchema,
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = req.params as { id: string };
+        const existing = await (prisma as any).activityPromotion.findUnique({ where: { id } });
+        if (!existing) return sendError(reply, 404, "NOT_FOUND", "Promotion not found.");
+        await (prisma as any).activityPromotion.delete({ where: { id } });
+        return sendSuccess(reply, 200, { deleted: true });
+      } catch (err) {
+        req.log.error({ err }, "Failed to delete promotion");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while deleting promotion.");
       }
     },
   );
@@ -600,11 +867,11 @@ export async function voucherRoutes(app: FastifyInstance) {
     {
       schema: {
         tags: ["Promotions"],
-        summary: "Get currently active (date-valid) promotions, optionally filtered by category",
+        summary: "Get currently active (date-valid) promotions, optionally filtered by activity category",
         querystring: {
           type: "object",
           properties: {
-            category: { type: "string", enum: ["hotel", "apartment", "car"] },
+            activity: { type: "string", enum: ["hotel", "apartment", "car"] },
           },
         },
         response: {
@@ -615,10 +882,7 @@ export async function voucherRoutes(app: FastifyInstance) {
               data: {
                 type: "object",
                 properties: {
-                  promotions: {
-                    type: "array",
-                    items: { type: "object", additionalProperties: true },
-                  },
+                  promotions: { type: "array", items: { type: "object", additionalProperties: true } },
                 },
                 required: ["promotions"],
               },
@@ -629,29 +893,22 @@ export async function voucherRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const q = req.query as { category?: string };
+        const q = req.query as { activity?: string };
         const now = new Date();
 
-      const ids = await redis.smembers("promos:all");
-      if (!ids.length) return sendSuccess(reply, 200, { promotions: [] });
+        const where: any = {
+          status:    "active",
+          validFrom: { lte: now },
+          validUntil: { gte: now },
+        };
+        if (q.activity) where.activity = q.activity;
 
-      const pipeline = redis.pipeline();
-      for (const id of ids) pipeline.get(`promo:${id}`);
-      const results = await pipeline.exec();
+        const promotions = await (prisma as any).activityPromotion.findMany({
+          where,
+          orderBy: { createdAt: "desc" },
+        });
 
-      let promotions: any[] = (results ?? [])
-        .map((r) => {
-          if (!r || r[0] != null || !r[1]) return null;
-          try { return JSON.parse(r[1] as string); } catch { return null; }
-        })
-        .filter(Boolean)
-        .filter((p: any) => p.isActive && new Date(p.validFrom) <= now && new Date(p.validUntil) >= now);
-
-      if (q.category) {
-        promotions = promotions.filter((p: any) => p.category === q.category || p.category === "all");
-      }
-
-      return sendSuccess(reply, 200, { promotions });
+        return sendSuccess(reply, 200, { promotions });
       } catch (err) {
         req.log.error({ err }, "Failed to fetch active promotions");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching active promotions.");
@@ -786,22 +1043,48 @@ export async function voucherRoutes(app: FastifyInstance) {
           orderBy: { createdAt: "desc" },
           skip,
           take: limit,
-          include: { _count: { select: { redemptions: true } } },
+          // Note: _count removed — computed separately below with a safe fallback
+          // so the endpoint works even if the production DB is missing new columns.
         }),
         prisma.voucher.count({ where }),
       ]);
+
+      // Fetch redemption counts per voucher; fall back to 0 if table unavailable
+      const redemptionCountMap = new Map<string, number>();
+      try {
+        const voucherIds = vouchers.map((v) => v.id);
+        if (voucherIds.length > 0) {
+          const counts = await prisma.voucherRedemption.groupBy({
+            by: ["voucherId"],
+            where: { voucherId: { in: voucherIds } },
+            _count: { voucherId: true },
+          });
+          for (const c of counts) {
+            redemptionCountMap.set(c.voucherId, c._count.voucherId);
+          }
+        }
+      } catch {
+        // voucher_redemptions table not yet available on this environment — default to 0
+      }
 
       return sendSuccess(reply, 200, {
         vouchers: vouchers.map((v) => ({
           id:              v.id,
           code:            v.code,
+          title:           (v as any).title ?? "",
+          activityScope:   (v as any).activityScope ?? "universal",
           discountType:    v.discountType,
           discountValue:   Number(v.discountValue),
           minOrderValue:   v.minOrderValue ? Number(v.minOrderValue) : null,
           maxDiscount:     v.maxDiscount ? Number(v.maxDiscount) : null,
           usageLimit:      v.usageLimit,
+          usageLimitPerGuest: (v as any).usageLimitPerGuest ?? 1,
           usageCount:      v.usageCount,
-          redemptionCount: v._count.redemptions,
+          status:          (v as any).status ?? (v.isActive ? "active" : "paused"),
+          applicableTiers: (v as any).applicableTiers ?? [],
+          countryScope:    (v as any).countryScope ?? null,
+          autoAssign:      (v as any).autoAssign ?? false,
+          redemptionCount: redemptionCountMap.get(v.id) ?? 0,
           validFrom:       v.validFrom.toISOString(),
           validUntil:      v.validUntil.toISOString(),
           isActive:        v.isActive,
