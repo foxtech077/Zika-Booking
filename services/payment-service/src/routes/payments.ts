@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
-import { requireUser, type GuestRequest } from "../middleware/auth.js";
+import { requireUser, requireAdmin, requireInternalService, type GuestRequest } from "../middleware/auth.js";
+import { cancelPayout } from "../services/payout.service.js";
 import { initiateTaraPayment, initiateTaraReversal } from "../lib/tara.js";
 import { sendPaymentLinkEmail } from "../services/email.services.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
@@ -328,7 +329,10 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
 
     if (!customerAccount) {
-      const customer = await stripe.customers.create({ metadata: { userId } });
+      const customer = await stripe.customers.create(
+        { metadata: { userId } },
+        { idempotencyKey: `stripe-cust-${userId}` }
+      );
 
       const existingAccount = await prisma.customerAccount.findUnique({
         where: {
@@ -659,6 +663,7 @@ export async function paymentRoutes(app: FastifyInstance) {
 
   // ── POST /payments/refunds (internal) ─────────────────────────────────────
   app.post("/payments/refunds", {
+    preHandler: [requireAdmin],
     schema: {
       tags: ["Payments"],
       body: {
@@ -712,11 +717,14 @@ export async function paymentRoutes(app: FastifyInstance) {
     // 4. Provider-specific refund logic
     if (payment.paymentProvider === "stripe") {
       try {
-        const re = await stripe.refunds.create({
-          payment_intent: payment.providerPaymentId ?? undefined,
-          amount: Math.round(refundAmount * 100),
-          reason: "requested_by_customer",
-        });
+        const re = await stripe.refunds.create(
+          {
+            payment_intent: payment.providerPaymentId ?? undefined,
+            amount: Math.round(refundAmount * 100),
+            reason: "requested_by_customer",
+          },
+          { idempotencyKey: `stripe-refund-${refund.id}` }
+        );
 
         await prisma.refund.update({
           where: { id: refund.id },
@@ -753,6 +761,28 @@ export async function paymentRoutes(app: FastifyInstance) {
         data: { status: "failed", failureReason: (err as Error).message },
       });
       return sendError(reply, 502, "REFUND_FAILED", "Failed to submit Tara reversal.");
+    }
+  });
+
+  // ── POST /payments/internal/bookings/:bookingId/cancel-payout ─────────────────
+  app.post("/payments/internal/bookings/:bookingId/cancel-payout", {
+    preHandler: [requireInternalService],
+    schema: {
+      tags: ["Payments"],
+      summary: "Internal: cancel scheduled payout for a booking",
+      params: {
+        type: "object",
+        required: ["bookingId"],
+        properties: { bookingId: { type: "string", format: "uuid" } },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { bookingId } = req.params as { bookingId: string };
+    try {
+      await cancelPayout(bookingId);
+      return sendSuccess(reply, 200, { message: "Payout cancelled successfully." });
+    } catch (err: any) {
+      return sendError(reply, 500, "DATABASE_ERROR", err.message);
     }
   });
 }

@@ -45,8 +45,14 @@ export async function schedulePayout(params: SchedulePayoutParams): Promise<void
 
 export async function cancelPayout(bookingId: string): Promise<void> {
   await prisma.payout.updateMany({
-    where: { bookingId, status: { in: ["scheduled", "processing"] } },
-    data: { status: "cancelled", updatedAt: new Date() },
+    where: {
+      bookingId,
+      status: "scheduled",
+    },
+    data: {
+      status: "cancelled",
+      updatedAt: new Date(),
+    },
   });
   console.log(`[payout] Cancelled payout for booking ${bookingId}`);
 }
@@ -83,8 +89,92 @@ async function processSinglePayout(payout: any): Promise<void> {
 
   try {
     if (!merchant.isVerified) {
-      // Leave in processing state for admin to handle after merchant verifies
-      console.log(`[payout-job] Payout ${payout.id}: merchant not yet verified — held in processing`);
+      console.log(`[payout-job] Payout ${payout.id}: merchant not yet verified — reverting to scheduled`);
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: {
+          status: "scheduled",
+          failureReason: "Merchant is not verified",
+          updatedAt: new Date(),
+        },
+      });
+      return;
+    }
+
+    // JIT verification of booking status before executing payout transfer
+    const bookingServiceUrl = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
+    const internalServiceKey = process.env["INTERNAL_SERVICE_KEY"] ?? "";
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+    let res;
+    try {
+      res = await fetch(`${bookingServiceUrl}/bookings/internal/${payout.bookingId}`, {
+        headers: { "x-service-key": internalServiceKey },
+        signal: controller.signal,
+      });
+    } catch (fetchErr: any) {
+      // Network/timeout error is transient: reset status back to scheduled so it is retried automatically
+      const isTimeout = fetchErr.name === "AbortError";
+      const errMsg = isTimeout ? "Request timed out after 10s" : fetchErr.message;
+      console.error(`[payout-job] Transient network error fetching status for payout ${payout.id}:`, errMsg);
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: {
+          status: "scheduled",
+          failureReason: `Transient error: ${errMsg}`,
+          updatedAt: new Date(),
+        },
+      });
+      return;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    if (!res.ok) {
+      if (res.status === 404) {
+        // Booking not found is a permanent issue
+        console.error(`[payout-job] Permanent failure for payout ${payout.id}: Booking ${payout.bookingId} not found (404)`);
+        await prisma.payout.update({
+          where: { id: payout.id },
+          data: { status: "failed", failureReason: `Booking not found (404) during JIT verification`, updatedAt: new Date() },
+        });
+        return;
+      }
+      // Server error (e.g. 500, 503) is transient: reset to scheduled for auto-retry
+      console.error(`[payout-job] Transient server error from listing-service for payout ${payout.id}: status ${res.status}`);
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: {
+          status: "scheduled",
+          failureReason: `Transient HTTP status: ${res.status}`,
+          updatedAt: new Date(),
+        },
+      });
+      return;
+    }
+
+    const json = await res.json() as any;
+    const booking = json.data;
+
+    if (!booking) {
+      // Booking data empty is permanent
+      console.error(`[payout-job] Permanent failure for payout ${payout.id}: Booking ${payout.bookingId} data empty`);
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: { status: "failed", failureReason: `Booking data empty during JIT verification`, updatedAt: new Date() },
+      });
+      return;
+    }
+
+    const cancelledStatuses = ["cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"];
+    if (cancelledStatuses.includes(booking.status)) {
+      console.log(`[payout-job] Payout ${payout.id}: booking ${payout.bookingId} is cancelled (${booking.status}) — aborting and cancelling payout`);
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: { status: "cancelled", failureReason: `Booking was cancelled (${booking.status})`, updatedAt: new Date() },
+      });
       return;
     }
 
@@ -97,6 +187,8 @@ async function processSinglePayout(payout: any): Promise<void> {
         destination: merchant.stripeConnectAccountId,
         transfer_group: payout.bookingId,
         metadata: { bookingId: payout.bookingId, payoutId: payout.id },
+      }, {
+        idempotencyKey: `payout-transfer-${payout.id}`,
       });
       providerPayoutId = transfer.id;
 

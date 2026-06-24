@@ -196,10 +196,13 @@ export async function merchantRoutes(app: FastifyInstance) {
     let stripeAccountId = merchant.stripeConnectAccountId;
 
     if (!stripeAccountId) {
-      const account = await stripe.accounts.create({
-        type: "express",
-        metadata: { userId },
-      });
+      const account = await stripe.accounts.create(
+        {
+          type: "express",
+          metadata: { userId },
+        },
+        { idempotencyKey: `stripe-connect-acc-${merchant.id}` }
+      );
       stripeAccountId = account.id;
 
       // Persist the account ID immediately so we can re-use it on refresh

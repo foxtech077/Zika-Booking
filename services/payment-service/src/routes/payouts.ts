@@ -212,6 +212,9 @@ export async function payoutRoutes(app: FastifyInstance) {
     if (!payout) return sendError(reply, 404, "NOT_FOUND", "Payout not found.");
     if (payout.status === "paid") return sendError(reply, 400, "ALREADY_PAID", "Cannot cancel a paid payout.");
     if (payout.status === "cancelled") return sendError(reply, 400, "ALREADY_CANCELLED", "Payout is already cancelled.");
+    if (payout.status === "processing") {
+      return sendError(reply, 400, "PROCESSING", "Cannot cancel a payout that is currently processing.");
+    }
 
     const updated = await prisma.payout.update({
       where: { id },
