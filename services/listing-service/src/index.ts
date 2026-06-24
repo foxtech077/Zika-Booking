@@ -312,18 +312,6 @@ app.all("/admin/payouts/*", async (req, reply) => {
   await app.register(bookingDocumentRoutes);
   await app.register(loyaltyRoutes);
 
-  app.setErrorHandler((error: { statusCode?: number; message: string }, _req, reply) => {
-    app.log.error(error);
-    const statusCode = error.statusCode ?? 500;
-    reply.status(statusCode).send({
-      success: false,
-      error: {
-        code: "SERVER_ERROR",
-        message: statusCode === 500 ? "An unexpected error occurred." : error.message,
-      },
-    });
-  });
-
   return app;
 }
 

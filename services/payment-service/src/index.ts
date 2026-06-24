@@ -113,14 +113,6 @@ async function build() {
   // ── Health check ──────────────────────────────────────────────────────────
   app.get("/health", async () => ({ status: "ok", service: "payment-service", timestamp: new Date().toISOString() }));
 
-  // ── Route plugins ─────────────────────────────────────────────────────────
-  await app.register(paymentRoutes,);
-  await app.register(webhookRoutes,);
-  await app.register(paymentMethodRoutes,);
-  await app.register(adminPaymentRoutes,);
-  await app.register(merchantRoutes,);
-  await app.register(payoutRoutes,);
-
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler((error: any, _req, reply) => {
     app.log.error(error);
@@ -133,6 +125,14 @@ async function build() {
       },
     });
   });
+
+  // ── Route plugins ─────────────────────────────────────────────────────────
+  await app.register(paymentRoutes,);
+  await app.register(webhookRoutes,);
+  await app.register(paymentMethodRoutes,);
+  await app.register(adminPaymentRoutes,);
+  await app.register(merchantRoutes,);
+  await app.register(payoutRoutes,);
 
   return app;
 }
