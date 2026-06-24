@@ -113,10 +113,12 @@ export interface Payout {
   createdAt: string;
   updatedAt: string;
   merchant?: {
-    payoutMethod: string;
+    payoutMethod: MerchantProfile["payoutMethod"];
     isVerified: boolean;
   };
 }
+
+export type PayoutStatus = Payout["status"];
 
 export interface StripeConnectStatusResponse {
   stripeAccountId: string | null;
@@ -193,5 +195,29 @@ export async function getPayouts(params?: {
 export async function getPayoutDetail(id: string): Promise<SinglePayoutResponse> {
   const res = await paymentApi.get<SinglePayoutResponse>(`/provider/me/payouts/${id}`);
   return res.data;
+}
+
+export async function getAllPayouts(params?: {
+  status?: PayoutStatus;
+  pageSize?: number;
+}): Promise<Payout[]> {
+  const limit = Math.max(1, Math.min(params?.pageSize ?? 100, 100));
+  const firstPage = await getPayouts({
+    page: 1,
+    limit,
+    ...(params?.status ? { status: params.status } : {}),
+  });
+  const payouts = [...firstPage.data];
+
+  for (let page = 2; page <= firstPage.meta.totalPages; page += 1) {
+    const nextPage = await getPayouts({
+      page,
+      limit,
+      ...(params?.status ? { status: params.status } : {}),
+    });
+    payouts.push(...nextPage.data);
+  }
+
+  return payouts;
 }
 

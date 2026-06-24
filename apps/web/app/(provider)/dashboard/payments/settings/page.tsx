@@ -1,23 +1,12 @@
 "use client";
 
-/**
- * Provider → Dashboard → Payments → Settings
- *
- * API integrations (all via paymentApi):
- *  ✅ GET  /merchant/me                         — load profile on mount
- *  ✅ PATCH /merchant/me                        — save payout details
- *  ✅ POST  /merchant/me/stripe/connect         — start Stripe onboarding
- *  ✅ GET   /merchant/me/stripe/connect/refresh — regenerate expired link
- *  ✅ GET   /merchant/me/stripe/connect/status  — check connection status
- */
-
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  ArrowLeft,
-  CheckCircle2,
   AlertCircle,
+  ArrowLeft,
   Building,
+  CheckCircle2,
   CreditCard,
   ExternalLink,
   Loader2,
@@ -26,124 +15,295 @@ import {
   Save,
   ShieldCheck,
   User,
+  Wallet,
 } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
-import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/utils";
 import {
   getMerchantProfile,
-  updateMerchantProfile,
-  startStripeConnect,
-  refreshStripeConnect,
   getStripeConnectStatus,
+  refreshStripeConnect,
+  startStripeConnect,
+  updateMerchantProfile,
   type MerchantProfile,
   type StripeConnectStatusResponse,
 } from "@/lib/payment-api";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 type PayoutMethod = MerchantProfile["payoutMethod"];
-
-// ─── Toast helper ─────────────────────────────────────────────────────────────
-
 type Toast = { message: string; type: "success" | "error" } | null;
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+type SetupState = {
+  label: string;
+  detail: string;
+  badgeTone: "success" | "warning" | "danger" | "info";
+};
 
-function extractErrorMessage(err: unknown, fallback: string): string {
-  const e = err as { response?: { data?: { message?: string } } };
-  return e?.response?.data?.message ?? fallback;
+function extractErrorMessage(error: unknown, fallback: string): string {
+  const err = error as { response?: { data?: { message?: string } } };
+  return err?.response?.data?.message ?? (error instanceof Error ? error.message : fallback);
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+function formatMethodLabel(method: PayoutMethod): string {
+  switch (method) {
+    case "stripe_connect":
+      return "Stripe Connect";
+    case "bank_transfer":
+      return "Bank Transfer";
+    case "mobile_money":
+      return "Mobile Money";
+    case "manual":
+      return "Manual";
+  }
+}
+
+function maskValue(value: string, visible = 4): string {
+  const clean = value.replace(/\s+/g, "");
+  if (!clean) return "N/A";
+  if (clean.length <= visible) return clean;
+  return `${"*".repeat(Math.max(1, clean.length - visible))}${clean.slice(-visible)}`;
+}
+
+function maskStripeAccountId(value: string | null | undefined): string {
+  if (!value) return "N/A";
+  if (value.length <= 10) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function getSetupState(profile: MerchantProfile | null, stripeStatus: StripeConnectStatusResponse | null): SetupState {
+  if (!profile) {
+    return { label: "Not loaded", detail: "Merchant profile is still loading.", badgeTone: "info" };
+  }
+
+  if (profile.payoutMethod === "stripe_connect") {
+    if (!profile.stripeConnectAccountId) {
+      return { label: "Not connected", detail: "Stripe Connect onboarding has not started yet.", badgeTone: "warning" };
+    }
+    if (stripeStatus?.onboardingComplete) {
+      return { label: "Connected and ready for payouts", detail: "Stripe has confirmed onboarding and payout readiness.", badgeTone: "success" };
+    }
+    if (!stripeStatus) {
+      return { label: "Stripe status unavailable", detail: "Use the status check button to confirm onboarding progress.", badgeTone: "warning" };
+    }
+    if (!stripeStatus.detailsSubmitted) {
+      return { label: "Onboarding incomplete", detail: "Stripe onboarding is still missing required details.", badgeTone: "warning" };
+    }
+    if (!stripeStatus.chargesEnabled || !stripeStatus.payoutsEnabled) {
+      return { label: "Action required", detail: "Stripe still needs attention before payouts can flow.", badgeTone: "danger" };
+    }
+    return { label: "Onboarding in progress", detail: "Stripe is still finalizing account readiness.", badgeTone: "warning" };
+  }
+
+  if (profile.payoutMethod === "bank_transfer") {
+    const complete = Boolean(profile.bankName && profile.bankAccountNumber && profile.bankAccountName);
+    return complete
+      ? { label: "Bank details saved", detail: "Bank payout fields are saved on the merchant profile.", badgeTone: "success" }
+      : { label: "Bank details incomplete", detail: "Bank transfer requires a bank name, account name, and account number.", badgeTone: "warning" };
+  }
+
+  if (profile.payoutMethod === "mobile_money") {
+    return profile.mobileMoneyNumber
+      ? { label: "Mobile money saved", detail: "Mobile money payout details are saved on the merchant profile.", badgeTone: "success" }
+      : { label: "Mobile money incomplete", detail: "Mobile money requires a phone number.", badgeTone: "warning" };
+  }
+
+  return { label: "Manual payouts selected", detail: "Manual payout handling is currently selected.", badgeTone: "info" };
+}
+
+function getStripeConnectState(profile: MerchantProfile | null, stripeStatus: StripeConnectStatusResponse | null): SetupState {
+  if (!profile?.stripeConnectAccountId) {
+    return { label: "Not connected", detail: "No Stripe Connect account has been created yet.", badgeTone: "warning" };
+  }
+
+  if (!stripeStatus) {
+    return { label: "Status unavailable", detail: "Use the status check button to confirm onboarding progress.", badgeTone: "warning" };
+  }
+
+  if (stripeStatus.onboardingComplete) {
+    return { label: "Connected and ready for payouts", detail: "Stripe has confirmed that the account is fully onboarded.", badgeTone: "success" };
+  }
+
+  if (!stripeStatus.detailsSubmitted) {
+    return { label: "Onboarding incomplete", detail: "Stripe onboarding has not been finished yet.", badgeTone: "warning" };
+  }
+
+  if (!stripeStatus.chargesEnabled || !stripeStatus.payoutsEnabled) {
+    return { label: "Action required", detail: "Stripe still needs attention before payouts can flow.", badgeTone: "danger" };
+  }
+
+  return { label: "Onboarding in progress", detail: "Stripe is still finalizing account readiness.", badgeTone: "warning" };
+}
+
+function getVerificationState(profile: MerchantProfile | null): SetupState {
+  if (!profile) {
+    return { label: "Not loaded", detail: "Merchant profile is still loading.", badgeTone: "info" };
+  }
+
+  return profile.isVerified
+    ? { label: "Verified", detail: "Merchant verification has been confirmed in the backend.", badgeTone: "success" }
+    : { label: "Not verified", detail: "Merchant verification is still pending.", badgeTone: "warning" };
+}
+
+function getAccountSummary(profile: MerchantProfile | null): { label: string; value: string; detail: string } {
+  if (!profile) {
+    return { label: "Account details", value: "N/A", detail: "Merchant profile is still loading." };
+  }
+
+  switch (profile.payoutMethod) {
+    case "stripe_connect":
+      return {
+        label: "Stripe account",
+        value: maskStripeAccountId(profile.stripeConnectAccountId),
+        detail: profile.stripeConnectAccountId ? "Masked Stripe Connect account ID." : "No Stripe account has been connected yet.",
+      };
+    case "bank_transfer":
+      return {
+        label: "Bank account",
+        value: profile.bankAccountNumber ? `Ending ${profile.bankAccountNumber.slice(-4)}` : "Not saved",
+        detail: profile.bankName ? `${profile.bankName} - ${maskValue(profile.bankAccountNumber ?? "")}` : "Bank details are saved in masked form.",
+      };
+    case "mobile_money":
+      return {
+        label: "Mobile money",
+        value: profile.mobileMoneyNumber ? maskValue(profile.mobileMoneyNumber) : "Not saved",
+        detail: "Stored in a masked format for safety.",
+      };
+    case "manual":
+      return {
+        label: "Manual payouts",
+        value: "No payout account details required",
+        detail: "Manual payouts do not expose any stored account details.",
+      };
+  }
+}
+
+function OverviewCard({
+  label,
+  value,
+  detail,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: React.ReactNode;
+  tone: string;
+}) {
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+          <p className="mt-2 text-lg font-bold text-slate-900 leading-tight">{value}</p>
+          <p className="mt-1 text-xs text-slate-500">{detail}</p>
+        </div>
+        <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-sm [&>svg]:h-5 [&>svg]:w-5", tone)}>
+          {icon}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function SectionNotice({
+  title,
+  message,
+  tone = "bg-slate-50 border-slate-100 text-slate-700",
+}: {
+  title: string;
+  message: string;
+  tone?: string;
+}) {
+  return (
+    <div className={cn("rounded-xl border p-4 text-sm", tone)}>
+      <p className="font-semibold">{title}</p>
+      <p className="mt-1 text-xs leading-relaxed opacity-90">{message}</p>
+    </div>
+  );
+}
 
 export default function PaymentSettingsPage() {
-  // ── Profile state ──
   const [profile, setProfile] = useState<MerchantProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  // ── Form state ──
   const [payoutMethod, setPayoutMethod] = useState<PayoutMethod>("manual");
-  // Bank Transfer
   const [bankName, setBankName] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
   const [bankAccountName, setBankAccountName] = useState("");
-  // Mobile Money
   const [mobileMoneyNumber, setMobileMoneyNumber] = useState("");
-  // Shared
   const [businessName, setBusinessName] = useState("");
   const [country, setCountry] = useState("");
 
-  // ── Stripe Connect state ──
   const [stripeStatus, setStripeStatus] = useState<StripeConnectStatusResponse | null>(null);
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeRefreshing, setStripeRefreshing] = useState(false);
   const [stripeChecking, setStripeChecking] = useState(false);
 
-  // ── Action state ──
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
 
   function showToast(message: string, type: "success" | "error" = "success") {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    window.setTimeout(() => setToast(null), 4000);
   }
 
-  // ── Hydrate form from profile ──
-  function hydrateForm(p: MerchantProfile) {
-    setPayoutMethod(p.payoutMethod ?? "manual");
-    setBankName(p.bankName ?? "");
-    setBankAccountNumber(p.bankAccountNumber ?? "");
-    setBankAccountName(p.bankAccountName ?? "");
-    setMobileMoneyNumber(p.mobileMoneyNumber ?? "");
-    setBusinessName(p.businessName ?? "");
-    setCountry(p.country ?? "");
+  function hydrateForm(next: MerchantProfile) {
+    setPayoutMethod(next.payoutMethod ?? "manual");
+    setBankName(next.bankName ?? "");
+    setBankAccountNumber(next.bankAccountNumber ?? "");
+    setBankAccountName(next.bankAccountName ?? "");
+    setMobileMoneyNumber(next.mobileMoneyNumber ?? "");
+    setBusinessName(next.businessName ?? "");
+    setCountry(next.country ?? "");
   }
 
-  // ── Fetch merchant profile ──
-  async function loadProfile() {
+  async function loadProfile(options?: { includeStripeStatus?: boolean }) {
+    const includeStripeStatus = options?.includeStripeStatus ?? true;
     setProfileLoading(true);
     setProfileError(null);
+
     try {
       const res = await getMerchantProfile();
-      setProfile(res.data);
-      hydrateForm(res.data);
-      // If payout method is stripe, also fetch stripe status
-      if (res.data.payoutMethod === "stripe_connect" || res.data.stripeConnectAccountId) {
-        await loadStripeStatus();
+      const nextProfile = res.data;
+      setProfile(nextProfile);
+      hydrateForm(nextProfile);
+
+      if (!includeStripeStatus || !nextProfile.stripeConnectAccountId) {
+        setStripeStatus(null);
+        return;
       }
-    } catch (err) {
-      setProfileError(extractErrorMessage(err, "Failed to load your merchant profile."));
+
+      try {
+        const stripeRes = await getStripeConnectStatus();
+        setStripeStatus(stripeRes.data);
+      } catch (stripeError) {
+        setStripeStatus(null);
+      }
+    } catch (error) {
+      setProfileError(extractErrorMessage(error, "Failed to load your merchant profile."));
     } finally {
       setProfileLoading(false);
     }
   }
 
-  // ── Fetch stripe connect status ──
-  async function loadStripeStatus() {
-    try {
-      const res = await getStripeConnectStatus();
-      setStripeStatus(res.data);
-    } catch {
-      // No stripe account yet — silence the error; we'll show the Connect button
-      setStripeStatus(null);
-    }
-  }
-
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    loadProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void loadProfile({ includeStripeStatus: true });
   }, []);
 
-  // ── Save payout details ──
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
+  const setupState = useMemo(() => getSetupState(profile, stripeStatus), [profile, stripeStatus]);
+  const stripeConnectState = useMemo(() => getStripeConnectState(profile, stripeStatus), [profile, stripeStatus]);
+  const verificationState = useMemo(() => getVerificationState(profile), [profile]);
+  const accountSummary = useMemo(() => getAccountSummary(profile), [profile]);
+
+  async function handleSave(event: React.FormEvent) {
+    event.preventDefault();
     setSaving(true);
 
-    // Build payload — only include fields relevant to the selected method
     const payload: Parameters<typeof updateMerchantProfile>[0] = {
       payoutMethod,
       ...(businessName.trim() ? { businessName: businessName.trim() } : {}),
@@ -156,6 +316,7 @@ export default function PaymentSettingsPage() {
         setSaving(false);
         return;
       }
+
       payload.bankName = bankName.trim();
       payload.bankAccountNumber = bankAccountNumber.trim();
       payload.bankAccountName = bankAccountName.trim();
@@ -165,6 +326,7 @@ export default function PaymentSettingsPage() {
         setSaving(false);
         return;
       }
+
       payload.mobileMoneyNumber = mobileMoneyNumber.trim();
     }
 
@@ -172,302 +334,285 @@ export default function PaymentSettingsPage() {
       const res = await updateMerchantProfile(payload);
       setProfile(res.data);
       hydrateForm(res.data);
-      showToast("Payment details updated successfully!");
-    } catch (err) {
-      showToast(extractErrorMessage(err, "Failed to save payment details."), "error");
+      await loadProfile({ includeStripeStatus: true });
+      showToast("Payment details updated successfully.");
+    } catch (error) {
+      showToast(extractErrorMessage(error, "Failed to save payment details."), "error");
     } finally {
       setSaving(false);
     }
   }
 
-  // ── Connect Stripe ──
   async function handleConnectStripe() {
     setStripeConnecting(true);
     try {
       const res = await startStripeConnect();
-      // Redirect to Stripe-hosted onboarding page
       window.location.href = res.data.onboardingUrl;
-    } catch (err) {
-      showToast(extractErrorMessage(err, "Failed to start Stripe Connect onboarding."), "error");
+    } catch (error) {
+      showToast(extractErrorMessage(error, "Failed to start Stripe Connect onboarding."), "error");
       setStripeConnecting(false);
     }
   }
 
-  // ── Refresh expired Stripe link ──
   async function handleRefreshStripeLink() {
     setStripeRefreshing(true);
     try {
       const res = await refreshStripeConnect();
       window.location.href = res.data.onboardingUrl;
-    } catch (err) {
-      showToast(extractErrorMessage(err, "Failed to refresh Stripe onboarding link."), "error");
+    } catch (error) {
+      showToast(extractErrorMessage(error, "Failed to refresh Stripe onboarding link."), "error");
       setStripeRefreshing(false);
     }
   }
 
-  // ── Check Stripe status ──
   async function handleCheckStripeStatus() {
     setStripeChecking(true);
     try {
       const res = await getStripeConnectStatus();
       setStripeStatus(res.data);
+
       if (res.data.onboardingComplete) {
-        showToast("Stripe is fully connected and active!");
-        // Reload profile so payoutMethod is updated from DB
-        await loadProfile();
+        showToast("Stripe Connect is connected and ready for payouts.");
+        await loadProfile({ includeStripeStatus: false });
       } else {
-        showToast("Stripe onboarding is not yet complete. Please finish setup on Stripe.", "error");
+        const nextState = getStripeConnectState(profile, res.data);
+        showToast(`Stripe status: ${nextState.label}.`, "error");
       }
-    } catch (err) {
-      showToast(extractErrorMessage(err, "Failed to check Stripe status."), "error");
+    } catch (error) {
+      showToast(extractErrorMessage(error, "Failed to check Stripe status."), "error");
     } finally {
       setStripeChecking(false);
     }
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  const showStripeButtons = payoutMethod === "stripe_connect" || Boolean(profile?.stripeConnectAccountId);
+  const showStripeRefresh = Boolean(profile?.stripeConnectAccountId) && !stripeStatus?.onboardingComplete;
+  const stripeBadgeVariant = stripeConnectState.badgeTone;
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
-      {/* Toast Notification */}
+    <div className="mx-auto max-w-5xl space-y-6 animate-fade-in">
       {toast && (
         <div
           className={cn(
-            "fixed top-4 right-4 z-50 flex items-center gap-2.5 rounded-xl px-4 py-3 shadow-lg border animate-slide-in text-sm font-semibold",
-            toast.type === "success"
-              ? "bg-emerald-50 border-emerald-100 text-emerald-800"
-              : "bg-red-50 border-red-100 text-red-800"
+            "fixed right-4 top-4 z-50 flex items-center gap-2.5 rounded-xl border px-4 py-3 text-sm font-semibold shadow-lg animate-slide-in",
+            toast.type === "success" ? "border-emerald-100 bg-emerald-50 text-emerald-800" : "border-red-100 bg-red-50 text-red-800",
           )}
         >
           {toast.type === "success" ? (
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
           ) : (
-            <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+            <AlertCircle className="h-5 w-5 shrink-0 text-red-600" />
           )}
           <span>{toast.message}</span>
         </div>
       )}
 
-      {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/dashboard/payments">
-          <Button variant="ghost" size="sm" icon={<ArrowLeft />}>Back</Button>
+          <Button variant="ghost" size="sm" icon={<ArrowLeft />}>
+            Back
+          </Button>
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payment Settings</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Configure your payout method and account details.</p>
+          <p className="mt-0.5 text-sm text-slate-500">Configure your provider payout method and account details.</p>
         </div>
       </div>
 
-      {/* Loading skeleton */}
       {profileLoading && (
         <div className="space-y-4">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="h-32 rounded-2xl bg-slate-100 animate-pulse" />
+          {[0, 1, 2].map((index) => (
+            <div key={index} className="h-32 rounded-2xl bg-slate-100 animate-pulse" />
           ))}
         </div>
       )}
 
-      {/* Profile error */}
       {!profileLoading && profileError && (
         <div className="rounded-2xl border border-red-100 bg-red-50 p-6 flex flex-col items-center gap-4 text-center">
           <AlertCircle className="h-10 w-10 text-red-400" />
           <p className="font-semibold text-red-800">{profileError}</p>
-          <Button variant="outline" icon={<RefreshCw />} onClick={loadProfile}>
+          <Button variant="outline" icon={<RefreshCw />} onClick={() => void loadProfile({ includeStripeStatus: true })}>
             Retry
           </Button>
         </div>
       )}
 
-      {/* Main content */}
       {!profileLoading && !profileError && (
-        <div className="grid gap-6 md:grid-cols-3">
-          {/* Left column: status + method selection */}
-          <div className="space-y-6 md:col-span-1">
-            {/* Verification Status */}
-            <Card>
-              <CardHeader title="Verification Status" />
-              <div className="mt-2 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-500 font-medium">Status</span>
-                  <Badge
-                    label={profile?.isVerified ? "Verified" : "Unverified"}
-                    status={profile?.isVerified ? "active" : "suspended"}
-                    dot
-                  />
-                </div>
-
-                {!profile?.isVerified ? (
-                  <div className="rounded-xl bg-amber-50 border border-amber-100 p-3.5 text-xs text-amber-800">
-                    <div className="flex gap-2">
-                      <AlertCircle className="h-4 w-4 shrink-0 text-amber-600 mt-0.5" />
-                      <div>
-                        <p className="font-bold">Verification Required</p>
-                        <p className="mt-1 leading-relaxed text-amber-700">
-                          Please complete payout setup. An admin will verify your account before payouts can be released.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3.5 text-xs text-emerald-800">
-                    <div className="flex gap-2">
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 mt-0.5" />
-                      <div>
-                        <p className="font-bold">Account Verified</p>
-                        <p className="mt-1 leading-relaxed text-emerald-700">
-                          Your account is active. Payouts are scheduled automatically after check-in.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-
-            {/* Preferred Method Selection */}
-            <Card>
-              <CardHeader title="Preferred Method" />
-              <div className="mt-3 space-y-2">
-                {(
-                  [
-                    { value: "stripe_connect", label: "Stripe Connect", sub: "Direct instant payouts", Icon: CreditCard },
-                    { value: "bank_transfer",  label: "Bank Transfer",  sub: "Standard bank account",   Icon: Building },
-                    { value: "mobile_money",   label: "Mobile Money",   sub: "Orange, MTN, M-Pesa",     Icon: Phone },
-                  ] as const
-                ).map(({ value, label, sub, Icon }) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setPayoutMethod(value)}
-                    className={cn(
-                      "w-full flex items-center gap-3 p-3.5 rounded-xl border text-left transition-all",
-                      payoutMethod === value
-                        ? "bg-emerald-50 border-emerald-200 shadow-sm"
-                        : "border-slate-100 hover:bg-slate-50"
-                    )}
-                  >
-                    <Icon className={cn("h-5 w-5", payoutMethod === value ? "text-emerald-700" : "text-slate-400")} />
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800">{label}</p>
-                      <p className="text-[10px] text-slate-400">{sub}</p>
-                    </div>
-                    {payoutMethod === value && (
-                      <span className="ml-auto w-2 h-2 rounded-full bg-emerald-600" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            </Card>
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <OverviewCard
+              label="Current Payout Method"
+              value={formatMethodLabel(profile?.payoutMethod ?? payoutMethod)}
+              detail="Stored on the merchant profile."
+              icon={<Wallet />}
+              tone="bg-emerald-600 text-white"
+            />
+            <OverviewCard
+              label="Setup Status"
+              value={setupState.label}
+              detail={setupState.detail}
+              icon={<ShieldCheck />}
+              tone="bg-green-700 text-white"
+            />
+            <OverviewCard
+              label="Verification Status"
+              value={verificationState.label}
+              detail={verificationState.detail}
+              icon={<CheckCircle2 />}
+              tone="bg-slate-700 text-white"
+            />
+            <OverviewCard
+              label={accountSummary.label}
+              value={accountSummary.value}
+              detail={accountSummary.detail}
+              icon={<CreditCard />}
+              tone="bg-sky-600 text-white"
+            />
           </div>
 
-          {/* Right column: details form */}
-          <div className="md:col-span-2">
-            <Card>
-              <CardHeader
-                title={
-                  payoutMethod === "stripe_connect"
-                    ? "Stripe Connect Integration"
-                    : payoutMethod === "bank_transfer"
+          <Card>
+            <CardHeader
+              title={
+                payoutMethod === "stripe_connect"
+                  ? "Stripe Connect Integration"
+                  : payoutMethod === "bank_transfer"
                     ? "Bank Account Information"
                     : payoutMethod === "mobile_money"
-                    ? "Mobile Money Configuration"
-                    : "Payout Details"
-                }
-                subtitle="Enter details for your selected payout method"
-              />
-              <form onSubmit={handleSave} className="space-y-4 mt-4">
-                {/* Optional shared fields */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Input
-                    label="Business Name (optional)"
-                    placeholder="Your business or trading name"
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    leftIcon={<User />}
-                  />
-                  <Input
-                    label="Country (optional)"
-                    placeholder="e.g. Ghana, Nigeria, Kenya"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                  />
+                      ? "Mobile Money Configuration"
+                      : "Manual Payout Setup"
+              }
+              subtitle="Only the fields relevant to the selected payout method are shown below."
+            />
+
+            <form onSubmit={handleSave} className="mt-4 space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Business Name (optional)"
+                  placeholder="Your business or trading name"
+                  value={businessName}
+                  onChange={(event) => setBusinessName(event.target.value)}
+                  leftIcon={<User />}
+                />
+                <Input
+                  label="Country (optional)"
+                  placeholder="e.g. Ghana, Nigeria, Kenya"
+                  value={country}
+                  onChange={(event) => setCountry(event.target.value)}
+                />
+              </div>
+
+              <Card className="border border-slate-100 bg-slate-50/60" padding="sm">
+                <div className="grid gap-2">
+                  {([
+                    { value: "stripe_connect", label: "Stripe Connect", sub: "Direct onboarding and payouts", Icon: CreditCard },
+                    { value: "bank_transfer", label: "Bank Transfer", sub: "Bank account settlement", Icon: Building },
+                    { value: "mobile_money", label: "Mobile Money", sub: "Mobile wallet payouts", Icon: Phone },
+                    { value: "manual", label: "Manual", sub: "No stored payout details", Icon: Wallet },
+                  ] as const).map(({ value, label, sub, Icon }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setPayoutMethod(value)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-xl border p-3.5 text-left transition-all",
+                        payoutMethod === value ? "border-emerald-200 bg-emerald-50 shadow-sm" : "border-slate-100 bg-white hover:bg-slate-50",
+                      )}
+                    >
+                      <Icon className={cn("h-5 w-5", payoutMethod === value ? "text-emerald-700" : "text-slate-400")} />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{label}</p>
+                        <p className="text-[10px] text-slate-400">{sub}</p>
+                      </div>
+                      {payoutMethod === value && <span className="ml-auto h-2 w-2 rounded-full bg-emerald-600" />}
+                    </button>
+                  ))}
                 </div>
+              </Card>
 
-                {/* ── Stripe Connect ── */}
-                {payoutMethod === "stripe_connect" && (
-                  <div className="space-y-4">
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm text-slate-600 leading-relaxed">
-                      <p className="font-semibold text-slate-800">Why Stripe Connect?</p>
-                      <p className="mt-1 text-xs">
-                        Stripe Connect enables instant, secure payouts to your regional bank account once a booking is completed. Setting up is free.
-                      </p>
-                    </div>
+              {showStripeButtons && (
+                <div className="space-y-4">
+                  <SectionNotice
+                    title="Stripe Connect"
+                    message="Connect Stripe to continue onboarding, or refresh the link if the original onboarding page expired."
+                    tone="bg-slate-50 border-slate-100 text-slate-700"
+                  />
 
-                    {/* Connected account info */}
-                    {profile?.stripeConnectAccountId && (
-                      <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 space-y-2">
-                        <p className="text-xs font-semibold text-emerald-800">Stripe Account ID</p>
-                        <p className="font-mono text-sm text-emerald-900">{profile.stripeConnectAccountId}</p>
-                        {stripeStatus && (
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            <Badge label={stripeStatus.onboardingComplete ? "Fully Onboarded" : "Onboarding Incomplete"} status={stripeStatus.onboardingComplete ? "active" : "pending"} dot />
-                            {stripeStatus.chargesEnabled && <Badge label="Charges Enabled" status="active" dot />}
-                            {stripeStatus.payoutsEnabled && <Badge label="Payouts Enabled" status="active" dot />}
-                          </div>
+                  {profile?.stripeConnectAccountId ? (
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge label={stripeConnectState.label} variant={stripeBadgeVariant} />
+                        {stripeStatus?.chargesEnabled && <Badge label="Charges Enabled" variant="success" />}
+                        {stripeStatus?.payoutsEnabled && <Badge label="Payouts Enabled" variant="success" />}
+                        {typeof stripeStatus?.detailsSubmitted === "boolean" && (
+                          <Badge label={stripeStatus.detailsSubmitted ? "Details Submitted" : "Details Missing"} variant={stripeStatus.detailsSubmitted ? "success" : "warning"} />
                         )}
                       </div>
+                      <p className="font-mono text-sm text-emerald-900">{maskStripeAccountId(profile.stripeConnectAccountId)}</p>
+                    </div>
+                  ) : (
+                    <SectionNotice
+                      title="Stripe account not connected"
+                      message="Start Stripe onboarding to create the express account and generate the first onboarding link."
+                      tone="bg-amber-50 border-amber-100 text-amber-800"
+                    />
+                  )}
+
+                  <div className="flex flex-wrap gap-3">
+                    {!profile?.stripeConnectAccountId ? (
+                      <Button
+                        type="button"
+                        variant="primary"
+                        icon={stripeConnecting ? <Loader2 className="animate-spin" /> : <CreditCard />}
+                        loading={stripeConnecting}
+                        onClick={handleConnectStripe}
+                      >
+                        Connect Stripe
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        icon={stripeConnecting ? <Loader2 className="animate-spin" /> : <ExternalLink />}
+                        loading={stripeConnecting}
+                        onClick={handleConnectStripe}
+                      >
+                        Resume Onboarding
+                      </Button>
                     )}
 
-                    {/* Action buttons */}
-                    <div className="flex flex-wrap gap-3">
-                      {!profile?.stripeConnectAccountId ? (
-                        <Button
-                          type="button"
-                          variant="primary"
-                          icon={stripeConnecting ? <Loader2 className="animate-spin" /> : <CreditCard />}
-                          loading={stripeConnecting}
-                          onClick={handleConnectStripe}
-                        >
-                          Connect with Stripe
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            icon={stripeConnecting ? <Loader2 className="animate-spin" /> : <ExternalLink />}
-                            loading={stripeConnecting}
-                            onClick={handleConnectStripe}
-                          >
-                            Re-open Onboarding
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            icon={stripeRefreshing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                            loading={stripeRefreshing}
-                            onClick={handleRefreshStripeLink}
-                          >
-                            Refresh Onboarding Link
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            icon={stripeChecking ? <Loader2 className="animate-spin" /> : <ShieldCheck />}
-                            loading={stripeChecking}
-                            onClick={handleCheckStripeStatus}
-                          >
-                            Check Stripe Status
-                          </Button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
+                    {showStripeRefresh && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        icon={stripeRefreshing ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                        loading={stripeRefreshing}
+                        onClick={handleRefreshStripeLink}
+                      >
+                        Refresh Onboarding Link
+                      </Button>
+                    )}
 
-                {/* ── Bank Transfer ── */}
-                {payoutMethod === "bank_transfer" && (
+                    {profile?.stripeConnectAccountId && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        icon={stripeChecking ? <Loader2 className="animate-spin" /> : <ShieldCheck />}
+                        loading={stripeChecking}
+                        onClick={handleCheckStripeStatus}
+                      >
+                        Check Stripe Status
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {payoutMethod === "bank_transfer" && (
+                <div className="space-y-4">
+                  <SectionNotice
+                    title="Bank Transfer"
+                    message="The stored bank account number is hidden in the input field for safety. Re-enter it if you need to change the value."
+                  />
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="sm:col-span-2">
                       <Input
@@ -475,7 +620,7 @@ export default function PaymentSettingsPage() {
                         placeholder="Jane Doe"
                         required
                         value={bankAccountName}
-                        onChange={(e) => setBankAccountName(e.target.value)}
+                        onChange={(event) => setBankAccountName(event.target.value)}
                         leftIcon={<User />}
                       />
                     </div>
@@ -484,52 +629,60 @@ export default function PaymentSettingsPage() {
                       placeholder="Emerald Trust Bank"
                       required
                       value={bankName}
-                      onChange={(e) => setBankName(e.target.value)}
+                      onChange={(event) => setBankName(event.target.value)}
                       leftIcon={<Building />}
                     />
                     <div className="sm:col-span-2">
                       <Input
                         label="Account Number / IBAN"
-                        placeholder="1234567890"
+                        placeholder="Enter or update your account number"
+                        type="password"
+                        autoComplete="off"
                         required
                         value={bankAccountNumber}
-                        onChange={(e) => setBankAccountNumber(e.target.value)}
+                        onChange={(event) => setBankAccountNumber(event.target.value)}
+                        hint="Stored in masked form on screen."
                       />
                     </div>
                   </div>
-                )}
-
-                {/* ── Mobile Money ── */}
-                {payoutMethod === "mobile_money" && (
-                  <div className="space-y-4">
-                    <Input
-                      label="Mobile Money Phone Number"
-                      placeholder="+233 50 123 4567"
-                      required
-                      value={mobileMoneyNumber}
-                      onChange={(e) => setMobileMoneyNumber(e.target.value)}
-                      leftIcon={<Phone />}
-                    />
-                    <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5 text-xs text-slate-600">
-                      Supported networks: MTN Mobile Money, Orange Money, Vodafone Cash, M-Pesa, AirtelTigo Money.
-                    </div>
-                  </div>
-                )}
-
-                {/* Save button — not shown for stripe_connect (no form fields to save aside from shared ones) */}
-                <div className="pt-4 border-t border-slate-100 flex justify-end">
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    loading={saving}
-                    icon={<Save />}
-                  >
-                    Save Changes
-                  </Button>
                 </div>
-              </form>
-            </Card>
-          </div>
+              )}
+
+              {payoutMethod === "mobile_money" && (
+                <div className="space-y-4">
+                  <SectionNotice
+                    title="Mobile Money"
+                    message="The stored mobile number is hidden in the input field for safety. Re-enter it if you need to update the payout destination."
+                  />
+                  <Input
+                    label="Mobile Money Phone Number"
+                    placeholder="+233 50 123 4567"
+                    type="password"
+                    autoComplete="off"
+                    required
+                    value={mobileMoneyNumber}
+                    onChange={(event) => setMobileMoneyNumber(event.target.value)}
+                    leftIcon={<Phone />}
+                    hint="Stored in masked form on screen."
+                  />
+                </div>
+              )}
+
+              {payoutMethod === "manual" && (
+                <SectionNotice
+                  title="Manual Payouts"
+                  message="No payout account fields are required for manual payouts."
+                  tone="bg-slate-50 border-slate-100 text-slate-700"
+                />
+              )}
+
+              <div className="flex justify-end border-t border-slate-100 pt-4">
+                <Button type="submit" variant="primary" loading={saving} icon={<Save />}>
+                  Save Changes
+                </Button>
+              </div>
+            </form>
+          </Card>
         </div>
       )}
     </div>
