@@ -646,7 +646,7 @@ model VoucherRedemption {
 model ActivityPromotion {
   id             String   @id @default(uuid())
   activity       String   @db.VarChar(20)
-  labelText      String   @map("label_text") @db.VarChar(6)
+  labelText      String   @map("label_text") @db.VarChar(20)
   labelColour    String   @default("#C84B2F") @map("label_colour") @db.VarChar(10)
   discountType   String   @default("label_only") @map("discount_type") @db.VarChar(20)
   discountValue  Decimal? @map("discount_value") @db.Decimal(10, 2)

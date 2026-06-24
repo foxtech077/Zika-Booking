@@ -630,8 +630,8 @@ export async function voucherRoutes(app: FastifyInstance) {
           required: ["activity", "labelText", "bannerTitle", "validFrom", "validUntil"],
           properties: {
             activity:      { type: "string", enum: ["hotel", "apartment", "car"] },
-            labelText:     { type: "string", minLength: 1, maxLength: 6 },
-            labelColour:   { type: "string", default: "#C84B2F" },
+            labelText:     { type: "string", minLength: 1, maxLength: 20 },
+            labelColour:   { type: "string", maxLength: 10, default: "#C84B2F" },
             discountType:  { type: "string", enum: ["percentage", "fixed", "label_only"], default: "label_only" },
             discountValue: { type: "number", minimum: 0, nullable: true },
             validFrom:     { type: "string" },
@@ -640,7 +640,7 @@ export async function voucherRoutes(app: FastifyInstance) {
             bannerTitle:   { type: "string", maxLength: 100 },
             bannerSubtitle: { type: "string", maxLength: 200, nullable: true },
             status:        { type: "string", enum: ["scheduled", "active"], default: "active" },
-            countryScope:  { type: "string", nullable: true },
+            countryScope:  { type: "string", minLength: 2, maxLength: 2, nullable: true },
           },
         },
         response: {
@@ -773,8 +773,8 @@ export async function voucherRoutes(app: FastifyInstance) {
         body: {
           type: "object",
           properties: {
-            labelText:      { type: "string", minLength: 1, maxLength: 6 },
-            labelColour:    { type: "string" },
+            labelText:      { type: "string", minLength: 1, maxLength: 20 },
+            labelColour:    { type: "string", maxLength: 10 },
             discountType:   { type: "string", enum: ["percentage", "fixed", "label_only"] },
             discountValue:  { type: "number", minimum: 0, nullable: true },
             validFrom:      { type: "string" },
@@ -783,7 +783,7 @@ export async function voucherRoutes(app: FastifyInstance) {
             bannerTitle:    { type: "string", maxLength: 100 },
             bannerSubtitle: { type: "string", maxLength: 200, nullable: true },
             status:         { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"] },
-            countryScope:   { type: "string", nullable: true },
+            countryScope:   { type: "string", minLength: 2, maxLength: 2, nullable: true },
           },
         },
         response: {
