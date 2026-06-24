@@ -175,6 +175,12 @@ export default function AccreditationPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [selectedTask, setSelectedTask] = useState<ListingReviewTask | null>(null);
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
+
+  useEffect(() => {
+    setShowAllPhotos(false);
+  }, [selectedTask?.listing?.id]);
+
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [starRating, setStarRating] = useState("3");
@@ -528,21 +534,50 @@ export default function AccreditationPage() {
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
                   Listing Photos ({detail.photos.length})
                 </p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {detail.photos.map((p: any, i: number) => (
+                {!showAllPhotos ? (
+                  <div className="space-y-2">
                     <button
-                      key={p.id ?? i}
-                      onClick={() => openPhoto(detail.photos, i)}
-                      className="aspect-square bg-slate-100 rounded-lg overflow-hidden group relative focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      title={`View photo ${i + 1}`}
+                      onClick={() => {
+                        setShowAllPhotos(true);
+                        openPhoto(detail.photos, 0);
+                      }}
+                      className="w-full aspect-video bg-slate-100 rounded-xl overflow-hidden group relative border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      title="View gallery"
                     >
-                      <img src={p.cdnUrl} alt={`Photo ${i + 1}`} className="w-full h-full object-cover transition group-hover:scale-105 duration-200" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
-                        <Eye className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                      <img src={detail.photos[0].cdnUrl} alt="Cover Photo" className="w-full h-full object-cover transition group-hover:scale-105 duration-200" />
+                      <div className="absolute inset-0 bg-black/35 group-hover:bg-black/45 transition flex flex-col items-center justify-center gap-1">
+                        <Eye className="h-6 w-6 text-white drop-shadow" />
+                        <span className="text-white text-xs font-semibold drop-shadow">View Image Gallery ({detail.photos.length} photos)</span>
                       </div>
                     </button>
-                  ))}
-                </div>
+                    {detail.photos.length > 1 && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setShowAllPhotos(true)}
+                      >
+                        Load All Photos ({detail.photos.length})
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {detail.photos.map((p: any, i: number) => (
+                      <button
+                        key={p.id ?? i}
+                        onClick={() => openPhoto(detail.photos, i)}
+                        className="aspect-square bg-slate-100 rounded-lg overflow-hidden group relative focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        title={`View photo ${i + 1}`}
+                      >
+                        <img src={p.cdnUrl} alt={`Photo ${i + 1}`} className="w-full h-full object-cover transition group-hover:scale-105 duration-200" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
+                          <Eye className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -588,13 +623,27 @@ export default function AccreditationPage() {
               </span>
             </div>
           )}
-          <Select
-            id="star-rating"
-            label="Verified Star Rating (admin-assigned)"
-            value={starRating}
-            onChange={(e) => setStarRating(e.target.value)}
-            options={[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `${n} Star${n > 1 ? "s" : ""}` }))}
-          />
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+              Verified Star Rating (admin-assigned)
+            </label>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStarRating(String(s))}
+                  className={`flex-1 py-2.5 rounded-xl border text-sm font-semibold transition-all duration-150 ${
+                    starRating === String(s)
+                      ? "bg-primary text-white border-primary shadow-sm shadow-primary/20 scale-[1.02]"
+                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {s}★
+                </button>
+              ))}
+            </div>
+          </div>
           <Textarea
             id="admin-note"
             label="Internal note (optional — logged in audit trail)"
