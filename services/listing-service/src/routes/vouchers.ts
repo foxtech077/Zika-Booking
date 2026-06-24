@@ -218,6 +218,8 @@ export async function voucherRoutes(app: FastifyInstance) {
           properties: {
             totalAmount: { type: "number", minimum: 0, description: "The booking total amount in the listing's currency" },
             currency:    { type: "string", description: "ISO 4217 currency code" },
+            activity:    { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"], description: "Current booking activity context" },
+            guestCountry:{ type: "string", description: "Guest's ISO 3166-1 alpha-2 country code" },
           },
         },
         response: {
@@ -264,7 +266,7 @@ export async function voucherRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const guestId = (req as any).providerId as string;
-        const q = req.query as { totalAmount?: string; currency?: string };
+        const q = req.query as { totalAmount?: string; currency?: string; activity?: string; guestCountry?: string };
       const totalAmount = parseFloat(q.totalAmount ?? "0");
       const now = new Date();
 
@@ -310,6 +312,21 @@ export async function voucherRoutes(app: FastifyInstance) {
         const applicableTiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
         if (applicableTiers.length > 0 && !applicableTiers.includes(guestTier)) {
           // Not eligible for this tier — skip entirely
+          continue;
+        }
+
+        // Activity Scope check
+        if (q.activity && (v as any).activityScope && (v as any).activityScope !== "universal") {
+          const allowed = (v as any).activityScope === "hotels_apartments" 
+            ? ["hotels", "apartments"] 
+            : [(v as any).activityScope];
+          if (!allowed.includes(q.activity)) {
+            continue;
+          }
+        }
+
+        // Country Scope check
+        if ((v as any).countryScope && (v as any).countryScope !== q.guestCountry) {
           continue;
         }
 
@@ -408,6 +425,13 @@ export async function voucherRoutes(app: FastifyInstance) {
         tags: ["Vouchers"],
         summary: "Get the authenticated guest's voucher wallet (auto-assigned vouchers)",
         security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          properties: {
+            activity: { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"], description: "Current booking activity context" },
+            guestCountry: { type: "string", description: "Guest's ISO 3166-1 alpha-2 country code" },
+          },
+        },
         response: {
           200: {
             type: "object",
@@ -449,6 +473,7 @@ export async function voucherRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const guestId = (req as any).providerId as string;
+        const q = req.query as { activity?: string; guestCountry?: string };
         const now = new Date();
 
         // Auto-assigned wallet entries use the bookingId prefix "wallet-"
@@ -475,6 +500,18 @@ export async function voucherRoutes(app: FastifyInstance) {
             status:           (v as any).status ?? "active",
             assignedAt:       a.createdAt.toISOString(),
           };
+        }).filter((item) => {
+          if (q.activity && item.activityScope !== "universal") {
+            const allowed = item.activityScope === "hotels_apartments" 
+              ? ["hotels", "apartments"] 
+              : [item.activityScope];
+            if (!allowed.includes(q.activity)) return false;
+          }
+          if (q.guestCountry) {
+            const vRaw = assignments.find((a) => a.voucher.id === item.voucherId)?.voucher as any;
+            if (vRaw?.countryScope && vRaw.countryScope !== q.guestCountry) return false;
+          }
+          return true;
         });
 
         return sendSuccess(reply, 200, { vouchers });
