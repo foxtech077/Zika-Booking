@@ -627,7 +627,7 @@ export async function adminUserRoutes(app: FastifyInstance) {
     if (targetType) and.push({ targetType: { equals:   targetType, mode: "insensitive" } });
     if (targetId)   and.push({ targetId });
     if (adminId)    and.push({ adminId });
-    if (role)       and.push({ role:       { equals:   role, mode: "insensitive" } });
+    if (role)       and.push({ role:       { equals:   role.toLowerCase() } });
     if (from || to) {
       const tsFilter: any = {};
       if (from) tsFilter.gte = new Date(from);
@@ -635,16 +635,22 @@ export async function adminUserRoutes(app: FastifyInstance) {
       and.push({ timestamp: tsFilter });
     }
     if (q) {
-      and.push({
-        OR: [
-          { action: { contains: q, mode: "insensitive" } },
-          { targetType: { contains: q, mode: "insensitive" } },
-          { targetId: { contains: q, mode: "insensitive" } },
-          { ipAddress: { contains: q, mode: "insensitive" } },
-          { role: { contains: q, mode: "insensitive" } },
-          { admin: { name: { contains: q, mode: "insensitive" } } },
-        ],
-      });
+      const rolesList = ["super_admin", "admin", "country_manager", "sales", "support", "finance"];
+      const matchingRoles = rolesList.filter((r) => r.includes(q.toLowerCase()));
+
+      const orConditions: any[] = [
+        { action: { contains: q, mode: "insensitive" } },
+        { targetType: { contains: q, mode: "insensitive" } },
+        { targetId: { contains: q, mode: "insensitive" } },
+        { ipAddress: { contains: q, mode: "insensitive" } },
+        { admin: { name: { contains: q, mode: "insensitive" } } },
+      ];
+
+      if (matchingRoles.length > 0) {
+        orConditions.push({ role: { in: matchingRoles } });
+      }
+
+      and.push({ OR: orConditions });
     }
     if (and.length > 0) where.AND = and;
 

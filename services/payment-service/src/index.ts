@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
@@ -71,15 +71,21 @@ async function build() {
 
   // ── CORS ──────────────────────────────────────────────────────────────────
   const isDev = process.env["NODE_ENV"] !== "production";
+  const LOCALHOST_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3002",
+    "http://localhost:3005",
+  ];
   await app.register(cors, {
     origin: isDev
       ? true
       : [
-          process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
-          process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
-          "https://kainook.com",
-        ],
+        process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+        process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+        process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
+        "https://kainook.com",
+        ...LOCALHOST_ORIGINS,
+      ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
   });
@@ -107,14 +113,6 @@ async function build() {
   // ── Health check ──────────────────────────────────────────────────────────
   app.get("/health", async () => ({ status: "ok", service: "payment-service", timestamp: new Date().toISOString() }));
 
-  // ── Route plugins ─────────────────────────────────────────────────────────
-  await app.register(paymentRoutes,);
-  await app.register(webhookRoutes,);
-  await app.register(paymentMethodRoutes,);
-  await app.register(adminPaymentRoutes,);
-  await app.register(merchantRoutes,);
-  await app.register(payoutRoutes,);
-
   // ── Global error handler ──────────────────────────────────────────────────
   app.setErrorHandler((error: any, _req, reply) => {
     app.log.error(error);
@@ -127,6 +125,14 @@ async function build() {
       },
     });
   });
+
+  // ── Route plugins ─────────────────────────────────────────────────────────
+  await app.register(paymentRoutes,);
+  await app.register(webhookRoutes,);
+  await app.register(paymentMethodRoutes,);
+  await app.register(adminPaymentRoutes,);
+  await app.register(merchantRoutes,);
+  await app.register(payoutRoutes,);
 
   return app;
 }

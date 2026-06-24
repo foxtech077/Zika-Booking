@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 
 interface HeaderProps {
@@ -10,46 +10,135 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ user, activeTab, setActiveTab, onLogout }) => {
+  const [scrolled, setScrolled] = useState(false);
+  const isHero = activeTab === "home";
+
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 60);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const transparent = isHero && !scrolled;
+
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-6 py-4 flex items-center justify-between shadow-sm">
-      <Link href="/traveller" className="text-2xl font-bold text-[#0B1E3F] tracking-tight font-serif flex items-center gap-2">
-        <span className="bg-[#0B1E3F] text-white px-2.5 py-1 rounded-xl">Kainook </span>
+    <header
+      className={`sticky top-0 z-40 px-8 py-4 flex items-center justify-between transition-all duration-300 ${
+        transparent
+          ? "bg-transparent"
+          : "bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm"
+      }`}
+    >
+      <Link href="/traveller" className="flex items-center">
+        <span
+          className={`text-xl font-serif font-bold tracking-tight transition-colors duration-300 ${
+            transparent ? "text-white" : "text-[#0c2614]"
+          }`}
+        >
+          Kainook
+        </span>
       </Link>
 
-      <nav className="hidden md:flex items-center gap-6">
-        {["home", "search", "bookings"].map((tab) => (
+      <nav className="hidden md:flex items-center gap-8">
+        <button
+          onClick={() => setActiveTab("home")}
+          className={`text-sm font-medium tracking-wide transition-colors ${
+            activeTab === "home"
+              ? transparent ? "text-white font-semibold" : "text-[#0c2614] font-semibold"
+              : transparent ? "text-white/70 hover:text-white" : "text-slate-500 hover:text-[#0c2614]"
+          }`}
+        >
+          Destinations
+        </button>
+        <button
+          onClick={() => setActiveTab("search")}
+          className={`text-sm font-medium tracking-wide transition-colors ${
+            activeTab === "search"
+              ? transparent ? "text-white font-semibold" : "text-[#0c2614] font-semibold"
+              : transparent ? "text-white/70 hover:text-white" : "text-slate-500 hover:text-[#0c2614]"
+          }`}
+        >
+          Hotels
+        </button>
+        <button
+          className={`text-sm font-medium tracking-wide transition-colors ${
+            transparent ? "text-white/70 hover:text-white" : "text-slate-500 hover:text-[#0c2614]"
+          }`}
+        >
+          Villas
+        </button>
+        <button
+          className={`text-sm font-medium tracking-wide transition-colors ${
+            transparent ? "text-white/70 hover:text-white" : "text-slate-500 hover:text-[#0c2614]"
+          }`}
+        >
+          Car Rentals
+        </button>
+        {user && (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`text-sm font-semibold capitalize transition hover:text-[#0B1E3F] ${
-              activeTab === tab ? "text-[#0B1E3F] border-b-2 border-[#0B1E3F] pb-1" : "text-slate-500"
+            onClick={() => setActiveTab("bookings")}
+            className={`text-sm font-medium tracking-wide transition-colors ${
+              activeTab === "bookings"
+                ? transparent ? "text-white font-semibold" : "text-[#0c2614] font-semibold"
+                : transparent ? "text-white/70 hover:text-white" : "text-slate-500 hover:text-[#0c2614]"
             }`}
           >
-            {tab === "bookings" ? "My Bookings" : tab}
+            My Reservations
           </button>
-        ))}
+        )}
       </nav>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         {user ? (
           <>
-            <span className="text-sm font-semibold text-slate-700 hidden sm:block">
-              {user.firstName} {user.lastName}
-            </span>
+            <div
+              className={`flex items-center gap-2 rounded-full py-1.5 px-3 transition-all ${
+                transparent
+                  ? "bg-white/10 border border-white/25"
+                  : "bg-slate-50 border border-slate-200 shadow-sm"
+              }`}
+            >
+              <div className="w-6 h-6 rounded-full bg-[#0c2614] text-white flex items-center justify-center font-bold uppercase text-[10px]">
+                {user.firstName[0]}
+              </div>
+              <span
+                className={`hidden sm:block text-xs font-semibold transition-colors ${
+                  transparent ? "text-white" : "text-slate-700"
+                }`}
+              >
+                {user.firstName}
+              </span>
+            </div>
             <button
               onClick={onLogout}
-              className="rounded-full bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600 transition"
+              className={`text-xs font-medium transition-colors ${
+                transparent ? "text-white/50 hover:text-white" : "text-slate-400 hover:text-red-500"
+              }`}
             >
               Logout
             </button>
           </>
         ) : (
-          <Link
-            href="/auth/login"
-            className="rounded-full bg-[#0B1E3F] px-4 py-2 text-sm font-semibold text-white hover:bg-[#07152B] transition"
-          >
-            Login
-          </Link>
+          <>
+            <Link
+              href="/auth/login"
+              className={`hidden sm:block text-sm font-medium transition-colors ${
+                transparent ? "text-white/80 hover:text-white" : "text-slate-500 hover:text-[#0c2614]"
+              }`}
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/auth/login"
+              className={`rounded-full px-5 py-2 text-sm font-semibold transition-all shadow-sm ${
+                transparent
+                  ? "border border-white/40 text-white bg-white/10 hover:bg-white/20 backdrop-blur-sm"
+                  : "bg-[#0c2614] hover:bg-[#081b0d] text-white"
+              }`}
+            >
+              Sign Up
+            </Link>
+          </>
         )}
       </div>
     </header>

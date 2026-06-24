@@ -18,7 +18,8 @@ ALTER TABLE listing.vouchers
   ADD COLUMN IF NOT EXISTS "status"                VARCHAR(20)  NOT NULL DEFAULT 'active',
   ADD COLUMN IF NOT EXISTS "applicable_tiers"      TEXT[]       NOT NULL DEFAULT ARRAY[]::TEXT[],
   ADD COLUMN IF NOT EXISTS "country_scope"         CHAR(2),
-  ADD COLUMN IF NOT EXISTS "auto_assign"           BOOLEAN      NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS "auto_assign"           BOOLEAN      NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "min_points_redemption" INTEGER;
 
 -- Sync status with isActive for any pre-existing vouchers
 UPDATE listing.vouchers
