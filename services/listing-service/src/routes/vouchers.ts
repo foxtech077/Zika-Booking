@@ -639,7 +639,7 @@ export async function voucherRoutes(app: FastifyInstance) {
             applyToBooking: { type: "boolean", default: false },
             bannerTitle:   { type: "string", maxLength: 100 },
             bannerSubtitle: { type: "string", maxLength: 200, nullable: true },
-            status:        { type: "string", enum: ["scheduled", "active"], default: "active" },
+            status:        { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"], default: "active" },
             countryScope:  { type: "string", minLength: 2, maxLength: 2, nullable: true },
           },
         },
@@ -668,11 +668,15 @@ export async function voucherRoutes(app: FastifyInstance) {
         if ((body.discountType === "percentage" || body.discountType === "fixed") && !body.discountValue)
           return sendError(reply, 400, "VALIDATION_ERROR", "discountValue is required when discountType is percentage or fixed.");
 
-        // Supersede any existing active or scheduled promotion for this activity
-        await (prisma as any).activityPromotion.updateMany({
-          where: { activity: body.activity, status: { in: ["active", "scheduled"] } },
-          data:  { status: "superseded" },
-        });
+        const status = body.status ?? "active";
+
+        // Supersede any existing active or scheduled promotion for this activity if activating/scheduling
+        if (status === "active" || status === "scheduled") {
+          await (prisma as any).activityPromotion.updateMany({
+            where: { activity: body.activity, status: { in: ["active", "scheduled"] } },
+            data:  { status: "superseded" },
+          });
+        }
 
         const promo = await (prisma as any).activityPromotion.create({
           data: {
@@ -686,7 +690,7 @@ export async function voucherRoutes(app: FastifyInstance) {
             applyToBooking: body.applyToBooking ?? false,
             bannerTitle:    body.bannerTitle,
             bannerSubtitle: body.bannerSubtitle ?? null,
-            status:         body.status ?? "active",
+            status,
             countryScope:   body.countryScope ?? null,
           },
         });
