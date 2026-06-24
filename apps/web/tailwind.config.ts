@@ -10,6 +10,7 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-poppins)", "Inter", "system-ui", "-apple-system", "sans-serif"],
+        serif: ["Cormorant Garamond", "Georgia", "serif"],
       },
       colors: {
         primary: {
@@ -37,6 +38,12 @@ const config: Config = {
           gold:        "#F4A41A",
           teal:        "#0E9F9F",
           orange:      "#FF6B35",
+        },
+        brand: {
+          darkest: "#0c2614",
+          dark:    "#081b0d",
+          DEFAULT: "#1D8D2B",
+          light:   "#58B430",
         },
         surface: {
           DEFAULT: "#ffffff",
