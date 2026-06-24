@@ -176,13 +176,6 @@ async function build() {
     }
   });
 
-  // Register route modules
-  await app.register(authRoutes);
-  await app.register(adminAuthRoutes);
-  await app.register(adminUserRoutes);
-  await app.register(adminOperatorRoutes);
-  await app.register(adminDashboardRoutes);
-
   // Global error handler
   app.setErrorHandler((error, _req, reply) => {
     app.log.error(error);
@@ -197,6 +190,13 @@ async function build() {
       },
     });
   });
+
+  // Register route modules
+  await app.register(authRoutes);
+  await app.register(adminAuthRoutes);
+  await app.register(adminUserRoutes);
+  await app.register(adminOperatorRoutes);
+  await app.register(adminDashboardRoutes);
 
   return app;
 }
