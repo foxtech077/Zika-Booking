@@ -217,6 +217,29 @@ export async function bookingRoutes(app: FastifyInstance) {
     return true;
   }
 
+  const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
+
+  async function notifyPayoutCancellation(bookingId: string) {
+    if (!PAYMENT_SERVICE_URL) return;
+    try {
+      const res = await fetch(`${PAYMENT_SERVICE_URL}/payments/internal/bookings/${bookingId}/cancel-payout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-service-key": INTERNAL_SERVICE_KEY,
+        },
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        app.log.error(`[payout-cancel] Failed to cancel payout for booking ${bookingId}: status ${res.status}. Response: ${txt}`);
+      } else {
+        app.log.info(`[payout-cancel] Payout cancelled successfully via API for booking ${bookingId}`);
+      }
+    } catch (err: any) {
+      app.log.error(`[payout-cancel] Network error calling payout cancellation for booking ${bookingId}: ${err.message}`);
+    }
+  }
+
   app.get("/booking/quote", {
     preHandler: [ipDetect], schema: {
       tags: ["Booking"],
@@ -301,7 +324,16 @@ export async function bookingRoutes(app: FastifyInstance) {
     try {
       const booking = await prisma.booking.findUnique({
         where: { id: req.params.id },
-        include: { listing: true },
+        select: {
+          id: true,
+          status: true,
+          totalAmount: true,
+          currency: true,
+          reference: true,
+          guestEmail: true,
+          guestFirstName: true,
+          guestPhone: true,
+        },
       });
 
       if (!booking) {
@@ -1567,6 +1599,11 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         });
 
+        // Trigger payout cancellation on payment-service
+        notifyPayoutCancellation(id).catch((err) => {
+          app.log.error({ err }, "Background payout cancellation notification failed");
+        });
+
         await prisma.bookingStatusLog.create({
           data: {
             bookingId: id,
@@ -1717,6 +1754,11 @@ export async function bookingRoutes(app: FastifyInstance) {
             cancellationReason: reasonText ?? reasonCode,
             refundAmount: booking.totalAmount, // always full refund
           },
+        });
+
+        // Trigger payout cancellation on payment-service
+        notifyPayoutCancellation(id).catch((err) => {
+          app.log.error({ err }, "Background payout cancellation notification failed");
         });
 
         await prisma.bookingStatusLog.create({
