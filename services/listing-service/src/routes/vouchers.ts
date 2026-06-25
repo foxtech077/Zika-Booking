@@ -35,26 +35,26 @@ const errSchema = {
 const voucherItemSchema = {
   type: "object",
   properties: {
-    id:            { type: "string" },
-    code:          { type: "string" },
-    title:         { type: "string" },
-    description:   { type: "string", maxLength: 120 },
+    id: { type: "string" },
+    code: { type: "string" },
+    title: { type: "string" },
+    description: { type: "string", maxLength: 120 },
     activityScope: { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"] },
-    discountType:  { type: "string", enum: ["percentage", "fixed"] },
+    discountType: { type: "string", enum: ["percentage", "fixed"] },
     discountValue: { type: "number" },
     minOrderValue: { type: "number", nullable: true },
-    maxDiscount:   { type: "number", nullable: true },
-    usageLimit:    { type: "integer", nullable: true },
+    maxDiscount: { type: "number", nullable: true },
+    usageLimit: { type: "integer", nullable: true },
     usageLimitPerGuest: { type: "integer", default: 1 },
-    usageCount:    { type: "integer" },
-    validFrom:     { type: "string" },
-    validUntil:    { type: "string" },
-    status:        { type: "string", enum: ["active", "paused", "expired", "exhausted"] },
+    usageCount: { type: "integer" },
+    validFrom: { type: "string" },
+    validUntil: { type: "string" },
+    status: { type: "string", enum: ["active", "paused", "expired", "exhausted"] },
     applicableTiers: { type: "array", items: { type: "string" } },
-    countryScope:  { type: "string", nullable: true },
-    autoAssign:    { type: "boolean" },
-    isActive:      { type: "boolean" },
-    createdAt:     { type: "string" },
+    countryScope: { type: "string", nullable: true },
+    autoAssign: { type: "boolean" },
+    isActive: { type: "boolean" },
+    createdAt: { type: "string" },
   },
   required: ["id", "code", "discountType", "discountValue", "usageCount", "validFrom", "validUntil", "isActive", "createdAt"],
 };
@@ -73,13 +73,13 @@ export async function voucherRoutes(app: FastifyInstance) {
           type: "object",
           required: ["code", "totalAmount", "activity", "guestId"],
           properties: {
-            code:        { type: "string" },
+            code: { type: "string" },
             totalAmount: { type: "number", minimum: 0 },
-            currency:    { type: "string", minLength: 3, maxLength: 3 },
-            activity:    { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"] },
-            guestId:     { type: "string" },
-            guestTier:   { type: "string", enum: ["Bronze", "Silver", "Gold", "Diamond"], nullable: true },
-            guestCountry:{ type: "string", nullable: true },
+            currency: { type: "string", minLength: 3, maxLength: 3 },
+            activity: { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"] },
+            guestId: { type: "string" },
+            guestTier: { type: "string", enum: ["Bronze", "Silver", "Gold", "Diamond"], nullable: true },
+            guestCountry: { type: "string", nullable: true },
           },
         },
         response: {
@@ -90,19 +90,19 @@ export async function voucherRoutes(app: FastifyInstance) {
               data: {
                 type: "object",
                 properties: {
-                  valid:          { type: "boolean" },
+                  valid: { type: "boolean" },
                   discountAmount: { type: "number" },
                   voucherDiscount: { type: "number" },
-                  message:        { type: "string" },
+                  message: { type: "string" },
                   voucher: {
                     type: "object",
                     nullable: true,
                     properties: {
-                      code:          { type: "string" },
-                      discountType:  { type: "string", enum: ["percentage", "fixed"] },
+                      code: { type: "string" },
+                      discountType: { type: "string", enum: ["percentage", "fixed"] },
                       discountValue: { type: "number" },
-                      maxDiscount:   { type: "number", nullable: true },
-                      validUntil:    { type: "string" },
+                      maxDiscount: { type: "number", nullable: true },
+                      validUntil: { type: "string" },
                     },
                     required: ["code", "discountType", "discountValue", "maxDiscount", "validUntil"],
                   },
@@ -121,79 +121,79 @@ export async function voucherRoutes(app: FastifyInstance) {
       try {
         const body = req.body as { code: string; totalAmount: number; currency?: string; activity: string; guestId: string; guestTier?: string; guestCountry?: string };
 
-      const now = new Date();
-      // @ts-ignore - Assuming prisma schema is updated
-      const voucher = await prisma.voucher.findUnique({ where: { code: body.code } });
+        const now = new Date();
+        // @ts-ignore - Assuming prisma schema is updated
+        const voucher = await prisma.voucher.findUnique({ where: { code: body.code } });
 
-      if (!voucher)
-        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher code not found.", voucher: null });
-      
-      // Replaced isActive with status check based on PRD (falling back to isActive if status isn't there yet)
-      if ((voucher as any).status === "paused" || (voucher as any).status === "expired" || (voucher as any).status === "exhausted" || (!voucher.isActive && !(voucher as any).status))
-        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not active.", voucher: null });
-      
-      // Activity Scope check
-      if ((voucher as any).activityScope && (voucher as any).activityScope !== "universal") {
-        const allowed = (voucher as any).activityScope === "hotels_apartments" 
-          ? ["hotels", "apartments"] 
-          : [(voucher as any).activityScope];
-        if (!allowed.includes(body.activity))
-          return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not applicable for this activity.", voucher: null });
-      }
+        if (!voucher)
+          return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher code not found.", voucher: null });
 
-      // Country Scope check
-      if ((voucher as any).countryScope && (voucher as any).countryScope !== body.guestCountry)
-        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not applicable in your country.", voucher: null });
+        // Replaced isActive with status check based on PRD (falling back to isActive if status isn't there yet)
+        if ((voucher as any).status === "paused" || (voucher as any).status === "expired" || (voucher as any).status === "exhausted" || (!voucher.isActive && !(voucher as any).status))
+          return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not active.", voucher: null });
 
-      // Tier check
-      const tiers = (voucher as any).applicableTiers || [];
-      const normalizedTiers = tiers.map((t: string) => t.toLowerCase());
-      const guestTierLower = body.guestTier?.toLowerCase();
-      if (normalizedTiers.length > 0 && (!guestTierLower || !normalizedTiers.includes(guestTierLower)))
-        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not applicable for your loyalty tier.", voucher: null });
+        // Activity Scope check
+        if ((voucher as any).activityScope && (voucher as any).activityScope !== "universal") {
+          const allowed = (voucher as any).activityScope === "hotels_apartments"
+            ? ["hotels", "apartments"]
+            : [(voucher as any).activityScope];
+          if (!allowed.includes(body.activity))
+            return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not applicable for this activity.", voucher: null });
+        }
 
-      if (now < voucher.validFrom || now > voucher.validUntil)
-        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher has expired or is not yet valid.", voucher: null });
-      if (voucher.usageLimit !== null && voucher.usageCount >= voucher.usageLimit)
-        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher usage limit has been reached.", voucher: null });
-        
-      const guestUsageCount = await prisma.voucherRedemption.count({ where: { voucherId: voucher.id, guestId: body.guestId } });
-      if (guestUsageCount >= ((voucher as any).usageLimitPerGuest || 1)) 
-        return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Your per-guest usage limit has been reached.", voucher: null });
+        // Country Scope check
+        if ((voucher as any).countryScope && (voucher as any).countryScope !== body.guestCountry)
+          return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not applicable in your country.", voucher: null });
 
-      if (voucher.minOrderValue !== null && body.totalAmount < Number(voucher.minOrderValue))
+        // Tier check
+        const tiers = (voucher as any).applicableTiers || [];
+        const normalizedTiers = tiers.map((t: string) => t.toLowerCase());
+        const guestTierLower = body.guestTier?.toLowerCase();
+        if (normalizedTiers.length > 0 && (!guestTierLower || !normalizedTiers.includes(guestTierLower)))
+          return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher is not applicable for your loyalty tier.", voucher: null });
+
+        if (now < voucher.validFrom || now > voucher.validUntil)
+          return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher has expired or is not yet valid.", voucher: null });
+        if (voucher.usageLimit !== null && voucher.usageCount >= voucher.usageLimit)
+          return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Voucher usage limit has been reached.", voucher: null });
+
+        const guestUsageCount = await prisma.voucherRedemption.count({ where: { voucherId: voucher.id, guestId: body.guestId } });
+        if (guestUsageCount >= ((voucher as any).usageLimitPerGuest || 1))
+          return sendSuccess(reply, 200, { valid: false, discountAmount: 0, voucherDiscount: 0, message: "Your per-guest usage limit has been reached.", voucher: null });
+
+        if (voucher.minOrderValue !== null && body.totalAmount < Number(voucher.minOrderValue))
+          return sendSuccess(reply, 200, {
+            valid: false,
+            discountAmount: 0,
+            voucherDiscount: 0,
+            message: `Minimum order value of ${Number(voucher.minOrderValue)} required to use this voucher.`,
+            voucher: null,
+          });
+
+        let discountAmount: number;
+        if (voucher.discountType === "percentage") {
+          discountAmount = body.totalAmount * (Number(voucher.discountValue) / 100);
+        } else {
+          discountAmount = Number(voucher.discountValue);
+        }
+        if (voucher.maxDiscount !== null && discountAmount > Number(voucher.maxDiscount)) {
+          discountAmount = Number(voucher.maxDiscount);
+        }
+        discountAmount = Math.min(discountAmount, body.totalAmount);
+
         return sendSuccess(reply, 200, {
-          valid: false,
-          discountAmount: 0,
-          voucherDiscount: 0,
-          message: `Minimum order value of ${Number(voucher.minOrderValue)} required to use this voucher.`,
-          voucher: null,
+          valid: true,
+          discountAmount,
+          voucherDiscount: discountAmount,
+          message: "Voucher is valid.",
+          voucher: {
+            code: voucher.code,
+            discountType: voucher.discountType,
+            discountValue: Number(voucher.discountValue),
+            maxDiscount: voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
+            validUntil: voucher.validUntil.toISOString(),
+          },
         });
-
-      let discountAmount: number;
-      if (voucher.discountType === "percentage") {
-        discountAmount = body.totalAmount * (Number(voucher.discountValue) / 100);
-      } else {
-        discountAmount = Number(voucher.discountValue);
-      }
-      if (voucher.maxDiscount !== null && discountAmount > Number(voucher.maxDiscount)) {
-        discountAmount = Number(voucher.maxDiscount);
-      }
-      discountAmount = Math.min(discountAmount, body.totalAmount);
-
-      return sendSuccess(reply, 200, {
-        valid: true,
-        discountAmount,
-        voucherDiscount: discountAmount,
-        message: "Voucher is valid.",
-        voucher: {
-          code:          voucher.code,
-          discountType:  voucher.discountType,
-          discountValue: Number(voucher.discountValue),
-          maxDiscount:   voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
-          validUntil:    voucher.validUntil.toISOString(),
-        },
-      });
       } catch (err) {
         req.log.error({ err }, "Failed to validate voucher");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while validating the voucher.");
@@ -217,7 +217,7 @@ export async function voucherRoutes(app: FastifyInstance) {
           required: ["totalAmount"],
           properties: {
             totalAmount: { type: "number", minimum: 0, description: "The booking total amount in the listing's currency" },
-            currency:    { type: "string", description: "ISO 4217 currency code" },
+            currency: { type: "string", description: "ISO 4217 currency code" },
           },
         },
         response: {
@@ -235,19 +235,19 @@ export async function voucherRoutes(app: FastifyInstance) {
                     items: {
                       type: "object",
                       properties: {
-                        code:             { type: "string" },
-                        title:            { type: "string" },
-                        description:      { type: "string", nullable: true },
-                        activityScope:    { type: "string" },
-                        discountType:     { type: "string", enum: ["percentage", "fixed"] },
-                        discountValue:    { type: "number" },
-                        maxDiscount:      { type: "number", nullable: true },
-                        minOrderValue:    { type: "number", nullable: true },
+                        code: { type: "string" },
+                        title: { type: "string" },
+                        description: { type: "string", nullable: true },
+                        activityScope: { type: "string" },
+                        discountType: { type: "string", enum: ["percentage", "fixed"] },
+                        discountValue: { type: "number" },
+                        maxDiscount: { type: "number", nullable: true },
+                        minOrderValue: { type: "number", nullable: true },
                         computedDiscount: { type: "number" },
-                        validUntil:       { type: "string" },
+                        validUntil: { type: "string" },
                         hoursUntilExpiry: { type: "number" },
-                        applicable:       { type: "boolean" },
-                        reason:           { type: "string", nullable: true },
+                        applicable: { type: "boolean" },
+                        reason: { type: "string", nullable: true },
                       },
                       required: ["code", "discountType", "discountValue", "computedDiscount", "validUntil", "applicable"],
                     },
@@ -265,134 +265,134 @@ export async function voucherRoutes(app: FastifyInstance) {
       try {
         const guestId = (req as any).providerId as string;
         const q = req.query as { totalAmount?: string; currency?: string };
-      const totalAmount = parseFloat(q.totalAmount ?? "0");
-      const now = new Date();
+        const totalAmount = parseFloat(q.totalAmount ?? "0");
+        const now = new Date();
 
-      // Fetch the guest's current loyalty tier from auth.User
-      let guestTier = "bronze";
-      try {
-        const userRes = await prisma.$queryRawUnsafe<{ currentTier: string }[]>(
-          `SELECT "currentTier" FROM auth."User" WHERE id = $1`,
-          guestId
-        );
-        if (userRes[0]) guestTier = userRes[0].currentTier.toLowerCase();
-      } catch {
-        // fallback to bronze if query fails
-      }
+        // Fetch the guest's current loyalty tier from auth.User
+        let guestTier = "bronze";
+        try {
+          const userRes = await prisma.$queryRawUnsafe<{ currentTier: string }[]>(
+            `SELECT "currentTier" FROM auth."User" WHERE id = $1`,
+            guestId
+          );
+          if (userRes[0]) guestTier = userRes[0].currentTier.toLowerCase();
+        } catch {
+          // fallback to bronze if query fails
+        }
 
-      const vouchers = await prisma.voucher.findMany({
-        where: {
-          isActive: true,
-          validFrom:  { lte: now },
-          validUntil: { gte: now },
-        },
-        orderBy: { discountValue: "desc" },
-        take: 50,
-      });
+        const vouchers = await prisma.voucher.findMany({
+          where: {
+            isActive: true,
+            validFrom: { lte: now },
+            validUntil: { gte: now },
+          },
+          orderBy: { discountValue: "desc" },
+          take: 50,
+        });
 
-      // Fetch per-guest redemption counts for all vouchers in one query
-      const voucherIds = vouchers.map((v) => v.id);
-      const redemptionCounts = voucherIds.length > 0
-        ? await prisma.voucherRedemption.groupBy({
+        // Fetch per-guest redemption counts for all vouchers in one query
+        const voucherIds = vouchers.map((v) => v.id);
+        const redemptionCounts = voucherIds.length > 0
+          ? await prisma.voucherRedemption.groupBy({
             by: ["voucherId"],
             where: { voucherId: { in: voucherIds }, guestId },
             _count: { voucherId: true },
           })
-        : [];
-      const guestRedemptionMap = new Map<string, number>();
-      for (const r of redemptionCounts) {
-        guestRedemptionMap.set(r.voucherId, r._count.voucherId);
-      }
-
-      const result: any[] = [];
-      for (const v of vouchers) {
-        // Tier eligibility: empty applicableTiers = universal (all tiers)
-        const applicableTiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
-        if (applicableTiers.length > 0 && !applicableTiers.includes(guestTier)) {
-          // Not eligible for this tier — skip entirely
-          continue;
+          : [];
+        const guestRedemptionMap = new Map<string, number>();
+        for (const r of redemptionCounts) {
+          guestRedemptionMap.set(r.voucherId, r._count.voucherId);
         }
 
-        // Global usage limit
-        if (v.usageLimit !== null && v.usageCount >= v.usageLimit) {
+        const result: any[] = [];
+        for (const v of vouchers) {
+          // Tier eligibility: empty applicableTiers = universal (all tiers)
+          const applicableTiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
+          if (applicableTiers.length > 0 && !applicableTiers.includes(guestTier)) {
+            // Not eligible for this tier — skip entirely
+            continue;
+          }
+
+          // Global usage limit
+          if (v.usageLimit !== null && v.usageCount >= v.usageLimit) {
+            result.push({
+              code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
+              activityScope: (v as any).activityScope ?? "universal",
+              discountType: v.discountType, discountValue: Number(v.discountValue),
+              maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
+              minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
+              computedDiscount: 0, validUntil: v.validUntil.toISOString(),
+              hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
+              applicable: false, reason: "Voucher usage limit has been reached.",
+            });
+            continue;
+          }
+
+          // Per-guest usage limit
+          const guestUsageCount = guestRedemptionMap.get(v.id) ?? 0;
+          const perGuestLimit = (v as any).usageLimitPerGuest ?? 1;
+          if (guestUsageCount >= perGuestLimit) {
+            result.push({
+              code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
+              activityScope: (v as any).activityScope ?? "universal",
+              discountType: v.discountType, discountValue: Number(v.discountValue),
+              maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
+              minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
+              computedDiscount: 0, validUntil: v.validUntil.toISOString(),
+              hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
+              applicable: false, reason: "Your per-guest usage limit for this voucher has been reached.",
+            });
+            continue;
+          }
+
+          // Below minimum order value
+          if (v.minOrderValue !== null && totalAmount < Number(v.minOrderValue)) {
+            result.push({
+              code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
+              activityScope: (v as any).activityScope ?? "universal",
+              discountType: v.discountType, discountValue: Number(v.discountValue),
+              maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
+              minOrderValue: Number(v.minOrderValue),
+              computedDiscount: 0, validUntil: v.validUntil.toISOString(),
+              hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
+              applicable: false, reason: `Minimum order value of ${Number(v.minOrderValue)} required.`,
+            });
+            continue;
+          }
+
+          let computedDiscount: number;
+          if (v.discountType === "percentage") {
+            computedDiscount = totalAmount * (Number(v.discountValue) / 100);
+          } else {
+            computedDiscount = Number(v.discountValue);
+          }
+          if (v.maxDiscount !== null && computedDiscount > Number(v.maxDiscount)) {
+            computedDiscount = Number(v.maxDiscount);
+          }
+          computedDiscount = Math.min(computedDiscount, totalAmount);
+
+          const hoursUntilExpiry = Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000);
           result.push({
             code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
             activityScope: (v as any).activityScope ?? "universal",
             discountType: v.discountType, discountValue: Number(v.discountValue),
             maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
             minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
-            computedDiscount: 0, validUntil: v.validUntil.toISOString(),
-            hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
-            applicable: false, reason: "Voucher usage limit has been reached.",
+            computedDiscount, validUntil: v.validUntil.toISOString(),
+            hoursUntilExpiry, applicable: true, reason: null,
           });
-          continue;
         }
 
-        // Per-guest usage limit
-        const guestUsageCount = guestRedemptionMap.get(v.id) ?? 0;
-        const perGuestLimit = (v as any).usageLimitPerGuest ?? 1;
-        if (guestUsageCount >= perGuestLimit) {
-          result.push({
-            code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
-            activityScope: (v as any).activityScope ?? "universal",
-            discountType: v.discountType, discountValue: Number(v.discountValue),
-            maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
-            minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
-            computedDiscount: 0, validUntil: v.validUntil.toISOString(),
-            hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
-            applicable: false, reason: "Your per-guest usage limit for this voucher has been reached.",
-          });
-          continue;
-        }
+        // Compute banner state: pick best applicable voucher
+        const applicable = result.filter((v) => v.applicable);
+        const bestVoucher = applicable.length > 0
+          ? applicable.reduce((a, b) => b.computedDiscount > a.computedDiscount ? b : a)
+          : null;
+        const bannerState = bestVoucher === null ? "none"
+          : bestVoucher.hoursUntilExpiry <= 48 ? "expiring_soon"
+            : "active";
 
-        // Below minimum order value
-        if (v.minOrderValue !== null && totalAmount < Number(v.minOrderValue)) {
-          result.push({
-            code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
-            activityScope: (v as any).activityScope ?? "universal",
-            discountType: v.discountType, discountValue: Number(v.discountValue),
-            maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
-            minOrderValue: Number(v.minOrderValue),
-            computedDiscount: 0, validUntil: v.validUntil.toISOString(),
-            hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
-            applicable: false, reason: `Minimum order value of ${Number(v.minOrderValue)} required.`,
-          });
-          continue;
-        }
-
-        let computedDiscount: number;
-        if (v.discountType === "percentage") {
-          computedDiscount = totalAmount * (Number(v.discountValue) / 100);
-        } else {
-          computedDiscount = Number(v.discountValue);
-        }
-        if (v.maxDiscount !== null && computedDiscount > Number(v.maxDiscount)) {
-          computedDiscount = Number(v.maxDiscount);
-        }
-        computedDiscount = Math.min(computedDiscount, totalAmount);
-
-        const hoursUntilExpiry = Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000);
-        result.push({
-          code: v.code, title: (v as any).title ?? "", description: (v as any).description ?? null,
-          activityScope: (v as any).activityScope ?? "universal",
-          discountType: v.discountType, discountValue: Number(v.discountValue),
-          maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
-          minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
-          computedDiscount, validUntil: v.validUntil.toISOString(),
-          hoursUntilExpiry, applicable: true, reason: null,
-        });
-      }
-
-      // Compute banner state: pick best applicable voucher
-      const applicable = result.filter((v) => v.applicable);
-      const bestVoucher = applicable.length > 0
-        ? applicable.reduce((a, b) => b.computedDiscount > a.computedDiscount ? b : a)
-        : null;
-      const bannerState = bestVoucher === null ? "none"
-        : bestVoucher.hoursUntilExpiry <= 48 ? "expiring_soon"
-        : "active";
-
-      return sendSuccess(reply, 200, { bannerState, bestVoucher, vouchers: result });
+        return sendSuccess(reply, 200, { bannerState, bestVoucher, vouchers: result });
       } catch (err) {
         req.log.error({ err }, "Failed to fetch applicable vouchers");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching applicable vouchers.");
@@ -421,19 +421,19 @@ export async function voucherRoutes(app: FastifyInstance) {
                     items: {
                       type: "object",
                       properties: {
-                        voucherId:        { type: "string" },
-                        code:             { type: "string" },
-                        title:            { type: "string" },
-                        description:      { type: "string", nullable: true },
-                        activityScope:    { type: "string" },
-                        discountType:     { type: "string" },
-                        discountValue:    { type: "number" },
-                        maxDiscount:      { type: "number", nullable: true },
-                        minOrderValue:    { type: "number", nullable: true },
-                        validUntil:       { type: "string" },
+                        voucherId: { type: "string" },
+                        code: { type: "string" },
+                        title: { type: "string" },
+                        description: { type: "string", nullable: true },
+                        activityScope: { type: "string" },
+                        discountType: { type: "string" },
+                        discountValue: { type: "number" },
+                        maxDiscount: { type: "number", nullable: true },
+                        minOrderValue: { type: "number", nullable: true },
+                        validUntil: { type: "string" },
                         hoursUntilExpiry: { type: "number" },
-                        status:           { type: "string" },
-                        assignedAt:       { type: "string" },
+                        status: { type: "string" },
+                        assignedAt: { type: "string" },
                       },
                     },
                   },
@@ -461,19 +461,19 @@ export async function voucherRoutes(app: FastifyInstance) {
         const vouchers = assignments.map((a) => {
           const v = a.voucher;
           return {
-            voucherId:        v.id,
-            code:             v.code,
-            title:            (v as any).title ?? "",
-            description:      (v as any).description ?? null,
-            activityScope:    (v as any).activityScope ?? "universal",
-            discountType:     v.discountType,
-            discountValue:    Number(v.discountValue),
-            maxDiscount:      v.maxDiscount ? Number(v.maxDiscount) : null,
-            minOrderValue:    v.minOrderValue ? Number(v.minOrderValue) : null,
-            validUntil:       v.validUntil.toISOString(),
+            voucherId: v.id,
+            code: v.code,
+            title: (v as any).title ?? "",
+            description: (v as any).description ?? null,
+            activityScope: (v as any).activityScope ?? "universal",
+            discountType: v.discountType,
+            discountValue: Number(v.discountValue),
+            maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
+            minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
+            validUntil: v.validUntil.toISOString(),
             hoursUntilExpiry: Math.max(0, (v.validUntil.getTime() - now.getTime()) / 3_600_000),
-            status:           (v as any).status ?? "active",
-            assignedAt:       a.createdAt.toISOString(),
+            status: (v as any).status ?? "active",
+            assignedAt: a.createdAt.toISOString(),
           };
         });
 
@@ -497,22 +497,22 @@ export async function voucherRoutes(app: FastifyInstance) {
           type: "object",
           required: ["code", "title", "activityScope", "discountType", "discountValue", "validFrom", "validUntil"],
           properties: {
-            code:          { type: "string", minLength: 6, maxLength: 12 },
-            title:         { type: "string" },
-            description:   { type: "string", maxLength: 120 },
+            code: { type: "string", minLength: 6, maxLength: 12 },
+            title: { type: "string" },
+            description: { type: "string", maxLength: 120 },
             activityScope: { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"] },
-            discountType:  { type: "string", enum: ["percentage", "fixed"] },
+            discountType: { type: "string", enum: ["percentage", "fixed"] },
             discountValue: { type: "number", minimum: 0.01 },
             minOrderValue: { type: "number", minimum: 0, nullable: true },
-            maxDiscount:   { type: "number", minimum: 0, nullable: true },
-            usageLimit:    { type: "integer", minimum: 1, nullable: true },
+            maxDiscount: { type: "number", minimum: 0, nullable: true },
+            usageLimit: { type: "integer", minimum: 1, nullable: true },
             usageLimitPerGuest: { type: "integer", default: 1 },
-            status:        { type: "string", enum: ["active", "paused", "expired", "exhausted"], default: "active" },
+            status: { type: "string", enum: ["active", "paused", "expired", "exhausted"], default: "active" },
             applicableTiers: { type: "array", items: { type: "string" } },
-            countryScope:  { type: "string", nullable: true },
-            autoAssign:    { type: "boolean", default: false },
-            validFrom:     { type: "string" },
-            validUntil:    { type: "string" },
+            countryScope: { type: "string", nullable: true },
+            autoAssign: { type: "boolean", default: false },
+            validFrom: { type: "string" },
+            validUntil: { type: "string" },
           },
         },
         response: {
@@ -534,81 +534,81 @@ export async function voucherRoutes(app: FastifyInstance) {
       try {
         const body = req.body as {
           code: string;
-        title: string;
-        description?: string;
-        activityScope: string;
-        discountType: "percentage" | "fixed";
-        discountValue: number;
-        minOrderValue?: number;
-        maxDiscount?: number;
-        usageLimit?: number;
-        usageLimitPerGuest?: number;
-        status?: string;
-        applicableTiers?: string[];
-        countryScope?: string;
-        autoAssign?: boolean;
-        validFrom: string;
-        validUntil: string;
-      };
+          title: string;
+          description?: string;
+          activityScope: string;
+          discountType: "percentage" | "fixed";
+          discountValue: number;
+          minOrderValue?: number;
+          maxDiscount?: number;
+          usageLimit?: number;
+          usageLimitPerGuest?: number;
+          status?: string;
+          applicableTiers?: string[];
+          countryScope?: string;
+          autoAssign?: boolean;
+          validFrom: string;
+          validUntil: string;
+        };
 
-      if (!["percentage", "fixed"].includes(body.discountType))
-        return sendError(reply, 400, "VALIDATION_ERROR", "discountType must be 'percentage' or 'fixed'.");
-      if (body.discountValue <= 0)
-        return sendError(reply, 400, "VALIDATION_ERROR", "discountValue must be greater than 0.");
-      if (body.discountType === "percentage" && body.discountValue > 100)
-        return sendError(reply, 400, "VALIDATION_ERROR", "Percentage discount cannot exceed 100.");
+        if (!["percentage", "fixed"].includes(body.discountType))
+          return sendError(reply, 400, "VALIDATION_ERROR", "discountType must be 'percentage' or 'fixed'.");
+        if (body.discountValue <= 0)
+          return sendError(reply, 400, "VALIDATION_ERROR", "discountValue must be greater than 0.");
+        if (body.discountType === "percentage" && body.discountValue > 100)
+          return sendError(reply, 400, "VALIDATION_ERROR", "Percentage discount cannot exceed 100.");
 
-      const validFrom  = new Date(body.validFrom);
-      const validUntil = new Date(body.validUntil);
-      if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime()))
-        return sendError(reply, 400, "VALIDATION_ERROR", "validFrom and validUntil must be valid ISO dates.");
-      if (validUntil <= validFrom)
-        return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be after validFrom.");
+        const validFrom = new Date(body.validFrom);
+        const validUntil = new Date(body.validUntil);
+        if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime()))
+          return sendError(reply, 400, "VALIDATION_ERROR", "validFrom and validUntil must be valid ISO dates.");
+        if (validUntil <= validFrom)
+          return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be after validFrom.");
 
-      const existing = await prisma.voucher.findUnique({ where: { code: body.code.toUpperCase() } });
-      if (existing)
-        return sendError(reply, 409, "DUPLICATE_CODE", "A voucher with this code already exists.");
+        const existing = await prisma.voucher.findUnique({ where: { code: body.code.toUpperCase() } });
+        if (existing)
+          return sendError(reply, 409, "DUPLICATE_CODE", "A voucher with this code already exists.");
 
-      // @ts-ignore - Assuming prisma schema is updated to include new fields
-      const voucher = await prisma.voucher.create({
-        data: {
-          code:          body.code.toUpperCase(),
-          title:         body.title,
-          description:   body.description,
-          activityScope: body.activityScope,
-          discountType:  body.discountType,
-          discountValue: body.discountValue,
-          minOrderValue: body.minOrderValue ?? null,
-          maxDiscount:   body.maxDiscount ?? null,
-          usageLimit:    body.usageLimit ?? null,
-          usageLimitPerGuest: body.usageLimitPerGuest ?? 1,
-          status:        body.status ?? "active",
-          applicableTiers: body.applicableTiers ?? [],
-          countryScope:  body.countryScope ?? null,
-          autoAssign:    body.autoAssign ?? false,
-          validFrom,
-          validUntil,
-          createdBy: "admin",
-        } as any,
-      });
+        // @ts-ignore - Assuming prisma schema is updated to include new fields
+        const voucher = await prisma.voucher.create({
+          data: {
+            code: body.code.toUpperCase(),
+            title: body.title,
+            description: body.description,
+            activityScope: body.activityScope,
+            discountType: body.discountType,
+            discountValue: body.discountValue,
+            minOrderValue: body.minOrderValue ?? null,
+            maxDiscount: body.maxDiscount ?? null,
+            usageLimit: body.usageLimit ?? null,
+            usageLimitPerGuest: body.usageLimitPerGuest ?? 1,
+            status: body.status ?? "active",
+            applicableTiers: body.applicableTiers ?? [],
+            countryScope: body.countryScope ?? null,
+            autoAssign: body.autoAssign ?? false,
+            validFrom,
+            validUntil,
+            createdBy: "admin",
+          } as any,
+        });
 
-      return sendSuccess(reply, 201, {
-        id:            voucher.id,
-        code:          voucher.code,
-        title:         (voucher as any).title,
-        activityScope: (voucher as any).activityScope,
-        discountType:  voucher.discountType,
-        discountValue: Number(voucher.discountValue),
-        minOrderValue: voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
-        maxDiscount:   voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
-        usageLimit:    voucher.usageLimit,
-        usageCount:    voucher.usageCount,
-        status:        (voucher as any).status,
-        validFrom:     voucher.validFrom.toISOString(),
-        validUntil:    voucher.validUntil.toISOString(),
-        isActive:      voucher.isActive, // Keep for backward compatibility
-        createdAt:     voucher.createdAt.toISOString(),
-      });
+        return sendSuccess(reply, 201, {
+          id: voucher.id,
+          code: voucher.code,
+          title: (voucher as any).title,
+          activityScope: (voucher as any).activityScope,
+          discountType: voucher.discountType,
+          discountValue: Number(voucher.discountValue),
+          minOrderValue: voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
+          maxDiscount: voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
+          usageLimit: voucher.usageLimit,
+          usageCount: voucher.usageCount,
+          status: (voucher as any).status,
+          validFrom: voucher.validFrom.toISOString(),
+          validUntil: voucher.validUntil.toISOString(),
+          isActive: voucher.isActive, // Keep for backward compatibility
+          createdAt: voucher.createdAt.toISOString(),
+        });
       } catch (err) {
         req.log.error({ err }, "Failed to create voucher");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while creating voucher.");
@@ -629,18 +629,18 @@ export async function voucherRoutes(app: FastifyInstance) {
           type: "object",
           required: ["activity", "labelText", "bannerTitle", "validFrom", "validUntil"],
           properties: {
-            activity:      { type: "string", enum: ["hotel", "apartment", "car"] },
-            labelText:     { type: "string", minLength: 1, maxLength: 20 },
-            labelColour:   { type: "string", maxLength: 10, default: "#C84B2F" },
-            discountType:  { type: "string", enum: ["percentage", "fixed", "label_only"], default: "label_only" },
+            activity: { type: "string", enum: ["hotel", "apartment", "car"] },
+            labelText: { type: "string", minLength: 1, maxLength: 20 },
+            labelColour: { type: "string", maxLength: 10, default: "#C84B2F" },
+            discountType: { type: "string", enum: ["percentage", "fixed", "label_only"], default: "label_only" },
             discountValue: { type: "number", minimum: 0, nullable: true },
-            validFrom:     { type: "string" },
-            validUntil:    { type: "string" },
+            validFrom: { type: "string" },
+            validUntil: { type: "string" },
             applyToBooking: { type: "boolean", default: false },
-            bannerTitle:   { type: "string", maxLength: 100 },
+            bannerTitle: { type: "string", maxLength: 100 },
             bannerSubtitle: { type: "string", maxLength: 200, nullable: true },
-            status:        { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"], default: "active" },
-            countryScope:  { type: "string", minLength: 2, maxLength: 2, nullable: true },
+            status: { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"], default: "active" },
+            countryScope: { type: "string", minLength: 2, maxLength: 2, nullable: true },
           },
         },
         response: {
@@ -659,7 +659,7 @@ export async function voucherRoutes(app: FastifyInstance) {
           bannerSubtitle?: string; status?: string; countryScope?: string;
         };
 
-        const validFrom  = new Date(body.validFrom);
+        const validFrom = new Date(body.validFrom);
         const validUntil = new Date(body.validUntil);
         if (isNaN(validFrom.getTime()) || isNaN(validUntil.getTime()))
           return sendError(reply, 400, "VALIDATION_ERROR", "validFrom and validUntil must be valid ISO dates.");
@@ -674,24 +674,24 @@ export async function voucherRoutes(app: FastifyInstance) {
         if (status === "active" || status === "scheduled") {
           await (prisma as any).activityPromotion.updateMany({
             where: { activity: body.activity, status: { in: ["active", "scheduled"] } },
-            data:  { status: "superseded" },
+            data: { status: "superseded" },
           });
         }
 
         const promo = await (prisma as any).activityPromotion.create({
           data: {
-            activity:       body.activity,
-            labelText:      body.labelText.toUpperCase(),
-            labelColour:    body.labelColour ?? "#C84B2F",
-            discountType:   body.discountType ?? "label_only",
-            discountValue:  body.discountValue ?? null,
+            activity: body.activity,
+            labelText: body.labelText.toUpperCase(),
+            labelColour: body.labelColour ?? "#C84B2F",
+            discountType: body.discountType ?? "label_only",
+            discountValue: body.discountValue ?? null,
             validFrom,
             validUntil,
             applyToBooking: body.applyToBooking ?? false,
-            bannerTitle:    body.bannerTitle,
+            bannerTitle: body.bannerTitle,
             bannerSubtitle: body.bannerSubtitle ?? null,
             status,
-            countryScope:   body.countryScope ?? null,
+            countryScope: body.countryScope ?? null,
           },
         });
 
@@ -714,10 +714,10 @@ export async function voucherRoutes(app: FastifyInstance) {
         querystring: {
           type: "object",
           properties: {
-            status:   { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"] },
+            status: { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"] },
             activity: { type: "string", enum: ["hotel", "apartment", "car"] },
-            page:     { type: "integer", minimum: 1, default: 1 },
-            limit:    { type: "integer", minimum: 1, maximum: 100, default: 20 },
+            page: { type: "integer", minimum: 1, default: 1 },
+            limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
           },
         },
         response: {
@@ -741,12 +741,12 @@ export async function voucherRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const q = req.query as { status?: string; activity?: string; page?: number; limit?: number };
-        const page  = Number(q.page  ?? 1);
+        const page = Number(q.page ?? 1);
         const limit = Number(q.limit ?? 20);
-        const skip  = (page - 1) * limit;
+        const skip = (page - 1) * limit;
 
         const where: any = {};
-        if (q.status)   where.status   = q.status;
+        if (q.status) where.status = q.status;
         if (q.activity) where.activity = q.activity;
 
         const [promotions, total] = await Promise.all([
@@ -777,17 +777,17 @@ export async function voucherRoutes(app: FastifyInstance) {
         body: {
           type: "object",
           properties: {
-            labelText:      { type: "string", minLength: 1, maxLength: 20 },
-            labelColour:    { type: "string", maxLength: 10 },
-            discountType:   { type: "string", enum: ["percentage", "fixed", "label_only"] },
-            discountValue:  { type: "number", minimum: 0, nullable: true },
-            validFrom:      { type: "string" },
-            validUntil:     { type: "string" },
+            labelText: { type: "string", minLength: 1, maxLength: 20 },
+            labelColour: { type: "string", maxLength: 10 },
+            discountType: { type: "string", enum: ["percentage", "fixed", "label_only"] },
+            discountValue: { type: "number", minimum: 0, nullable: true },
+            validFrom: { type: "string" },
+            validUntil: { type: "string" },
             applyToBooking: { type: "boolean" },
-            bannerTitle:    { type: "string", maxLength: 100 },
+            bannerTitle: { type: "string", maxLength: 100 },
             bannerSubtitle: { type: "string", maxLength: 200, nullable: true },
-            status:         { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"] },
-            countryScope:   { type: "string", minLength: 2, maxLength: 2, nullable: true },
+            status: { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"] },
+            countryScope: { type: "string", minLength: 2, maxLength: 2, nullable: true },
           },
         },
         response: {
@@ -809,22 +809,22 @@ export async function voucherRoutes(app: FastifyInstance) {
         if (body.status === "active") {
           await (prisma as any).activityPromotion.updateMany({
             where: { activity: existing.activity, status: { in: ["active", "scheduled"] }, id: { not: id } },
-            data:  { status: "superseded" },
+            data: { status: "superseded" },
           });
         }
 
         const data: any = {};
-        if (body.labelText      !== undefined) data.labelText      = body.labelText.toUpperCase();
-        if (body.labelColour    !== undefined) data.labelColour    = body.labelColour;
-        if (body.discountType   !== undefined) data.discountType   = body.discountType;
-        if (body.discountValue  !== undefined) data.discountValue  = body.discountValue;
-        if (body.validFrom      !== undefined) data.validFrom      = new Date(body.validFrom);
-        if (body.validUntil     !== undefined) data.validUntil     = new Date(body.validUntil);
+        if (body.labelText !== undefined) data.labelText = body.labelText.toUpperCase();
+        if (body.labelColour !== undefined) data.labelColour = body.labelColour;
+        if (body.discountType !== undefined) data.discountType = body.discountType;
+        if (body.discountValue !== undefined) data.discountValue = body.discountValue;
+        if (body.validFrom !== undefined) data.validFrom = new Date(body.validFrom);
+        if (body.validUntil !== undefined) data.validUntil = new Date(body.validUntil);
         if (body.applyToBooking !== undefined) data.applyToBooking = body.applyToBooking;
-        if (body.bannerTitle    !== undefined) data.bannerTitle    = body.bannerTitle;
+        if (body.bannerTitle !== undefined) data.bannerTitle = body.bannerTitle;
         if (body.bannerSubtitle !== undefined) data.bannerSubtitle = body.bannerSubtitle;
-        if (body.status         !== undefined) data.status         = body.status;
-        if (body.countryScope   !== undefined) data.countryScope   = body.countryScope;
+        if (body.status !== undefined) data.status = body.status;
+        if (body.countryScope !== undefined) data.countryScope = body.countryScope;
 
         const promo = await (prisma as any).activityPromotion.update({ where: { id }, data });
         return sendSuccess(reply, 200, promo);
@@ -901,7 +901,7 @@ export async function voucherRoutes(app: FastifyInstance) {
         const now = new Date();
 
         const where: any = {
-          status:    "active",
+          status: "active",
           validFrom: { lte: now },
           validUntil: { gte: now },
         };
@@ -950,35 +950,35 @@ export async function voucherRoutes(app: FastifyInstance) {
         const { id } = req.params as { id: string };
         const { isActive } = req.body as { isActive: boolean };
 
-      const existing = await prisma.voucher.findUnique({ where: { id } });
-      if (!existing) return sendError(reply, 404, "NOT_FOUND", "Voucher not found.");
+        const existing = await prisma.voucher.findUnique({ where: { id } });
+        if (!existing) return sendError(reply, 404, "NOT_FOUND", "Voucher not found.");
 
-      const voucher = await (prisma.voucher.update as any)({
-        where: { id },
-        data: {
-          isActive,
-          status: isActive ? "active" : "paused",
-        },
-      });
+        const voucher = await (prisma.voucher.update as any)({
+          where: { id },
+          data: {
+            isActive,
+            status: isActive ? "active" : "paused",
+          },
+        });
 
-      return sendSuccess(reply, 200, {
-        id:            voucher.id,
-        code:          voucher.code,
-        title:         voucher.title,
-        activityScope: voucher.activityScope,
-        discountType:  voucher.discountType,
-        discountValue: Number(voucher.discountValue),
-        minOrderValue: voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
-        maxDiscount:   voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
-        usageLimit:    voucher.usageLimit,
-        usageCount:    voucher.usageCount,
-        status:        voucher.status,
-        isActive:      voucher.isActive,
-        validFrom:     voucher.validFrom.toISOString(),
-        validUntil:    voucher.validUntil.toISOString(),
-        createdBy:     voucher.createdBy,
-        createdAt:     voucher.createdAt.toISOString(),
-      });
+        return sendSuccess(reply, 200, {
+          id: voucher.id,
+          code: voucher.code,
+          title: voucher.title,
+          activityScope: voucher.activityScope,
+          discountType: voucher.discountType,
+          discountValue: Number(voucher.discountValue),
+          minOrderValue: voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
+          maxDiscount: voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
+          usageLimit: voucher.usageLimit,
+          usageCount: voucher.usageCount,
+          status: voucher.status,
+          isActive: voucher.isActive,
+          validFrom: voucher.validFrom.toISOString(),
+          validUntil: voucher.validUntil.toISOString(),
+          createdBy: voucher.createdBy,
+          createdAt: voucher.createdAt.toISOString(),
+        });
       } catch (err) {
         req.log.error({ err }, "Failed to toggle voucher status");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating voucher status.");
@@ -998,8 +998,8 @@ export async function voucherRoutes(app: FastifyInstance) {
           type: "object",
           properties: {
             isActive: { type: "string", enum: ["true", "false"] },
-            page:     { type: "integer", minimum: 1, default: 1 },
-            limit:    { type: "integer", minimum: 1, maximum: 100, default: 20 },
+            page: { type: "integer", minimum: 1, default: 1 },
+            limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
           },
         },
         response: {
@@ -1014,10 +1014,10 @@ export async function voucherRoutes(app: FastifyInstance) {
                   pagination: {
                     type: "object",
                     properties: {
-                      total:       { type: "integer" },
-                      page:        { type: "integer" },
-                      limit:       { type: "integer" },
-                      totalPages:  { type: "integer" },
+                      total: { type: "integer" },
+                      page: { type: "integer" },
+                      limit: { type: "integer" },
+                      totalPages: { type: "integer" },
                     },
                     required: ["total", "page", "limit", "totalPages"],
                   },
@@ -1033,75 +1033,75 @@ export async function voucherRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const q = req.query as { isActive?: string; page?: number; limit?: number };
-        const page  = Number(q.page  ?? 1);
-      const limit = Number(q.limit ?? 20);
-      const skip  = (page - 1) * limit;
+        const page = Number(q.page ?? 1);
+        const limit = Number(q.limit ?? 20);
+        const skip = (page - 1) * limit;
 
-      const where: any = {};
-      if (q.isActive === "true")  where.isActive = true;
-      else if (q.isActive === "false") where.isActive = false;
+        const where: any = {};
+        if (q.isActive === "true") where.isActive = true;
+        else if (q.isActive === "false") where.isActive = false;
 
-      const [vouchers, total] = await Promise.all([
-        prisma.voucher.findMany({
-          where,
-          orderBy: { createdAt: "desc" },
-          skip,
-          take: limit,
-          // Note: _count removed — computed separately below with a safe fallback
-          // so the endpoint works even if the production DB is missing new columns.
-        }),
-        prisma.voucher.count({ where }),
-      ]);
+        const [vouchers, total] = await Promise.all([
+          prisma.voucher.findMany({
+            where,
+            orderBy: { createdAt: "desc" },
+            skip,
+            take: limit,
+            // Note: _count removed — computed separately below with a safe fallback
+            // so the endpoint works even if the production DB is missing new columns.
+          }),
+          prisma.voucher.count({ where }),
+        ]);
 
-      // Fetch redemption counts per voucher; fall back to 0 if table unavailable
-      const redemptionCountMap = new Map<string, number>();
-      try {
-        const voucherIds = vouchers.map((v) => v.id);
-        if (voucherIds.length > 0) {
-          const counts = await prisma.voucherRedemption.groupBy({
-            by: ["voucherId"],
-            where: { voucherId: { in: voucherIds } },
-            _count: { voucherId: true },
-          });
-          for (const c of counts) {
-            redemptionCountMap.set(c.voucherId, c._count.voucherId);
+        // Fetch redemption counts per voucher; fall back to 0 if table unavailable
+        const redemptionCountMap = new Map<string, number>();
+        try {
+          const voucherIds = vouchers.map((v) => v.id);
+          if (voucherIds.length > 0) {
+            const counts = await prisma.voucherRedemption.groupBy({
+              by: ["voucherId"],
+              where: { voucherId: { in: voucherIds } },
+              _count: { voucherId: true },
+            });
+            for (const c of counts) {
+              redemptionCountMap.set(c.voucherId, c._count.voucherId);
+            }
           }
+        } catch {
+          // voucher_redemptions table not yet available on this environment — default to 0
         }
-      } catch {
-        // voucher_redemptions table not yet available on this environment — default to 0
-      }
 
-      return sendSuccess(reply, 200, {
-        vouchers: vouchers.map((v) => ({
-          id:              v.id,
-          code:            v.code,
-          title:           (v as any).title ?? "",
-          activityScope:   (v as any).activityScope ?? "universal",
-          discountType:    v.discountType,
-          discountValue:   Number(v.discountValue),
-          minOrderValue:   v.minOrderValue ? Number(v.minOrderValue) : null,
-          maxDiscount:     v.maxDiscount ? Number(v.maxDiscount) : null,
-          usageLimit:      v.usageLimit,
-          usageLimitPerGuest: (v as any).usageLimitPerGuest ?? 1,
-          usageCount:      v.usageCount,
-          status:          (v as any).status ?? (v.isActive ? "active" : "paused"),
-          applicableTiers: (v as any).applicableTiers ?? [],
-          countryScope:    (v as any).countryScope ?? null,
-          autoAssign:      (v as any).autoAssign ?? false,
-          redemptionCount: redemptionCountMap.get(v.id) ?? 0,
-          validFrom:       v.validFrom.toISOString(),
-          validUntil:      v.validUntil.toISOString(),
-          isActive:        v.isActive,
-          createdBy:       v.createdBy,
-          createdAt:       v.createdAt.toISOString(),
-        })),
-        pagination: {
-          total,
-          page,
-          limit,
-          totalPages: Math.ceil(total / limit),
-        },
-      });
+        return sendSuccess(reply, 200, {
+          vouchers: vouchers.map((v) => ({
+            id: v.id,
+            code: v.code,
+            title: (v as any).title ?? "",
+            activityScope: (v as any).activityScope ?? "universal",
+            discountType: v.discountType,
+            discountValue: Number(v.discountValue),
+            minOrderValue: v.minOrderValue ? Number(v.minOrderValue) : null,
+            maxDiscount: v.maxDiscount ? Number(v.maxDiscount) : null,
+            usageLimit: v.usageLimit,
+            usageLimitPerGuest: (v as any).usageLimitPerGuest ?? 1,
+            usageCount: v.usageCount,
+            status: (v as any).status ?? (v.isActive ? "active" : "paused"),
+            applicableTiers: (v as any).applicableTiers ?? [],
+            countryScope: (v as any).countryScope ?? null,
+            autoAssign: (v as any).autoAssign ?? false,
+            redemptionCount: redemptionCountMap.get(v.id) ?? 0,
+            validFrom: v.validFrom.toISOString(),
+            validUntil: v.validUntil.toISOString(),
+            isActive: v.isActive,
+            createdBy: v.createdBy,
+            createdAt: v.createdAt.toISOString(),
+          })),
+          pagination: {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+          },
+        });
       } catch (err) {
         req.log.error({ err }, "Failed to fetch admin vouchers list");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching vouchers.");

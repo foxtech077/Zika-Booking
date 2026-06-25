@@ -4,7 +4,7 @@ const authApiUrl = process.env.ADMIN_API_URL ?? "http://localhost:3001";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
 	basePath: "/admin",
-	transpilePackages: ["@zika/types", "@zika/validators"],
+	transpilePackages: ["@zika/types", "@zika/validators", "victory-vendor"],
 	async redirects() {
 		return [
 			{

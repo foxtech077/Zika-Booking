@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ticket, Plus, ToggleLeft, ToggleRight } from "lucide-react";
+import { Ticket, Plus, ToggleLeft, ToggleRight, Trash2, Edit2 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -11,12 +11,13 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, CustomDropdown } from "@/components/ui/Input";
 import countries from "i18n-iso-countries";
 import enLocale from "i18n-iso-countries/langs/en.json";
-import { ActionModal } from "@/components/modals/Modals";
+import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
 import type { Voucher } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
 
 countries.registerLocale(enLocale);
 function codeToFlag(code: string) {
@@ -68,12 +69,14 @@ export default function VouchersPage() {
     return `${year}-${month}-${day}`;
   })();
   const canCreateVoucher = role === "super_admin";
+  const hasManagePermission = canAccess(role, "manage_vouchers");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [statusFilter, setStatusFilter] = useState("");
   const [addModal, setAddModal] = useState(false);
   const [selected, setSelected] = useState<Voucher | null>(null);
   const [form, setForm] = useState({
+    id: "",
     title: "",
     code: "",
     discountType: "percentage" as "percentage" | "fixed",
@@ -108,24 +111,136 @@ export default function VouchersPage() {
   const vouchersList: Voucher[] = data?.vouchers ?? [];
   const total = data?.total ?? 0;
 
+  const [editModal, setEditModal] = useState(false);
+
   const createMut = useMutation({
     mutationFn: (body: any) => listingApi.post("/admin/vouchers", body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
       setAddModal(false);
       setForm({
-        title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", minOrderValue: "", activityScope: "universal",
+        id: "", title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", minOrderValue: "", activityScope: "universal",
         countryScope: "", validFrom: "", validUntil: "", usageLimit: "",
         usagePerGuest: "", applicableTiers: [], autoAssign: false, isActive: true
       });
     },
   });
 
+  const updateMut = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: any }) =>
+      listingApi.patch(`/admin/vouchers/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
+      setEditModal(false);
+      setSelected(null);
+      setForm({
+        id: "", title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", minOrderValue: "", activityScope: "universal",
+        countryScope: "", validFrom: "", validUntil: "", usageLimit: "",
+        usagePerGuest: "", applicableTiers: [], autoAssign: false, isActive: true
+      });
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.error?.message ?? err?.message ?? "Failed to update voucher");
+    }
+  });
+
+  const openEdit = (v: Voucher, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Parse ISO dates back to YYYY-MM-DD
+    const parseDateLocal = (dateStr: string) => {
+      if (!dateStr) return "";
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "";
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const yyyy = d.getFullYear();
+      const mm = pad(d.getMonth() + 1);
+      const dd = pad(d.getDate());
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    setForm({
+      id: v.id,
+      title: v.title || "",
+      code: v.code || "",
+      discountType: v.discountType,
+      discountValue: String(v.discountValue || ""),
+      maxDiscount: String(v.maxDiscount || ""),
+      minOrderValue: String(v.minOrderValue || ""),
+      activityScope: v.activityScope || "universal",
+      countryScope: v.countryScope || "",
+      validFrom: parseDateLocal(v.validFrom),
+      validUntil: parseDateLocal(v.validUntil),
+      usageLimit: String(v.usageLimit || ""),
+      usagePerGuest: String(v.usageLimitPerGuest || ""),
+      applicableTiers: v.applicableTiers ?? [],
+      autoAssign: v.autoAssign ?? false,
+      isActive: v.isActive ?? true,
+    });
+    setAddModal(false);
+    setEditModal(true);
+  };
+
+  const handleCancel = () => {
+    setAddModal(false);
+    setEditModal(false);
+    setForm({
+      id: "", title: "", code: "", discountType: "percentage", discountValue: "", maxDiscount: "", minOrderValue: "", activityScope: "universal",
+      countryScope: "", validFrom: "", validUntil: "", usageLimit: "",
+      usagePerGuest: "", applicableTiers: [], autoAssign: false, isActive: true
+    });
+  };
+
+  const handleSave = () => {
+    const payload = {
+      title: form.title,
+      code: form.code.toUpperCase(),
+      discountType: form.discountType,
+      discountValue: parseFloat(form.discountValue),
+      maxDiscount: form.maxDiscount ? parseFloat(form.maxDiscount) : null,
+      minOrderValue: form.minOrderValue ? parseFloat(form.minOrderValue) : null,
+      activityScope: form.activityScope,
+      countryScope: form.countryScope ? form.countryScope : null,
+      validFrom: form.validFrom ? new Date(form.validFrom).toISOString() : undefined,
+      validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
+      usageLimit: form.usageLimit ? parseInt(form.usageLimit) : null,
+      usageLimitPerGuest: form.usagePerGuest ? parseInt(form.usagePerGuest) : 1,
+      applicableTiers: form.applicableTiers.length > 0 ? form.applicableTiers : [],
+      autoAssign: form.autoAssign,
+      isActive: form.isActive,
+    };
+
+    if (editModal) {
+      updateMut.mutate({ id: form.id, body: payload });
+    } else {
+      createMut.mutate(payload);
+    }
+  };
+
+  const [deleteConfirm, setDeleteConfirm] = useState<Voucher | null>(null);
+
   const toggleMut = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       listingApi.patch(`/admin/vouchers/${id}`, { isActive }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-vouchers"] }),
   });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => listingApi.delete(`/admin/vouchers/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
+      setDeleteConfirm(null);
+      setSelected(null);
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.error?.message ?? err?.message ?? "Failed to delete voucher");
+    }
+  });
+
+  const handleDelete = () => {
+    if (!deleteConfirm) return;
+    deleteMut.mutate(deleteConfirm.id);
+  };
 
   const columns: Column<Voucher>[] = [
     {
@@ -254,13 +369,36 @@ export default function VouchersPage() {
       label: "",
       align: "right",
       render: (v) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); toggleMut.mutate({ id: v.id, isActive: !v.isActive }); }}
-          className={`p-1.5 rounded-lg transition-colors ${v.isActive ? "text-success hover:bg-success/5" : "text-slate-400 hover:bg-slate-100"}`}
-          title={v.isActive ? "Deactivate" : "Activate"}
-        >
-          {v.isActive ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
-        </button>
+        <div className="flex justify-end items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          {hasManagePermission && (
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleMut.mutate({ id: v.id, isActive: !v.isActive }); }}
+                className={`p-1.5 rounded-lg transition-colors ${v.isActive ? "text-success hover:bg-success/5" : "text-slate-400 hover:bg-slate-100"}`}
+                title={v.isActive ? "Deactivate" : "Activate"}
+              >
+                {v.isActive ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+              </button>
+              <button
+                onClick={(e) => openEdit(v, e)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-slate-50 transition-colors"
+                title="Edit Voucher"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteConfirm(v);
+                }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
+                title="Delete Voucher"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </div>
       ),
     },
   ];
@@ -410,40 +548,24 @@ export default function VouchersPage() {
         )}
       </SlideDrawer>
 
-      {/* Create voucher modal */}
+      {/* Create / Edit voucher modal */}
       <ActionModal
-        open={addModal}
-        onClose={() => setAddModal(false)}
-        title="Create Voucher"
-        description="Configure a new promotional voucher code."
+        open={addModal || editModal}
+        onClose={handleCancel}
+        title={editModal ? "Edit Voucher" : "Create Voucher"}
+        description={editModal ? "Update promotional voucher configuration." : "Configure a new promotional voucher code."}
         size="md"
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setAddModal(false)}>Cancel</Button>
+            <Button variant="secondary" size="sm" onClick={handleCancel}>Cancel</Button>
             <Button
               variant="primary"
               size="sm"
-              loading={createMut.isPending}
-              onClick={() => createMut.mutate({
-                title: form.title,
-                code: form.code.toUpperCase(),
-                discountType: form.discountType,
-                discountValue: parseFloat(form.discountValue),
-                maxDiscount: form.maxDiscount ? parseFloat(form.maxDiscount) : undefined,
-                minOrderValue: form.minOrderValue ? parseFloat(form.minOrderValue) : undefined,
-                activityScope: form.activityScope,
-                countryScope: form.countryScope ? form.countryScope : undefined,
-                validFrom: form.validFrom ? new Date(form.validFrom).toISOString() : undefined,
-                validUntil: form.validUntil ? new Date(form.validUntil).toISOString() : undefined,
-                usageLimit: form.usageLimit ? parseInt(form.usageLimit) : undefined,
-                usageLimitPerGuest: form.usagePerGuest ? parseInt(form.usagePerGuest) : undefined,
-                applicableTiers: form.applicableTiers.length > 0 ? form.applicableTiers : undefined,
-                autoAssign: form.autoAssign,
-                isActive: form.isActive,
-              })}
+              loading={createMut.isPending || updateMut.isPending}
+              onClick={handleSave}
               disabled={!form.title || !form.code || !form.discountValue || !form.validFrom || !form.validUntil}
             >
-              Create Voucher
+              {editModal ? "Save Changes" : "Create Voucher"}
             </Button>
           </>
         }
@@ -621,6 +743,18 @@ export default function VouchersPage() {
           </div>
         </div>
       </ActionModal>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        open={!!deleteConfirm}
+        onClose={() => setDeleteConfirm(null)}
+        onConfirm={handleDelete}
+        title="Delete Voucher"
+        description={`Are you sure you want to permanently delete the voucher "${deleteConfirm?.code}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deleteMut.isPending}
+      />
     </div>
   );
 }
