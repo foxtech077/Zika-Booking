@@ -23,8 +23,10 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
 import {
+  extractApiErrorMessage,
   getMerchantProfile,
   getStripeConnectStatus,
+  getStripeOnboardingUrl,
   refreshStripeConnect,
   startStripeConnect,
   updateMerchantProfile,
@@ -41,9 +43,42 @@ type SetupState = {
   badgeTone: "success" | "warning" | "danger" | "info";
 };
 
+type MerchantSetupSnapshot = {
+  profile: MerchantProfile;
+  stripeStatus: StripeConnectStatusResponse | null;
+};
+
+let initialMerchantSetupPromise: Promise<MerchantSetupSnapshot> | null = null;
+
+async function fetchMerchantSetup(): Promise<MerchantSetupSnapshot> {
+  const profileRes = await getMerchantProfile();
+  const profile = profileRes.data;
+  let stripeStatus: StripeConnectStatusResponse | null = null;
+
+  if (profile.stripeConnectAccountId) {
+    try {
+      const stripeRes = await getStripeConnectStatus();
+      stripeStatus = stripeRes.data;
+    } catch {
+      stripeStatus = null;
+    }
+  }
+
+  return { profile, stripeStatus };
+}
+
+function fetchMerchantSetupOnce(): Promise<MerchantSetupSnapshot> {
+  if (!initialMerchantSetupPromise) {
+    initialMerchantSetupPromise = fetchMerchantSetup().finally(() => {
+      initialMerchantSetupPromise = null;
+    });
+  }
+
+  return initialMerchantSetupPromise;
+}
+
 function extractErrorMessage(error: unknown, fallback: string): string {
-  const err = error as { response?: { data?: { message?: string } } };
-  return err?.response?.data?.message ?? (error instanceof Error ? error.message : fallback);
+  return extractApiErrorMessage(error, fallback);
 }
 
 function formatMethodLabel(method: PayoutMethod): string {
@@ -261,28 +296,15 @@ export default function PaymentSettingsPage() {
     setCountry(next.country ?? "");
   }
 
-  async function loadProfile(options?: { includeStripeStatus?: boolean }) {
-    const includeStripeStatus = options?.includeStripeStatus ?? true;
+  async function loadProfile() {
     setProfileLoading(true);
     setProfileError(null);
 
     try {
-      const res = await getMerchantProfile();
-      const nextProfile = res.data;
-      setProfile(nextProfile);
-      hydrateForm(nextProfile);
-
-      if (!includeStripeStatus || !nextProfile.stripeConnectAccountId) {
-        setStripeStatus(null);
-        return;
-      }
-
-      try {
-        const stripeRes = await getStripeConnectStatus();
-        setStripeStatus(stripeRes.data);
-      } catch (stripeError) {
-        setStripeStatus(null);
-      }
+      const snapshot = await fetchMerchantSetup();
+      setProfile(snapshot.profile);
+      hydrateForm(snapshot.profile);
+      setStripeStatus(snapshot.stripeStatus);
     } catch (error) {
       setProfileError(extractErrorMessage(error, "Failed to load your merchant profile."));
     } finally {
@@ -292,7 +314,33 @@ export default function PaymentSettingsPage() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    void loadProfile({ includeStripeStatus: true });
+    let cancelled = false;
+
+    setProfileLoading(true);
+    setProfileError(null);
+
+    void fetchMerchantSetupOnce()
+      .then((snapshot) => {
+        if (cancelled) return;
+
+        setProfile(snapshot.profile);
+        hydrateForm(snapshot.profile);
+        setStripeStatus(snapshot.stripeStatus);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setProfileError(extractErrorMessage(error, "Failed to load your merchant profile."));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setProfileLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const setupState = useMemo(() => getSetupState(profile, stripeStatus), [profile, stripeStatus]);
@@ -334,7 +382,18 @@ export default function PaymentSettingsPage() {
       const res = await updateMerchantProfile(payload);
       setProfile(res.data);
       hydrateForm(res.data);
-      await loadProfile({ includeStripeStatus: true });
+
+      if (res.data.stripeConnectAccountId) {
+        try {
+          const stripeRes = await getStripeConnectStatus();
+          setStripeStatus(stripeRes.data);
+        } catch {
+          // Keep the current Stripe status visible if the refresh fails.
+        }
+      } else {
+        setStripeStatus(null);
+      }
+
       showToast("Payment details updated successfully.");
     } catch (error) {
       showToast(extractErrorMessage(error, "Failed to save payment details."), "error");
@@ -347,7 +406,14 @@ export default function PaymentSettingsPage() {
     setStripeConnecting(true);
     try {
       const res = await startStripeConnect();
-      window.location.href = res.data.onboardingUrl;
+      const onboardingUrl = getStripeOnboardingUrl(res);
+      if (!onboardingUrl) {
+        showToast("Stripe onboarding URL was missing from the response.", "error");
+        setStripeConnecting(false);
+        return;
+      }
+
+      window.location.assign(onboardingUrl);
     } catch (error) {
       showToast(extractErrorMessage(error, "Failed to start Stripe Connect onboarding."), "error");
       setStripeConnecting(false);
@@ -358,7 +424,14 @@ export default function PaymentSettingsPage() {
     setStripeRefreshing(true);
     try {
       const res = await refreshStripeConnect();
-      window.location.href = res.data.onboardingUrl;
+      const onboardingUrl = getStripeOnboardingUrl(res);
+      if (!onboardingUrl) {
+        showToast("Stripe onboarding URL was missing from the response.", "error");
+        setStripeRefreshing(false);
+        return;
+      }
+
+      window.location.assign(onboardingUrl);
     } catch (error) {
       showToast(extractErrorMessage(error, "Failed to refresh Stripe onboarding link."), "error");
       setStripeRefreshing(false);
@@ -371,9 +444,19 @@ export default function PaymentSettingsPage() {
       const res = await getStripeConnectStatus();
       setStripeStatus(res.data);
 
+      setProfile((current) =>
+        current
+          ? {
+              ...current,
+              payoutMethod: res.data.payoutMethod,
+              stripeConnectAccountId: res.data.stripeAccountId,
+            }
+          : current,
+      );
+      setPayoutMethod(res.data.payoutMethod);
+
       if (res.data.onboardingComplete) {
         showToast("Stripe Connect is connected and ready for payouts.");
-        await loadProfile({ includeStripeStatus: false });
       } else {
         const nextState = getStripeConnectState(profile, res.data);
         showToast(`Stripe status: ${nextState.label}.`, "error");
@@ -385,8 +468,12 @@ export default function PaymentSettingsPage() {
     }
   }
 
-  const showStripeButtons = payoutMethod === "stripe_connect" || Boolean(profile?.stripeConnectAccountId);
-  const showStripeRefresh = Boolean(profile?.stripeConnectAccountId) && !stripeStatus?.onboardingComplete;
+  const stripeAccountConnected = Boolean(profile?.stripeConnectAccountId);
+  const stripeOnboardingComplete = Boolean(stripeStatus?.onboardingComplete);
+  const showStripeSection = payoutMethod === "stripe_connect" || stripeAccountConnected;
+  const showStripeConnectAction = showStripeSection && !stripeOnboardingComplete;
+  const showStripeRefresh = stripeAccountConnected && !stripeOnboardingComplete;
+  const stripeActionLabel = stripeAccountConnected ? "Continue Stripe Setup" : "Connect Stripe";
   const stripeBadgeVariant = stripeConnectState.badgeTone;
 
   return (
@@ -431,7 +518,7 @@ export default function PaymentSettingsPage() {
         <div className="rounded-2xl border border-red-100 bg-red-50 p-6 flex flex-col items-center gap-4 text-center">
           <AlertCircle className="h-10 w-10 text-red-400" />
           <p className="font-semibold text-red-800">{profileError}</p>
-          <Button variant="outline" icon={<RefreshCw />} onClick={() => void loadProfile({ includeStripeStatus: true })}>
+          <Button variant="outline" icon={<RefreshCw />} onClick={() => void loadProfile()}>
             Retry
           </Button>
         </div>
@@ -529,7 +616,7 @@ export default function PaymentSettingsPage() {
                 </div>
               </Card>
 
-              {showStripeButtons && (
+              {showStripeSection && (
                 <div className="space-y-4">
                   <SectionNotice
                     title="Stripe Connect"
@@ -558,25 +645,15 @@ export default function PaymentSettingsPage() {
                   )}
 
                   <div className="flex flex-wrap gap-3">
-                    {!profile?.stripeConnectAccountId ? (
+                    {showStripeConnectAction && (
                       <Button
                         type="button"
                         variant="primary"
-                        icon={stripeConnecting ? <Loader2 className="animate-spin" /> : <CreditCard />}
+                        icon={stripeConnecting ? <Loader2 className="animate-spin" /> : stripeAccountConnected ? <ExternalLink /> : <CreditCard />}
                         loading={stripeConnecting}
                         onClick={handleConnectStripe}
                       >
-                        Connect Stripe
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        icon={stripeConnecting ? <Loader2 className="animate-spin" /> : <ExternalLink />}
-                        loading={stripeConnecting}
-                        onClick={handleConnectStripe}
-                      >
-                        Resume Onboarding
+                        {stripeActionLabel}
                       </Button>
                     )}
 
