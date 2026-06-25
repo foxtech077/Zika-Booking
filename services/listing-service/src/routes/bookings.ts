@@ -1324,8 +1324,8 @@ export async function bookingRoutes(app: FastifyInstance) {
         const basePoints = Math.floor(Number(booking.totalAmount));
         if (basePoints > 0) {
           // Fetch current user tier and points AFTER points were already deducted at checkout
-          const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number, currentTier: string }[]>(`
-            SELECT "loyaltyPoints", "currentTier" FROM auth."User" WHERE id = $1
+          const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number, currentTier: string, country: string }[]>(`
+            SELECT "loyaltyPoints", "currentTier", "country" FROM auth."User" WHERE id = $1
           `, booking.guestId);
 
           const user = userRes[0];
@@ -1394,7 +1394,12 @@ export async function bookingRoutes(app: FastifyInstance) {
 
               const tierVouchers = autoVouchers.filter((v) => {
                 const tiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
-                return tiers.length === 0 || tiers.includes(finalTier);
+                const tierMatches = tiers.length === 0 || tiers.includes(finalTier);
+                
+                const vCountry = (v as any).countryScope;
+                const countryMatches = !vCountry || vCountry === user.country;
+
+                return tierMatches && countryMatches;
               });
 
               // Actually assign the vouchers — create VoucherRedemption placeholder records
