@@ -298,7 +298,7 @@ export default function BookingDetailScreen() {
       if (booking?.status === "pending_payment") {
         await listingApi.patch(`/bookings/${id}/fail`, { failureReason: "Cancelled by guest" });
       } else {
-        await listingApi.post(`/bookings/${id}/cancel`);
+        await listingApi.post(`/bookings/${id}/cancel`, {});
       }
     },
     onSuccess: () => {
