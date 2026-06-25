@@ -292,7 +292,7 @@ function StatCard({
       ) : (
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[15px] font-medium text-slate-500">{label}</p>
+            <p className="text-[12px] font-medium text-slate-500">{label}</p>
             <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
             <p className={cn("mt-2 flex items-center gap-1 text-xs font-semibold", positive ? "text-emerald-600" : "text-red-600")}>
               {positive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
