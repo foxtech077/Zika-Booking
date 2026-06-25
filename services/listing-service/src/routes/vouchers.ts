@@ -218,6 +218,7 @@ export async function voucherRoutes(app: FastifyInstance) {
           properties: {
             totalAmount: { type: "number", minimum: 0, description: "The booking total amount in the listing's currency" },
             currency:    { type: "string", description: "ISO 4217 currency code" },
+            activity:    { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"], description: "Booking activity type — filters out vouchers scoped to other activities" },
           },
         },
         response: {
@@ -264,8 +265,9 @@ export async function voucherRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const guestId = (req as any).providerId as string;
-        const q = req.query as { totalAmount?: string; currency?: string };
+        const q = req.query as { totalAmount?: string; currency?: string; activity?: string };
       const totalAmount = parseFloat(q.totalAmount ?? "0");
+      const activity = q.activity;
       const now = new Date();
 
       // Fetch the guest's current loyalty tier from auth.User
@@ -309,8 +311,16 @@ export async function voucherRoutes(app: FastifyInstance) {
         // Tier eligibility: empty applicableTiers = universal (all tiers)
         const applicableTiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
         if (applicableTiers.length > 0 && !applicableTiers.includes(guestTier)) {
-          // Not eligible for this tier — skip entirely
           continue;
+        }
+
+        // Activity scope: skip vouchers that don't apply to the current booking type
+        if (activity) {
+          const scope: string = (v as any).activityScope ?? "universal";
+          if (scope !== "universal") {
+            const allowed = scope === "hotels_apartments" ? ["hotels", "apartments"] : [scope];
+            if (!allowed.includes(activity)) continue;
+          }
         }
 
         // Global usage limit
@@ -630,8 +640,8 @@ export async function voucherRoutes(app: FastifyInstance) {
           required: ["activity", "labelText", "bannerTitle", "validFrom", "validUntil"],
           properties: {
             activity:      { type: "string", enum: ["hotel", "apartment", "car"] },
-            labelText:     { type: "string", minLength: 1, maxLength: 6 },
-            labelColour:   { type: "string", default: "#C84B2F" },
+            labelText:     { type: "string", minLength: 1, maxLength: 20 },
+            labelColour:   { type: "string", maxLength: 10, default: "#C84B2F" },
             discountType:  { type: "string", enum: ["percentage", "fixed", "label_only"], default: "label_only" },
             discountValue: { type: "number", minimum: 0, nullable: true },
             validFrom:     { type: "string" },
@@ -639,8 +649,8 @@ export async function voucherRoutes(app: FastifyInstance) {
             applyToBooking: { type: "boolean", default: false },
             bannerTitle:   { type: "string", maxLength: 100 },
             bannerSubtitle: { type: "string", maxLength: 200, nullable: true },
-            status:        { type: "string", enum: ["scheduled", "active"], default: "active" },
-            countryScope:  { type: "string", nullable: true },
+            status:        { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"], default: "active" },
+            countryScope:  { type: "string", minLength: 2, maxLength: 2, nullable: true },
           },
         },
         response: {
@@ -668,11 +678,15 @@ export async function voucherRoutes(app: FastifyInstance) {
         if ((body.discountType === "percentage" || body.discountType === "fixed") && !body.discountValue)
           return sendError(reply, 400, "VALIDATION_ERROR", "discountValue is required when discountType is percentage or fixed.");
 
-        // Supersede any existing active or scheduled promotion for this activity
-        await (prisma as any).activityPromotion.updateMany({
-          where: { activity: body.activity, status: { in: ["active", "scheduled"] } },
-          data:  { status: "superseded" },
-        });
+        const status = body.status ?? "active";
+
+        // Supersede any existing active or scheduled promotion for this activity if activating/scheduling
+        if (status === "active" || status === "scheduled") {
+          await (prisma as any).activityPromotion.updateMany({
+            where: { activity: body.activity, status: { in: ["active", "scheduled"] } },
+            data:  { status: "superseded" },
+          });
+        }
 
         const promo = await (prisma as any).activityPromotion.create({
           data: {
@@ -686,7 +700,7 @@ export async function voucherRoutes(app: FastifyInstance) {
             applyToBooking: body.applyToBooking ?? false,
             bannerTitle:    body.bannerTitle,
             bannerSubtitle: body.bannerSubtitle ?? null,
-            status:         body.status ?? "active",
+            status,
             countryScope:   body.countryScope ?? null,
           },
         });
@@ -773,8 +787,8 @@ export async function voucherRoutes(app: FastifyInstance) {
         body: {
           type: "object",
           properties: {
-            labelText:      { type: "string", minLength: 1, maxLength: 6 },
-            labelColour:    { type: "string" },
+            labelText:      { type: "string", minLength: 1, maxLength: 20 },
+            labelColour:    { type: "string", maxLength: 10 },
             discountType:   { type: "string", enum: ["percentage", "fixed", "label_only"] },
             discountValue:  { type: "number", minimum: 0, nullable: true },
             validFrom:      { type: "string" },
@@ -783,7 +797,7 @@ export async function voucherRoutes(app: FastifyInstance) {
             bannerTitle:    { type: "string", maxLength: 100 },
             bannerSubtitle: { type: "string", maxLength: 200, nullable: true },
             status:         { type: "string", enum: ["scheduled", "active", "paused", "expired", "superseded"] },
-            countryScope:   { type: "string", nullable: true },
+            countryScope:   { type: "string", minLength: 2, maxLength: 2, nullable: true },
           },
         },
         response: {
@@ -978,6 +992,37 @@ export async function voucherRoutes(app: FastifyInstance) {
       } catch (err) {
         req.log.error({ err }, "Failed to toggle voucher status");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating voucher status.");
+      }
+    },
+  );
+
+  // ── DELETE /admin/vouchers/:id — delete a voucher ────────────────────
+  app.delete(
+    "/admin/vouchers/:id",
+    {
+      schema: {
+        tags: ["Admin Vouchers"],
+        summary: "Delete a voucher (admin)",
+        security: [{ bearerAuth: [] }],
+        params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+        response: {
+          200: { type: "object", properties: { success: { type: "boolean" } } },
+          404: errSchema,
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = req.params as { id: string };
+        const existing = await prisma.voucher.findUnique({ where: { id } });
+        if (!existing) return sendError(reply, 404, "NOT_FOUND", "Voucher not found.");
+        await prisma.voucherRedemption.deleteMany({ where: { voucherId: id } });
+        await prisma.voucher.delete({ where: { id } });
+        return sendSuccess(reply, 200, { deleted: true });
+      } catch (err) {
+        req.log.error({ err }, "Failed to delete voucher");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while deleting voucher.");
       }
     },
   );

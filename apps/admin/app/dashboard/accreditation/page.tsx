@@ -152,9 +152,8 @@ function PhotoLightbox({
             <button
               key={p.id ?? i}
               onClick={() => onJump(i)}
-              className={`flex-shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition ${
-                i === currentIndex ? "border-white opacity-100" : "border-transparent opacity-50 hover:opacity-80"
-              }`}
+              className={`flex-shrink-0 w-12 h-12 rounded overflow-hidden border-2 transition ${i === currentIndex ? "border-white opacity-100" : "border-transparent opacity-50 hover:opacity-80"
+                }`}
               title={`Photo ${i + 1}`}
             >
               <img src={p.cdnUrl} alt="" className="w-full h-full object-cover" />
@@ -177,7 +176,7 @@ export default function AccreditationPage() {
   const isCountryManager = user?.role === "country_manager";
   const userCountryScope = user?.countryScope ?? [];
   const qc = useQueryClient();
-  
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [selectedTask, setSelectedTask] = useState<ListingReviewTask | null>(null);
