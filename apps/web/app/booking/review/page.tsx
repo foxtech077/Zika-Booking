@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { paymentApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
+import { storeLatestReviewContext } from "@/services/traveller";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -228,7 +230,17 @@ export default function BookingReviewPage() {
 
   // ─── Actions ──────────────────────────────────────────────────────────────────
 
-  function startPolling(pmId: string, ref: string, total: number, base: number, fee: number, tax: number, disc: number, method: string) {
+  function startPolling(
+    pmId: string,
+    ref: string,
+    reviewBookingId: string,
+    total: number,
+    base: number,
+    fee: number,
+    tax: number,
+    disc: number,
+    method: string,
+  ) {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       try {
@@ -238,8 +250,17 @@ export default function BookingReviewPage() {
           clearInterval(pollRef.current!);
           pollRef.current = null;
           const txId = res.data?.data?.transactionId ?? res.data?.data?.transaction_id ?? pmId;
+          storeLatestReviewContext({
+            bookingId: reviewBookingId,
+            listingId: ctx!.listingId,
+            listingName: ctx!.listingTitle,
+            completedAt: new Date().toISOString(),
+          });
           setConfirmed({
-            reference: ref, bookingId, totalAmount: total, currency: ctx!.currency,
+            reference: ref,
+            bookingId: reviewBookingId,
+            totalAmount: total,
+            currency: ctx!.currency,
             paymentId: pmId, paymentMethod: method, transactionId: txId,
             baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
           });
@@ -333,7 +354,7 @@ export default function BookingReviewPage() {
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
         setStep("polling");
-        startPolling(pmId, bRef, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money");
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money");
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
@@ -355,7 +376,7 @@ export default function BookingReviewPage() {
         setPayError(result.error.message ?? "Card payment failed. Please check your details.");
       } else {
         setStep("polling");
-        if (paymentId) startPolling(paymentId, bookingRef, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card");
+        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card");
       }
     } catch (err: any) {
       setPayError(err?.message ?? "Card payment failed.");
@@ -941,6 +962,12 @@ function ConfirmedView({
         >
           <span>⬇</span> Download Voucher PDF
         </button>
+        <Link
+          href={`/traveller/reviews?bookingId=${encodeURIComponent(confirmed.bookingId)}&listingId=${encodeURIComponent(ctx.listingId)}${ctx.listingTitle ? `&listingName=${encodeURIComponent(ctx.listingTitle)}` : ""}`}
+          className="flex-1 py-3.5 border-2 border-[#0B1E3F] text-[#0B1E3F] font-bold rounded-xl hover:bg-[#0B1E3F]/5 transition text-sm flex items-center justify-center gap-2"
+        >
+          <span>★</span> Leave a Review
+        </Link>
         <button
           onClick={onViewBookings}
           className="flex-1 py-3.5 bg-[#166534] text-white font-bold rounded-xl hover:bg-[#14532d] transition text-sm"
