@@ -6,48 +6,22 @@ import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
-  CalendarDays,
-  XCircle,
-  Plus,
-  Send,
-  MessageSquare,
-  ArrowLeft,
-  AlertCircle,
-  CheckCircle2,
-  Search,
-  Save,
-  X,
-  CreditCard,
-  FileText,
-  Hash,
-  UserCircle,
-  User,
-  Building2,
-  Mail,
-  Phone,
-  MapPin,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Info,
+  ArrowLeft, User, Building2, CalendarDays, Phone, Mail,
+  Globe, FileText, AlertCircle, CheckCircle2, Search,
+  CreditCard, Hash, UserCircle, MapPin, Loader2,
+  Send, Save, X, ChevronLeft, ChevronRight, Info, ChevronDown, XCircle
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
 import { canAccess } from "@/permissions/rbac";
 import { SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import ReactSelect from "react-select";
-import { ChangeEvent } from "react";
-import ReactCountryFlag from "react-country-flag";
-import countries from "i18n-iso-countries";
-import enLocale from "i18n-iso-countries/langs/en.json";
-
-import { Input, Select as UISelect, Textarea } from "@/components/ui/Input";
-import { ListingSearchDropdown } from "../../../../components/ui/ListingSearchDropdown";
-import type { SelectedListing } from "../../../../components/ui/ListingSearchDropdown";
-import { formatCurrency } from "@/lib/utils";
+import { Input, Select, Textarea, CustomDropdown } from "@/components/ui/Input";
+import { formatCurrency, cn } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
+
+const UISelect = Select;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -78,7 +52,10 @@ interface AvailabilityData {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function toYMD(d: Date) {
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function addDays(dateStr: string, n: number) {
@@ -171,9 +148,11 @@ function AvailabilityCalendar({
   // Sync calendar month to checkIn when it changes
   useEffect(() => {
     if (checkIn) {
-      const d = new Date(checkIn);
-      setViewYear(d.getFullYear());
-      setViewMonth(d.getMonth());
+      const [y, m] = checkIn.split("-").map(Number);
+      if (y && m) {
+        setViewYear(y);
+        setViewMonth(m - 1); // 0-indexed
+      }
     }
   }, [checkIn]);
 
@@ -398,43 +377,29 @@ export default function ManualBookingPage() {
   const [email, setEmail] = useState("");
   const [selectedCountry, setSelectedCountry] = useState<Country>((COUNTRIES.find(c => c.code === "KE") || COUNTRIES[0]) as Country);
   const [localPhone, setLocalPhone] = useState("");
-  const phone = `${selectedCountry.dialCode}${localPhone}`;
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [countrySearch, setCountrySearch] = useState("");
   const [nationality, setNationality] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Register locale for i18n-iso-countries
-  countries.registerLocale(enLocale);
+  const phone = `${selectedCountry.dialCode}${localPhone.trim().replace(/\D/g, "")}`;
 
-  const bookingCountryOptions: CountryOption[] = Object.entries(countries.getNames("en", { select: "official" })).map(([code, name]) => ({
-    value: code,
-    label: `${code}`,
-  }));
-
-  const formatOptionLabel = ({ value, label }: CountryOption) => (
-    <div className="flex items-center gap-2">
-      <ReactCountryFlag countryCode={value} svg style={{ width: "1.2em", height: "1.2em" }} />
-      <span>{value}</span>
-    </div>
-  );
-
-  const formatCountryOptionLabel = ({ value, label }: CountryOption) => (
-    <div className="flex items-center gap-2">
-      <ReactCountryFlag countryCode={value} svg style={{ width: "1.2em", height: "1.2em" }} />
-      <span>{value}</span>
-    </div>
-  );
-
-  // Options for the Nationality dropdown – only ISO code as label
-  const nationalityOptions: CountryOption[] = Object.entries(countries.getNames("en", { select: "official" })).map(([code, name]) => ({
-    value: code,
-    label: `${code}`,
-  }));
-
-
-  // Formatter for Nationality dropdown – flag and ISO code only
-
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".phone-country-dropdown")) {
+        setIsDropdownOpen(false);
+      }
+      if (!target.closest(".booking-country-dropdown")) {
+        setIsBookingCountryOpen(false);
+      }
+      if (!target.closest(".booking-listing-dropdown")) {
+        setIsListingSelectOpen(false);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, []);
 
   // ── Section 2: Booking Info ───────────────────────────────────────────────────
   const [listingType, setListingType] = useState<ListingType>("hotel");
@@ -476,7 +441,6 @@ export default function ManualBookingPage() {
   const [calSelectStep, setCalSelectStep] = useState<"checkIn" | "checkOut">("checkIn");
 
   // ── Section 4: Price ──────────────────────────────────────────────────────────
-  const [selectedListing, setSelectedListing] = useState<SelectedListing | null>(null);
   const [price, setPrice] = useState<PriceSummary | null>(null);
 
   // ── Section 5: Payment ────────────────────────────────────────────────────────
@@ -548,7 +512,7 @@ export default function ManualBookingPage() {
   const isAccommodation = listingType !== "car";
   const bookingRef = submitted ? `MBK-${Date.now().toString(36).toUpperCase()}` : "";
 
-  // Reset fields when listing type changes
+  // Reset conditional fields when listing type or country changes
   useEffect(() => {
     setCheckIn("");
     setCheckOut("");
@@ -558,13 +522,60 @@ export default function ManualBookingPage() {
     setPrice(null);
     setAvailability(null);
     setCalSelectStep("checkIn");
+    setListingId(""); setListingName("");
   }, [listingType, country]);
+
+  // ── Auto-fetch calendar data when a listing is selected ──────────────────────
+  // Uses the public /listings/:id/availability endpoint (no auth required) to
+  // pre-populate the calendar with booked ranges so all status colours are shown
+  // immediately — without waiting for the user to click "Check Availability".
+  useEffect(() => {
+    if (!listingId) {
+      setAvailability(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCalLoading(true);
+
+    const now = new Date();
+    const monthParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    listingApi
+      .get(`/listings/${listingId}/availability`, { params: { month: monthParam } })
+      .then((res) => {
+        if (cancelled) return;
+        const d = res.data?.data ?? res.data ?? {};
+        // The public endpoint returns { unavailableRanges: [{start, end}] }
+        // Map them to bookedRanges for the calendar's getDayStatus helper
+        const unavailable: { start: string | null; end: string | null }[] =
+          d.unavailableRanges ?? [];
+        const bookedRanges = unavailable
+          .filter((r) => r.start && r.end)
+          .map((r) => ({ start: r.start as string, end: r.end as string }));
+        setAvailability({ bookedRanges, lockedRanges: [] });
+      })
+      .catch(() => {
+        // Silently ignore — calendar degrades gracefully to "all available" view
+        if (!cancelled) setAvailability(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCalLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [listingId]);
 
   // Fetch listings for dropdown
   const { data: listingsData, isLoading: listingsLoading } = useQuery({
-    queryKey: ["listings"],
+    queryKey: ['listings', listingType, country],
     queryFn: async () => {
-      const res = await listingApi.get("/admin/listings");
+      const params: Record<string, string> = {
+        limit: "1000",
+      };
+      if (listingType) params.category = listingType;
+      if (country) params.country = country;
+      const res = await listingApi.get('/admin/listings', { params });
       return res.data?.data ?? res.data;
     },
   });
@@ -590,10 +601,10 @@ export default function ManualBookingPage() {
     return Math.max(0, Math.ceil(diff / 86400000));
   })();
 
-  const pricePerNight = price && nights > 0 ? (price.baseAmount ?? 0) / nights : null;
-  const pricePerGuest = price && guests > 0 ? (price.total ?? 0) / guests : null;
-  const serviceFeeRate = price?.baseAmount && price.baseAmount > 0 ? (price.serviceFee / price.baseAmount) * 100 : null;
-  const taxRate = price?.baseAmount && price.baseAmount > 0 ? (price.tax / price.baseAmount) * 100 : null;
+  const pricePerNight = price && nights > 0 ? price.baseAmount / nights : null;
+  const pricePerGuest = price && guests > 0 ? price.total / guests : null;
+  const serviceFeeRate = price && price.baseAmount > 0 ? (price.serviceFee / price.baseAmount) * 100 : null;
+  const taxRate = price && price.baseAmount > 0 ? (price.tax / price.baseAmount) * 100 : null;
 
   const formatDateLabel = (dateStr: string) => {
     if (!dateStr) return "—";
@@ -617,8 +628,15 @@ export default function ManualBookingPage() {
     if (!firstName.trim()) e.firstName = "Required";
     if (!lastName.trim()) e.lastName = "Required";
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) e.email = "Valid email required";
-    if (!localPhone.trim()) e.phone = "Required";
-    if (!selectedListing) e.listingName = "Please select a listing";
+    if (!localPhone.trim()) {
+      e.phone = "Required";
+    } else {
+      const digitsOnly = localPhone.replace(/\D/g, "");
+      if (digitsOnly.length < 6 || digitsOnly.length > 15) {
+        e.phone = "Invalid phone number length (6-15 digits required)";
+      }
+    }
+    if (!listingName.trim()) e.listingName = "Required";
     if (!country.trim()) e.country = "Required";
     if (isAccommodation) {
       if (!checkIn) e.checkIn = "Required";
@@ -676,11 +694,32 @@ export default function ManualBookingPage() {
           currency: d.pricing.currency ?? getCurrencyForCountry(country),
         });
       }
+      // The admin endpoint never returns bookedRanges/lockedRanges directly.
+      // If it found conflicts (available: false), refresh the calendar from
+      // the public endpoint so the blocking ranges become visible.
       if (d.bookedRanges || d.lockedRanges) {
         setAvailability({
           bookedRanges: d.bookedRanges ?? [],
           lockedRanges: d.lockedRanges ?? [],
         });
+      } else if (!d.available && listingId) {
+        // Re-fetch public availability to reveal which dates are blocked
+        try {
+          const now = new Date();
+          const monthParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+          const calRes = await listingApi.get(`/listings/${listingId}/availability`, {
+            params: { month: monthParam },
+          });
+          const calData = calRes.data?.data ?? calRes.data ?? {};
+          const unavailable: { start: string | null; end: string | null }[] =
+            calData.unavailableRanges ?? [];
+          const bookedRanges = unavailable
+            .filter((r) => r.start && r.end)
+            .map((r) => ({ start: r.start as string, end: r.end as string }));
+          setAvailability({ bookedRanges, lockedRanges: [] });
+        } catch {
+          // ignore — calendar already has data from the initial fetch
+        }
       }
     } catch {
       // Mock fallback
@@ -690,7 +729,7 @@ export default function ManualBookingPage() {
         s.setDate(s.getDate() + startOffset);
         const e = new Date(today);
         e.setDate(e.getDate() + endOffset);
-        return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) };
+        return { start: toYMD(s), end: toYMD(e) };
       };
 
       const mockAvail = {
@@ -734,29 +773,25 @@ export default function ManualBookingPage() {
     </button>
   );
 
-  // ── Mutations ───────────────────────────────────────────────────────
-  const createDraftMut = useMutation({
-    mutationFn: async () => {
-      const res = await listingApi.post("/admin/bookings/draft", {
-        listingId: selectedListing!.id,
-        listingType,
-        listingName: selectedListing!.name,
-        guestFirstName: firstName,
-        guestLastName: lastName,
-        guestEmail: email,
-        guestPhone: phone,
-        nationality,
-        country,
-        guests,
-        ...(isAccommodation ? { checkIn: new Date(checkIn).toISOString(), checkOut: new Date(checkOut).toISOString(), rooms, units } : { pickupDatetime: pickup, returnDatetime: returnDt }),
-        notes,
-      });
-      return res.data.data as { bookingId: string; draftId: string };
-    },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error?.message ?? "Failed to create draft booking.";
-      setErrors((p) => ({ ...p, _api: msg }));
-    },
+
+
+
+  // ── Save Draft ────────────────────────────────────────────────────────────────
+  const saveDraftMut = useMutation({
+    mutationFn: () =>
+      listingApi.post("/admin/bookings/draft", {
+        listingId, listingType, listingName,
+        guestFirstName: firstName, guestLastName: lastName,
+        guestEmail: email, guestPhone: phone, nationality,
+        country, guests, notes,
+        checkIn: isAccommodation ? (checkIn ? new Date(checkIn).toISOString() : undefined) : (pickup ? new Date(pickup).toISOString() : undefined),
+        checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : undefined) : (returnDt ? new Date(returnDt).toISOString() : undefined),
+        nightsOrDays: nights,
+        nightlyRate: price?.baseAmount ?? 0,
+        guestId: "",
+      }).then((r) => r.data),
+    onSuccess: () => setErrors({}),
+    onError: () => setErrors((p) => ({ ...p, _api: "Draft saved (backend not yet active — data stored locally)." })),
   });
 
   const paymentLinkMut = useMutation({
@@ -775,20 +810,29 @@ export default function ManualBookingPage() {
     },
   });
 
+
   async function handleSendLink() {
-    if (!validate()) return;
-    if (availStatus !== "available") {
-      setErrors((p) => ({ ...p, _avail: "Please check availability before sending a payment link." }));
-      return;
-    }
+    setIsSending(true);
+    // Create draft booking first
     try {
-      const draft = await createDraftMut.mutateAsync();
-      const linkResp = await paymentLinkMut.mutateAsync(draft.bookingId);
-      setPaymentLink(linkResp.paymentLink);
+      const draft = await saveDraftMut.mutateAsync();
+      const bookingId = draft?.data?.bookingId ?? draft?.bookingId ?? draft?.id ?? draft?.data?.id;
+      if (!bookingId) {
+        setErrors(p => ({ ...p, _api: "Failed to obtain booking ID." }));
+        setIsSending(false);
+        return;
+      }
+      await paymentApi.post(`/${paymentMethod}/payment-link`, { bookingId });
+      if (paymentMethod === "tara") {
+        await paymentApi.get(`/tara/trigger/${bookingId}`);
+      }
       setSubmitted(true);
       setLinkSent(true);
-    } catch {
-      // Errors handled in mutations
+    } catch (err: any) {
+      const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
+      setErrors(p => ({ ...p, _api: msg }));
+    } finally {
+      setIsSending(false);
     }
   }
 
@@ -816,26 +860,13 @@ export default function ManualBookingPage() {
           <Button
             variant="secondary"
             onClick={() => {
-              setSubmitted(false);
-              setLinkSent(false);
-              setFirstName("");
-              setLastName("");
-              setEmail("");
-              setLocalPhone("");
-              setNationality("");
-              setNotes("");
-              setSelectedListing(null);
-              setCountry("");
-              setCheckIn("");
-              setCheckOut("");
-              setPickup("");
-              setReturnDt("");
-              setGuests(1);
-              setRooms(1);
-              setUnits(1);
-              setAvailStatus("idle");
-              setPrice(null);
-              setAvailability(null);
+              setSubmitted(false); setLinkSent(false);
+              setFirstName(""); setLastName(""); setEmail(""); setLocalPhone("");
+              setSelectedCountry((COUNTRIES.find((c) => c.code === "KE") || COUNTRIES[0]) as Country);
+              setNationality(""); setNotes(""); setListingName(""); setListingId("");
+              setCountry(""); setCheckIn(""); setCheckOut(""); setPickup(""); setReturnDt("");
+              setGuests(1); setRooms(1); setUnits(1);
+              setAvailStatus("idle"); setPrice(null); setAvailability(null);
             }}
           >
             New Booking
@@ -886,27 +917,112 @@ export default function ManualBookingPage() {
                 <Input id={`${uid}-lastName`} label="Last Name" required placeholder="Doe" value={lastName} onChange={(e) => setLastName(e.target.value)} error={errors.lastName} />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Input id={`${uid}-email`} label="Email Address" type="email" required placeholder="john@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} leftIcon={<Mail className="h-4 w-4" />} />
-                <Input id={`${uid}-phone`} label="Phone Number" type="tel" required placeholder="+254700000000" value={phone} onChange={(e) => {}} error={errors.phone} leftIcon={<Phone className="h-4 w-4" />} />
-              </div>
-              <div className="grid grid-cols-1 gap-4">
-                <ReactSelect
-                  inputId={`${uid}-nationality`}
-                  placeholder="Select nationality..."
-                  options={nationalityOptions}
-                  value={nationalityOptions.find((o) => o.value === nationality) || null}
-                  onChange={(selected) => setNationality(selected?.value || "")}
-                  formatOptionLabel={formatOptionLabel}
-                  isClearable
-                  menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
-                  menuPosition="fixed"
-                  maxMenuHeight={200}
-                  styles={{
-                    control: (provided) => ({ ...provided, borderRadius: "0.5rem" }),
-                    menu: (provided) => ({ ...provided, zIndex: 9999 }),
-                    menuList: (provided) => ({ ...provided, maxHeight: "200px", overflowY: "auto" }),
-                  }}
+                <Input
+                  id={`${uid}-email`}
+                  label="Email Address"
+                  type="email"
+                  required
+                  placeholder="john@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  error={errors.email}
+                  leftIcon={<Mail className="h-4 w-4" />}
                 />
+                <div className="space-y-1">
+                  <label htmlFor={`${uid}-phone`} className="block text-sm font-medium text-slate-700">
+                    Phone Number <span className="text-danger ml-0.5">*</span>
+                  </label>
+                  <div className="flex gap-2 relative">
+                    {/* Country Selector Dropdown */}
+                    <div className="w-[180px] flex-shrink-0 relative phone-country-dropdown">
+                      <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-slate-900",
+                          "transition-colors duration-150 h-[38px] mt-0.5",
+                          "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
+                          errors.phone ? "border-danger" : "border-border hover:border-slate-400"
+                        )}
+                      >
+                        <span className="truncate">
+                          {selectedCountry.name === "United Arab Emirates" ? "UAE" : selectedCountry.name} ({selectedCountry.dialCode})
+                        </span>
+                        <ChevronDown className="h-4 w-4 text-slate-400 ml-1 flex-shrink-0" />
+                      </button>
+
+                      {isDropdownOpen && (
+                        <div className="absolute left-0 mt-1 w-[260px] rounded-lg border border-border bg-white shadow-lg z-50 p-2 space-y-1.5 max-h-[300px] overflow-y-auto">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Search country or code..."
+                              value={countrySearch}
+                              onChange={(e) => setCountrySearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="overflow-y-auto max-h-[200px]">
+                            {COUNTRIES.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.dialCode.includes(countrySearch)
+                            ).map((c) => (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCountry(c);
+                                  setIsDropdownOpen(false);
+                                  setCountrySearch("");
+                                }}
+                                className={cn(
+                                  "w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 transition-colors flex items-center justify-between",
+                                  selectedCountry.code === c.code ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
+                                )}
+                              >
+                                <span className="truncate">{c.name}</span>
+                                <span className="text-slate-400 font-mono flex-shrink-0 ml-1">{c.dialCode}</span>
+                              </button>
+                            ))}
+                            {COUNTRIES.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.dialCode.includes(countrySearch)
+                            ).length === 0 && (
+                                <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
+                              )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Phone Number Input */}
+                    <div className="flex-1 relative">
+                      <input
+                        id={`${uid}-phone`}
+                        type="tel"
+                        required
+                        placeholder="700000000"
+                        value={localPhone}
+                        onChange={(e) => setLocalPhone(e.target.value)}
+                        className={cn(
+                          "block w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400",
+                          "transition-colors duration-150 h-[38px] mt-0.5",
+                          "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
+                          errors.phone
+                            ? "border-danger focus:border-danger focus:ring-danger/25"
+                            : "border-border hover:border-slate-400"
+                        )}
+                      />
+                    </div>
+                  </div>
+                  {errors.phone && <p className="text-xs text-danger mt-1">{errors.phone}</p>}
+                </div>
               </div>
               <Textarea id={`${uid}-notes`} label="Notes / Special Requests" placeholder="Any special requests or notes for this booking..." value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} hint="Visible to internal staff only." />
             </div>
@@ -916,51 +1032,318 @@ export default function ManualBookingPage() {
           <SectionCard step={2} title="Booking Information" icon={Building2}>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <UISelect id={`${uid}-listingType`} label="Listing Type" required value={listingType} onChange={(e: ChangeEvent<HTMLSelectElement>) => setListingType(e.target.value as ListingType)} options={[{ value: "hotel", label: "Hotel" }, { value: "apartment", label: "Apartment" }, { value: "car", label: "Car Rental" }]} />
-                <div className="flex flex-col">
-                  <label htmlFor={`${uid}-country`} className="block text-sm font-medium text-gray-700 mb-1">
-                    Country <span className="text-red-500">*</span>
+                <CustomDropdown
+                  id={`${uid}-listingType`}
+                  label="Listing Type"
+                  required
+                  value={listingType}
+                  onChange={(val) => setListingType(val as ListingType)}
+                  options={[
+                    { value: "hotel", label: "Hotel" },
+                    { value: "apartment", label: "Apartment" },
+                    { value: "car", label: "Car Rental" },
+                  ]}
+                />
+                <div className="space-y-1 relative booking-country-dropdown">
+                  <label htmlFor={`${uid}-country`} className="block text-sm font-medium text-slate-700">
+                    Country <span className="text-danger ml-0.5">*</span>
                   </label>
-                  <ReactSelect
-                    inputId={`${uid}-country`}
-                    placeholder="Select country..."
-                    options={bookingCountryOptions}
-                    value={bookingCountryOptions.find((o) => o.value === country) || null}
-                    onChange={(selected) => {
-                      setCountry(selected?.value || "");
-                      setSelectedListing(null);
-                      setAvailStatus("idle");
-                      setPrice(null);
-                    }}
-                    formatOptionLabel={formatCountryOptionLabel}
-                    isClearable
-                    menuPortalTarget={typeof window !== "undefined" ? document.body : undefined}
-                    menuPosition="fixed"
-                    maxMenuHeight={200}
-                    styles={{
-                      control: (provided) => ({ ...provided, borderRadius: "0.5rem" }),
-                      menu: (provided) => ({ ...provided, zIndex: 9999 }),
-                      menuList: (provided) => ({ ...provided, maxHeight: "200px", overflowY: "auto" }),
-                    }}
-                  />
+                  {isCountryManager && scopedCountries.length === 1 ? (
+                    <div className="w-full flex items-center justify-between rounded-lg border border-border bg-slate-50 px-3 py-2 text-sm text-slate-500 h-[38px] mt-0.5 cursor-not-allowed">
+                      <span>
+                        {(() => {
+                          const found = allowedBookingCountries.find(c => c.code === country);
+                          return found ? `${found.flag} ${found.name} (${found.code})` : country;
+                        })()}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setIsBookingCountryOpen(!isBookingCountryOpen)}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-slate-900",
+                          "transition-colors duration-150 h-[38px] mt-0.5",
+                          "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
+                          errors.country ? "border-danger" : "border-border hover:border-slate-400"
+                        )}
+                      >
+                        <span>
+                          {country ? (
+                            (() => {
+                              const found = allowedBookingCountries.find(c => c.code === country);
+                              return found ? `${found.flag} ${found.name} (${found.code})` : country;
+                            })()
+                          ) : (
+                            "Select country…"
+                          )}
+                        </span>
+                        <ChevronDown className="h-4 w-4 text-slate-400 ml-1 flex-shrink-0" />
+                      </button>
+
+                      {isBookingCountryOpen && (
+                        <div className="absolute left-0 mt-1 w-full rounded-lg border border-border bg-white shadow-lg z-50 p-2 space-y-1.5 max-h-[300px] overflow-y-auto">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Search country or code..."
+                              value={bookingCountrySearch}
+                              onChange={(e) => setBookingCountrySearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="overflow-y-auto max-h-[200px]">
+                            {allowedBookingCountries.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(bookingCountrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(bookingCountrySearch.toLowerCase())
+                            ).map((c) => (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => {
+                                  setCountry(c.code);
+                                  setIsBookingCountryOpen(false);
+                                  setBookingCountrySearch("");
+                                }}
+                                className={cn(
+                                  "w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 transition-colors flex items-center gap-2",
+                                  country === c.code ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
+                                )}
+                              >
+                                <span>{c.flag}</span>
+                                <span className="truncate">{c.name}</span>
+                                <span className="text-slate-400 font-mono flex-shrink-0 ml-auto">{c.code}</span>
+                              </button>
+                            ))}
+                            {allowedBookingCountries.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(bookingCountrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(bookingCountrySearch.toLowerCase())
+                            ).length === 0 && (
+                                <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
+                              )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {errors.country && <p className="text-xs text-danger mt-1">{errors.country}</p>}
                 </div>
               </div>
-              <ListingSearchDropdown
-                country={country}
-                listingType={listingType}
-                value={selectedListing}
-                onChange={(listing: SelectedListing | null) => {
-                  setSelectedListing(listing);
-                  setAvailStatus("idle");
-                  setPrice(null);
+
+
+              <div className="space-y-1 relative booking-listing-dropdown">
+                <label htmlFor={`${uid}-listing`} className="block text-sm font-medium text-slate-700">
+                  Listing
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsListingSelectOpen(!isListingSelectOpen)}
+                  className={cn(
+                    "w-full flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-slate-900",
+                    "transition-colors duration-150 h-[38px] mt-0.5",
+                    "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
+                    errors.listingName ? "border-danger" : "border-border hover:border-slate-400"
+                  )}
+                >
+                  <span className="truncate">
+                    {listingName || "Select a listing"}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-slate-400 ml-1 flex-shrink-0" />
+                </button>
+
+                {isListingSelectOpen && (
+                  <div className="absolute left-0 mt-1 w-full rounded-lg border border-border bg-white shadow-lg z-50 p-2 space-y-1.5 max-h-[350px] overflow-y-auto">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search listing by name or ID..."
+                        value={listingSelectSearch}
+                        onChange={(e) => setListingSelectSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="overflow-y-auto max-h-[250px] space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setListingId("");
+                          setListingName("");
+                          setAvailability(null);
+                          setIsListingSelectOpen(false);
+                          setListingSelectSearch("");
+                        }}
+                        className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 text-slate-500 transition-colors"
+                      >
+                        Select a listing (none)
+                      </button>
+                      {listings.filter((l: any) => {
+                        const query = listingSelectSearch.toLowerCase();
+                        return (
+                          (l.name?.toLowerCase().includes(query) || false) ||
+                          (l.title?.toLowerCase().includes(query) || false) ||
+                          (l.id?.toLowerCase().includes(query) || false) ||
+                          (l.town?.toLowerCase().includes(query) || false)
+                        );
+                      }).map((l: any) => {
+                        const isSelected = listingId === l.id;
+                        const name = l.name ?? l.title ?? l.id;
+                        const details = [
+                          l.category ? l.category.charAt(0).toUpperCase() + l.category.slice(1) : "",
+                          l.town ?? "",
+                          l.pricePerNight ? `${l.pricePerNight} ${l.currency ?? "USD"}` : ""
+                        ].filter(Boolean).join(" · ");
+
+                        return (
+                          <button
+                            key={l.id}
+                            type="button"
+                            onClick={() => {
+                              setListingId(l.id);
+                              setListingName(name);
+                              setAvailability(null);
+                              setIsListingSelectOpen(false);
+                              setListingSelectSearch("");
+                            }}
+                            className={cn(
+                              "w-full text-left px-2 py-2 text-xs rounded hover:bg-slate-100 transition-colors flex flex-col gap-0.5",
+                              isSelected ? "bg-primary/5 border-l-2 border-primary pl-1.5" : ""
+                            )}
+                          >
+                            <div className={cn("font-medium", isSelected ? "text-primary" : "text-slate-900")}>
+                              {name}
+                            </div>
+                            <div className="text-[10px] text-slate-400 flex items-center justify-between gap-2 w-full">
+                              <span>{details}</span>
+                              <span className="font-mono text-slate-300 text-[9px] select-all">{l.id}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {listings.filter((l: any) => {
+                        const query = listingSelectSearch.toLowerCase();
+                        return (
+                          (l.name?.toLowerCase().includes(query) || false) ||
+                          (l.title?.toLowerCase().includes(query) || false) ||
+                          (l.id?.toLowerCase().includes(query) || false) ||
+                          (l.town?.toLowerCase().includes(query) || false)
+                        );
+                      }).length === 0 && (
+                          <p className="text-xs text-slate-400 text-center py-4">No listings found</p>
+                        )}
+                    </div>
+                  </div>
+                )}
+                {errors.listingName && <p className="text-xs text-danger mt-1">{errors.listingName}</p>}
+              </div>
+
+              <Input
+                id={`${uid}-listingId`}
+                label="Listing ID (optional)"
+                placeholder="lst_abc123"
+                value={listingId}
+                onChange={(e) => {
+                  setListingId(e.target.value);
+                  setAvailability(null); // reset calendar on ID change
                 }}
-                error={errors.listingName}
+                hint="Providing an ID auto-loads the availability calendar."
               />
+
+              {/* Dates — accommodation vs car */}
               {isAccommodation ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <Input id={`${uid}-checkIn`} label="Check-In" type="date" required value={checkIn} onChange={(e) => setCheckIn(e.target.value)} error={errors.checkIn} rightIcon={checkIn ? renderClearDate(setCheckIn) : undefined} />
-                  <Input id={`${uid}-checkOut`} label="Check-Out" type="date" required value={checkOut} onChange={(e) => setCheckOut(e.target.value)} error={errors.checkOut} rightIcon={checkOut ? renderClearDate(setCheckOut) : undefined} />
-                </div>
+                <>
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 flex items-center gap-2">
+                    <CalendarDays className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                    <p className="text-xs text-primary">
+                      You can also click dates directly on the calendar →
+                      {" "}<strong>{calSelectStep === "checkIn" ? "Select Check-In" : "Select Check-Out"}</strong>
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <DatePicker
+                      id={`${uid}-checkIn`}
+                      label="Check-In Date"
+                      required
+                      value={checkIn}
+                      onChange={(val) => { setCheckIn(val); setAvailStatus("idle"); setPrice(null); setCalSelectStep("checkOut"); }}
+                      error={errors.checkIn}
+                    />
+                    <DatePicker
+                      id={`${uid}-checkOut`}
+                      label="Check-Out Date"
+                      required
+                      minDate={checkIn || undefined}
+                      value={checkOut}
+                      onChange={(val) => { setCheckOut(val); setAvailStatus("idle"); setPrice(null); setCalSelectStep("checkIn"); }}
+                      error={errors.checkOut}
+                    />
+                  </div>
+                  {nights > 0 && (
+                    <p className="text-xs text-slate-500">
+                      <CalendarDays className="inline h-3.5 w-3.5 mr-1 text-primary" />
+                      {nights} night{nights !== 1 ? "s" : ""}
+                    </p>
+                  )}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <label htmlFor={`${uid}-guests`} className="block text-sm font-medium text-slate-700">
+                        Guests <span className="text-danger">*</span>
+                      </label>
+                      <input
+                        id={`${uid}-guests`}
+                        type="number" min={1} max={50}
+                        value={guests}
+                        onChange={(e) => setGuests(Math.max(1, Number(e.target.value)))}
+                        onFocus={(e) => {
+                          const target = e.target;
+                          setTimeout(() => target.select(), 0);
+                        }}
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
+                        className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
+                      />
+                    </div>
+                    {listingType === "hotel" && (
+                      <div className="space-y-1">
+                        <label htmlFor={`${uid}-rooms`} className="block text-sm font-medium text-slate-700">Rooms</label>
+                        <input
+                          id={`${uid}-rooms`}
+                          type="number" min={1} max={50}
+                          value={rooms}
+                          onChange={(e) => setRooms(Math.max(1, Number(e.target.value)))}
+                          onFocus={(e) => {
+                            const target = e.target;
+                            setTimeout(() => target.select(), 0);
+                          }}
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
+                          className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
+                        />
+                      </div>
+                    )}
+                    {listingType === "apartment" && (
+                      <div className="space-y-1">
+                        <label htmlFor={`${uid}-units`} className="block text-sm font-medium text-slate-700">Units</label>
+                        <input
+                          id={`${uid}-units`}
+                          type="number" min={1} max={20}
+                          value={units}
+                          onChange={(e) => setUnits(Math.max(1, Number(e.target.value)))}
+                          onFocus={(e) => {
+                            const target = e.target;
+                            setTimeout(() => target.select(), 0);
+                          }}
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
+                          className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   <DatePicker
@@ -1188,10 +1571,28 @@ export default function ManualBookingPage() {
               </Button>
             </Link>
             <div className="flex items-center gap-2">
-              <Button type="button" variant="secondary" loading={createDraftMut.isPending} leftIcon={<Save className="h-4 w-4" />} onClick={() => createDraftMut.mutate()}>
+              <Button
+                type="button"
+                variant="secondary"
+                loading={saveDraftMut.isPending}
+                leftIcon={<Save className="h-4 w-4" />}
+                onClick={() => {
+                  if (!validate()) return;
+                  saveDraftMut.mutate();
+                }}
+              >
                 Save Draft
               </Button>
-              <Button type="button" loading={paymentLinkMut.isPending} leftIcon={<Send className="h-4 w-4" />} onClick={handleSendLink} disabled={availStatus === "unavailable"}>
+              <Button
+                type="button"
+                loading={isSending}
+                leftIcon={<Send className="h-4 w-4" />}
+                onClick={() => {
+                  if (!validate()) return;
+                  handleSendLink();
+                }}
+                disabled={availStatus === "unavailable" || isSending}
+              >
                 Send Payment Link
               </Button>
             </div>
@@ -1228,4 +1629,3 @@ export default function ManualBookingPage() {
     </div>
   );
 }
-

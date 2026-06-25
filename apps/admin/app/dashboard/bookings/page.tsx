@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle, Plus, Send, MessageSquare } from "lucide-react";
+import { CalendarDays, XCircle, Eye, Plus, Send, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
@@ -11,12 +12,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
-
-import MessagingPage from "../messaging/page";
-import { ConfirmModal } from "@/components/modals/Modals";
+import { ActionModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime, formatCurrency, slugToLabel } from "@/lib/utils";
-import Link from 'next/link';
-import { CurrencySymbol } from "@/components/CurrencySymbol";
 import type { Booking } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
@@ -70,65 +67,9 @@ export default function BookingsPage() {
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [resendModal, setResendModal] = useState<Booking | null>(null);
+  const [resendGateway, setResendGateway] = useState<"stripe" | "tara">("stripe");
   const [resendError, setResendError] = useState("");
   const [resendSuccess, setResendSuccess] = useState(false);
-  const [showMessagingDrawer, setShowMessagingDrawer] = useState(false);
-
-  
-
-  // Set default status for Sales role
-  useEffect(() => {
-    if (role === "sales" && status === "") {
-      setStatus("pending_payment");
-    }
-  }, [role, status]);
-
-  const canCreateManualBooking = canAccess(role as AdminRole, "manage_manual_booking");
-
-  // ✅ no duplicate arrays, no any[]
-  const statusOptions =
-    role === "sales"
-      ? [{ value: "pending_payment", label: "Pending Requests" }]
-      : [
-          { value: "pending_payment", label: "Pending Payment" },
-          { value: "confirmed", label: "Confirmed" },
-          { value: "completed", label: "Completed" },
-          { value: "cancelled_by_guest", label: "Cancelled by Guest" },
-          { value: "cancelled_by_provider", label: "Cancelled by Provider" },
-          { value: "cancelled_by_system", label: "Cancelled by System" },
-        ];
-
-  const filterItems = [
-    {
-      key: "status",
-      label: role === "sales" ? "Pending Requests" : "All Statuses",
-      value: status,
-      onChange: (v: string) => { setStatus(v); setPage(1); },
-      options: statusOptions,
-    },
-    {
-      key: "listingType",
-      label: "All Types",
-      value: listingType,
-      onChange: (v: string) => { setListingType(v); setPage(1); },
-      options: [
-        { value: "hotel", label: "Hotel" },
-        { value: "apartment", label: "Apartment" },
-        { value: "car", label: "Car" },
-      ],
-    },
-    ...(canShowCountryFilter
-      ? [
-          {
-            key: "country",
-            label: "All Countries",
-            value: country,
-            onChange: (v: string) => { setCountry(v); setPage(1); },
-            options: countryOptions,
-          },
-        ]
-      : []),
-  ];
 
   const params = Object.fromEntries(
     Object.entries({
@@ -259,13 +200,8 @@ export default function BookingsPage() {
       align: "right",
       render: (b) => (
         <div className="text-right">
-          <p className="font-semibold text-sm tabular">
-            <CurrencySymbol currency={b.currency} className="mr-0.5 text-slate-500" />
-            {Number(b.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-          {role !== "sales" && role !== "support" && (
-            <p className="text-xs text-slate-500">Commission: <CurrencySymbol currency={b.currency} className="mr-0.5" />{Number(b.commissionAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-          )}
+          <p className="font-semibold text-sm tabular">{formatCurrency(Number(b.totalAmount), b.currency)}</p>
+          <p className="text-xs text-slate-500">Commission: {formatCurrency(Number(b.commissionAmount), b.currency)}</p>
         </div>
       ),
     },
@@ -512,79 +448,147 @@ export default function BookingsPage() {
               </div>
             )}
           </div>
-          ) : null}
+        ) : null}
       </SlideDrawer>
 
-        {detailData && ["pending_payment", "confirmed"].includes(detailData.status) && (
-          <div className="border-t border-border pt-4 flex gap-2">
-            {canAccess(role as AdminRole, "manage_bookings") && selected && (
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={() => { setCancelModal(selected); setSelected(null); }}
-              >
-                Cancel Booking
-              </Button>
-            )}
-            {canAccess(role as AdminRole, "view_messaging") && selected && (
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<MessageSquare className="h-3 w-3" />}
-                onClick={() => { setShowMessagingDrawer(true); setSelected(selected); }}
-              >
-                Message Guest
-              </Button>
-            )}
-          </div>
-        )}        {/* Messaging Drawer */}
-        <SlideDrawer
-          open={showMessagingDrawer}
-          onClose={() => setShowMessagingDrawer(false)}
-          title="Messaging"
-          description="Guest communication"
-          width="md"
-        >
-          <MessagingPage />
-        </SlideDrawer>
-      {/* Resend Payment Link Modal */}
-      {resendModal && (
-        <ConfirmModal
-          open={!!resendModal}
-          onClose={() => { setResendModal(null); setResendError(""); setResendSuccess(false); }}
-          title="Resend Payment Link"
-          description={`Send a new payment link to ${resendModal.guestEmail}?`}
-          confirmLabel="Send Link"
-          variant="info"
-          loading={resendLinkMut.isPending}
-          onConfirm={() => resendLinkMut.mutate({ id: resendModal.id, gateway: "stripe" })}
-        >
-          {resendError && <p className="text-sm text-danger mt-2">{resendError}</p>}
-          {resendSuccess && <p className="text-sm text-success mt-2">Payment link sent successfully!</p>}
-        </ConfirmModal>
-      )}
+      {/* Cancel booking modal */}
+      <ActionModal
+        open={!!cancelModal}
+        onClose={() => { setCancelModal(null); setCancelReason(""); }}
+        title="Cancel booking"
+        description={`Cancel booking ${cancelModal?.reference}? This cannot be undone.`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setCancelModal(null)}>Cancel</Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={cancelMut.isPending}
+              onClick={() => cancelModal && cancelMut.mutate({ id: cancelModal.id, reason: cancelReason })}
+              leftIcon={<XCircle className="h-4 w-4" />}
+            >
+              Confirm Cancellation
+            </Button>
+          </>
+        }
+      >
+        <Textarea
+          id="cancel-reason"
+          label="Cancellation reason"
+          value={cancelReason}
+          onChange={(e) => setCancelReason(e.target.value)}
+          placeholder="Explain why this booking is being cancelled…"
+          required
+          rows={3}
+        />
+      </ActionModal>
 
-      {/* Cancel confirmation modal */}
-      {cancelModal && (
-        <ConfirmModal
-          open={!!cancelModal}
-          onClose={() => { setCancelModal(null); setCancelReason(""); }}
-          title="Cancel Booking"
-          description={`Cancel booking ${cancelModal.reference}? This action cannot be undone.`}
-          confirmLabel="Cancel Booking"
-          variant="danger"
-          loading={cancelMut.isPending}
-          onConfirm={() => cancelMut.mutate({ id: cancelModal.id, reason: cancelReason })}
-        >
-          <Textarea
-            label="Cancellation reason"
-            placeholder="Provide a reason for cancellation…"
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            rows={3}
-          />
-        </ConfirmModal>
-      )}
+      {/* Resend payment link modal */}
+      <ActionModal
+        open={!!resendModal}
+        onClose={() => {
+          setResendModal(null);
+          setResendError("");
+          setResendSuccess(false);
+        }}
+        title="Send/Resend Payment Link"
+        description={
+          resendSuccess 
+            ? "Payment link has been successfully generated and sent to the guest."
+            : `Generate and email a secure payment link for booking ${resendModal?.reference}.`
+        }
+        size="sm"
+        footer={
+          resendSuccess ? (
+            <Button 
+              variant="primary" 
+              size="sm" 
+              onClick={() => {
+                setResendModal(null);
+                setResendSuccess(false);
+              }}
+            >
+              Close
+            </Button>
+          ) : (
+            <>
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => setResendModal(null)}
+                disabled={resendLinkMut.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={resendLinkMut.isPending}
+                onClick={() => resendModal && resendLinkMut.mutate({ id: resendModal.id, gateway: resendGateway })}
+                leftIcon={<Send className="h-4 w-4" />}
+              >
+                Send Link
+              </Button>
+            </>
+          )
+        }
+      >
+        {!resendSuccess && (
+          <div className="space-y-4 pt-2">
+            {resendError && (
+              <div className="p-3 text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-lg">
+                {resendError}
+              </div>
+            )}
+            
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-slate-700">Guest Email</label>
+              <input
+                type="text"
+                disabled
+                value={resendModal?.guestEmail ?? ""}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-500 rounded-lg px-3 py-2 text-sm cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-2">Select Payment Gateway</p>
+              <div className="grid grid-cols-2 gap-3">
+                {(["stripe", "tara"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setResendGateway(m)}
+                    className={`flex items-center gap-2.5 rounded-xl border-2 px-4 py-2.5 transition-all text-left ${
+                      resendGateway === m
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className={`h-4 w-4 rounded-full border flex items-center justify-center flex-shrink-0 ${
+                      resendGateway === m ? "border-primary" : "border-slate-300"
+                    }`}>
+                      {resendGateway === m && <div className="h-2 w-2 rounded-full bg-primary" />}
+                    </div>
+                    <span className="text-xs font-semibold capitalize">{m === "tara" ? "Tara" : "Stripe"}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {resendSuccess && (
+          <div className="py-4 text-center">
+            <div className="mx-auto w-12 h-12 bg-green-50 border border-green-200 text-green-600 rounded-full flex items-center justify-center mb-3">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-semibold text-slate-800">Email Sent Successfully</p>
+            <p className="text-xs text-slate-500 mt-1">The guest has been sent the link for {resendGateway === "stripe" ? "Stripe" : "Tara"} payment.</p>
+          </div>
+        )}
+      </ActionModal>
     </div>
   );
 }
