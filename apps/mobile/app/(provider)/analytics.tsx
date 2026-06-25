@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
@@ -175,6 +176,7 @@ const tb = StyleSheet.create({
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function AnalyticsScreen() {
+  const router   = useRouter();
   const user     = useAuthStore((s) => s.user);
   const currency = getCurrencyForCountry(user?.country).code;
 
@@ -277,6 +279,18 @@ export default function AnalyticsScreen() {
                 <Text style={s.heroItemNote}>after {fmt(data.totalCommission, currency)} fee</Text>
               </View>
             </View>
+
+            <View style={s.heroDivider} />
+
+            <TouchableOpacity
+              style={s.withdrawBtn}
+              onPress={() => router.push("/(provider)/payouts")}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="wallet-outline" size={16} color={K.colors.darkGreen} />
+              <Text style={s.withdrawBtnText}>Withdraw Now</Text>
+              <Ionicons name="arrow-forward" size={14} color={K.colors.darkGreen} style={{ marginLeft: "auto" }} />
+            </TouchableOpacity>
           </View>
 
           {/* Stats grid */}
@@ -358,6 +372,17 @@ const s = StyleSheet.create({
   heroDividerV: { width: 1, backgroundColor: "rgba(255,255,255,0.12)" },
   momChip:  { flexDirection: "row", alignItems: "center", gap: 4 },
   momText:  { fontSize: 11, fontWeight: "700" },
+
+  withdrawBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  withdrawBtnText: { fontSize: 14, fontWeight: "700", color: K.colors.darkGreen, flex: 1 },
 
   statsRow: { flexDirection: "row", gap: 12 },
 
