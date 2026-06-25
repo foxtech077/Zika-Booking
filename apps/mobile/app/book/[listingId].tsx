@@ -21,6 +21,8 @@ import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { useReleaseLock } from "../../hooks/booking";
+import { VoucherSelector } from "../../components/checkout/VoucherSelector";
+import type { ActivityScope } from "../../lib/types/voucher";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -212,14 +214,10 @@ export default function BookingFlowScreen() {
 
   // ── Voucher / promo code ──────────────────────────────────────────────────
   const [voucherCode, setVoucherCode] = useState("");
-  const [voucherInput, setVoucherInput] = useState("");
   const [voucherDiscount, setVoucherDiscount] = useState<number | null>(null);
-  const [voucherMessage, setVoucherMessage] = useState<string | null>(null);
-  const [voucherError, setVoucherError] = useState<string | null>(null);
-  const [voucherLoading, setVoucherLoading] = useState(false);
 
   // ── AfriPoints redemption ─────────────────────────────────────────────────
-  const userPoints = (user as any)?.loyaltyPoints as number ?? 0;
+  const userPoints = user?.loyaltyPoints ?? 0;
   const [usePoints, setUsePoints] = useState(false);
 
   // ── Countdown ─────────────────────────────────────────────────────────────
@@ -632,40 +630,6 @@ export default function BookingFlowScreen() {
       return;
     }
     setStep(1);
-  }
-
-  // ── Voucher apply ─────────────────────────────────────────────────────────
-  async function handleApplyVoucher() {
-    const code = voucherInput.trim();
-    if (!code) return;
-    if (!pricing) return;
-    setVoucherLoading(true);
-    setVoucherError(null);
-    setVoucherMessage(null);
-    setVoucherDiscount(null);
-    setVoucherCode("");
-    try {
-      const res = await listingApi.post<{
-        data: { valid: boolean; discountAmount: number; message: string };
-      }>("/vouchers/validate", {
-        code,
-        totalAmount: pricing.total,
-        currency: pricing.currency,
-      });
-      const { valid, discountAmount, message } = res.data.data;
-      if (valid) {
-        setVoucherCode(code);
-        setVoucherDiscount(discountAmount);
-        setVoucherMessage(message);
-      } else {
-        setVoucherError(message ?? "Invalid promo code.");
-      }
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? "Could not validate promo code.";
-      setVoucherError(msg);
-    } finally {
-      setVoucherLoading(false);
-    }
   }
 
   // ── Date formatting helpers ───────────────────────────────────────────────
@@ -1178,12 +1142,22 @@ export default function BookingFlowScreen() {
                   </View>
                 )}
 
-                <View style={[styles.priceRow, styles.totalRow]}>
-                  <Text style={styles.totalLabel}>Total</Text>
-                  <Text style={styles.totalValue}>
-                    {formatCurrency(pricing.total, pricing.currency)}
-                  </Text>
-                </View>
+                {(() => {
+                  const promoAmt   = pricing.discountAmount ?? 0;
+                  const voucherAmt = voucherDiscount ?? 0;
+                  const bestIsVoucher = voucherAmt > 0 && voucherAmt >= promoAmt;
+                  // pricing.total already has promoAmt baked in; subtract the extra voucher savings
+                  const extraOff   = bestIsVoucher ? voucherAmt - promoAmt : 0;
+                  const displayTotal = pricing.total - extraOff;
+                  return (
+                    <View style={[styles.priceRow, styles.totalRow]}>
+                      <Text style={styles.totalLabel}>Total</Text>
+                      <Text style={styles.totalValue}>
+                        {formatCurrency(displayTotal, pricing.currency)}
+                      </Text>
+                    </View>
+                  );
+                })()}
               </View>
 
               {/* Guest summary */}
@@ -1210,61 +1184,34 @@ export default function BookingFlowScreen() {
               )}
             </View>
 
-            {/* Promo Code */}
-            <View style={styles.promoSection}>
-              <Text style={styles.promoLabel}>Promo code (optional)</Text>
-              <View style={styles.promoRow}>
-                <TextInput
-                  style={[styles.input, styles.promoInput]}
-                  value={voucherInput}
-                  onChangeText={setVoucherInput}
-                  placeholder="Enter promo code"
-                  autoCapitalize="characters"
-                  editable={!voucherCode}
+            {/* Voucher selector */}
+            {pricing && (
+              <View style={styles.promoSection}>
+                <VoucherSelector
+                  totalAmount={pricing.total}
+                  currency={pricing.currency}
+                  activity={(isCar ? "cars" : "hotels") as ActivityScope}
+                  guestId={user?.id ?? ""}
+                  guestTier={user?.currentTier ?? null}
+                  guestCountry={user?.country ?? null}
+                  onApplied={(discountAmount, code) => {
+                    setVoucherDiscount(discountAmount);
+                    setVoucherCode(code);
+                  }}
+                  onCleared={() => {
+                    setVoucherDiscount(null);
+                    setVoucherCode("");
+                  }}
                 />
-                {voucherCode ? (
-                  <TouchableOpacity
-                    style={[styles.promoBtn, { backgroundColor: "#dc2626" }]}
-                    onPress={() => {
-                      setVoucherCode("");
-                      setVoucherInput("");
-                      setVoucherDiscount(null);
-                      setVoucherMessage(null);
-                      setVoucherError(null);
-                    }}
-                  >
-                    <Text style={styles.promoBtnText}>Remove</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.promoBtn, voucherLoading && styles.promoBtnDisabled]}
-                    onPress={handleApplyVoucher}
-                    disabled={voucherLoading}
-                  >
-                    {voucherLoading ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text style={styles.promoBtnText}>Apply</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
               </View>
-              {voucherMessage && voucherDiscount != null && (
-                <Text style={styles.promoSuccess}>
-                  {voucherMessage}
-                </Text>
-              )}
-              {voucherError && (
-                <Text style={styles.promoError}>{voucherError}</Text>
-              )}
-            </View>
+            )}
 
             {/* AfriPoints redemption */}
             {userPoints > 0 && (
               <View style={styles.promoSection}>
                 <View style={styles.afriPointsRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.promoLabel}>AfriPoints</Text>
+                    <Text style={styles.fieldLabel}>AfriPoints</Text>
                     <Text style={styles.afriPointsBalance}>
                       You have {userPoints.toLocaleString()} pts available
                     </Text>
@@ -1580,24 +1527,8 @@ const styles = StyleSheet.create({
   policySection: { borderTopWidth: 1, borderTopColor: "#f3f4f6", paddingTop: 14 },
   policyText: { fontSize: 14, color: "#374151", textTransform: "capitalize" },
 
-  // Promo code
+  // Voucher selector wrapper
   promoSection: { marginBottom: 20 },
-  promoLabel: { fontSize: 14, fontWeight: "500", color: "#374151", marginBottom: 8 },
-  promoRow: { flexDirection: "row", gap: 10, alignItems: "center" },
-  promoInput: { flex: 1, letterSpacing: 1 },
-  promoBtn: {
-    backgroundColor: "#16a34a",
-    borderRadius: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 72,
-  },
-  promoBtnDisabled: { backgroundColor: "#9ca3af" },
-  promoBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  promoSuccess: { fontSize: 13, color: "#16a34a", fontWeight: "600", marginTop: 8 },
-  promoError: { fontSize: 13, color: "#dc2626", marginTop: 8 },
   bestDealNote: { fontSize: 11, color: "#6b7280", marginTop: 2, marginBottom: 2, fontStyle: "italic" },
 
   // AfriPoints

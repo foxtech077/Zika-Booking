@@ -94,7 +94,7 @@ const INSURANCE_TYPE_OPTIONS = [
 ];
 
 const TRANSMISSION_OPTIONS = [
-  { key: "manual", label: "Manual" }, { key: "automatic", label: "Automatic" }, { key: "both", label: "Both" },
+  { key: "manual", label: "Manual" }, { key: "automatic", label: "Automatic" }, { key: "semi_auto", label: "semi_auto" },
 ];
 
 const FUEL_TYPES = [
@@ -149,7 +149,7 @@ type EditForm = {
   odometerReading: string; seats: string; doors: string;
   transmission: string; fuelType: string; driveType: string;
   engineSize: string; airConditioning: boolean;
-  mileagePolicy: string; mileageLimitKm: string;
+  mileagePolicy: string; mileageLimitKm: string; extraKmRate: string;
   fuelPolicy: string; insuranceType: string; securityDeposit: string;
   minDriverAge: string;
   roadsideAssistance: boolean; crossBorderAllowed: boolean;
@@ -177,7 +177,7 @@ const DEFAULTS: EditForm = {
   odometerReading: "", seats: "5", doors: "4",
   transmission: "", fuelType: "", driveType: "",
   engineSize: "", airConditioning: true,
-  mileagePolicy: "unlimited", mileageLimitKm: "",
+  mileagePolicy: "unlimited", mileageLimitKm: "", extraKmRate: "",
   fuelPolicy: "full_to_full", insuranceType: "", securityDeposit: "", minDriverAge: "21",
   roadsideAssistance: false, crossBorderAllowed: false,
   airportPickup: false, returnSameLocation: true,
@@ -265,6 +265,7 @@ export default function EditListingScreen() {
       airConditioning: listing.airConditioning ?? true,
       mileagePolicy: listing.mileagePolicy ?? "unlimited",
       mileageLimitKm: String(listing.mileageLimitKm ?? ""),
+      extraKmRate: String(listing.extraKmRate ?? ""),
       fuelPolicy: listing.fuelPolicy ?? "full_to_full",
       insuranceType: listing.insuranceType ?? "",
       securityDeposit: String(listing.securityDeposit ?? ""),
@@ -364,6 +365,10 @@ export default function EditListingScreen() {
           if (!form.transmission) e.transmission = "Transmission type is required.";
           if (!form.fuelType) e.fuelType = "Fuel type is required.";
           break;
+        case 2:
+          if (form.mileagePolicy === "limited" && (!form.extraKmRate.trim() || parseFloat(form.extraKmRate) <= 0))
+            e.extraKmRate = "Extra km rate is required when mileage policy is limited.";
+          break;
         case 4:
           if (!form.address.trim()) e.address = "Pickup address is required.";
           if (!form.town.trim()) e.town = "Town / city is required.";
@@ -453,6 +458,7 @@ export default function EditListingScreen() {
         minimumDriverAge: parseInt(form.minDriverAge, 10) || null,
         mileagePolicy: form.mileagePolicy,
         mileageLimitKm: form.mileagePolicy === "limited" ? parseInt(form.mileageLimitKm, 10) || null : null,
+        extraKmRate: form.mileagePolicy === "limited" ? parseFloat(form.extraKmRate) || null : null,
         fuelPolicy: form.fuelPolicy || null, insuranceType: form.insuranceType || null,
         cancellationPolicy: form.cancellationPolicy || null,
       };
@@ -462,6 +468,7 @@ export default function EditListingScreen() {
         deliveryAvailable: form.deliveryAvailable,
         deliveryRadiusKm: form.deliveryAvailable ? parseInt(form.deliveryRadiusKm, 10) || null : null,
         deliveryFee: form.deliveryAvailable ? parseFloat(form.deliveryFee) || null : null,
+        extraKmRate: form.mileagePolicy === "limited" ? parseFloat(form.extraKmRate) || null : null,
       };
       case 4: return { address: form.address, town: form.town, pickupHours: form.pickupHours };
       default: return {};
@@ -953,9 +960,14 @@ export default function EditListingScreen() {
               <RadioGroup label="Mileage Policy" required options={MILEAGE_OPTIONS}
                 selected={form.mileagePolicy} onSelect={(k) => set("mileagePolicy", k)} />
               {form.mileagePolicy === "limited" && (
-                <FormField label="Mileage Limit (km/day)" value={form.mileageLimitKm}
-                  onChangeText={(t) => set("mileageLimitKm", t.replace(/\D/g, ""))}
-                  placeholder="200" keyboardType="numeric" />
+                <>
+                  <FormField label="Mileage Limit (km/day)" value={form.mileageLimitKm}
+                    onChangeText={(t) => set("mileageLimitKm", t.replace(/\D/g, ""))}
+                    placeholder="200" keyboardType="numeric" />
+                  <FormField label={`Extra km Rate (${form.currency})`} hint="Charge per km over the daily limit"
+                    value={form.extraKmRate} onChangeText={(t) => set("extraKmRate", t)}
+                    placeholder="0.50" keyboardType="decimal-pad" error={errors.extraKmRate} />
+                </>
               )}
               <RadioGroup label="Fuel Policy" required options={FUEL_POLICY_OPTIONS}
                 selected={form.fuelPolicy} onSelect={(k) => set("fuelPolicy", k)} />
@@ -987,6 +999,14 @@ export default function EditListingScreen() {
                   <FormField label={`Delivery Fee (${form.currency})`} value={form.deliveryFee}
                     onChangeText={(t) => set("deliveryFee", t)} placeholder="15.00" keyboardType="decimal-pad" />
                 </View>
+              )}
+              {form.mileagePolicy === "limited" && (
+                <>
+                  <SectionHeader title="Mileage Overage" icon="activity" />
+                  <FormField label={`Extra km Rate (${form.currency})`} hint="Charge per km over the daily limit"
+                    value={form.extraKmRate} onChangeText={(t) => set("extraKmRate", t)}
+                    placeholder="0.50" keyboardType="decimal-pad" error={errors.extraKmRate} />
+                </>
               )}
             </View>
           )}

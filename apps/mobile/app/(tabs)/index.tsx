@@ -354,6 +354,29 @@ export default function HomeScreen() {
     staleTime: 60_000,
   });
 
+  const { data: promotions } = useQuery<{ title: string; description: string; bannerUrl?: string | null; ctaRoute?: string }[]>({
+    queryKey: ["promotions-active"],
+    queryFn:  async () => {
+      try {
+        const res = await listingApi.get<{ data: { promotions: { title: string; description: string; bannerUrl?: string | null; ctaRoute?: string }[] } }>("/promotions/active");
+        return res.data.data.promotions ?? [];
+      } catch { return []; }
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: recentlyViewed } = useQuery<SearchResult[]>({
+    queryKey: ["recently-viewed"],
+    queryFn:  async () => {
+      try {
+        const res = await listingApi.get<{ data: { listings: SearchResult[] } }>("/guests/me/recently-viewed");
+        return res.data.data.listings ?? [];
+      } catch { return []; }
+    },
+    staleTime: 30_000,
+    enabled: !!user,
+  });
+
   const bestOffers    = [...(hotelsData ?? []).filter(h => h.nightlyRate != null), ...(apartmentsData ?? [])].slice(0, 8);
   const popularHotels = (hotelsData ?? []).filter(h => h.listingType !== "car").slice(0, 6);
 
@@ -608,6 +631,45 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* ── Promotions ── */}
+        {promotions && promotions.length > 0 && (
+          <View style={s.section}>
+            <SectionHead title="Special offers" />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
+              {promotions.map((promo, idx) => (
+                <TouchableOpacity
+                  key={idx}
+                  style={s.promoCard}
+                  onPress={() => promo.ctaRoute ? router.push(promo.ctaRoute as any) : router.push("/search" as any)}
+                  activeOpacity={0.88}
+                >
+                  <Text style={s.promoEyebrow}>PROMOTION</Text>
+                  <Text style={s.promoTitle} numberOfLines={2}>{promo.title}</Text>
+                  <Text style={s.promoDesc} numberOfLines={2}>{promo.description}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ── Recently Viewed ── */}
+        {recentlyViewed && recentlyViewed.length > 0 && (
+          <View style={s.section}>
+            <SectionHead title="Recently viewed" />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.carousel}>
+              {recentlyViewed.slice(0, 8).map((item, idx) => (
+                <View key={item.id} style={{ marginRight: idx < recentlyViewed.length - 1 ? 14 : 0 }}>
+                  <ListingCard
+                    item={item}
+                    width={200}
+                    onPress={() => navToListing(item.id)}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
@@ -798,4 +860,33 @@ const s = StyleSheet.create({
 
   // Carousel
   carousel: { paddingHorizontal: K.spacing.screen, paddingBottom: 4 },
+
+  // Promotions
+  promoCard: {
+    width: 220,
+    backgroundColor: K.colors.darkGreenMid,
+    borderRadius: K.radius.xl,
+    padding: 18,
+    marginRight: 14,
+  },
+  promoEyebrow: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: K.colors.accentLight,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+    marginBottom: 6,
+  },
+  promoTitle: {
+    fontSize: K.font.base,
+    fontWeight: "800",
+    color: "#fff",
+    marginBottom: 6,
+    lineHeight: 22,
+  },
+  promoDesc: {
+    fontSize: 12,
+    color: K.colors.textLightMuted,
+    lineHeight: 18,
+  },
 });

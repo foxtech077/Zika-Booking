@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, FlatList, TextInput,
   ActivityIndicator, Alert, StyleSheet, Dimensions,
@@ -576,6 +576,12 @@ export default function ListingDetailScreen() {
     },
     enabled: !!id,
   });
+
+  useEffect(() => {
+    if (!listing || !user) return;
+    void listingApi.post("/guests/me/recently-viewed", { listingId: listing.id }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listing?.id]);
 
   const favMut = useMutation({
     mutationFn: async ({ isFav }: { isFav: boolean }) => {

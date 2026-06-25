@@ -95,7 +95,8 @@ function SkeletonPulse({ w, h = 14, mb = 0 }: { w: number | string; h?: number; 
 // ── Wallet Card ───────────────────────────────────────────────────────────────
 
 function WalletCard({ tier, points }: { tier: LoyaltyTier; points: number }) {
-  const tierColor = TIER_COLORS[tier];
+  const tierColor    = TIER_COLORS[tier];
+  const localCurrency = useAuthStore((s) => s.localCurrency) ?? "USD";
   const { pct, needed, nextLabel } = tierProgress(points, tier);
   const isTopTier = tier === "diamond";
   const bgStart   = tier === "gold" || tier === "diamond" ? "#2a1f06" : K.colors.darkGreen;
@@ -123,7 +124,7 @@ function WalletCard({ tier, points }: { tier: LoyaltyTier; points: number }) {
         <Text style={wc.balance}>{points.toLocaleString()}</Text>
         <Text style={wc.balancePts}> pts</Text>
       </View>
-      <Text style={wc.balanceValue}>≈ {points > 0 ? `KES ${Math.round(points * 0.1).toLocaleString()}` : "—"} value</Text>
+      <Text style={wc.balanceValue}>≈ {points > 0 ? `${localCurrency} ${Math.round(points * 0.1).toLocaleString()}` : "—"} value</Text>
 
       {/* Progress bar */}
       {!isTopTier && (
@@ -243,7 +244,7 @@ function TransactionRow({ tx }: { tx: PointsTransaction }) {
         </Text>
       </View>
       <View style={s.txRight}>
-        <Text style={[s.txPoints, { color }]}>{sign}{tx.points.toLocaleString()}</Text>
+        <Text style={[s.txPoints, { color }]}>{sign}{(tx.points ?? 0).toLocaleString()}</Text>
         <Text style={s.txTypeLabel}>{tx.type}</Text>
       </View>
     </View>
@@ -326,17 +327,17 @@ export default function LoyaltyScreen() {
         {summary && (
           <View style={s.summaryRow}>
             <View style={s.summaryCell}>
-              <Text style={[s.summaryStat, { color: K.colors.success }]}>{summary.totalEarned.toLocaleString()}</Text>
+              <Text style={[s.summaryStat, { color: K.colors.success }]}>{(summary.totalEarned ?? 0).toLocaleString()}</Text>
               <Text style={s.summaryLabel}>Earned</Text>
             </View>
             <View style={s.summarySep} />
             <View style={s.summaryCell}>
-              <Text style={[s.summaryStat, { color: "#7c3aed" }]}>{summary.totalRedeemed.toLocaleString()}</Text>
+              <Text style={[s.summaryStat, { color: "#7c3aed" }]}>{(summary.totalRedeemed ?? 0).toLocaleString()}</Text>
               <Text style={s.summaryLabel}>Redeemed</Text>
             </View>
             <View style={s.summarySep} />
             <View style={s.summaryCell}>
-              <Text style={[s.summaryStat, { color: K.colors.error }]}>{summary.totalReversed.toLocaleString()}</Text>
+              <Text style={[s.summaryStat, { color: K.colors.error }]}>{(summary.totalReversed ?? 0).toLocaleString()}</Text>
               <Text style={s.summaryLabel}>Reversed</Text>
             </View>
           </View>

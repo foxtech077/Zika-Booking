@@ -273,7 +273,7 @@ function AppleButton({ onError }: { onError: (m: string) => void }) {
       });
       return (res.data as { data: AuthResponse }).data;
     },
-    onSuccess: async (data) => { await setAuth(data.user, data.tokens.accessToken); router.replace("/(tabs)"); },
+    onSuccess: async (data) => { await setAuth(data.user, data.tokens.accessToken); handleRoleAndStatusRedirect(data.user); },
     onError: () => onError("Apple Sign-In failed. Please try again."),
   });
   return (

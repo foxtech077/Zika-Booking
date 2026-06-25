@@ -197,6 +197,18 @@ export default function ProfileScreen() {
             onPress={() => router.push("/payment-methods/index" as any)}
           />
           <MenuItem
+            iconName="pricetag-outline"
+            label="Voucher Wallet"
+            sublabel="Promo codes & discounts"
+            onPress={() => router.push("/voucher-wallet" as any)}
+          />
+          <MenuItem
+            iconName="star-outline"
+            label="My Reviews"
+            sublabel="Reviews you've written"
+            onPress={() => router.push("/my-reviews" as any)}
+          />
+          <MenuItem
             iconName="lock-closed-outline"
             label="Change Password"
             sublabel="Update your security"

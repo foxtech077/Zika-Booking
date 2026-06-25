@@ -66,8 +66,8 @@ function SkeletonLoader() {
     ).start();
   }, [opacity]);
 
-  const B = ({ w, h = 13 }: { w: number | string; h?: number }) => (
-    <Animated.View style={{ width: w, height: h, backgroundColor: "#e5e7eb", borderRadius: 6, opacity }} />
+  const B = ({ w, h = 13 }: { w: number | `${number}%`; h?: number }) => (
+    <Animated.View style={{ width: w as any, height: h, backgroundColor: "#e5e7eb", borderRadius: 6, opacity }} />
   );
 
   return (

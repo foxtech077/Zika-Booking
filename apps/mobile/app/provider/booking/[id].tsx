@@ -211,11 +211,52 @@ export default function ProviderBookingDetailScreen() {
       await listingApi.post(`/provider/bookings/${id}/cancel`, { reasonCode, reasonText });
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["providerBookingDetail", id] });
+      const now = new Date().toISOString();
+      // Immediately reflect cancellation in the detail cache
+      qc.setQueryData<ProviderBooking>(["providerBookingDetail", id], (old) =>
+        old ? { ...old, status: "cancelled_by_provider", cancelledAt: now } : old
+      );
+      // Patch every list-tab cache so the booking list also shows Cancelled instantly
+      for (const tab of TABS_ALL) {
+        qc.setQueryData<BookingListResponse>(["providerBookings", tab], (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            bookings: old.bookings.map((b) =>
+              b.id === id ? { ...b, status: "cancelled_by_provider" } : b
+            ),
+          };
+        });
+      }
+      // Background revalidation for authoritative server data + dashboard counters
       void qc.invalidateQueries({ queryKey: ["providerBookings"] });
+      void qc.invalidateQueries({ queryKey: ["providerDashboard"] });
       Alert.alert("Booking Cancelled", "The booking has been cancelled. A full refund will be issued to the guest.");
     },
     onError: (err: any) => {
+      const httpStatus = err?.response?.status;
+      const errCode: string = err?.response?.data?.error?.code ?? "";
+      if (httpStatus === 409 || errCode === "INVALID_STATUS") {
+        // Server says it's already cancelled — sync local caches immediately
+        const now = new Date().toISOString();
+        qc.setQueryData<ProviderBooking>(["providerBookingDetail", id], (old) =>
+          old ? { ...old, status: "cancelled_by_provider", cancelledAt: now } : old
+        );
+        for (const tab of TABS_ALL) {
+          qc.setQueryData<BookingListResponse>(["providerBookings", tab], (old) => {
+            if (!old) return old;
+            return {
+              ...old,
+              bookings: old.bookings.map((b) =>
+                b.id === id ? { ...b, status: "cancelled_by_provider" } : b
+              ),
+            };
+          });
+        }
+        void qc.invalidateQueries({ queryKey: ["providerBookings"] });
+        Alert.alert("Already Cancelled", "This booking has already been cancelled.");
+        return;
+      }
       const msg = err?.response?.data?.error?.message ?? "Could not cancel this booking. Please try again.";
       Alert.alert("Cancellation Failed", msg);
     },
@@ -476,7 +517,7 @@ export default function ProviderBookingDetailScreen() {
           {/* Cancel — provider endpoint */}
           {canCancel && !cancelled && (
             <TouchableOpacity
-              style={s.cancelBtn}
+              style={[s.cancelBtn, cancelMutation.isPending && s.cancelBtnDisabled]}
               onPress={handleCancel}
               disabled={cancelMutation.isPending}
               activeOpacity={0.85}
@@ -490,6 +531,14 @@ export default function ProviderBookingDetailScreen() {
                 </>
               )}
             </TouchableOpacity>
+          )}
+
+          {/* Non-clickable cancelled badge */}
+          {cancelled && (
+            <View style={s.cancelledBadge}>
+              <Feather name="x-circle" size={16} color="#DC2626" />
+              <Text style={s.cancelledBadgeText}>Booking Cancelled</Text>
+            </View>
           )}
 
           {/* Share */}
@@ -662,7 +711,14 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: "#FECACA", borderRadius: K.radius.lg,
     paddingVertical: 14, backgroundColor: "#FEF2F2",
   },
+  cancelBtnDisabled: { opacity: 0.55 },
   cancelBtnText: { fontSize: K.font.base, fontWeight: "700", color: K.colors.error },
+  cancelledBadge: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    borderWidth: 1.5, borderColor: "#FECACA", borderRadius: K.radius.lg,
+    paddingVertical: 14, backgroundColor: "#FEF2F2",
+  },
+  cancelledBadgeText: { fontSize: K.font.base, fontWeight: "700", color: "#DC2626" },
   shareBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     borderWidth: 1, borderColor: K.colors.border, borderRadius: K.radius.lg,

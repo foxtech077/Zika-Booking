@@ -19,6 +19,7 @@ import { useStripe } from "@stripe/stripe-react-native";
 import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { paymentApi } from "../../lib/payment-api";
+import { LOYALTY_QK } from "../../hooks/loyalty";
 import { initializeStripe, resolveStripePublishableKey } from "../../lib/stripe-config";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -486,6 +487,9 @@ export default function PaymentScreen() {
     setView("success");
     void queryClient.invalidateQueries({ queryKey: ["booking", bookingId] });
     void queryClient.invalidateQueries({ queryKey: ["myBookings"] });
+    // Refresh loyalty points — booking completion earns AfriPoints
+    void queryClient.invalidateQueries({ queryKey: LOYALTY_QK.profile });
+    void queryClient.invalidateQueries({ queryKey: LOYALTY_QK.historyInfinite });
     router.replace("/booking/submitted");
   }
 

@@ -140,6 +140,22 @@ export function useCancelBooking(bookingId: string) {
   });
 }
 
+// ── Bind commission ───────────────────────────────────────────────────────────
+
+export function useBindCommission(bookingId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (commissionCode: string) => {
+      await listingApi.patch(`/guests/me/bookings/${bookingId}/bind-commission`, {
+        commissionCode,
+      });
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: BOOKING_QK.detail(bookingId) });
+    },
+  });
+}
+
 // ── Lock release ──────────────────────────────────────────────────────────────
 
 export function useReleaseLock() {

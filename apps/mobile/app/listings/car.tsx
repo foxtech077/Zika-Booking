@@ -9,6 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   BackHandler,
+  Modal,
+  FlatList,
+  TouchableOpacity,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -59,7 +62,7 @@ const INSURANCE_TYPE_OPTIONS = [
 const TRANSMISSION_OPTIONS = [
   { key: "manual", label: "Manual" },
   { key: "automatic", label: "Automatic" },
-  { key: "both", label: "Both" },
+  { key: "semi_auto", label: "Semi-Automatic" },
 ];
 
 const FUEL_TYPES = [
@@ -134,6 +137,7 @@ type CarForm = {
   minDriverAge: string;
   mileagePolicy: string;
   mileageLimitKm: string;
+  extraKmRate: string;
   fuelPolicy: string;
   insuranceType: string;
   securityDeposit: string;
@@ -154,6 +158,99 @@ type CarForm = {
 };
 
 type FormErrors = Partial<Record<keyof CarForm | "photos", string>>;
+
+// ── Time Range Picker ─────────────────────────────────────────────────────────
+
+const HOUR_OPTIONS: string[] = (() => {
+  const opts: string[] = [];
+  for (let h = 0; h < 24; h++) {
+    opts.push(`${String(h).padStart(2, "0")}:00`);
+    opts.push(`${String(h).padStart(2, "0")}:30`);
+  }
+  opts.push("24:00");
+  return opts;
+})();
+
+function parsePickupHours(val: string): [string, string] {
+  const m = val.match(/^(\d{2}:\d{2})\s*[–\-]\s*(\d{2}:\d{2})$/);
+  if (m) return [m[1]!, m[2]!];
+  return ["08:00", "18:00"];
+}
+
+function TimeRangePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState<"from" | "to" | null>(null);
+  const [from, to] = parsePickupHours(value);
+
+  function select(time: string) {
+    if (!open) return;
+    const newFrom = open === "from" ? time : from;
+    const newTo   = open === "to"   ? time : to;
+    onChange(`${newFrom} – ${newTo}`);
+    setOpen(null);
+  }
+
+  return (
+    <View>
+      <Text style={s.trpLabel}>Pickup Hours</Text>
+      <Text style={s.trpHint}>Operating hours for pickup and return</Text>
+      <View style={s.trpRow}>
+        <TouchableOpacity style={s.trpBtn} onPress={() => setOpen("from")} activeOpacity={0.75}>
+          <Text style={s.trpBtnHint}>FROM</Text>
+          <Text style={s.trpBtnValue}>{from}</Text>
+        </TouchableOpacity>
+        <Text style={s.trpSepText}>–</Text>
+        <TouchableOpacity style={s.trpBtn} onPress={() => setOpen("to")} activeOpacity={0.75}>
+          <Text style={s.trpBtnHint}>UNTIL</Text>
+          <Text style={s.trpBtnValue}>{to}</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal visible={!!open} transparent animationType="slide" onRequestClose={() => setOpen(null)}>
+        <View style={s.trpOverlay}>
+          <View style={s.trpSheet}>
+            <View style={s.trpSheetHeader}>
+              <Text style={s.trpSheetTitle}>
+                {open === "from" ? "Opens at" : "Closes at"}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setOpen(null)}
+                hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+              >
+                <Text style={s.trpClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={HOUR_OPTIONS}
+              keyExtractor={(item) => item}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const active = item === (open === "from" ? from : to);
+                return (
+                  <TouchableOpacity
+                    style={[s.trpOption, active && s.trpOptionActive]}
+                    onPress={() => select(item)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.trpOptionText, active && s.trpOptionTextActive]}>
+                      {item}
+                    </Text>
+                    {active && <Text style={s.trpCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -195,6 +292,7 @@ export default function CarListingScreen() {
     minDriverAge: "21",
     mileagePolicy: "unlimited",
     mileageLimitKm: "",
+    extraKmRate: "",
     fuelPolicy: "full_to_full",
     insuranceType: "",
     securityDeposit: "",
@@ -238,9 +336,15 @@ export default function CarListingScreen() {
       odometerReading: String(listing.odometerReading ?? ""),
       seats: String(listing.seats ?? 5),
       doors: String(listing.doors ?? 4),
-      transmission: listing.transmission ?? "",
+      transmission: listing.transmission === "both"
+        ? "semi_auto"
+        : TRANSMISSION_OPTIONS.some((o) => o.key === listing.transmission)
+          ? listing.transmission
+          : "",
       fuelType: listing.fuelType ?? "",
-      driveType: listing.driveType ?? "",
+      driveType: DRIVE_TYPES.some((o) => o.key === listing.driveType)
+        ? listing.driveType
+        : "",
       engineSize: listing.engineSize ?? "",
       airConditioning: listing.airConditioning ?? true,
       pricePerNight: String(listing.pricePerDay ?? listing.pricePerNight ?? ""),
@@ -250,6 +354,7 @@ export default function CarListingScreen() {
       minDriverAge: String(listing.minimumDriverAge ?? "21"),
       mileagePolicy: listing.mileagePolicy ?? "unlimited",
       mileageLimitKm: String(listing.mileageLimitKm ?? ""),
+      extraKmRate: String(listing.extraKmRate ?? ""),
       fuelPolicy: listing.fuelPolicy ?? "full_to_full",
       insuranceType: listing.insuranceType ?? "",
       securityDeposit: String(listing.securityDeposit ?? ""),
@@ -315,6 +420,12 @@ export default function CarListingScreen() {
         if (!form.cancellationPolicy) e.cancellationPolicy = "Cancellation policy is required.";
         if (form.mileagePolicy === "limited" && (!form.mileageLimitKm.trim() || parseInt(form.mileageLimitKm, 10) < 1))
           e.mileageLimitKm = "Daily mileage limit is required when policy is 'Limited'.";
+        if (form.mileagePolicy === "limited" && (!form.extraKmRate.trim() || parseFloat(form.extraKmRate) <= 0))
+          e.extraKmRate = "Extra km rate is required when policy is 'Limited'.";
+        break;
+      case 3:
+        if (form.mileagePolicy === "limited" && (!form.extraKmRate.trim() || parseFloat(form.extraKmRate) <= 0))
+          e.extraKmRate = "Extra km rate is required when policy is 'Limited'.";
         break;
       case 4:
         if (!form.address.trim()) e.address = "Pickup address is required.";
@@ -349,9 +460,20 @@ export default function CarListingScreen() {
         return {
           seats: parseInt(form.seats, 10) || 1,
           doors: parseInt(form.doors, 10) || 2,
-          transmission: form.transmission || null,
+          transmission: (() => {
+            const t = form.transmission === "both" ? "semi_auto" : form.transmission;
+            return (["manual", "automatic", "semi_auto"] as const).includes(
+              t as "manual" | "automatic" | "semi_auto",
+            )
+              ? t
+              : null;
+          })(),
           fuelType: form.fuelType || null,
-          driveType: form.driveType || null,
+          driveType: (["2WD", "4WD", "AWD"] as const).includes(
+            form.driveType as "2WD" | "4WD" | "AWD",
+          )
+            ? form.driveType
+            : null,
           engineSize: form.engineSize,
           airConditioning: form.airConditioning,
         };
@@ -362,6 +484,7 @@ export default function CarListingScreen() {
           minimumDriverAge: parseInt(form.minDriverAge, 10) || null,
           mileagePolicy: form.mileagePolicy,
           mileageLimitKm: form.mileagePolicy === "limited" ? parseInt(form.mileageLimitKm, 10) || null : null,
+          extraKmRate: form.mileagePolicy === "limited" ? parseFloat(form.extraKmRate) || null : null,
           fuelPolicy: form.fuelPolicy || null,
           insuranceType: form.insuranceType || null,
           cancellationPolicy: form.cancellationPolicy || null,
@@ -375,6 +498,7 @@ export default function CarListingScreen() {
           deliveryAvailable: form.deliveryAvailable,
           deliveryRadiusKm: form.deliveryAvailable ? parseInt(form.deliveryRadiusKm, 10) || null : null,
           deliveryFee: form.deliveryAvailable ? parseFloat(form.deliveryFee) || null : null,
+          extraKmRate: form.mileagePolicy === "limited" ? parseFloat(form.extraKmRate) || null : null,
         };
       case 4: // Location
         return {
@@ -851,15 +975,27 @@ export default function CarListingScreen() {
             />
 
             {form.mileagePolicy === "limited" && (
-              <FormField
-                label="Mileage Limit (km/day)"
-                required
-                value={form.mileageLimitKm}
-                onChangeText={(t) => set("mileageLimitKm", t.replace(/\D/g, ""))}
-                placeholder="e.g. 200"
-                keyboardType="numeric"
-                error={errors.mileageLimitKm}
-              />
+              <>
+                <FormField
+                  label="Mileage Limit (km/day)"
+                  required
+                  value={form.mileageLimitKm}
+                  onChangeText={(t) => set("mileageLimitKm", t.replace(/\D/g, ""))}
+                  placeholder="e.g. 200"
+                  keyboardType="numeric"
+                  error={errors.mileageLimitKm}
+                />
+                <FormField
+                  label="Extra km Rate"
+                  hint="Charge per km over the daily limit"
+                  required
+                  value={form.extraKmRate}
+                  onChangeText={(t) => set("extraKmRate", t.replace(/[^0-9.]/g, ""))}
+                  placeholder="e.g. 0.50"
+                  keyboardType="decimal-pad"
+                  error={errors.extraKmRate}
+                />
+              </>
             )}
 
             <RadioGroup
@@ -948,6 +1084,23 @@ export default function CarListingScreen() {
                 />
               </View>
             )}
+
+            {form.mileagePolicy === "limited" && (
+              <>
+                <View style={s.gap} />
+                <SectionHeader title="Mileage Overage" icon="alert-circle" />
+                <FormField
+                  label="Extra km Rate"
+                  hint="Charge per km over the daily mileage limit"
+                  required
+                  value={form.extraKmRate}
+                  onChangeText={(t) => set("extraKmRate", t.replace(/[^0-9.]/g, ""))}
+                  placeholder="e.g. 0.50"
+                  keyboardType="decimal-pad"
+                  error={errors.extraKmRate}
+                />
+              </>
+            )}
           </View>
         )}
 
@@ -979,12 +1132,9 @@ export default function CarListingScreen() {
             />
 
             <View style={s.gap} />
-            <FormField
-              label="Pickup Hours"
-              hint="Operating hours for pickup and return"
+            <TimeRangePicker
               value={form.pickupHours}
-              onChangeText={(t) => set("pickupHours", t)}
-              placeholder="e.g. 08:00 – 18:00"
+              onChange={(v) => set("pickupHours", v)}
             />
           </View>
         )}
@@ -1060,4 +1210,61 @@ const s = StyleSheet.create({
     borderColor: K.colors.border,
     gap: 4,
   },
+
+  // Time range picker
+  trpLabel: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textDark, marginBottom: 4 },
+  trpHint: { fontSize: K.font.xs, color: K.colors.textMuted, marginBottom: 10 },
+  trpRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  trpBtn: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: K.colors.border,
+    borderRadius: K.radius.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  trpBtnHint: {
+    fontSize: 10,
+    color: K.colors.textMuted,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    marginBottom: 2,
+  },
+  trpBtnValue: { fontSize: K.font.lg, fontWeight: "700", color: K.colors.textDark },
+  trpSepText: { fontSize: 18, color: K.colors.textMuted, fontWeight: "300" },
+  trpOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
+  trpSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "60%",
+    paddingBottom: 32,
+  },
+  trpSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: K.colors.border,
+  },
+  trpSheetTitle: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark },
+  trpClose: { fontSize: K.font.base, color: K.colors.textMuted, paddingHorizontal: 4 },
+  trpOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: K.colors.border,
+  },
+  trpOptionActive: { backgroundColor: "#f0fdf4" },
+  trpOptionText: { fontSize: K.font.base, color: K.colors.textMid },
+  trpOptionTextActive: { color: K.colors.accent, fontWeight: "700" },
+  trpCheck: { fontSize: K.font.base, color: K.colors.accent, fontWeight: "700" },
 });

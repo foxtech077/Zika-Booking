@@ -1,7 +1,45 @@
+import { View, Text, StyleSheet } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
+import { useUnreadCount } from "../../hooks/messaging";
 import { K } from "../../constants/theme";
+
+function MessagesTabIcon({ color, focused }: { color: string; focused: boolean }) {
+  const { data } = useUnreadCount();
+  const count = data?.unreadCount ?? 0;
+  return (
+    <View style={tl.iconWrap}>
+      <Ionicons
+        name={focused ? "chatbubble" : "chatbubble-outline"}
+        size={24}
+        color={color}
+      />
+      {count > 0 && (
+        <View style={tl.badge}>
+          <Text style={tl.badgeText}>{count > 99 ? "99+" : count}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const tl = StyleSheet.create({
+  iconWrap: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  badge: {
+    position: "absolute",
+    top: -4,
+    right: -8,
+    backgroundColor: K.colors.error,
+    borderRadius: K.radius.full,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 3,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
+});
 
 export default function TabLayout() {
   const user = useAuthStore((s) => s.user);
@@ -54,6 +92,15 @@ export default function TabLayout() {
           title: "Trips",
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? "airplane" : "airplane-outline"} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: "Messages",
+          tabBarIcon: ({ color, focused }) => (
+            <MessagesTabIcon color={color} focused={focused} />
           ),
         }}
       />
