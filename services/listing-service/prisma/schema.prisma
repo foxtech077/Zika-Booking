@@ -643,6 +643,27 @@ model VoucherRedemption {
   @@schema("listing")
 }
 
+model ActivityPromotion {
+  id             String   @id @default(uuid())
+  activity       String   @db.VarChar(20)
+  labelText      String   @map("label_text") @db.VarChar(20)
+  labelColour    String   @default("#C84B2F") @map("label_colour") @db.VarChar(10)
+  discountType   String   @default("label_only") @map("discount_type") @db.VarChar(20)
+  discountValue  Decimal? @map("discount_value") @db.Decimal(10, 2)
+  validFrom      DateTime @map("valid_from")
+  validUntil     DateTime @map("valid_until")
+  applyToBooking Boolean  @default(false) @map("apply_to_booking")
+  bannerTitle    String   @map("banner_title") @db.VarChar(100)
+  bannerSubtitle String?  @map("banner_subtitle") @db.VarChar(200)
+  status         String   @default("scheduled") @db.VarChar(20)
+  countryScope   String?  @map("country_scope") @db.Char(2)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("activity_promotions")
+  @@schema("listing")
+}
+
 // ── E13 — iCal Sync ───────────────────────────────────────────────────────────
 
 model IcalFeed {

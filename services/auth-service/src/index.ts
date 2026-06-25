@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
@@ -96,7 +96,12 @@ async function build() {
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
-  const isDev = process.env["NODE_ENV"] == "production";
+  const isDev = process.env["NODE_ENV"] !== "production";
+  const LOCALHOST_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3002",
+    "http://localhost:3005",
+  ];
   await app.register(cors, {
     // In development, allow all origins so the Expo mobile app (which sends no
     // Origin header from React Native) can reach the API.  In production, lock
@@ -106,12 +111,12 @@ async function build() {
     origin: isDev
       ? true
       : [
-          process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
-          process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-          "https://kainook.com",
-          "http://localhost:3000",
-          "http://localhost:3002",
-        ],
+        process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
+        process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
+        process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
+        "https://kainook.com",
+        ...LOCALHOST_ORIGINS,
+      ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
   });
@@ -139,12 +144,42 @@ async function build() {
     timestamp: new Date().toISOString(),
   }));
 
-  // Register route modules
-  await app.register(authRoutes);
-  await app.register(adminAuthRoutes);
-  await app.register(adminUserRoutes);
-  await app.register(adminOperatorRoutes);
-  await app.register(adminDashboardRoutes);
+  // ── Proxy merchant requests to payment-service ──────────────────────────────
+  const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
+  app.all("/merchant/*", async (req, reply) => {
+    try {
+      const subPath = (req.params as any)["*"];
+      const queryParams = new URLSearchParams(req.query as Record<string, string>).toString();
+      const url = `${PAYMENT_SERVICE_URL}/merchant/${subPath}${queryParams ? `?${queryParams}` : ""}`;
+
+      const headers: Record<string, string> = {
+        "Accept": "application/json",
+      };
+      if (req.headers.authorization) {
+        headers["Authorization"] = req.headers.authorization;
+      }
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"];
+      }
+
+      const fetchOptions: any = {
+        method: req.method,
+        headers,
+      };
+
+      if (["POST", "PATCH", "PUT"].includes(req.method) && req.body) {
+        fetchOptions.body = JSON.stringify(req.body);
+      }
+
+      const res = await fetch(url, fetchOptions);
+      const data = await res.json() as any;
+
+      reply.status(res.status).send(data);
+    } catch (err) {
+      req.log.error({ err }, "Failed to proxy merchant request to payment-service");
+      reply.status(502).send({ success: false, error: { code: "BAD_GATEWAY", message: "Failed to communicate with payment service." } });
+    }
+  });
 
   // Global error handler
   app.setErrorHandler((error, _req, reply) => {
@@ -160,6 +195,13 @@ async function build() {
       },
     });
   });
+
+  // Register route modules
+  await app.register(authRoutes);
+  await app.register(adminAuthRoutes);
+  await app.register(adminUserRoutes);
+  await app.register(adminOperatorRoutes);
+  await app.register(adminDashboardRoutes);
 
   return app;
 }

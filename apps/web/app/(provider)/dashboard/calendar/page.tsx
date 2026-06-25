@@ -217,15 +217,24 @@ function normalizeBooking(raw: unknown): Booking {
   };
 }
 
+function normalizeFeedStatus(status: string): IcalFeed["status"] {
+  const s = status?.toLowerCase();
+  if (s === "error" || s === "failed") return "failed";
+  if (s === "pending" || s === "syncing") return "syncing";
+  if (s === "paused") return "paused";
+  return "synced";
+}
+
 function normalizeFeed(raw: unknown): IcalFeed {
   const item = raw as Record<string, unknown>;
+  const rawStatus = safeString(item.status ?? item.syncStatus, "synced");
   return {
     id: safeString(item.id ?? item._id ?? item.feedId, crypto.randomUUID()),
     name: safeString(item.name ?? item.feedName, "External Calendar"),
     url: safeString(item.url ?? item.feedUrl, ""),
     platform: safeString(item.platform ?? item.source, "Custom iCal URL"),
     lastSyncAt: safeString(item.lastSyncAt ?? item.lastSyncTime ?? item.updatedAt),
-    status: safeString(item.status ?? item.syncStatus, "active").toLowerCase() as IcalFeed["status"],
+    status: normalizeFeedStatus(rawStatus),
   };
 }
 
@@ -359,7 +368,7 @@ function SummaryCard({
     <Card className="min-h-[104px]">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[15px] font-medium text-slate-500">{label}</p>
+          <p className="text-[12px] font-medium text-slate-500">{label}</p>
           <p className="mt-2 text-2xl font-bold text-slate-950">{count}</p>
         </div>
         <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl [&>svg]:h-5 [&>svg]:w-5", tone)}>
@@ -469,6 +478,7 @@ export default function CalendarPage() {
       setFeedForm({ name: "", url: "", platform: "Airbnb" });
       setNotice({ type: "success", message: "iCal feed added." });
       queryClient.invalidateQueries({ queryKey: ["calendar-ical-feeds", selectedListing] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-blocked-dates", selectedListing] });
     },
     onError: () => setNotice({ type: "error", message: "Could not add iCal feed." }),
   });
@@ -478,6 +488,7 @@ export default function CalendarPage() {
     onSuccess: () => {
       setNotice({ type: "success", message: "iCal feed removed." });
       queryClient.invalidateQueries({ queryKey: ["calendar-ical-feeds", selectedListing] });
+      queryClient.invalidateQueries({ queryKey: ["calendar-blocked-dates", selectedListing] });
     },
     onError: () => setNotice({ type: "error", message: "Could not delete iCal feed." }),
   });

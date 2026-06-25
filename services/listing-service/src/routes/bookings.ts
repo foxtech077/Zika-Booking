@@ -11,6 +11,7 @@ import { getPaymentProvider } from "../services/payment.services.js";
 import { calculateBilling } from "../services/billing.service.js";
 import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
+import { logLoyaltyTransaction } from "./loyalty.js";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 
@@ -216,6 +217,29 @@ export async function bookingRoutes(app: FastifyInstance) {
     return true;
   }
 
+  const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
+
+  async function notifyPayoutCancellation(bookingId: string) {
+    if (!PAYMENT_SERVICE_URL) return;
+    try {
+      const res = await fetch(`${PAYMENT_SERVICE_URL}/payments/internal/bookings/${bookingId}/cancel-payout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-service-key": INTERNAL_SERVICE_KEY,
+        },
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        app.log.error(`[payout-cancel] Failed to cancel payout for booking ${bookingId}: status ${res.status}. Response: ${txt}`);
+      } else {
+        app.log.info(`[payout-cancel] Payout cancelled successfully via API for booking ${bookingId}`);
+      }
+    } catch (err: any) {
+      app.log.error(`[payout-cancel] Network error calling payout cancellation for booking ${bookingId}: ${err.message}`);
+    }
+  }
+
   app.get("/booking/quote", {
     preHandler: [ipDetect], schema: {
       tags: ["Booking"],
@@ -300,7 +324,16 @@ export async function bookingRoutes(app: FastifyInstance) {
     try {
       const booking = await prisma.booking.findUnique({
         where: { id: req.params.id },
-        include: { listing: true },
+        select: {
+          id: true,
+          status: true,
+          totalAmount: true,
+          currency: true,
+          reference: true,
+          guestEmail: true,
+          guestFirstName: true,
+          guestPhone: true,
+        },
       });
 
       if (!booking) {
@@ -938,7 +971,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         let pointsDiscount = 0;
         if (redeemPoints > 0) {
           const settings = await prisma.platformSettings.findUnique({ where: { id: "global" } });
-          const minRedemption = settings?.minPointsRedemption ?? 500;
+          const minRedemption = (settings as any)?.minPointsRedemption ?? 500;
           
           if (redeemPoints < minRedemption) {
             return sendError(reply, 400, "MINIMUM_REDEMPTION_NOT_MET", `You must redeem at least ${minRedemption} points.`);
@@ -953,7 +986,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             return sendError(reply, 400, "INSUFFICIENT_POINTS", "You do not have enough loyalty points to redeem.");
           }
 
-          const ratio = settings?.pointsToCurrencyRatio ?? 100;
+          const ratio = (settings as any)?.pointsToCurrencyRatio ?? 100;
           pointsDiscount = redeemPoints / ratio;
         }
 
@@ -988,7 +1021,7 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         const reference = await generateReference(listing.country ?? "XX");
 
-        const booking = await prisma.booking.create({
+        const booking = await (prisma.booking.create as any)({
           data: {
             reference,
             listingId: listing.id,
@@ -1076,11 +1109,24 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         // Immediately deduct redeemed points from the user's balance to prevent double-spending
         if (redeemPoints > 0) {
+          const balRows = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(
+            `SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1`, guestId,
+          );
+          const prevBalance = balRows[0]?.loyaltyPoints ?? 0;
           await prisma.$executeRawUnsafe(`
             UPDATE auth."User"
             SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" - $1), "updatedAt" = NOW()
             WHERE id = $2
           `, redeemPoints, guestId);
+          const balanceAfter = Math.max(0, prevBalance - redeemPoints);
+          await logLoyaltyTransaction({
+            userId:      guestId,
+            type:        "redeemed",
+            points:      -redeemPoints,
+            balanceAfter,
+            bookingId:   booking.id,
+            description: `Redeemed ${redeemPoints} pts at checkout for booking ${booking.reference}`,
+          }).catch(() => {});
         }
 
         return sendSuccess(reply, 201, {
@@ -1147,19 +1193,110 @@ export async function bookingRoutes(app: FastifyInstance) {
           });
         }
 
-        await prisma.booking.update({
-          where: { id },
-          data: { status: "confirmed", confirmedAt: new Date(), paymentId },
-        });
+        // Confirm inside a transaction with a listing-level row lock so concurrent
+        // payment webhooks cannot both confirm overlapping bookings simultaneously.
+        const confirmedAt = new Date();
+        try {
+          await prisma.$transaction(async (tx) => {
+            // Lock the listing row — serialises all confirmations for this listing.
+            await tx.$queryRawUnsafe(
+              `SELECT id FROM listing.listings WHERE id = $1 FOR UPDATE`,
+              booking.listingId,
+            );
 
-        await prisma.bookingStatusLog.create({
-          data: {
-            bookingId: id,
-            fromStatus: "pending_payment",
-            toStatus: "confirmed",
-            actorType: "system",
-          },
-        });
+            // Re-read booking status inside the TX to catch any concurrent confirm.
+            const fresh = await tx.$queryRawUnsafe<{ status: string }[]>(
+              `SELECT status FROM listing.bookings WHERE id = $1 FOR UPDATE`,
+              id,
+            );
+            if (!fresh[0] || fresh[0].status !== "pending_payment") {
+              throw Object.assign(new Error("Already processed"), { code: "ALREADY_PROCESSED" });
+            }
+
+            // Re-validate that no other confirmed booking occupies these dates.
+            const startDate = booking.checkIn ?? booking.pickupDatetime;
+            const endDate   = booking.checkOut ?? booking.returnDatetime;
+            if (startDate && endDate) {
+              const listing  = await tx.listing.findUnique({ where: { id: booking.listingId } });
+              const unitCount = listing?.unitCount ?? 1;
+
+              const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
+                SELECT id FROM listing.bookings
+                WHERE listing_id = $1
+                  AND status = 'confirmed'
+                  AND id != $2
+                  AND (
+                    (check_in IS NOT NULL AND check_in < $4 AND check_out > $3)
+                    OR (pickup_datetime IS NOT NULL AND pickup_datetime < $4 AND return_datetime > $3)
+                  )
+              `, booking.listingId, id, startDate, endDate);
+
+              if (conflicts.length >= unitCount) {
+                throw Object.assign(new Error("Dates taken"), { code: "DATES_TAKEN" });
+              }
+            }
+
+            await tx.booking.update({
+              where: { id },
+              data: { status: "confirmed", confirmedAt, paymentId },
+            });
+
+            await tx.bookingStatusLog.create({
+              data: {
+                bookingId: id,
+                fromStatus: "pending_payment",
+                toStatus: "confirmed",
+                actorType: "system",
+              },
+            });
+          });
+        } catch (txErr: any) {
+          if (txErr.code === "ALREADY_PROCESSED") {
+            return reply.status(409).send({
+              success: false,
+              error: { code: "INVALID_STATUS", message: "Booking was already processed." },
+            });
+          }
+
+          if (txErr.code === "DATES_TAKEN") {
+            // Another booking confirmed these dates first — auto-cancel and refund points.
+            await prisma.booking.update({
+              where: { id },
+              data: {
+                status: "cancelled_by_system",
+                cancellationReason: "Booking dates became unavailable before payment could be confirmed.",
+                cancelledAt: new Date(),
+                cancelledBy: "system",
+              },
+            }).catch(() => {});
+            await prisma.bookingStatusLog.create({
+              data: {
+                bookingId: id,
+                fromStatus: "pending_payment",
+                toStatus: "cancelled_by_system",
+                actorType: "system",
+                reason: "Dates taken by a concurrent booking.",
+              },
+            }).catch(() => {});
+            const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
+            if (redeemedPoints > 0) {
+              await prisma.$executeRawUnsafe(`
+                UPDATE auth."User"
+                SET "loyaltyPoints" = "loyaltyPoints" + $1, "updatedAt" = NOW()
+                WHERE id = $2
+              `, redeemedPoints, booking.guestId).catch(() => {});
+            }
+            return reply.status(409).send({
+              success: false,
+              error: {
+                code: "DATES_UNAVAILABLE",
+                message: "These dates are no longer available. Your payment will be refunded.",
+              },
+            });
+          }
+
+          throw txErr;
+        }
 
         // Send confirmation email (non-blocking)
         const confirmedListing = await prisma.listing.findUnique({
@@ -1226,17 +1363,27 @@ export async function bookingRoutes(app: FastifyInstance) {
                   "updatedAt" = NOW()
                 WHERE id = $3
               `, newPoints, finalTier, booking.guestId),
-              prisma.booking.update({
+              (prisma.booking.update as any)({
                 where: { id },
                 data: { earnedPoints },
               }),
             ]);
 
+            // Log earned points transaction
+            await logLoyaltyTransaction({
+              userId:      booking.guestId,
+              type:        "earned",
+              points:      earnedPoints,
+              balanceAfter: newPoints,
+              bookingId:   id,
+              description: `Earned from booking ${booking.reference} (${finalTier} tier × ${multiplier})`,
+            }).catch(() => {});
+
             // Tier upgrade: send push notification + auto-assign vouchers
             if (finalTier !== user.currentTier.toLowerCase()) {
               const tierName = finalTier.charAt(0).toUpperCase() + finalTier.slice(1);
 
-              // Find all vouchers with auto_assign=true that include the new tier
+              // Find all vouchers with auto_assign=true filtered by the new tier
               const autoVouchers = await prisma.voucher.findMany({
                 where: {
                   isActive: true,
@@ -1246,9 +1393,24 @@ export async function bookingRoutes(app: FastifyInstance) {
               });
 
               const tierVouchers = autoVouchers.filter((v) => {
-                const applicableTiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
-                return applicableTiers.includes(finalTier);
+                const tiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
+                return tiers.length === 0 || tiers.includes(finalTier);
               });
+
+              // Actually assign the vouchers — create VoucherRedemption placeholder records
+              // so the guest's wallet reflects the auto-assigned vouchers
+              for (const v of tierVouchers) {
+                await prisma.voucherRedemption.upsert({
+                  where: { bookingId: `wallet-${booking.guestId}-${v.id}` },
+                  create: {
+                    voucherId: v.id,
+                    bookingId: `wallet-${booking.guestId}-${v.id}`,
+                    guestId:   booking.guestId,
+                    discount:  0,
+                  },
+                  update: {},
+                }).catch(() => {});
+              }
 
               // Build notification body
               const vouchersAssigned = tierVouchers.length > 0;
@@ -1264,7 +1426,6 @@ export async function bookingRoutes(app: FastifyInstance) {
                 `, booking.guestId, `You've reached ${tierName}! 🎉`, notificationBody,
                   JSON.stringify({ tier: finalTier, vouchersAssigned: tierVouchers.map((v) => v.code) }));
               } catch {
-                // Notification table may not have 'data' column in all envs — try without it
                 try {
                   await prisma.$executeRawUnsafe(`
                     INSERT INTO auth."Notification" (id, "userId", type, title, body, "createdAt")
@@ -1347,7 +1508,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         });
 
         // Refund any redeemed loyalty points back to the guest since payment failed
-        const redeemedPoints = Number(booking.redeemPoints ?? 0);
+        const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
         if (redeemedPoints > 0) {
           await prisma.$executeRawUnsafe(`
             UPDATE auth."User"
@@ -1438,6 +1599,11 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         });
 
+        // Trigger payout cancellation on payment-service
+        notifyPayoutCancellation(id).catch((err) => {
+          app.log.error({ err }, "Background payout cancellation notification failed");
+        });
+
         await prisma.bookingStatusLog.create({
           data: {
             bookingId: id,
@@ -1452,15 +1618,34 @@ export async function bookingRoutes(app: FastifyInstance) {
         // Loyalty points adjustments on cancellation:
         // 1. Refund redeemed points (guest paid with points that are now voided)
         // 2. Reverse earned points if they were awarded at confirmation
-        const redeemedPoints = Number(booking.redeemPoints ?? 0);
+        const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
         const earnedPointsToReverse = Number((booking as any).earnedPoints ?? 0);
         const pointsDelta = redeemedPoints - earnedPointsToReverse;
         if (pointsDelta !== 0) {
+          const balRows = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(
+            `SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1`, guestId,
+          ).catch(() => [] as { loyaltyPoints: number }[]);
+          const prevBal = balRows[0]?.loyaltyPoints ?? 0;
           await prisma.$executeRawUnsafe(`
             UPDATE auth."User"
             SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
             WHERE id = $2
           `, pointsDelta, guestId).catch(() => {});
+          const newBal = Math.max(0, prevBal + pointsDelta);
+          if (redeemedPoints > 0) {
+            await logLoyaltyTransaction({
+              userId: guestId, type: "refunded_redeemed",
+              points: redeemedPoints, balanceAfter: newBal,
+              bookingId: id, description: `Redeemed points refunded — booking ${booking.reference} cancelled by guest`,
+            }).catch(() => {});
+          }
+          if (earnedPointsToReverse > 0) {
+            await logLoyaltyTransaction({
+              userId: guestId, type: "reversed_earned",
+              points: -earnedPointsToReverse, balanceAfter: newBal,
+              bookingId: id, description: `Earned points reversed — booking ${booking.reference} cancelled by guest`,
+            }).catch(() => {});
+          }
         }
 
         const cancelledListing = await prisma.listing.findUnique({
@@ -1571,6 +1756,11 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         });
 
+        // Trigger payout cancellation on payment-service
+        notifyPayoutCancellation(id).catch((err) => {
+          app.log.error({ err }, "Background payout cancellation notification failed");
+        });
+
         await prisma.bookingStatusLog.create({
           data: {
             bookingId: id,
@@ -1584,15 +1774,34 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         // Loyalty points adjustments on provider cancellation:
         // Refund redeemed points + reverse earned points (full refund scenario)
-        const redeemedPoints = Number(booking.redeemPoints ?? 0);
+        const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
         const earnedPointsToReverse = Number((booking as any).earnedPoints ?? 0);
         const pointsDelta = redeemedPoints - earnedPointsToReverse;
         if (pointsDelta !== 0) {
+          const balRows = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(
+            `SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1`, booking.guestId,
+          ).catch(() => [] as { loyaltyPoints: number }[]);
+          const prevBal = balRows[0]?.loyaltyPoints ?? 0;
           await prisma.$executeRawUnsafe(`
             UPDATE auth."User"
             SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
             WHERE id = $2
           `, pointsDelta, booking.guestId).catch(() => {});
+          const newBal = Math.max(0, prevBal + pointsDelta);
+          if (redeemedPoints > 0) {
+            await logLoyaltyTransaction({
+              userId: booking.guestId, type: "refunded_redeemed",
+              points: redeemedPoints, balanceAfter: newBal,
+              bookingId: id, description: `Redeemed points refunded — booking ${booking.reference} cancelled by provider`,
+            }).catch(() => {});
+          }
+          if (earnedPointsToReverse > 0) {
+            await logLoyaltyTransaction({
+              userId: booking.guestId, type: "reversed_earned",
+              points: -earnedPointsToReverse, balanceAfter: newBal,
+              bookingId: id, description: `Earned points reversed — booking ${booking.reference} cancelled by provider`,
+            }).catch(() => {});
+          }
         }
 
         return sendSuccess(reply, 200, {
@@ -1715,9 +1924,9 @@ export async function bookingRoutes(app: FastifyInstance) {
             totalAmount: Number(b.totalAmount),
             currency: b.currency,
             voucherDiscount: Number(b.voucherDiscount),
-            pointsDiscount: b.pointsDiscount ? Number(b.pointsDiscount) : undefined,
-            earnedPoints: b.earnedPoints ? Number(b.earnedPoints) : undefined,
-            redeemPoints: b.redeemPoints ? Number(b.redeemPoints) : undefined,
+            pointsDiscount: (b as any).pointsDiscount ? Number((b as any).pointsDiscount) : undefined,
+            earnedPoints: (b as any).earnedPoints ? Number((b as any).earnedPoints) : undefined,
+            redeemPoints: (b as any).redeemPoints ? Number((b as any).redeemPoints) : undefined,
             createdAt: b.createdAt,
           })),
         });

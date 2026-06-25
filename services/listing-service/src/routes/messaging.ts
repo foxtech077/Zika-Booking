@@ -56,10 +56,10 @@ app.post(
         return sendError(reply, 400, "VALIDATION_ERROR", "listingId is required.");
       }
 
-      const listing = await prisma.listing.findFirst({
+      const listing = await (prisma.listing.findFirst as any)({
         where: { id: body.listingId, deletedAt: null },
         select: { id: true, providerId: true, allowPreBooking: true },
-      });
+      }) as { id: string; providerId: string; allowPreBooking: boolean } | null;
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
       if (!body.bookingId && !listing.allowPreBooking) {

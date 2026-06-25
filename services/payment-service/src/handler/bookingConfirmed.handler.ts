@@ -1,12 +1,47 @@
 import { buildInvoice } from "../services/invoice.service.js";
 import { generateVoucherPDF } from "../services/pdf.services.js";
-import { sendGuestEmail } from "../services/email.services.js";
+import { sendGuestEmail, sendAdminAlert } from "../services/email.services.js";
 import { sendHostEmail } from "../services/hostemail.service.js";
 import { prisma } from "../lib/prisma.js";
 import { cdnUrl, downloadBuffer } from "../lib/s3.js";
+import { schedulePayout } from "../services/payout.service.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
+
+// ── Guest email: attempt 1 is awaited; attempts 2 & 3 run in the background ──
+
+function scheduleGuestEmailRetry(
+  booking: any,
+  invoice: any,
+  voucher: { fileName: string; pdfUrl: string; pdfBuffer: Buffer },
+  paymentId: string,
+  attempt: number,
+): void {
+  const delayMs = attempt === 2 ? 5 * 60_000 : 30 * 60_000;
+
+  setTimeout(async () => {
+    try {
+      await sendGuestEmail(booking, invoice, voucher);
+      await prisma.payment.update({
+        where: { id: paymentId },
+        data: { confirmationEmailsSent: true },
+      });
+      console.log(`[email] Guest email sent (attempt ${attempt}/3) for booking ${booking.code}`);
+    } catch (err: any) {
+      console.error(`[email] Attempt ${attempt}/3 failed for booking ${booking.code}:`, err);
+      if (attempt < 3) {
+        scheduleGuestEmailRetry(booking, invoice, voucher, paymentId, attempt + 1);
+      } else {
+        const context = `booking ${booking.code} | guest: ${booking.user.email} | ref: ${booking.code} | time: ${new Date().toISOString()}`;
+        console.error(`[email] All 3 attempts exhausted — alerting admin. ${context}`);
+        await sendAdminAlert(context, err).catch((alertErr) => {
+          console.error(`[email] Admin alert also failed:`, alertErr);
+        });
+      }
+    }
+  }, delayMs);
+}
 
 console.log("BEFORE CONFIRM");
 async function confirmBooking(bookingId: string, paymentId: string, paymentProvider: string) {
@@ -95,6 +130,23 @@ export async function bookingConfirmedHandler(payment: any) {
 
   const booking = normalizeBooking(rawBooking);
 
+  // Schedule provider payout for 24 hours after check-in (idempotent)
+  if (rawBooking.providerId && Number(rawBooking.providerPayout) > 0) {
+    const isCar = rawBooking.listingType === "car";
+    const checkInRaw = isCar ? rawBooking.pickupDatetime : rawBooking.checkIn;
+    if (checkInRaw) {
+      schedulePayout({
+        bookingId: rawBooking.id,
+        providerId: rawBooking.providerId,
+        amount: Number(rawBooking.providerPayout),
+        currency: rawBooking.currency,
+        checkInAt: new Date(checkInRaw),
+      }).catch((err: Error) =>
+        console.error(`[payout] Failed to schedule payout for booking ${rawBooking.id}:`, err.message),
+      );
+    }
+  }
+
   // Smart Idempotency:
   // If booking status = confirmed:
   //   skip confirmation request, continue recovery path.
@@ -134,7 +186,7 @@ export async function bookingConfirmedHandler(payment: any) {
     // Recovery behavior: reconstruct metadata and download the voucher PDF from S3
     const s3Key = `vouchers/${booking.code}.pdf`;
     const pdfUrl = cdnUrl(s3Key);
-    const fileName = `ZikaBooking-${booking.code}.pdf`;
+    const fileName = `KAINOOK-${booking.code}.pdf`;
     
     const pdfBuffer = await downloadBuffer(s3Key);
     voucher = { fileName, pdfUrl, pdfBuffer };
@@ -143,29 +195,31 @@ export async function bookingConfirmedHandler(payment: any) {
   // 4. SEND EMAILS
   if (!dbPayment.confirmationEmailsSent) {
     console.log(`[webhook] Sending guest and host confirmation emails.`);
-    // Failures propagate (errors are not swallowed)
+
+    // Guest email — attempt 1 (immediate, awaited).
+    // On failure, retries 2 and 3 fire in the background after 5 min / 30 min.
+    // On 3rd failure an admin alert is sent.
     try {
       await sendGuestEmail(booking, invoice, voucher);
-      console.log(`[email] Guest email sent successfully for booking ${booking.code}`);
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { confirmationEmailsSent: true },
+      });
+      console.log(`[email] Guest email sent (attempt 1/3) for booking ${booking.code}`);
     } catch (err: any) {
-      console.error(`[email] Guest email sending failed:`, err);
-      throw err;
+      console.error(`[email] Attempt 1/3 failed for booking ${booking.code}:`, err);
+      scheduleGuestEmailRetry(booking, invoice, voucher, payment.id, 2);
     }
 
+    // Host email — single attempt (failure is logged, not fatal to the flow)
     try {
       await sendHostEmail(booking);
       console.log(`[email] Host email sent successfully for booking ${booking.code}`);
     } catch (err: any) {
-      console.error(`[email] Host email sending failed:`, err);
-      throw err;
+      console.error(`[email] Host email sending failed for booking ${booking.code}:`, err);
     }
 
-    // Update flag in database
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: { confirmationEmailsSent: true }
-    });
-    console.log(`[webhook] Confirmation flags updated successfully for booking ${bookingId}`);
+    console.log(`[webhook] Confirmation flow completed for booking ${bookingId}`);
   } else {
     console.log(`[webhook] Confirmation emails already sent. Skipping email sending.`);
   }

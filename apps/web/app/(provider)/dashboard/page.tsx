@@ -389,7 +389,7 @@ function OverviewCard({
       ) : (
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[15px] font-semibold text-slate-400 uppercase tracking-wide">{title}</p>
+            <p className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide">{title}</p>
             <p className="mt-2 text-2xl font-bold text-slate-900 leading-none">{value}</p>
             {trend !== undefined && (
               <p className={cn("mt-2.5 flex items-center gap-1 text-[11px] font-semibold", positive ? "text-emerald-600" : "text-red-500")}>

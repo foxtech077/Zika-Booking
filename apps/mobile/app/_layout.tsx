@@ -101,7 +101,7 @@ export default function RootLayout() {
     function startInterval() {
       if (intervalRef.current) return;
       // Poll every 30 s while app is in foreground
-      intervalRef.current = setInterval(() => { void runCheck(); }, 30_000);
+      intervalRef.current = setInterval(() => { runCheck().catch(() => {}); }, 30_000);
     }
 
     function stopInterval() {
@@ -112,7 +112,7 @@ export default function RootLayout() {
     }
 
     // Run immediately on mount
-    void runCheck();
+    runCheck().catch(() => {});
 
     // Start the polling interval
     startInterval();
@@ -123,7 +123,7 @@ export default function RootLayout() {
       appStateRef.current = nextState;
 
       if (nextState === "active" && prev !== "active") {
-        void runCheck();   // immediate check on foreground
+        runCheck().catch(() => {});   // immediate check on foreground
         startInterval();   // restart interval
       } else if (nextState === "background" || nextState === "inactive") {
         stopInterval();    // no polling while backgrounded

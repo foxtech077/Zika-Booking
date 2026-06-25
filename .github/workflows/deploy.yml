@@ -27,6 +27,6 @@ jobs:
             pnpm --filter listing-service db:migrate:deploy
             pnpm --filter payment-service db:migrate:deploy
 
-            pnpm turbo run build --filter=\!@zika/provider
+            pnpm turbo run build
 
             pm2 restart all

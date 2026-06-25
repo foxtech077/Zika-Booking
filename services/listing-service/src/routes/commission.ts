@@ -4,7 +4,7 @@ import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { sendCommissionRateChangeEmail } from "../lib/email.js";
 
-// ── Role helpers ───────────────────────────────────────────────────────────────
+// ── Role helpers ─────────────────────────────────────────────────────────────
 
 function isSuperAdmin(role: string) { return role === "super_admin"; }
 function canWriteCommission(role: string) { return role === "super_admin" || role === "admin"; }
@@ -227,7 +227,16 @@ export async function commissionRoutes(app: FastifyInstance) {
           });
 
           if (applyToAll) {
-            await tx.commissionRate.updateMany({ data: { rate: body.rate, setBy: admin.adminId } });
+            await tx.commissionRate.updateMany({
+              where: {},
+              data: {
+                rate: body.rate,
+                pendingRate: null,
+                pendingEffectiveFrom: null,
+                pendingReason: null,
+                setBy: admin.adminId,
+              },
+            });
           }
 
           await tx.commissionHistory.create({
@@ -302,7 +311,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     
-    const whereClause = isSuperAdmin(admin.adminRole) || admin.adminRole === "finance_agent" 
+    const whereClause = isSuperAdmin(admin.adminRole) || admin.adminRole === "admin" || admin.adminRole === "finance_agent" 
       ? {} 
       : { country: { in: admin.countryScope } };
 
@@ -386,7 +395,7 @@ export async function commissionRoutes(app: FastifyInstance) {
     const isImmediate = effectiveDate <= todayUtc;
     const notifyProviders = body.notifyProviders ?? false;
 
-    if (!isSuperAdmin(admin.adminRole) && !admin.countryScope.includes(countryCode)) {
+    if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && !admin.countryScope.includes(countryCode)) {
       return sendError(reply, 403, "FORBIDDEN", "You do not have permission to modify this country.");
     }
 
@@ -643,7 +652,7 @@ export async function commissionRoutes(app: FastifyInstance) {
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
 
-    if (!isSuperAdmin(admin.adminRole) && !admin.countryScope.includes(countryCode)) {
+    if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && !admin.countryScope.includes(countryCode)) {
       return sendError(reply, 403, "FORBIDDEN", "You do not have permission to modify this country.");
     }
 
@@ -727,7 +736,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
       const where: Record<string, unknown> = {};
 
-      if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "finance_agent") {
+      if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && admin.adminRole !== "finance_agent") {
         where["OR"] = [
           { scope: "global" },
           { countryCode: { in: admin.countryScope } }
@@ -736,7 +745,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
       if (q.country) {
         const c = q.country.toUpperCase();
-        if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "finance_agent" && !admin.countryScope.includes(c)) {
+        if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && admin.adminRole !== "finance_agent" && !admin.countryScope.includes(c)) {
           return sendError(reply, 403, "FORBIDDEN", "You do not have permission to view this country.");
         }
         where["countryCode"] = c;
