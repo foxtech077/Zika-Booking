@@ -126,11 +126,48 @@ export interface StripeConnectStatusResponse {
   payoutsEnabled: boolean;
   detailsSubmitted: boolean;
   onboardingComplete: boolean;
-  payoutMethod: string | null;
+  payoutMethod: MerchantProfile["payoutMethod"];
 }
 
 export interface StripeConnectOnboardingResponse {
   onboardingUrl: string;
+}
+
+export interface ApiErrorResponse {
+  message?: string;
+  error?: {
+    code?: string;
+    message?: string;
+    fields?: Record<string, string>;
+  };
+}
+
+export function extractApiErrorMessage(error: unknown, fallback: string): string {
+  const err = error as {
+    response?: { data?: ApiErrorResponse };
+    message?: string;
+  };
+
+  return (
+    err?.response?.data?.error?.message ??
+    err?.response?.data?.message ??
+    err?.message ??
+    (error instanceof Error ? error.message : fallback)
+  );
+}
+
+export function getStripeOnboardingUrl(response: { data?: { onboardingUrl?: unknown } } | null | undefined): string | null {
+  const onboardingUrl = response?.data?.onboardingUrl;
+
+  if (typeof onboardingUrl !== "string" || onboardingUrl.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    return new URL(onboardingUrl).toString();
+  } catch {
+    return null;
+  }
 }
 
 export interface PayoutListResponse {
