@@ -19,6 +19,7 @@ import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
 import { AccessDenied } from "@/components/ui/AccessDenied";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { useAlert } from "@/hooks/useAlert";
 
 countries.registerLocale(enLocale);
 function codeToFlag(code: string) {
@@ -66,6 +67,7 @@ export default function VouchersPage() {
   }
 
   const qc = useQueryClient();
+  const { showAlert } = useAlert();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [statusFilter, setStatusFilter] = useState("");
@@ -116,13 +118,23 @@ export default function VouchersPage() {
         countryScope: "", validFrom: "", validUntil: "", usageLimit: "",
         usagePerGuest: "", applicableTiers: [], autoAssign: false, isActive: true
       });
+      showAlert({ type: "success", title: "Voucher Created", message: "The voucher has been created successfully." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to create voucher. Please try again." });
     },
   });
 
   const toggleMut = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
       listingApi.patch(`/admin/vouchers/${id}`, { isActive }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-vouchers"] }),
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: ["admin-vouchers"] });
+      showAlert({ type: "success", title: vars.isActive ? "Voucher Activated" : "Voucher Deactivated", message: vars.isActive ? "Voucher is now active." : "Voucher has been deactivated." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to toggle voucher status. Please try again." });
+    },
   });
 
   const columns: Column<Voucher>[] = [

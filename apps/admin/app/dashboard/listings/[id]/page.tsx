@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listingApi } from "@/lib/listing-api";
 import { Button } from "@/components/ui/Button";
+import { useAlert } from "@/hooks/useAlert";
 
 const REJECTION_REASONS = [
   "Insufficient documentation",
@@ -62,6 +63,7 @@ export default function ListingReviewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const qc = useQueryClient();
+  const { showAlert } = useAlert();
 
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [docUrl, setDocUrl] = useState<{ url: string; fileType: string } | null>(null);
@@ -115,7 +117,11 @@ export default function ListingReviewPage() {
 
   const approveMutation = useMutation({
     mutationFn: () => listingApi.post(`/admin/listings/${id}/approve`, { starRating: assignedStar, adminNote }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["review-queue"] }); router.replace("/dashboard/listings"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["review-queue"] });
+      showAlert({ type: "success", title: "Listing Approved", message: "The listing has been approved and published." });
+      router.replace("/dashboard/listings");
+    },
     onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Approval failed."),
   });
 
@@ -123,25 +129,40 @@ export default function ListingReviewPage() {
     mutationFn: () => listingApi.post(`/admin/listings/${id}/reject`, {
       reasons: selectedReasons, providerNote, adminNote: rejectAdminNote,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["review-queue"] }); router.replace("/dashboard/listings"); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["review-queue"] });
+      showAlert({ type: "warning", title: "Listing Rejected", message: "The provider has been notified." });
+      router.replace("/dashboard/listings");
+    },
     onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Rejection failed."),
   });
 
   const starUpdateMutation = useMutation({
     mutationFn: () => listingApi.patch(`/admin/listings/${id}/star-rating`, { starRating: newStar, reason: starReason }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["listing-review", id] }); setShowStarUpdate(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["listing-review", id] });
+      setShowStarUpdate(false);
+      showAlert({ type: "success", title: "Star Rating Updated", message: "The verified star rating has been updated." });
+    },
     onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Update failed."),
   });
 
   const suspendMutation = useMutation({
     mutationFn: () => listingApi.post(`/admin/listings/${id}/suspend`, { reason: suspendReason }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["listing-review", id] }); setShowSuspend(false); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["listing-review", id] });
+      setShowSuspend(false);
+      showAlert({ type: "success", title: "Listing Suspended", message: "The listing has been suspended and removed from search." });
+    },
     onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Suspension failed."),
   });
 
   const reinstateMutation = useMutation({
     mutationFn: () => listingApi.post(`/admin/listings/${id}/reinstate`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["listing-review", id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["listing-review", id] });
+      showAlert({ type: "success", title: "Listing Reinstated", message: "The listing is now live again." });
+    },
     onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Reinstatement failed."),
   });
 

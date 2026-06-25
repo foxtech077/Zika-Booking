@@ -24,6 +24,7 @@ import { formatDate, formatRelativeTime, slugToLabel, cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess, getAllowedRolesToCreate } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
+import { useAlert } from "@/hooks/useAlert";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -106,6 +107,7 @@ export default function RolesPage() {
   const { user } = useAuthStore();
   const qc = useQueryClient();
   const canManage = canAccess(user?.role, "manage_roles") || user?.role === "admin";
+  const { showAlert } = useAlert();
 
   // Admin's own country scope (for restricting country picker)
   const adminCountries: string[] = user?.countryScope ?? [];
@@ -158,6 +160,10 @@ export default function RolesPage() {
       setCreateModal(false);
       setForm({ name: "", email: "", password: "", role: (allowedRoles[0] ?? "admin") as AdminRole, countryScope: "" });
       setCreateCountries([]);
+      showAlert({ type: "success", title: "Admin Created", message: "The new admin account is ready." });
+    },
+    onError: (err: any) => {
+      showAlert({ type: "error", title: "Create Failed", message: (err as any)?.response?.data?.error?.message ?? "Failed to create admin account." });
     },
   });
 
@@ -178,6 +184,10 @@ export default function RolesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-operators"] });
       setDeleteConfirm(null);
+      showAlert({ type: "success", title: "Admin Deleted", message: "The admin account has been removed." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Delete Failed", message: "Unable to delete admin account. Please try again." });
     },
   });
 
@@ -186,6 +196,10 @@ export default function RolesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-operators"] });
       setEditModal(null);
+      showAlert({ type: "success", title: "Role Updated", message: "Admin role has been changed successfully." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Update Failed", message: "Unable to change admin role. Please try again." });
     },
   });
 

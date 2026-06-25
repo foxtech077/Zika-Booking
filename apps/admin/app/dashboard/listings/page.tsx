@@ -17,6 +17,7 @@ import { formatDate, formatRelativeTime, formatCurrency, cn } from "@/lib/utils"
 import type { Listing } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
+import { useAlert } from "@/hooks/useAlert";
 
 
 function CategoryIcon({ category }: { category: string }) {
@@ -73,6 +74,7 @@ export default function ListingsPage() {
   const [starModal, setStarModal] = useState<Listing | null>(null);
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
+  const { showAlert } = useAlert();
  
   const params = { q, status, category, country, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
@@ -108,18 +110,41 @@ export default function ListingsPage() {
   const suspendMut = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       listingApi.post(`/admin/listings/${id}/suspend`, { reason }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setSuspendModal(null); setSuspendReason(""); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-listings"] });
+      setSuspendModal(null);
+      setSuspendReason("");
+      showAlert({ type: "success", title: "Listing Suspended", message: "The listing has been removed from search." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to suspend listing. Please try again." });
+    },
   });
 
   const reinstateMut = useMutation({
-    mutationFn: (id: string) => listingApi.post(`/admin/listings/${id}/reinstate`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setReinstateConfirm(null); },
+    mutationFn: (id: string) => listingApi.post(`/admin/listings/${id}/reinstate`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-listings"] });
+      setReinstateConfirm(null);
+      showAlert({ type: "success", title: "Listing Reinstated", message: "The listing is now live again." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to reinstate listing. Please try again." });
+    },
   });
 
   const starMut = useMutation({
     mutationFn: ({ id, starRating, reason }: any) =>
       listingApi.patch(`/admin/listings/${id}/star-rating`, { starRating: parseInt(starRating), reason }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setStarModal(null); setStarReason(""); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-listings"] });
+      setStarModal(null);
+      setStarReason("");
+      showAlert({ type: "success", title: "Star Rating Updated", message: "The listing's star rating has been updated." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to update star rating. Please try again." });
+    },
   });
 
   const columns: Column<Listing>[] = [

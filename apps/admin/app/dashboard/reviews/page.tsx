@@ -15,6 +15,7 @@ import type { ListingReview, AdminRole } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
 import { AccessDenied } from "@/components/ui/AccessDenied";
+import { useAlert } from "@/hooks/useAlert";
 
 const fetchReviews = (params: Record<string, string>) =>
   listingApi.get(`/admin/reviews?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -50,6 +51,7 @@ export default function ReviewsPage() {
   const [rating, setRating] = useState("");
   const [hideModal, setHideModal] = useState<ListingReview | null>(null);
   const [hideReason, setHideReason] = useState("");
+  const { showAlert } = useAlert();
 
   const params = { q, ...(isHidden ? { isHidden } : {}), ...(rating ? { rating } : {}), page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
@@ -78,10 +80,14 @@ export default function ReviewsPage() {
   const hideMut = useMutation({
     mutationFn: ({ id, hide, reason }: { id: string; hide: boolean; reason?: string }) =>
       listingApi.patch(`/reviews/${id}/hide`, { hidden: hide, reason }),
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-reviews"] });
       setHideModal(null);
       setHideReason("");
+      showAlert({ type: "success", title: vars.hide ? "Review Hidden" : "Review Restored", message: vars.hide ? "The review has been removed from public view." : "The review is now visible to the public." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to update review visibility. Please try again." });
     },
   });
 

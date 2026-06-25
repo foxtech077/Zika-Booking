@@ -10,12 +10,14 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { formatRelativeTime, formatDate, truncate } from "@/lib/utils";
 import type { IcalFeed } from "@/types/admin";
+import { useAlert } from "@/hooks/useAlert";
 
 const fetchFeeds = (params: Record<string, string>) =>
   listingApi.get(`/admin/ical-feeds?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 export default function ChannelPage() {
   const qc = useQueryClient();
+  const { showAlert } = useAlert();
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [isActive, setIsActive] = useState("");
@@ -50,6 +52,11 @@ export default function ChannelPage() {
     onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: ["admin-ical-feeds"] });
       setSyncingId(null);
+      showAlert({ type: "success", title: "Feed Synced", message: "The iCal feed has been synchronised successfully." });
+    },
+    onError: () => {
+      setSyncingId(null);
+      showAlert({ type: "error", title: "Sync Failed", message: "Unable to sync iCal feed. Please try again." });
     },
     onMutate: (id) => setSyncingId(id),
   });

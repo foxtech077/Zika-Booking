@@ -18,6 +18,7 @@ import type { Promotion } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
+import { useAlert } from "@/hooks/useAlert";
 
 countries.registerLocale(enLocale);
 
@@ -109,6 +110,7 @@ export default function PromotionsPage() {
   const { user, token, _hasHydrated } = useAuthStore();
   const role = user?.role;
   const hasManagePermission = canAccess(role, "manage_promotions");
+  const { showAlert } = useAlert();
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -174,9 +176,11 @@ export default function PromotionsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-promotions"] });
       setAddModal(false);
+      showAlert({ type: "success", title: "Promotion Created", message: "The promotion campaign is now live." });
     },
     onError: (err: any) => {
       setFormError(err?.response?.data?.error?.message ?? err?.message ?? "Failed to create campaign");
+      showAlert({ type: "error", title: "Error", message: err?.response?.data?.error?.message ?? "Failed to create promotion." });
     }
   });
 
@@ -188,9 +192,11 @@ export default function PromotionsPage() {
       setEditModal(false);
       // Close detail drawer if updated
       setSelected(null);
+      showAlert({ type: "success", title: "Promotion Updated", message: "The promotion campaign has been updated." });
     },
     onError: (err: any) => {
       setFormError(err?.response?.data?.error?.message ?? err?.message ?? "Failed to update campaign");
+      showAlert({ type: "error", title: "Error", message: err?.response?.data?.error?.message ?? "Failed to update promotion." });
     }
   });
 
@@ -200,9 +206,10 @@ export default function PromotionsPage() {
       qc.invalidateQueries({ queryKey: ["admin-promotions"] });
       setDeleteConfirm(null);
       setSelected(null);
+      showAlert({ type: "success", title: "Promotion Deleted", message: "The promotion has been removed." });
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.error?.message ?? err?.message ?? "Failed to delete campaign");
+      showAlert({ type: "error", title: "Delete Failed", message: err?.response?.data?.error?.message ?? err?.message ?? "Failed to delete campaign." });
     }
   });
 

@@ -12,10 +12,11 @@ import { ConfirmModal, ActionModal } from "@/components/modals/Modals";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
 import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import type { CommissionRate, CommissionRatesResponse, AdminRole } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
-
 import { SYSTEM_COUNTRIES } from "@/lib/countries";
+import { useAlert } from "@/hooks/useAlert";
 
 const fetchRates = () =>
   listingApi.get("/admin/commission-rates").then((r) => r.data.data ?? r.data);
@@ -35,6 +36,7 @@ export default function CommissionPage() {
   }
 
   const canManageCommission = role === "super_admin";
+  const { showAlert } = useAlert();
 
   const [addModal, setAddModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<CommissionRate | null>(null);
@@ -90,6 +92,10 @@ export default function CommissionPage() {
       setNewEffectiveFrom(new Date().toISOString().slice(0, 10));
       setNewNotifyProviders(false);
       setNewReason("");
+      showAlert({ type: "success", title: "Commission Rate Saved", message: "The commission rate has been updated successfully." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to save commission rate. Please try again." });
     },
   });
 
@@ -117,6 +123,10 @@ export default function CommissionPage() {
       setGlobalNotifyProviders(false);
       setGlobalApplyToAll(false);
       setGlobalConfirmText("");
+      showAlert({ type: "success", title: "Global Rate Updated", message: "The global commission rate has been updated successfully." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to update global commission rate. Please try again." });
     },
   });
 
@@ -127,6 +137,10 @@ export default function CommissionPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-commission-rates"] });
       setDeleteConfirm(null);
+      showAlert({ type: "success", title: "Rate Deleted", message: "The commission rate has been removed successfully." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to delete commission rate. Please try again." });
     },
   });
 

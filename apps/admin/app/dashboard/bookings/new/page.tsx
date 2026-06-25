@@ -20,6 +20,7 @@ import { Input, Select, Textarea, CustomDropdown } from "@/components/ui/Input";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { useAlert } from "@/hooks/useAlert";
 
 const UISelect = Select;
 
@@ -349,6 +350,7 @@ export default function ManualBookingPage() {
   const { user } = useAuthStore();
   const role = user?.role as AdminRole | undefined;
   const uid = useId();
+  const { showAlert } = useAlert();
 
   // Access guard
   const hasAccess = canAccess(role, "manage_manual_booking");
@@ -790,8 +792,14 @@ export default function ManualBookingPage() {
         nightlyRate: price?.baseAmount ?? 0,
         guestId: "",
       }).then((r) => r.data),
-    onSuccess: () => setErrors({}),
-    onError: () => setErrors((p) => ({ ...p, _api: "Draft saved (backend not yet active — data stored locally)." })),
+    onSuccess: () => {
+      setErrors({});
+      showAlert({ type: "success", title: "Draft Saved", message: "Booking draft saved successfully." });
+    },
+    onError: () => {
+      setErrors((p) => ({ ...p, _api: "Draft saved (backend not yet active — data stored locally)." }));
+      showAlert({ type: "warning", title: "Draft Not Saved", message: "Backend not yet active — data stored locally." });
+    },
   });
 
   const paymentLinkMut = useMutation({
@@ -807,6 +815,7 @@ export default function ManualBookingPage() {
     onError: (err: any) => {
       const msg = err?.response?.data?.error?.message ?? "Failed to generate payment link.";
       setErrors((p) => ({ ...p, _api: msg }));
+      showAlert({ type: "error", title: "Error", message: msg });
     },
   });
 
@@ -828,9 +837,11 @@ export default function ManualBookingPage() {
       }
       setSubmitted(true);
       setLinkSent(true);
+      showAlert({ type: "success", title: "Payment Link Sent", message: "Payment link sent successfully." });
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
       setErrors(p => ({ ...p, _api: msg }));
+      showAlert({ type: "error", title: "Error", message: msg });
     } finally {
       setIsSending(false);
     }

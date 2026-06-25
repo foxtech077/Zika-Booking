@@ -17,9 +17,10 @@ import { Input } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
 import { canAccess } from "@/permissions/rbac";
+import { useMockFinanceStore } from "@/lib/mock-finance-store";
 import { AccessDenied } from "@/components/ui/AccessDenied";
-
-const COUNTRY_OPTIONS = [
+import { useAlert } from "@/hooks/useAlert";
+const COUNTRY_OPTIONS=[
   { value: "MT", label: "MT" },
   { value: "US", label: "US" },
   { value: "GB", label: "GB" },
@@ -71,7 +72,8 @@ export default function PayoutManagementPage() {
     return <AccessDenied />;
   }
 
-  const { payouts, approvePayout, retryPayout } = useMockFinanceStore();
+  const { approvePayout, retryPayout } = useMockFinanceStore();
+  const { showAlert } = useAlert();
 
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<Payout["status"]>("scheduled");
@@ -159,6 +161,10 @@ export default function PayoutManagementPage() {
     mutationFn: () => listingApi.post("/admin/payouts/process-now"),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-payouts"] });
+      showAlert({ type: "success", title: "Payouts Processed", message: "Due payouts have been queued for processing." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to process payouts. Please try again." });
     },
   });
 
@@ -169,6 +175,10 @@ export default function PayoutManagementPage() {
       qc.invalidateQueries({ queryKey: ["admin-payouts"] });
       setMarkPaidConfirm(null);
       setProviderPayoutIdInput("");
+      showAlert({ type: "success", title: "Payout Marked as Paid", message: "The payout has been recorded as paid successfully." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to mark payout as paid. Please try again." });
     },
   });
 
@@ -177,6 +187,10 @@ export default function PayoutManagementPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-payouts"] });
       setCancelConfirm(null);
+      showAlert({ type: "success", title: "Payout Cancelled", message: "The scheduled payout has been cancelled." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to cancel payout. Please try again." });
     },
   });
 
@@ -185,6 +199,10 @@ export default function PayoutManagementPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-payouts"] });
       setRetryConfirm(null);
+      showAlert({ type: "success", title: "Payout Retried", message: "The failed payout has been re-queued for processing." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to retry payout. Please try again." });
     },
   });
 

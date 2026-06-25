@@ -17,6 +17,7 @@ import type { ListingReviewTask, PlatformUser } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
 import { AccessDenied } from "@/components/ui/AccessDenied";
+import { useAlert } from "@/hooks/useAlert";
 // ── Spec-defined rejection reasons ────────────────────────────────────────────
 const REJECTION_REASONS = [
   "Insufficient documentation",
@@ -176,6 +177,7 @@ export default function AccreditationPage() {
   const isCountryManager = user?.role === "country_manager";
   const userCountryScope = user?.countryScope ?? [];
   const qc = useQueryClient();
+  const { showAlert } = useAlert();
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -299,6 +301,10 @@ export default function AccreditationPage() {
       setSelectedTask(null);
       setShowApproveModal(false);
       setAdminNote("");
+      showAlert({ type: "success", title: "Listing Approved", message: "The hotel listing has been approved and published." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Approval Failed", message: "Unable to approve listing. Please try again." });
     },
   });
 
@@ -312,6 +318,10 @@ export default function AccreditationPage() {
       setReasons([]);
       setProviderNote("");
       setAdminNote("");
+      showAlert({ type: "warning", title: "Listing Rejected", message: "The provider has been notified with rejection details." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Rejection Failed", message: "Unable to reject listing. Please try again." });
     },
   });
 

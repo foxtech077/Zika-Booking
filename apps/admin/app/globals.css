@@ -125,4 +125,19 @@
 
   /* Number formatting */
   .tabular { font-variant-numeric: tabular-nums; }
+
+  /* ── Toast / Alert animations ─────────────────────────────────────────────── */
+  .animate-slide-in-right {
+    animation: slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes slide-in-right {
+    from { opacity: 0; transform: translateX(110%); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+
+  @keyframes shrink-width {
+    from { transform: scaleX(1); }
+    to   { transform: scaleX(0); }
+  }
 }

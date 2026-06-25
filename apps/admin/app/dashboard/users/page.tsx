@@ -16,6 +16,7 @@ import { formatDate, formatRelativeTime } from "@/lib/utils";
 import type { PlatformUser } from "@/types/admin";
 import { canAccess } from "@/permissions/rbac";
 import { AccessDenied } from "@/components/ui/AccessDenied";
+import { useAlert } from "@/hooks/useAlert";
 
 const fetchUsers = (params: Record<string, string>) =>
   api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
@@ -43,6 +44,7 @@ export default function UsersPage() {
   const [selected, setSelected] = useState<PlatformUser | null>(null);
   const [confirm, setConfirm] = useState<{ action: "suspend" | "reinstate" | "ban"; user: PlatformUser } | null>(null);
   const [reason, setReason] = useState("");
+  const { showAlert } = useAlert();
 
   const params: Record<string, string> = {
     q,
@@ -88,10 +90,15 @@ export default function UsersPage() {
       const needsReason = action === "ban" || action === "suspend";
       return api.patch(`/admin/users/${id}/${action}`, needsReason ? { reason } : undefined);
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["admin-users"] });
       setConfirm(null);
       setReason("");
+      const labels: Record<string, string> = { suspend: "Suspended", reinstate: "Reinstated", ban: "Banned" };
+      showAlert({ type: "success", title: `User ${labels[vars.action] ?? vars.action}`, message: "User status updated successfully." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Action Failed", message: "Unable to update user status. Please try again." });
     },
   });
 

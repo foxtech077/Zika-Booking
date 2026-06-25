@@ -20,6 +20,7 @@ import { canAccess } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { SYSTEM_COUNTRIES } from "@/lib/countries";
+import { useAlert } from "@/hooks/useAlert";
 
 const COUNTRY_OPTIONS = [
   "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
@@ -70,6 +71,7 @@ export default function BookingsPage() {
   const [resendGateway, setResendGateway] = useState<"stripe" | "tara">("stripe");
   const [resendError, setResendError] = useState("");
   const [resendSuccess, setResendSuccess] = useState(false);
+  const { showAlert } = useAlert();
 
   const params = Object.fromEntries(
     Object.entries({
@@ -126,6 +128,10 @@ export default function BookingsPage() {
       qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
       setCancelModal(null);
       setCancelReason("");
+      showAlert({ type: "success", title: "Booking Cancelled", message: "The booking has been cancelled successfully." });
+    },
+    onError: () => {
+      showAlert({ type: "error", title: "Error", message: "Unable to cancel booking. Please try again." });
     },
   });
 
@@ -144,10 +150,12 @@ export default function BookingsPage() {
       setResendSuccess(true);
       qc.invalidateQueries({ queryKey: ["admin-bookings"] });
       qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
+      showAlert({ type: "success", title: "Payment Link Sent", message: "Payment link sent to the guest successfully." });
     },
     onError: (err: any) => {
       const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
       setResendError(msg);
+      showAlert({ type: "error", title: "Error", message: msg });
     }
   });
 
