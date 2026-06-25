@@ -12,9 +12,14 @@ interface BadgeProps {
 
 function getVariantFromStatus(status: string): BadgeVariant {
   const s = status.toLowerCase();
+  // ── Payout-specific statuses (backend: scheduled, processing, paid, failed, cancelled) ──
+  if (["paid"].includes(s)) return "success";
+  if (["scheduled", "processing"].includes(s)) return "warning";
+  if (["cancelled"].includes(s)) return "danger";
+  // ── Generic booking / user statuses ──
   if (["active", "approved", "confirmed", "completed", "success"].includes(s))   return "success";
   if (["pending", "pending_review", "pending_payment", "awaiting"].some(k => s.includes(k))) return "warning";
-  if (["suspended", "rejected", "banned", "cancelled", "danger", "failed"].some(k => s.includes(k))) return "danger";
+  if (["suspended", "rejected", "banned", "danger", "failed"].some(k => s.includes(k))) return "danger";
   if (["draft", "deactivated", "info"].includes(s)) return "info";
   if (["auto_suspended"].includes(s)) return "orange";
   return "default";
