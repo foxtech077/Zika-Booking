@@ -5,6 +5,7 @@ import { requireProvider, requireProviderRole, type ProviderRequest } from "../m
 import { getRedis } from "../lib/redis.js";
 import { randomUUID } from "crypto";
 import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../lib/email.js";
+import { fireNotification } from "../lib/notifications.js";
 import { ipDetect } from "../middleware/ipDetect.js";
 import { getPricing } from "../services/pricing.services.js";
 import { getPaymentProvider } from "../services/payment.services.js";
@@ -1319,6 +1320,13 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         ).catch(() => { });
 
+        fireNotification(booking.guestId, {
+          type:  "booking_confirmed",
+          title: "Booking Confirmed!",
+          body:  `Your booking at ${confirmedListing?.name ?? "your listing"} (Ref: ${booking.reference}) is confirmed.`,
+          data:  { bookingId: id, reference: booking.reference },
+        });
+
         // Award loyalty points — cross-schema update to auth."User"
         // Earning rate: 1 point per $1 of totalAmount paid, multiplied by tier bonus
         const basePoints = Math.floor(Number(booking.totalAmount));
@@ -1417,26 +1425,25 @@ export async function bookingRoutes(app: FastifyInstance) {
                 }).catch(() => {});
               }
 
-              // Build notification body
               const vouchersAssigned = tierVouchers.length > 0;
               const notificationBody = vouchersAssigned
                 ? `You've reached ${tierName}! Your exclusive voucher has been added.`
                 : `Congratulations! You've reached ${tierName} status and unlocked new benefits.`;
 
-              // Insert push notification
-              try {
-                await prisma.$executeRawUnsafe(`
-                  INSERT INTO auth."Notification" (id, "userId", type, title, body, data, "createdAt")
-                  VALUES (gen_random_uuid()::text, $1, 'tier_upgrade', $2, $3, $4::jsonb, NOW())
-                `, booking.guestId, `You've reached ${tierName}! 🎉`, notificationBody,
-                  JSON.stringify({ tier: finalTier, vouchersAssigned: tierVouchers.map((v) => v.code) }));
-              } catch {
-                try {
-                  await prisma.$executeRawUnsafe(`
-                    INSERT INTO auth."Notification" (id, "userId", type, title, body, "createdAt")
-                    VALUES (gen_random_uuid()::text, $1, 'tier_upgrade', $2, $3, NOW())
-                  `, booking.guestId, `You've reached ${tierName}! 🎉`, notificationBody);
-                } catch { /* ignore */ }
+              fireNotification(booking.guestId, {
+                type:  "tier_upgrade",
+                title: `You've reached ${tierName}! 🎉`,
+                body:  notificationBody,
+                data:  { tier: finalTier, voucherCodes: tierVouchers.map((v) => v.code) },
+              });
+
+              if (vouchersAssigned) {
+                fireNotification(booking.guestId, {
+                  type:  "voucher_assigned",
+                  title: "New Voucher Added!",
+                  body:  `A ${tierName} exclusive voucher has been added to your wallet.`,
+                  data:  { voucherCodes: tierVouchers.map((v) => v.code) },
+                });
               }
             }
           }

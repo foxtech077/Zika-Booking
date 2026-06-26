@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/auth.js";
+import { fireNotification } from "../lib/notifications.js";
 
 export async function reviewRoutes(app: FastifyInstance) {
   // ── POST /reviews — guest submits a review ────────────────────────────
@@ -178,8 +179,13 @@ export async function reviewRoutes(app: FastifyInstance) {
               }
             })
           ]);
+          fireNotification(listing.providerId, {
+            type:  "listing_auto_suspended",
+            title: "Listing Suspended",
+            body:  `Your listing "${listing.name ?? listing.id}" has been suspended due to consecutive negative reviews. Our team will review it within 48 hours.`,
+            data:  { listingId: listing.id },
+          });
           // TODO: Cancel active reservations, void payments.
-          // TODO: Notify provider by email.
         } else {
           await prisma.listing.update({
             where: { id: listing.id },
