@@ -19,6 +19,7 @@ import { messagingRoutes } from "./routes/messaging.js";
 import { startCommissionScheduler } from "./lib/commissionScheduler.js";
 import { bookingDocumentRoutes } from "./routes/booking-documents.js";
 import { loyaltyRoutes } from "./routes/loyalty.js";
+import { locationRoutes } from "./routes/location.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
@@ -311,6 +312,7 @@ app.all("/admin/payouts/*", async (req, reply) => {
   await app.register(messagingRoutes);
   await app.register(bookingDocumentRoutes);
   await app.register(loyaltyRoutes);
+  await app.register(locationRoutes);
 
   return app;
 }
