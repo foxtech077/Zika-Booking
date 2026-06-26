@@ -832,9 +832,6 @@ export async function authRoutes(app: FastifyInstance) {
           },
         });
 
-        const webBase = (process.env.WEB_BASE_URL ?? "http://localhost:3000").trim().replace(/\/$/, "");
-        const resetUrl = `${webBase}/reset-password?token=${plainToken}`;
-
         try {
           await sendPasswordResetEmail(email, plainToken);
         } catch (error) {
