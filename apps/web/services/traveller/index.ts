@@ -155,7 +155,7 @@ export interface MyReviewsResponse {
 }
 
 export interface SubmitReviewInput {
-  bookingId: string;
+  bookingId?: string;
   rating: number;
   title?: string;
   body?: string;
