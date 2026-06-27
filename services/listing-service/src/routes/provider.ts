@@ -229,8 +229,8 @@ export async function providerRoutes(app: FastifyInstance) {
             limit: { type: "integer", default: 20, description: "Page size (max 50)" },
             status: {
               type: "string",
-              enum: ["all", "pending_payment", "confirmed", "completed", "cancelled"],
-              description: "Filter by booking status",
+              enum: ["all", "pending_payment", "confirmed", "completed", "cancelled", "cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"],
+              description: "Filter by booking status. Use 'cancelled' to match all cancellation types.",
             },
             search: {
               type: "string",
@@ -251,7 +251,11 @@ export async function providerRoutes(app: FastifyInstance) {
       const search   = q["search"];
 
       const where: Record<string, unknown> = { providerId };
-      if (status && status !== "all") where["status"] = status;
+      if (status && status !== "all") {
+        where["status"] = status === "cancelled"
+          ? { in: ["cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"] }
+          : status;
+      }
       if (search) {
         where["OR"] = [
           { reference:      { contains: search, mode: "insensitive" } },

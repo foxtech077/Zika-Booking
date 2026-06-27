@@ -6,6 +6,7 @@ import { calculateBilling } from "../services/billing.service.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
+import { fireNotification } from "../lib/notifications.js";
 
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
@@ -1052,6 +1053,12 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
 
       sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
+      fireNotification(listing.providerId, {
+        type:  "listing_approved",
+        title: "Listing Approved! 🎉",
+        body:  `Your listing "${listing.name ?? id}" has been approved and is now live.`,
+        data:  { listingId: id },
+      });
       return sendSuccess(reply, 200, { message: "Listing approved and published." });
     } catch (err: any) {
       return sendError(reply, 400, "APPROVE_LISTING_FAILED", "Failed to approve listing. Please try again.");
@@ -1228,6 +1235,12 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
 
       sendListingRejectedEmail(listing.providerId, listing.name ?? id, reasons, providerNote ?? null).catch(() => null);
+      fireNotification(listing.providerId, {
+        type:  "listing_rejected",
+        title: "Listing Needs Changes",
+        body:  `Your listing "${listing.name ?? id}" was not approved. Please review the feedback and resubmit.`,
+        data:  { listingId: id, reasons },
+      });
       return sendSuccess(reply, 200, { message: "Listing rejected. Provider has been notified." });
     } catch (err: any) {
       return sendError(reply, 400, "REJECT_LISTING_FAILED", "Failed to reject listing. Please try again.");
