@@ -149,6 +149,8 @@ export default function TravellerMessagesPage() {
   const router = useRouter();
   const pathname = usePathname();
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const hasAutoFocused = useRef(false);
   const [search, setSearch] = useState("");
   const [messageText, setMessageText] = useState("");
   const [urlConversationId, setUrlConversationId] = useState<string | null>(null);
@@ -222,6 +224,7 @@ export default function TravellerMessagesPage() {
     onSuccess: () => {
       setMessageText("");
       setSendError(null);
+      if (composerRef.current) composerRef.current.style.height = "auto";
       queryClient.invalidateQueries({ queryKey: ["traveller-conversation-messages", activeConversationId] });
       queryClient.invalidateQueries({ queryKey: ["traveller-conversations"] });
       queryClient.invalidateQueries({ queryKey: ["traveller-unread-count"] });
@@ -258,6 +261,14 @@ export default function TravellerMessagesPage() {
     if (!activeConversationId || !messagesUpdatedAt) return;
     queryClient.invalidateQueries({ queryKey: ["traveller-unread-count"] });
   }, [activeConversationId, messagesUpdatedAt, queryClient]);
+
+  useEffect(() => {
+    if (!urlConversationId || hasAutoFocused.current) return;
+    if (activeConversationId !== urlConversationId) return;
+    if (loadingMessages) return;
+    setTimeout(() => composerRef.current?.focus(), 80);
+    hasAutoFocused.current = true;
+  }, [urlConversationId, activeConversationId, loadingMessages]);
 
   const updateConversation = (conversationId: string) => {
     setActiveConversationId(conversationId);
@@ -422,15 +433,31 @@ export default function TravellerMessagesPage() {
             )}
           >
             {!activeConversation ? (
-              <EmptyState
-                title="Select a conversation"
-                message="Choose a thread from the left to view the message history and reply from here."
-                action={
-                  <Button variant="outline" onClick={() => router.push("/traveller")}>
-                    Back to listings
+              conversations.length === 0 && !loadingConversations ? (
+                <div className="flex min-h-[580px] flex-col items-center justify-center p-8 text-center">
+                  <div className="flex h-24 w-24 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-300">
+                    <MessageSquare className="h-12 w-12" />
+                  </div>
+                  <h2 className="mt-6 text-xl font-bold text-slate-950">No conversations yet</h2>
+                  <p className="mt-3 max-w-xs text-sm leading-6 text-slate-500">
+                    Start a conversation from any listing by clicking{" "}
+                    <span className="font-semibold text-slate-800">Message Provider</span>.
+                  </p>
+                  <Button variant="primary" className="mt-6" onClick={() => router.push("/traveller")}>
+                    Explore Listings
                   </Button>
-                }
-              />
+                </div>
+              ) : (
+                <EmptyState
+                  title="Select a conversation"
+                  message="Choose a thread from the left to view the message history and reply from here."
+                  action={
+                    <Button variant="outline" onClick={() => router.push("/traveller")}>
+                      Back to listings
+                    </Button>
+                  }
+                />
+              )
             ) : (
               <>
                 <div className="border-b border-slate-100 bg-white p-4 sm:p-5">
@@ -511,16 +538,19 @@ export default function TravellerMessagesPage() {
                         }}
                       >
                         <Textarea
+                          ref={composerRef}
                           value={messageText}
                           onChange={(event) => {
                             setMessageText(event.target.value);
                             setSendError(null);
+                            event.target.style.height = "auto";
+                            event.target.style.height = `${Math.min(event.target.scrollHeight, 200)}px`;
                           }}
                           onKeyDown={handleKeyDown}
                           rows={3}
                           maxLength={TRAVELLER_MESSAGE_LIMIT}
-                          placeholder="Write a message to the provider. Enter sends, Shift+Enter adds a new line."
-                          className="min-h-[88px] border-0 px-2 py-2 focus:ring-0"
+                          placeholder="Ask the provider about availability, amenities, check-in, parking, or anything else."
+                          className="min-h-[88px] max-h-[200px] overflow-hidden border-0 px-2 py-2 focus:ring-0"
                         />
                         <div className="mt-3 flex items-center justify-between gap-3">
                           <p className="text-[11px] text-slate-400">
