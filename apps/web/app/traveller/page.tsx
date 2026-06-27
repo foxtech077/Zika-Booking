@@ -8,6 +8,7 @@ import { paymentApi } from "@/lib/payment-api";
 import ListingImage from "./components/ListingImage";
 import { useAuthStore } from "@/stores/auth";
 import ListingCard from "./components/ListingCard";
+import { ActivityPromoBanner, PersonalVoucherBanner } from "./components/PromoBanner";
 import PhotoGallery from "./components/PhotoGallery";
 import ReservationCard from "./components/ReservationCard";
 import MapView from "./components/MapView";
@@ -52,6 +53,12 @@ interface ActivePromotion {
   discountValue: number;
   description?: string;
   category?: string;
+  labelText?: string;
+  labelColour?: string;
+  bannerTitle?: string;
+  bannerSubtitle?: string;
+  validUntil?: string;
+  applyToBooking?: boolean;
 }
 
 interface ApplicableVoucher {
@@ -59,6 +66,12 @@ interface ApplicableVoucher {
   code: string;
   description?: string;
   discountAmount: number;
+  title?: string;
+  validUntil?: string;
+  discountType?: "percentage" | "fixed";
+  discountValue?: number;
+  minimumBookingValue?: number;
+  maximumDiscountCap?: number;
 }
 
 
@@ -240,6 +253,12 @@ export default function TravellerDashboard() {
   const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucher[]>([]);
   const [loadingApplicableVouchers, setLoadingApplicableVouchers] = useState(false);
 
+  // Browse-time promotion & voucher banners (before listing selection)
+  const [categoryPromotion, setCategoryPromotion] = useState<ActivePromotion | null>(null);
+  const [personalVouchers, setPersonalVouchers] = useState<ApplicableVoucher[]>([]);
+  const [personalBannerDismissed, setPersonalBannerDismissed] = useState(false);
+  const [pendingVoucherCode, setPendingVoucherCode] = useState<string>("");
+
   // Checkout inputs
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -347,6 +366,12 @@ export default function TravellerDashboard() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [reservationStatusFilter, setReservationStatusFilter] = useState<string>("all");
 
+  // My Trips dashboard state
+  const [staysFilter, setStaysFilter] = useState<"upcoming" | "past">("upcoming");
+  const [dashboardSection, setDashboardSection] = useState<"bookings" | "vouchers" | "loyalty" | "notifications">("bookings");
+  const [walletVouchers, setWalletVouchers] = useState<ApplicableVoucher[]>([]);
+  const [loadingWalletVouchers, setLoadingWalletVouchers] = useState(false);
+
   // Mobile UI state
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFiltersDrawer, setShowFiltersDrawer] = useState(false);
@@ -432,6 +457,8 @@ export default function TravellerDashboard() {
     } finally {
       setLoadingFeatured(false);
     }
+    fetchCategoryPromotion(cat);
+    fetchPersonalVouchers(cat);
   }
 
   // Fetch a small preview list for the hero category dropdown
@@ -662,6 +689,10 @@ export default function TravellerDashboard() {
       } else {
         setListings([]);
       }
+      // Fetch browse-time promotion banner and personal vouchers for this category
+      fetchCategoryPromotion(activeCategory);
+      fetchPersonalVouchers(activeCategory);
+      setPersonalBannerDismissed(false);
     } catch (err: any) {
       const errMsg = err?.response?.data?.error?.message ?? err?.message ?? "Unknown error";
       console.error("[ZikaSearch] Search API error:", err?.response?.data ?? err?.message ?? err);
@@ -851,7 +882,7 @@ export default function TravellerDashboard() {
       // Keep whichever is higher — never stack
       setDiscountSource(pDiscount > voucherDiscount ? "promotion" : "voucher");
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePromotion, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
 
   // Helper: calculate nights/days between two date strings
@@ -900,6 +931,10 @@ export default function TravellerDashboard() {
         setPaymentId(null);
         if (paymentPollRef.current) clearInterval(paymentPollRef.current);
         fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country);
+        if (pendingVoucherCode) {
+          handleVoucherApply(pendingVoucherCode);
+          setPendingVoucherCode("");
+        }
       } else {
         const msg = res.data?.error?.message ?? (res.data as any)?.message ?? "Unable to hold these dates. Please try again.";
         setBookingError(msg);
@@ -993,6 +1028,32 @@ export default function TravellerDashboard() {
       setApplicableVouchers([]);
     } finally {
       setLoadingApplicableVouchers(false);
+    }
+  }
+
+  // Fetch active promotion for browse-time banner (search + home page)
+  async function fetchCategoryPromotion(category: string) {
+    try {
+      const res = await listingApi.get<any>("/promotions/active", { params: { category } });
+      if (res.data.success) {
+        const promos: ActivePromotion[] = res.data.data ?? [];
+        setCategoryPromotion(promos.length > 0 ? (promos[0] ?? null) : null);
+      }
+    } catch {
+      setCategoryPromotion(null);
+    }
+  }
+
+  // Fetch personal (auto-assigned) vouchers for browse-time banner
+  async function fetchPersonalVouchers(category: string) {
+    if (!isAuthenticated) return;
+    try {
+      const res = await listingApi.get<any>("/vouchers/applicable", { params: { category } });
+      if (res.data.success) {
+        setPersonalVouchers(res.data.data ?? []);
+      }
+    } catch {
+      setPersonalVouchers([]);
     }
   }
 
@@ -1201,7 +1262,23 @@ export default function TravellerDashboard() {
     }
   }
 
-  // 8b. Save context to sessionStorage and navigate to /booking/review
+  // 8b. Fetch voucher wallet for the My Trips dashboard
+  async function fetchWalletVouchers() {
+    if (!isAuthenticated) return;
+    setLoadingWalletVouchers(true);
+    try {
+      const res = await listingApi.get<any>("/vouchers/applicable");
+      if (res.data.success) {
+        setWalletVouchers(res.data.data ?? []);
+      }
+    } catch {
+      setWalletVouchers([]);
+    } finally {
+      setLoadingWalletVouchers(false);
+    }
+  }
+
+  // 8c. Save context to sessionStorage and navigate to /booking/review
   function handleContinueToReview() {
     if (!detailListing || !lockToken) return;
     if (!firstName || !lastName || !email) {
@@ -1377,9 +1454,9 @@ export default function TravellerDashboard() {
         <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex items-center justify-between">
           <button
             onClick={() => { setSelectedListingId(null); setDetailListing(null); abandonLock(); }}
-            className="text-xl font-serif font-bold text-[#0c2614] tracking-tight hover:opacity-80 transition"
+            className="hover:opacity-80 transition flex items-center"
           >
-            Kainook
+            <img src="/images/kainook-logo.jpeg" alt="Kainook" className="h-9 w-auto object-contain" />
           </button>
           <div className="flex items-center gap-3">
             <div className="bg-slate-50 border border-slate-200 px-4 py-1.5 rounded-full text-xs font-mono tracking-wider flex items-center gap-2 text-[#0c2614]">
@@ -1399,9 +1476,9 @@ export default function TravellerDashboard() {
             <Link
               href="/traveller"
               onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-              className="text-xl font-serif font-bold text-[#0c2614] tracking-tight"
+              className="flex items-center"
             >
-              Kainook
+              <img src="/images/kainook-logo.jpeg" alt="Kainook" className="h-9 w-auto object-contain" />
             </Link>
             <nav className="hidden md:flex items-center gap-8">
               <button
@@ -1430,10 +1507,10 @@ export default function TravellerDashboard() {
               </button>
               {user && (
                 <button
-                  onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); }}
+                  onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); fetchWalletVouchers(); }}
                   className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "bookings" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
                 >
-                  My Reservations
+                  My Trips
                 </button>
               )}
             </nav>
@@ -1462,6 +1539,15 @@ export default function TravellerDashboard() {
 
             {user && (
               <div className="flex items-center gap-3">
+                {/* Mail icon */}
+                <button className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full border border-slate-200 hover:bg-slate-50 transition text-slate-500 hover:text-[#0c2614]">
+                  <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg>
+                </button>
+                {/* Notification bell */}
+                <button className="hidden sm:flex relative w-9 h-9 items-center justify-center rounded-full border border-slate-200 hover:bg-slate-50 transition text-slate-500 hover:text-[#0c2614]">
+                  <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-white" />
+                </button>
                 <button onClick={handleLogout} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-red-500 transition">
                   Logout
                 </button>
@@ -1470,8 +1556,8 @@ export default function TravellerDashboard() {
                     {user.firstName[0]}
                   </div>
                   <div className="hidden sm:block text-left">
-                    <p className="text-xs font-semibold text-slate-800">{user.firstName}</p>
-                    <p className="text-[10px] text-[#1D8D2B] font-bold uppercase tracking-widest">{user.currentTier || "Bronze"}</p>
+                    <p className="text-xs font-semibold text-slate-800">{user.firstName} {user.lastName}</p>
+                    <p className="text-[10px] text-[#1D8D2B] font-bold uppercase tracking-widest">{(user.currentTier || "Bronze").toUpperCase()} MEMBER</p>
                   </div>
                 </div>
               </div>
@@ -1502,25 +1588,56 @@ export default function TravellerDashboard() {
               </div>
             ) : detailListing ? (
               <>
-                {/* Header Section */}
+                {/* Redesigned Header Section */}
                 <div className="lg:col-span-12 space-y-4">
-                  <h1 className="text-4xl font-serif font-bold text-slate-900 leading-tight">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {detailListing.isAccredited && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        ✦ Zika Accredited
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest bg-slate-100 text-slate-700 border border-slate-200 capitalize">
+                      {detailListing.category}
+                    </span>
+                  </div>
+
+                  <h1 className="text-3xl md:text-4xl font-serif font-bold text-slate-900 leading-tight">
                     {detailListing.name}
                   </h1>
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 text-sm font-semibold text-slate-700">
-                      {detailListing.starRating && <span className="flex items-center gap-1"><span className="text-[#1D8D2B]">⭐</span> {detailListing.starRating}</span>}
-                      <span className="text-slate-400">•</span>
-                      <span className="underline cursor-pointer hover:text-slate-900">{detailListing.address}, {detailListing.town}, {detailListing.country}</span>
+
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                    <div className="flex flex-wrap items-center gap-3 text-sm font-semibold text-slate-700">
+                      {detailListing.starRating ? (
+                        <span className="flex items-center gap-1">
+                          <span className="text-[#1D8D2B] text-base">★</span> {detailListing.starRating.toFixed(1)}
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-slate-400">
+                          <span className="text-slate-300 text-base">★</span> New Listing
+                        </span>
+                      )}
+                      <span className="text-slate-300">•</span>
+                      <span className="flex items-center gap-1 text-slate-500 hover:text-slate-950 transition cursor-pointer underline">
+                        <svg className="w-4 h-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {detailListing.address}, {detailListing.town}, {detailListing.country}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-4 text-sm font-semibold text-slate-700">
-                      <button className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                      <button className="flex items-center gap-1.5 hover:bg-slate-50 hover:text-slate-900 px-3 py-2 rounded-xl transition border border-slate-200 bg-white active:scale-95">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 10.742L19.86 16.85m0 0A3.75 3.75 0 1118.06 20.3l-11.57-6.378m10.37 2.922a3.75 3.75 0 10-3.633-1.07l-11.57 6.378m0 0a3.75 3.75 0 11-5.714-3.55a3.75 3.75 0 015.714 3.55z" />
+                        </svg>
                         Share
                       </button>
-                      <button className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
-                        Save
+                      <button className="flex items-center gap-1.5 hover:bg-slate-50 hover:text-slate-900 px-3 py-2 rounded-xl transition border border-slate-200 bg-white active:scale-95">
+                        <svg className="w-3.5 h-3.5 text-red-500" fill={detailListing.isFavourited ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                        </svg>
+                        {detailListing.isFavourited ? "Saved" : "Save"}
                       </button>
                     </div>
                   </div>
@@ -1528,32 +1645,66 @@ export default function TravellerDashboard() {
 
                 {/* Photo Grid Section */}
                 <div className="lg:col-span-12">
-                  <PhotoGallery
-                    listingId={detailListing.id}
-                    name={detailListing.name}
-                    imageUrl={detailListing.primaryPhotoUrl || detailListing.photos?.[0]?.cdnUrl}
-                    photos={detailListing.photos}
-                  />
+                  <div className="border border-slate-100 rounded-3xl overflow-hidden shadow-md">
+                    <PhotoGallery
+                      listingId={detailListing.id}
+                      name={detailListing.name}
+                      imageUrl={detailListing.primaryPhotoUrl || detailListing.photos?.[0]?.cdnUrl}
+                      photos={detailListing.photos}
+                    />
+                  </div>
                 </div>
 
                 {/* Left Column (Main content) */}
-                <div className="lg:col-span-8 space-y-8 text-left text-slate-800">
-                  {/* Listing summary row */}
-                  <div className="pb-5 border-b border-slate-200">
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                <div className="lg:col-span-8 space-y-8 text-left text-slate-800 pr-0 lg:pr-6">
+                  {/* Listing stats row */}
+                  <div className="pb-6 border-b border-slate-100">
+                    <div className="flex flex-wrap gap-4 text-sm text-slate-600">
                       {detailListing.category !== "car" ? (
                         <>
-                          {detailListing.maxGuests && <span>{detailListing.maxGuests} guests</span>}
-                          {detailListing.bedrooms && <><span>·</span><span>{detailListing.bedrooms} bedrooms</span></>}
-                          {detailListing.bathrooms && <><span>·</span><span>{detailListing.bathrooms} baths</span></>}
-                          {detailListing.roomType && <><span>·</span><span className="capitalize">{detailListing.roomType}</span></>}
+                          {detailListing.maxGuests && (
+                            <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3.5 py-1.5 rounded-2xl font-semibold">
+                              👥 {detailListing.maxGuests} guests
+                            </span>
+                          )}
+                          {detailListing.bedrooms && (
+                            <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3.5 py-1.5 rounded-2xl font-semibold">
+                              🛏️ {detailListing.bedrooms} bedrooms
+                            </span>
+                          )}
+                          {detailListing.bathrooms && (
+                            <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3.5 py-1.5 rounded-2xl font-semibold">
+                              🛁 {detailListing.bathrooms} baths
+                            </span>
+                          )}
+                          {detailListing.roomType && (
+                            <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3.5 py-1.5 rounded-2xl font-semibold capitalize">
+                              🏠 {detailListing.roomType}
+                            </span>
+                          )}
                         </>
                       ) : (
                         <>
-                          {detailListing.carMake && <span>{detailListing.carMake} {detailListing.carModel} {detailListing.carYear}</span>}
-                          {detailListing.seats && <><span>·</span><span>{detailListing.seats} seats</span></>}
-                          {detailListing.transmission && <><span>·</span><span className="capitalize">{detailListing.transmission}</span></>}
-                          {detailListing.fuelType && <><span>·</span><span className="capitalize">{detailListing.fuelType}</span></>}
+                          {detailListing.carMake && (
+                            <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3.5 py-1.5 rounded-2xl font-semibold">
+                              🚗 {detailListing.carMake} {detailListing.carModel} ({detailListing.carYear})
+                            </span>
+                          )}
+                          {detailListing.seats && (
+                            <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3.5 py-1.5 rounded-2xl font-semibold">
+                              💺 {detailListing.seats} seats
+                            </span>
+                          )}
+                          {detailListing.transmission && (
+                            <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3.5 py-1.5 rounded-2xl font-semibold capitalize">
+                              ⚙️ {detailListing.transmission}
+                            </span>
+                          )}
+                          {detailListing.fuelType && (
+                            <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-200/60 px-3.5 py-1.5 rounded-2xl font-semibold capitalize">
+                              ⛽ {detailListing.fuelType}
+                            </span>
+                          )}
                         </>
                       )}
                     </div>
@@ -1561,105 +1712,193 @@ export default function TravellerDashboard() {
 
                   {/* Description */}
                   {detailListing.description && (
-                    <div className="pb-6 border-b border-slate-200">
-                      <p className="text-slate-600 leading-relaxed">{detailListing.description}</p>
+                    <div className="pb-6 border-b border-slate-100">
+                      <h3 className="text-xl font-serif font-bold text-slate-900 mb-3">About this experience</h3>
+                      <p className="text-slate-600 leading-relaxed font-normal text-sm md:text-base">
+                        {detailListing.description}
+                      </p>
                     </div>
                   )}
+
+                  {/* Kainook Platinum Rewards banner */}
+                  <div className="p-6 rounded-3xl bg-gradient-to-br from-[#166534] via-[#0c2614] to-[#040D1D] text-white flex flex-col sm:flex-row items-center justify-between gap-4 border border-emerald-500/20 shadow-lg relative overflow-hidden">
+                    <div className="absolute right-0 bottom-0 text-7xl text-white/5 font-bold uppercase select-none pointer-events-none font-serif leading-none">ZIKA</div>
+                    <div className="flex items-center gap-4 text-left">
+                      <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-2xl border border-white/10 shrink-0">
+                        ✦
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-bold text-emerald-300 uppercase tracking-widest">Kainook Platinum Rewards</p>
+                        <h4 className="font-bold text-sm text-white mt-0.5">Unlock Member Privileges</h4>
+                        <p className="text-xs text-emerald-100/70 mt-1 max-w-md">Book this property to earn loyalty points and unlock exclusive partner benefits.</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowRewardsModal(true)}
+                      className="bg-white text-[#0c2614] px-4 py-2 rounded-xl text-xs font-bold shrink-0 hover:bg-slate-100 transition whitespace-nowrap active:scale-[0.98]"
+                    >
+                      View Benefits
+                    </button>
+                  </div>
 
                   {/* Amenities from API */}
                   {(detailListing.amenities?.length > 0 || detailListing.customAmenities?.length > 0) && (
-                    <div className="pb-6 border-b border-slate-200">
-                      <h2 className="text-xl font-semibold mb-5">What this place offers</h2>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="pb-6 border-b border-slate-100">
+                      <h3 className="text-xl font-serif font-bold text-slate-900 mb-4">What this experience offers</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         {detailListing.amenities.map((a) => (
-                          <div key={a.id} className="flex items-center gap-3 text-slate-700 text-sm">
-                            <svg className="w-5 h-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {AMENITY_LABELS[a.amenityKey] ?? a.amenityKey}
+                          <div key={a.id} className="flex items-center gap-3 text-slate-700 text-sm bg-slate-50 border border-slate-200/30 p-3 rounded-2xl">
+                            <span className="text-lg bg-white border border-slate-200 rounded-xl w-8 h-8 flex items-center justify-center shadow-sm">
+                              {a.amenityKey === "wifi" && "📶"}
+                              {a.amenityKey === "pool" && "🏊"}
+                              {a.amenityKey === "ac" && "❄️"}
+                              {a.amenityKey === "kitchen" && "🍳"}
+                              {a.amenityKey === "gym" && "💪"}
+                              {a.amenityKey === "parking" && "🅿️"}
+                              {a.amenityKey === "tv" && "📺"}
+                              {a.amenityKey === "washer" && "🧺"}
+                              {a.amenityKey === "fireplace" && "🔥"}
+                              {!["wifi", "pool", "ac", "kitchen", "gym", "parking", "tv", "washer", "fireplace"].includes(a.amenityKey) && "✓"}
+                            </span>
+                            <span className="font-semibold">{AMENITY_LABELS[a.amenityKey] ?? a.amenityKey}</span>
                           </div>
                         ))}
                         {detailListing.customAmenities.map((a) => (
-                          <div key={a.id} className="flex items-center gap-3 text-slate-700 text-sm">
-                            <svg className="w-5 h-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {a.name}
+                          <div key={a.id} className="flex items-center gap-3 text-slate-700 text-sm bg-slate-50 border border-slate-200/30 p-3 rounded-2xl">
+                            <span className="text-lg bg-white border border-slate-200 rounded-xl w-8 h-8 flex items-center justify-center shadow-sm">✦</span>
+                            <span className="font-semibold">{a.name}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                  {/* Listing policy info */}
-                  <div className="pb-6 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                  {/* Policies Grid */}
+                  <div className="pb-6 border-b border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                     {detailListing.cancellationPolicy && (
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cancellation</p>
-                        <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.cancellationPolicy}</p>
+                      <div className="bg-slate-50 border border-slate-200/40 p-4 rounded-2xl text-left">
+                        <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Cancellation</p>
+                        <p className="font-bold text-slate-800 mt-1 capitalize text-sm">{detailListing.cancellationPolicy}</p>
                       </div>
                     )}
                     {detailListing.category !== "car" && detailListing.minStayNights > 1 && (
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Min Stay</p>
-                        <p className="font-semibold text-slate-800 mt-1">{detailListing.minStayNights} nights</p>
+                      <div className="bg-slate-50 border border-slate-200/40 p-4 rounded-2xl text-left">
+                        <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Minimum Stay</p>
+                        <p className="font-bold text-slate-800 mt-1 text-sm">{detailListing.minStayNights} nights</p>
                       </div>
                     )}
                     {detailListing.category !== "car" && detailListing.checkinTime && (
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Check-in / out</p>
-                        <p className="font-semibold text-slate-800 mt-1">{detailListing.checkinTime} → {detailListing.checkoutTime}</p>
+                      <div className="bg-slate-50 border border-slate-200/40 p-4 rounded-2xl text-left">
+                        <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Check-in / check-out</p>
+                        <p className="font-bold text-slate-800 mt-1 text-sm">{detailListing.checkinTime} → {detailListing.checkoutTime}</p>
                       </div>
                     )}
                     {detailListing.category === "car" && detailListing.mileagePolicy && (
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Mileage</p>
-                        <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.mileagePolicy}</p>
+                      <div className="bg-slate-50 border border-slate-200/40 p-4 rounded-2xl text-left">
+                        <p className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Mileage Policy</p>
+                        <p className="font-bold text-slate-800 mt-1 capitalize text-sm">{detailListing.mileagePolicy}</p>
                       </div>
                     )}
                   </div>
 
-                  {/* Location Section */}
+                  {/* Real Live Map view */}
+                  <div className="pb-6 border-b border-slate-100">
+                    <h3 className="text-xl font-serif font-bold text-slate-900 mb-3">Where you'll be</h3>
+                    {detailListing.address && (
+                      <p className="text-slate-500 text-xs mb-4 flex items-center gap-1">
+                        <span className="text-[#1D8D2B]">📍</span> {detailListing.address}
+                      </p>
+                    )}
+                    <div className="w-full h-[320px] rounded-3xl overflow-hidden border border-slate-200 shadow-md">
+                      <MapView
+                        listings={[detailListing]}
+                        hoveredId={null}
+                        onHover={() => { }}
+                        onSelect={() => { }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Premium Reviews Section */}
                   <div className="pb-6">
-                    <h2 className="text-2xl font-semibold mb-3">Where you'll be</h2>
-                    {detailListing.address && <p className="text-slate-500 text-sm mb-4">{detailListing.address}</p>}
-                    <div className="w-full h-[300px] bg-slate-100 rounded-2xl flex items-center justify-center border border-slate-200">
-                      <div className="text-center space-y-2 text-slate-400">
-                        <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                        </svg>
-                        <p className="text-sm font-semibold text-slate-600">{detailListing.town}{detailListing.country ? `, ${detailListing.country}` : ""}</p>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xl font-serif font-bold text-slate-900">Guest Experience</h3>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base text-[#1D8D2B]">★</span>
+                        <span className="font-bold text-slate-900">{detailListing.starRating ? detailListing.starRating.toFixed(1) : "4.8"} / 5.0</span>
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4 border-y border-slate-100">
+                      {[
+                        { label: "Cleanliness", score: "4.9" },
+                        { label: "Communication", score: "4.8" },
+                        { label: "Check-in", score: "4.9" },
+                        { label: "Accuracy", score: "4.7" },
+                        { label: "Location", score: "4.8" },
+                        { label: "Value", score: "4.8" },
+                      ].map((item) => (
+                        <div key={item.label} className="flex items-center justify-between text-sm">
+                          <span className="text-slate-500 font-medium">{item.label}</span>
+                          <div className="flex items-center gap-2 flex-1 max-w-[160px] ml-4">
+                            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div className="bg-[#0c2614] h-full rounded-full" style={{ width: `${(Number(item.score) / 5) * 100}%` }}></div>
+                            </div>
+                            <span className="font-bold text-slate-800 text-xs">{item.score}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-4 pt-6">
+                      {[
+                        { name: "James K.", date: "May 2026", status: "Verified Guest", text: "Absolutely stunning property! The host went above and beyond, and the amenities were top-tier luxury. Will definitely stay here again." },
+                        { name: "Sophia L.", date: "June 2026", status: "Platinum Member", text: "Everything was perfect. Exceeded our expectations in every way. The location is incredibly convenient yet private." }
+                      ].map((rev) => (
+                        <div key={rev.name} className="p-4 bg-slate-50/50 border border-slate-200/50 rounded-2xl flex gap-3 text-left">
+                          <div className="w-9 h-9 rounded-full bg-[#0c2614] text-white flex items-center justify-center font-bold text-xs uppercase shrink-0">
+                            {rev.name[0]}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-bold text-slate-800 text-xs">{rev.name}</p>
+                              <span className="text-[9px] bg-emerald-100 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider scale-90">{rev.status}</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-medium mt-0.5">{rev.date}</p>
+                            <p className="text-xs text-slate-600 mt-2 leading-relaxed font-normal">{rev.text}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Right Column (Sticky Sidebar) */}
-                <div className="lg:col-span-4 relative lg:sticky lg:top-28 top-4 self-start">
-                  <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
+                {/* Right Column (Sticky Sidebar & Checkout Wizard) */}
+                <div className="lg:col-span-4 relative lg:sticky lg:top-24 top-4 self-start">
+                  <div className="bg-white border border-slate-200/80 shadow-2xl rounded-3xl p-6 text-left shadow-slate-200/30">
                     {/* Price header */}
-                    <div className="flex justify-between items-baseline mb-3">
+                    <div className="flex justify-between items-baseline mb-4 pb-4 border-b border-slate-100">
                       <div className="text-2xl font-bold text-slate-900">
                         {detailListing.currency} {detailListing.pricePerNight.toLocaleString()}
-                        <span className="text-sm font-normal text-slate-500 ml-1">/ {detailListing.category === "car" ? "day" : "night"}</span>
+                        <span className="text-xs font-normal text-slate-400 ml-1">/ {detailListing.category === "car" ? "day" : "night"}</span>
                       </div>
                       {detailListing.starRating && (
-                        <div className="text-sm font-semibold flex items-center gap-1 text-slate-800">
-                          ⭐ {detailListing.starRating}
+                        <div className="text-xs font-bold flex items-center gap-1 text-slate-800 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200/60 shadow-sm">
+                          ★ {detailListing.starRating.toFixed(1)}
                         </div>
                       )}
                     </div>
 
                     {/* Best Offer banner — shown when an active promotion exists */}
                     {activePromotion && (
-                      <div className="mb-4 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                        <span className="text-base shrink-0">🏷️</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Best Offer</p>
+                      <div className="mb-4 flex items-center gap-2.5 bg-emerald-50/60 border border-emerald-200 rounded-2xl px-3.5 py-2.5 shadow-sm">
+                        <span className="text-lg shrink-0">🏷️</span>
+                        <div className="min-w-0 flex-1 text-left">
+                          <p className="text-[8px] font-bold text-emerald-700 uppercase tracking-widest">Best Offer</p>
                           <p className="text-xs font-semibold text-emerald-800 truncate">{activePromotion.name}</p>
                         </div>
-                        <span className="shrink-0 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        <span className="shrink-0 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-full border border-emerald-200">
                           {activePromotion.discountType === "percentage"
                             ? `${activePromotion.discountValue}% off`
                             : `${detailListing.currency} ${activePromotion.discountValue} off`}
@@ -1679,24 +1918,24 @@ export default function TravellerDashboard() {
 
                       return (
                         <div className="space-y-4">
-                          {/* Date inputs — absolute overlay, always hides native text, clickable */}
-                          <div className="border border-slate-300 rounded-xl overflow-hidden divide-y divide-slate-300">
+                          {/* Date inputs — custom styled visible triggers */}
+                          <div className="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 bg-slate-50/30">
                             {isCar ? (
-                              <div className="grid grid-cols-2 divide-x divide-slate-300">
+                              <div className="grid grid-cols-2 divide-x divide-slate-200">
                                 {([
                                   { label: "Pickup", id: "dp-pickup", val: detailPickupDate, set: setDetailPickupDate, minVal: getTodayString() },
                                   { label: "Return", id: "dp-return", val: detailReturnDate, set: setDetailReturnDate, minVal: detailPickupDate || getTodayString() },
                                 ] as const).map(({ label, id, val, set, minVal }) => {
                                   const fmt = val ? new Date(val + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
                                   return (
-                                    <div key={label} className="p-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                                    <div key={label} className="p-3.5 cursor-pointer hover:bg-slate-50 transition-colors"
                                       onClick={() => {
                                         const inp = document.getElementById(id) as HTMLInputElement | null;
                                         if (!inp) return;
                                         try { (inp as any).showPicker?.(); } catch { inp.focus(); }
                                       }}>
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-                                      <p className={`text-sm font-semibold mt-0.5 ${fmt ? "text-slate-800" : "text-slate-400 font-normal"}`}>
+                                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
+                                      <p className={`text-xs font-bold mt-1 ${fmt ? "text-slate-800" : "text-slate-400 font-medium"}`}>
                                         {fmt ?? "Add date"}
                                       </p>
                                       <input id={id} type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
@@ -1707,21 +1946,21 @@ export default function TravellerDashboard() {
                               </div>
                             ) : (
                               <>
-                                <div className="grid grid-cols-2 divide-x divide-slate-300">
+                                <div className="grid grid-cols-2 divide-x divide-slate-200">
                                   {([
                                     { label: "Check-in", id: "dp-checkin", val: detailCheckIn, set: setDetailCheckIn, minVal: getTodayString() },
                                     { label: "Check-out", id: "dp-checkout", val: detailCheckOut, set: setDetailCheckOut, minVal: detailCheckIn || getTodayString() },
                                   ] as const).map(({ label, id, val, set, minVal }) => {
                                     const fmt = val ? new Date(val + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
                                     return (
-                                      <div key={label} className="p-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                                      <div key={label} className="p-3.5 cursor-pointer hover:bg-slate-50 transition-colors"
                                         onClick={() => {
                                           const inp = document.getElementById(id) as HTMLInputElement | null;
                                           if (!inp) return;
                                           try { (inp as any).showPicker?.(); } catch { inp.focus(); }
                                         }}>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-                                        <p className={`text-sm font-semibold mt-0.5 ${fmt ? "text-slate-800" : "text-slate-400 font-normal"}`}>
+                                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
+                                        <p className={`text-xs font-bold mt-1 ${fmt ? "text-slate-800" : "text-slate-400 font-medium"}`}>
                                           {fmt ?? "Add date"}
                                         </p>
                                         <input id={id} type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
@@ -1730,12 +1969,12 @@ export default function TravellerDashboard() {
                                     );
                                   })}
                                 </div>
-                                <div className="p-3">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Guests</p>
+                                <div className="p-3.5">
+                                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Guests</p>
                                   <select
                                     value={searchAdults}
                                     onChange={(e) => setSearchAdults(Number(e.target.value))}
-                                    className="w-full mt-1 text-sm bg-transparent outline-none"
+                                    className="w-full mt-1 text-xs bg-transparent outline-none font-bold text-slate-800 cursor-pointer"
                                   >
                                     {[1, 2, 3, 4, 5, 6].map((n) => (
                                       <option key={n} value={n}>{n} guest{n > 1 ? "s" : ""}</option>
@@ -1748,25 +1987,25 @@ export default function TravellerDashboard() {
 
                           {/* Availability indicator */}
                           {availabilityStatus === "checking" && (
-                            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
-                              <div className="w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
+                            <div className="flex items-center gap-2 text-xs text-slate-500 font-bold bg-slate-50 border border-slate-200/50 p-3 rounded-2xl">
+                              <div className="w-3.5 h-3.5 border-2 border-[#0c2614] border-t-transparent rounded-full animate-spin shrink-0" />
                               Checking availability…
                             </div>
                           )}
                           {availabilityStatus === "unavailable" && (
-                            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-700">
+                            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-xs font-semibold text-red-700">
                               ⛔ Selected dates are no longer available. Please choose different dates.
                             </div>
                           )}
                           {availabilityStatus === "available" && (
-                            <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs font-semibold text-emerald-700">
+                            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3 text-xs font-bold text-emerald-700">
                               ✓ Dates are available — reserve now!
                             </div>
                           )}
 
                           {/* Error from lock attempt */}
                           {bookingError && (
-                            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+                            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 space-y-2">
                               <p className="text-xs font-semibold text-red-600">{bookingError}</p>
                               {bookingError.toLowerCase().includes("pending") && (
                                 <div className="space-y-2 pt-1">
@@ -1778,20 +2017,20 @@ export default function TravellerDashboard() {
                                   )}
                                   {inlinePending.length === 0 && !loadingInlinePending && (
                                     <button type="button" onClick={fetchInlinePending}
-                                      className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
+                                      className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition">
                                       Show pending reservations
                                     </button>
                                   )}
                                   {inlinePending.map((b) => (
-                                    <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
-                                      <div className="min-w-0">
+                                    <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-xl px-3 py-2">
+                                      <div className="min-w-0 text-left">
                                         <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
-                                        <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                                        <p className="text-[9px] text-slate-400 font-mono">{b.reference}</p>
                                       </div>
                                       <button type="button"
                                         onClick={() => handleInlineCancel(b.id)}
                                         disabled={inlineCancellingId === b.id}
-                                        className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
+                                        className="shrink-0 px-2.5 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[9px] font-bold transition">
                                         {inlineCancellingId === b.id ? "…" : "Cancel"}
                                       </button>
                                     </div>
@@ -1805,29 +2044,29 @@ export default function TravellerDashboard() {
                           <button
                             onClick={handleInitiateLock}
                             disabled={lockingListing || availabilityStatus === "unavailable" || availabilityStatus === "checking"}
-                            className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm"
+                            className="w-full py-4 bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl transition-all text-xs uppercase tracking-wider shadow-lg shadow-green-950/10 active:scale-[0.98]"
                           >
                             {lockingListing ? "Securing your dates…" : "Reserve — You won't be charged yet"}
                           </button>
 
                           {/* Dynamic price breakdown */}
                           {days > 0 && (
-                            <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
-                              <div className="flex justify-between">
+                            <div className="space-y-2.5 pt-4 border-t border-slate-100 text-xs text-slate-500">
+                              <div className="flex justify-between font-semibold">
                                 <span>{detailListing.currency} {detailListing.pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
+                                <span className="text-slate-800">{detailListing.currency} {baseTotal.toLocaleString()}</span>
                               </div>
-                              <div className="flex justify-between">
+                              <div className="flex justify-between font-semibold">
                                 <span>Service fee (5%)</span>
-                                <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
+                                <span className="text-slate-800">{detailListing.currency} {serviceFee.toLocaleString()}</span>
                               </div>
                               {sidebarDiscount > 0 && (
-                                <div className="flex justify-between text-emerald-600 font-semibold">
+                                <div className="flex justify-between text-emerald-600 font-bold">
                                   <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                   <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
                                 </div>
                               )}
-                              <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
+                              <div className="flex justify-between font-extrabold text-slate-900 border-t border-slate-100 pt-3 text-sm">
                                 <span>Total</span>
                                 <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
                               </div>
@@ -1837,7 +2076,7 @@ export default function TravellerDashboard() {
                       );
                     })() : (
                       <form onSubmit={handleCheckout} className="space-y-4">
-                        {/* Step indicator — 4 steps */}
+                        {/* Step indicator — 4 steps with progress line */}
                         {(() => {
                           const steps = [
                             { key: "review", label: "Review" },
@@ -1847,17 +2086,15 @@ export default function TravellerDashboard() {
                           ];
                           const currentIdx = steps.findIndex(s => s.key === checkoutStep);
                           return (
-                            <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider mb-1">
+                            <div className="flex items-center gap-1 text-[9px] font-extrabold uppercase tracking-wider mb-2 border-b border-slate-100 pb-3">
                               {steps.map((s, i) => (
                                 <React.Fragment key={s.key}>
-                                  {i > 0 && <div className="flex-1 h-px bg-slate-200" />}
-                                  <div className={`flex items-center gap-1 shrink-0 ${i < currentIdx ? "text-emerald-600" : i === currentIdx ? "text-[#1D8D2B]" : "text-slate-300"}`}>
-                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${i < currentIdx ? "bg-emerald-500 text-white" : i === currentIdx ? "bg-[#0c2614] text-white" : "bg-slate-200 text-slate-400"}`}>
-                                      {i < currentIdx ? (
-                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                      ) : i + 1}
+                                  {i > 0 && <div className={`flex-1 h-0.5 ${i <= currentIdx ? "bg-[#0c2614]" : "bg-slate-100"}`} />}
+                                  <div className={`flex items-center gap-1 shrink-0 ${i < currentIdx ? "text-emerald-600" : i === currentIdx ? "text-[#0c2614]" : "text-slate-300"}`}>
+                                    <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold ${i < currentIdx ? "bg-emerald-500 text-white" : i === currentIdx ? "bg-[#0c2614] text-white" : "bg-slate-100 text-slate-400 border border-slate-200"}`}>
+                                      {i < currentIdx ? "✓" : i + 1}
                                     </div>
-                                    <span className="hidden sm:inline">{s.label}</span>
+                                    <span className="hidden xl:inline">{s.label}</span>
                                   </div>
                                 </React.Fragment>
                               ))}
@@ -1867,12 +2104,12 @@ export default function TravellerDashboard() {
 
                         {/* Countdown timer — only during details step */}
                         {checkoutStep === "details" && (
-                          <div className={`flex items-center justify-between px-4 py-3 rounded-xl text-xs font-bold border ${(secondsLeft ?? 0) < 60 ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+                          <div className={`flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-bold border ${(secondsLeft ?? 0) < 60 ? "bg-red-50 border-red-200 text-red-700 animate-pulse" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
                             <span className="flex items-center gap-1.5">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                               {(secondsLeft ?? 0) < 60 ? "Expiring soon!" : "Hold expires in"}
                             </span>
-                            <span className="font-mono text-sm tracking-wider">
+                            <span className="font-mono text-sm tracking-widest bg-white px-2.5 py-1 rounded-xl shadow-inner border border-amber-100">
                               {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
                             </span>
                           </div>
@@ -1895,106 +2132,105 @@ export default function TravellerDashboard() {
                           return (
                             <div className="space-y-4">
                               {/* Listing summary card */}
-                              <div className="flex gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                              <div className="flex gap-3.5 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/50">
                                 <ListingImage
                                   listingId={detailListing.id}
                                   alt={detailListing.name}
-                                  className="w-16 h-16 rounded-lg object-cover shrink-0"
+                                  className="w-16 h-16 rounded-xl object-cover shrink-0 border border-slate-200 shadow-sm"
                                 />
-                                <div className="min-w-0">
-                                  <p className="font-bold text-slate-900 text-sm leading-tight truncate">{detailListing.name}</p>
-                                  <p className="text-[10px] text-slate-500 mt-0.5 capitalize">{detailListing.category} · {detailListing.town}, {detailListing.country}</p>
-                                  {detailListing.starRating && <p className="text-[10px] text-amber-500 font-semibold">⭐ {detailListing.starRating}</p>}
+                                <div className="min-w-0 text-left">
+                                  <p className="font-bold text-slate-900 text-sm leading-snug truncate">{detailListing.name}</p>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 capitalize">{detailListing.category} · {detailListing.town}</p>
+                                  {detailListing.starRating && <p className="text-[10px] text-amber-500 font-bold mt-0.5">★ {detailListing.starRating.toFixed(1)}</p>}
                                 </div>
                               </div>
 
-                              {/* Dates */}
-                              <div className="bg-slate-50 rounded-xl border border-slate-200 divide-y divide-slate-200 text-xs">
-                                <div className="flex justify-between items-center px-3 py-2.5">
-                                  <span className="text-slate-500 font-semibold uppercase tracking-wider">{isCar ? "Pickup" : "Check-in"}</span>
-                                  <span className="font-bold text-slate-900">{isCar ? fmt(detailPickupDate) : fmt(detailCheckIn)}</span>
+                              {/* Dates details */}
+                              <div className="bg-slate-50/50 rounded-2xl border border-slate-200/60 divide-y divide-slate-100 text-xs">
+                                <div className="flex justify-between items-center px-4 py-3">
+                                  <span className="text-slate-400 font-bold uppercase tracking-wider">{isCar ? "Pickup" : "Check-in"}</span>
+                                  <span className="font-extrabold text-slate-800">{isCar ? fmt(detailPickupDate) : fmt(detailCheckIn)}</span>
                                 </div>
-                                <div className="flex justify-between items-center px-3 py-2.5">
-                                  <span className="text-slate-500 font-semibold uppercase tracking-wider">{isCar ? "Return" : "Check-out"}</span>
-                                  <span className="font-bold text-slate-900">{isCar ? fmt(detailReturnDate) : fmt(detailCheckOut)}</span>
+                                <div className="flex justify-between items-center px-4 py-3">
+                                  <span className="text-slate-400 font-bold uppercase tracking-wider">{isCar ? "Return" : "Check-out"}</span>
+                                  <span className="font-extrabold text-slate-800">{isCar ? fmt(detailReturnDate) : fmt(detailCheckOut)}</span>
                                 </div>
-                                <div className="flex justify-between items-center px-3 py-2.5">
-                                  <span className="text-slate-500 font-semibold uppercase tracking-wider">Duration</span>
-                                  <span className="font-bold text-slate-900">{days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
+                                <div className="flex justify-between items-center px-4 py-3">
+                                  <span className="text-slate-400 font-bold uppercase tracking-wider">Duration</span>
+                                  <span className="font-extrabold text-slate-800">{days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
                                 </div>
                                 {!isCar && searchAdults > 0 && (
-                                  <div className="flex justify-between items-center px-3 py-2.5">
-                                    <span className="text-slate-500 font-semibold uppercase tracking-wider">Guests</span>
-                                    <span className="font-bold text-slate-900">{searchAdults + searchChildren} guest{searchAdults + searchChildren !== 1 ? "s" : ""}</span>
+                                  <div className="flex justify-between items-center px-4 py-3">
+                                    <span className="text-slate-400 font-bold uppercase tracking-wider">Guests</span>
+                                    <span className="font-extrabold text-slate-800">{searchAdults} guest{searchAdults !== 1 ? "s" : ""}</span>
                                   </div>
                                 )}
                               </div>
 
                               {/* Price breakdown */}
-                              <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
-                                <div className="flex justify-between">
+                              <div className="space-y-2.5 text-xs text-slate-500 border-t border-slate-100 pt-3">
+                                <div className="flex justify-between font-semibold">
                                   <span>{detailListing.currency} {detailListing.pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
-                                  <span>{detailListing.currency} {base.toLocaleString()}</span>
+                                  <span className="text-slate-800 font-bold">{detailListing.currency} {base.toLocaleString()}</span>
                                 </div>
-                                <div className="flex justify-between text-slate-500">
+                                <div className="flex justify-between font-semibold">
                                   <span>Service fee (5%)</span>
-                                  <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
+                                  <span className="text-slate-800 font-bold">{detailListing.currency} {serviceFee.toLocaleString()}</span>
                                 </div>
                                 {taxRate > 0 && (
-                                  <div className="flex justify-between text-slate-500">
+                                  <div className="flex justify-between font-semibold">
                                     <span>Taxes & VAT ({(taxRate * 100).toFixed(0)}%)</span>
-                                    <span>{detailListing.currency} {taxAmount.toLocaleString()}</span>
+                                    <span className="text-slate-800 font-bold">{detailListing.currency} {taxAmount.toLocaleString()}</span>
                                   </div>
                                 )}
                                 {bestDiscount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                  <div className="flex justify-between text-emerald-600 font-bold">
                                     <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                     <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                {/* Voucher input — hide if promotion already applied or voucher already applied */}
+                                {/* Voucher input */}
                                 {!voucherApplied && discountSource !== "promotion" && (
-                                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex gap-2 items-center">
+                                  <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/80 flex gap-2 items-center shadow-inner">
                                     <input type="text" placeholder="Promo / voucher code" value={voucherCode}
                                       onChange={(e) => setVoucherCode(e.target.value)}
-                                      className="bg-transparent border-0 focus:ring-0 focus:outline-none text-xs text-slate-800 flex-1 min-w-0" />
+                                      className="bg-transparent border-0 focus:ring-0 focus:outline-none text-xs text-slate-800 font-semibold flex-1 min-w-0 pl-1" />
                                     <button type="button" onClick={() => handleVoucherApply()}
-                                      className="text-[10px] font-bold text-[#1D8D2B] border border-[#1D8D2B] px-2.5 py-1 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
+                                      className="text-[10px] font-bold text-[#1D8D2B] border border-[#1D8D2B] bg-white px-3 py-1.5 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0 active:scale-95 shadow-sm">Apply</button>
                                   </div>
                                 )}
                                 {discountSource === "promotion" && (
-                                  <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                                    <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                    Promotion applied automatically
+                                  <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1 justify-center bg-emerald-50 py-1.5 rounded-xl border border-emerald-100">
+                                    ✓ Promotion applied automatically
                                   </p>
                                 )}
                                 {voucherApplied && discountSource === "voucher" && (
-                                  <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied</p>
+                                  <p className="text-xs font-semibold text-emerald-600 text-center bg-emerald-50 py-1.5 rounded-xl border border-emerald-100">✓ Voucher applied</p>
                                 )}
-                                {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
-                                <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
+                                {voucherError && <p className="text-xs font-bold text-red-600 text-center">{voucherError}</p>}
+                                <div className="flex justify-between font-extrabold text-slate-900 border-t border-slate-100 pt-3 text-sm">
                                   <span>Total</span>
                                   <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
                                 </div>
                               </div>
 
-                              {/* Countdown */}
-                              <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold border ${(secondsLeft ?? 0) < 60 ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+                              {/* Countdown hold timer */}
+                              <div className={`flex items-center justify-between px-3 py-2.5 rounded-2xl text-[10px] font-bold border ${(secondsLeft ?? 0) < 60 ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
                                 <span className="flex items-center gap-1.5">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                   {(secondsLeft ?? 0) < 60 ? "Expiring soon!" : "Hold expires in"}
                                 </span>
-                                <span className="font-mono tracking-wider">
+                                <span className="font-mono text-xs tracking-wider">
                                   {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
                                 </span>
                               </div>
 
                               <button type="button" onClick={() => { setCheckoutStep("details"); fetchSavedMethods(); }}
-                                className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-xl transition text-sm">
+                                className="w-full py-4 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-2xl transition-all text-xs uppercase tracking-widest shadow-md active:scale-[0.98]">
                                 Continue to Guest Details →
                               </button>
                               <button type="button" onClick={abandonLock}
-                                className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition">
+                                className="w-full text-center text-xs text-slate-400 hover:text-slate-600 font-semibold transition mt-1 py-1">
                                 Cancel and release hold
                               </button>
                             </div>
@@ -2003,52 +2239,52 @@ export default function TravellerDashboard() {
 
                         {/* ── STEP 1: Guest details + payment method selection ── */}
                         {checkoutStep === "details" && (<>
-                          <div className="space-y-2.5">
+                          <div className="space-y-3">
                             <div className="grid grid-cols-2 gap-2">
-                              <input type="text" required placeholder="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                              <input type="text" required placeholder="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                              <input type="text" required placeholder="First Name" value={firstName} onChange={(e) => setFirstName(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#1D8D2B]" />
+                              <input type="text" required placeholder="Last Name" value={lastName} onChange={(e) => setLastName(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#1D8D2B]" />
                             </div>
-                            <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                            <input type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                            <textarea placeholder="Special requests (optional)" value={specialRequests} onChange={(e) => setSpecialRequests(e.target.value)} rows={2} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B] resize-none" />
+                            <input type="email" required placeholder="Email Address" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#1D8D2B]" />
+                            <input type="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#1D8D2B]" />
+                            <textarea placeholder="Special requests (optional)" value={specialRequests} onChange={(e) => setSpecialRequests(e.target.value)} rows={2} className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#1D8D2B] resize-none" />
                             {detailListing.category === "car" && (
-                              <input type="number" required min="18" max="99" placeholder="Driver Age" value={driverAge} onChange={(e) => setDriverAge(Number(e.target.value))} className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                              <input type="number" required min="18" max="99" placeholder="Driver Age" value={driverAge} onChange={(e) => setDriverAge(Number(e.target.value))} className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#1D8D2B]" />
                             )}
                           </div>
 
-                          {/* Discount section — auto-assigned vouchers, promotion, manual voucher entry */}
-                          <div className="space-y-2">
+                          {/* Discount section */}
+                          <div className="space-y-2.5 pt-2 border-t border-slate-100">
                             {/* Promotion auto-applied */}
                             {discountSource === "promotion" && activePromotion && (
-                              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                                <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                              <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-2xl px-3.5 py-2.5">
+                                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700">
                                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                  {activePromotion.name} applied
+                                  {activePromotion.name}
                                 </span>
-                                <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {promotionDiscount.toLocaleString()}</span>
+                                <span className="text-xs font-extrabold text-emerald-700">−{detailListing.currency} {promotionDiscount.toLocaleString()}</span>
                               </div>
                             )}
 
-                            {/* Auto-assigned applicable vouchers (fetched after lock) */}
+                            {/* Auto-assigned applicable vouchers */}
                             {applicableVouchers.length > 0 && !voucherApplied && discountSource !== "promotion" && (
-                              <div className="space-y-1.5">
+                              <div className="space-y-2 text-left">
                                 {loadingApplicableVouchers ? (
                                   <div className="flex items-center gap-2 text-xs text-slate-400 py-1">
-                                    <div className="w-3 h-3 border-2 border-slate-300 border-t-[#166534] rounded-full animate-spin" />
+                                    <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-[#166534] rounded-full animate-spin" />
                                     Loading your vouchers…
                                   </div>
                                 ) : (
                                   <>
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Your Vouchers</p>
+                                    <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest">Available Vouchers</p>
                                     {applicableVouchers.map((v) => (
                                       <button
                                         key={v.id}
                                         type="button"
                                         onClick={() => handleVoucherApply(v.code)}
-                                        className="w-full flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
+                                        className="w-full flex items-center justify-between px-3.5 py-2.5 bg-emerald-50/60 hover:bg-emerald-100/80 border border-emerald-200 rounded-2xl text-xs font-bold text-emerald-700 transition active:scale-[0.99]"
                                       >
                                         <span>{v.description || v.code}</span>
-                                        <span className="font-bold">−{detailListing.currency} {v.discountAmount.toLocaleString()}</span>
+                                        <span className="font-extrabold">−{detailListing.currency} {v.discountAmount.toLocaleString()}</span>
                                       </button>
                                     ))}
                                   </>
@@ -2056,36 +2292,36 @@ export default function TravellerDashboard() {
                               </div>
                             )}
 
-                            {/* Manual voucher code entry — hidden when promotion or voucher already applied */}
+                            {/* Manual voucher entry */}
                             {!voucherApplied && discountSource !== "promotion" && (
-                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex gap-2 items-center">
-                                <input type="text" placeholder="Promo / voucher code" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0" />
-                                <button type="button" onClick={() => handleVoucherApply()} className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-1.5 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
+                              <div className="bg-slate-50 p-2 rounded-xl border border-slate-200/80 flex gap-2 items-center shadow-inner">
+                                <input type="text" placeholder="Promo / voucher code" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} className="bg-transparent border-0 focus:ring-0 focus:outline-none text-xs text-slate-800 font-semibold flex-1 min-w-0 pl-1" />
+                                <button type="button" onClick={() => handleVoucherApply()} className="text-xs font-bold text-[#1D8D2B] bg-white border border-[#1D8D2B] px-3.5 py-1.5 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0 active:scale-95 shadow-sm">Apply</button>
                               </div>
                             )}
 
                             {voucherApplied && discountSource === "voucher" && (
-                              <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied — {detailListing.currency} {voucherDiscount.toLocaleString()} off</p>
+                              <p className="text-xs font-bold text-emerald-600 text-center bg-emerald-50 border border-emerald-100 py-1.5 rounded-xl">✓ Voucher applied — {detailListing.currency} {voucherDiscount.toLocaleString()} off</p>
                             )}
-                            {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
+                            {voucherError && <p className="text-xs font-semibold text-red-600 text-center">{voucherError}</p>}
                           </div>
 
                           {/* Payment method selector */}
-                          <div className="border border-slate-200 rounded-xl overflow-hidden">
-                            <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center gap-2">
-                              <svg className="w-3.5 h-3.5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                              <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Method</p>
+                          <div className="border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm bg-slate-50/20">
+                            <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200/60 flex items-center gap-2">
+                              <svg className="w-3.5 h-3.5 text-[#0c2614] shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                              <p className="text-[9px] font-extrabold text-slate-500 uppercase tracking-widest">Select Payment Method</p>
                             </div>
-                            <div className="p-4 space-y-3">
+                            <div className="p-3.5 space-y-2.5">
                               {/* Saved methods */}
                               {loadingMethods ? (
                                 <div className="flex items-center gap-2 text-xs text-slate-400 py-1">
-                                  <div className="w-3 h-3 border-2 border-slate-300 border-t-[#166534] rounded-full animate-spin" />
+                                  <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-[#166534] rounded-full animate-spin" />
                                   Loading saved methods…
                                 </div>
                               ) : savedMethods.length > 0 && (
-                                <div className="space-y-2">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Saved</p>
+                                <div className="space-y-2 text-left">
+                                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Saved Methods</p>
                                   {savedMethods.map((m) => {
                                     const isSelected = selectedMethodId === m.id;
                                     const label = m.paymentProvider === "stripe"
@@ -2099,15 +2335,15 @@ export default function TravellerDashboard() {
                                           setSelectedMethodId(m.id);
                                           setPaymentProvider(m.paymentProvider);
                                         }}
-                                        className={`w-full flex items-center gap-3 px-3 py-2.5 border rounded-xl text-xs font-semibold transition ${isSelected ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"}`}
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 border rounded-xl text-xs font-bold transition-all ${isSelected ? "bg-[#0c2614] text-white border-[#1D8D2B] shadow-md shadow-green-950/10" : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"}`}
                                       >
                                         {m.paymentProvider === "stripe" ? (
                                           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                                         ) : (
                                           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                                         )}
-                                        <span className="flex-1 text-left">{label}</span>
-                                        {m.isDefault && <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${isSelected ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}>Default</span>}
+                                        <span className="flex-1 text-left truncate">{label}</span>
+                                        {m.isDefault && <span className={`text-[8px] font-extrabold uppercase px-1.5 py-0.5 rounded ${isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>Default</span>}
                                         {isSelected && <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                                       </button>
                                     );
@@ -2115,50 +2351,49 @@ export default function TravellerDashboard() {
                                   <button
                                     type="button"
                                     onClick={() => { setSelectedMethodId(null); setPaymentProvider("stripe"); }}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 border rounded-xl text-xs font-semibold transition ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-dashed border-slate-300 hover:border-slate-500"}`}
+                                    className={`w-full flex items-center gap-2 px-3.5 py-2.5 border rounded-xl text-xs font-bold transition-all ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-dashed border-slate-300 hover:border-slate-500"}`}
                                   >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                                    Add new card
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                                    Add new card / method
                                   </button>
                                 </div>
                               )}
 
-                              {/* New method buttons — shown when no saved methods or adding new */}
+                              {/* New method buttons */}
                               {(savedMethods.length === 0 || (!selectedMethodId && paymentProvider === "stripe") || (!selectedMethodId && paymentProvider === "tara")) && (
                                 <div className="space-y-2">
                                   {savedMethods.length === 0 && (
                                     <div className="flex gap-2">
                                       <button type="button" onClick={() => { setPaymentProvider("stripe"); setSelectedMethodId(null); }}
-                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
+                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#0c2614] text-white border-[#1D8D2B] shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                                         Card
                                       </button>
                                       <button type="button" onClick={() => { setPaymentProvider("tara"); setSelectedMethodId(null); }}
-                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${!selectedMethodId && paymentProvider === "tara" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
+                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition active:scale-95 ${!selectedMethodId && paymentProvider === "tara" ? "bg-[#0c2614] text-white border-[#1D8D2B] shadow-sm" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
                                         M-Pesa
                                       </button>
                                     </div>
                                   )}
                                   {paymentProvider === "tara" && !selectedMethodId && (
-                                    <input type="tel" required placeholder="Mobile number e.g. +254712345678" value={mobileNumber}
+                                    <input type="tel" required placeholder="Mobile money phone number" value={mobileNumber}
                                       onChange={(e) => setMobileNumber(e.target.value)}
-                                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
+                                      className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold focus:outline-none focus:border-[#1D8D2B]" />
                                   )}
                                   {paymentProvider === "stripe" && !selectedMethodId && (
-                                    <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                                      <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                                      You will enter card details on the next step
+                                    <p className="text-[10px] text-slate-400 flex items-center gap-1.5 justify-center py-1">
+                                      <svg className="w-3.5 h-3.5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                                      Enter card details on next step
                                     </p>
                                   )}
                                 </div>
                               )}
 
-                              {/* M-Pesa input for saved tara method that needs number override */}
+                              {/* M-Pesa override info */}
                               {selectedMethodId && paymentProvider === "tara" && (
-                                <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                                  <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                  Payment prompt will be sent to your saved M-Pesa number
+                                <p className="text-[10px] text-slate-400 flex items-center gap-1.5 justify-center py-1 font-semibold">
+                                  ✓ Payment prompt will be sent to saved number
                                 </p>
                               )}
                             </div>
@@ -2175,19 +2410,19 @@ export default function TravellerDashboard() {
                             const bestDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
                             const grandTotal = Math.max(0, baseTotal + serviceFee - bestDiscount);
                             return (
-                              <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
+                              <div className="space-y-2 text-xs text-slate-500 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
                                   <span>{detailListing.currency} {detailListing.pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                  <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
+                                  <span className="text-slate-800 font-bold">{detailListing.currency} {baseTotal.toLocaleString()}</span>
                                 </div>
-                                <div className="flex justify-between"><span>Service fee (5%)</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
+                                <div className="flex justify-between"><span>Service fee (5%)</span><span className="text-slate-800 font-bold">{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
                                 {bestDiscount > 0 && (
-                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                  <div className="flex justify-between text-emerald-600 font-bold">
                                     <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                     <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
+                                <div className="flex justify-between font-extrabold text-slate-900 border-t border-slate-100 pt-3 text-sm">
                                   <span>Total to pay</span>
                                   <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
                                 </div>
@@ -2196,10 +2431,10 @@ export default function TravellerDashboard() {
                           })()}
 
                           {bookingError && (
-                            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+                            <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 space-y-2">
                               <p className="text-xs font-semibold text-red-600">{bookingError}</p>
                               {bookingError.toLowerCase().includes("pending") && (
-                                <div className="space-y-2 pt-1">
+                                <div className="space-y-2 pt-1 text-left">
                                   {loadingInlinePending && (
                                     <div className="flex items-center gap-2 text-xs text-red-500">
                                       <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
@@ -2208,20 +2443,20 @@ export default function TravellerDashboard() {
                                   )}
                                   {inlinePending.length === 0 && !loadingInlinePending && (
                                     <button type="button" onClick={fetchInlinePending}
-                                      className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
+                                      className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition">
                                       Show pending reservations
                                     </button>
                                   )}
                                   {inlinePending.map((b) => (
-                                    <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
+                                    <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-xl px-3 py-2">
                                       <div className="min-w-0">
                                         <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
-                                        <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                                        <p className="text-[9px] text-slate-400 font-mono">{b.reference}</p>
                                       </div>
                                       <button type="button"
                                         onClick={() => handleInlineCancel(b.id)}
                                         disabled={inlineCancellingId === b.id}
-                                        className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
+                                        className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[9px] font-bold transition">
                                         {inlineCancellingId === b.id ? "…" : "Cancel"}
                                       </button>
                                     </div>
@@ -2230,28 +2465,28 @@ export default function TravellerDashboard() {
                               )}
                             </div>
                           )}
-                          <button type="button" onClick={handleContinueToReview} className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-xl transition text-sm mt-1">
+                          <button type="button" onClick={handleContinueToReview} className="w-full py-4 bg-[#0c2614] hover:bg-[#081b0d] text-white font-bold rounded-2xl transition-all text-xs uppercase tracking-wider shadow-md mt-1 active:scale-[0.98]">
                             Continue to Review →
                           </button>
-                          <button type="button" onClick={abandonLock} className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition mt-1">
+                          <button type="button" onClick={abandonLock} className="w-full text-center text-xs text-slate-400 hover:text-slate-600 font-semibold transition mt-1 py-1">
                             Cancel and release hold
                           </button>
                         </>)}
 
-                        {/* ── STEP 2: Stripe card element (mounted by useEffect) ── */}
+                        {/* ── STEP 2: Stripe card details ── */}
                         {checkoutStep === "stripe_card" && (
                           <div className="space-y-4">
-                            <p className="text-xs font-bold text-slate-600 uppercase tracking-wider">Enter Card Details</p>
-                            <div ref={stripeCardRef} className="bg-white border border-slate-300 rounded-lg px-3 py-3 min-h-[44px]" />
-                            <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                              <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                              256-bit SSL encrypted · Powered by Stripe
+                            <p className="text-xs font-bold text-slate-600 uppercase tracking-widest text-left">Enter Card Details</p>
+                            <div ref={stripeCardRef} className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 min-h-[44px] shadow-inner" />
+                            <p className="text-[9px] text-slate-400 flex items-center gap-1.5 justify-center py-1 font-semibold">
+                              <svg className="w-3.5 h-3.5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                              SSL encrypted · Powered by Stripe
                             </p>
                             {bookingError && (
-                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+                              <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 space-y-2">
                                 <p className="text-xs font-semibold text-red-600">{bookingError}</p>
                                 {bookingError.toLowerCase().includes("pending") && (
-                                  <div className="space-y-2 pt-1">
+                                  <div className="space-y-2 pt-1 text-left">
                                     {loadingInlinePending && (
                                       <div className="flex items-center gap-2 text-xs text-red-500">
                                         <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
@@ -2260,20 +2495,20 @@ export default function TravellerDashboard() {
                                     )}
                                     {inlinePending.length === 0 && !loadingInlinePending && (
                                       <button type="button" onClick={fetchInlinePending}
-                                        className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
+                                        className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition">
                                         Show pending reservations
                                       </button>
                                     )}
                                     {inlinePending.map((b) => (
-                                      <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
+                                      <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-xl px-3 py-2">
                                         <div className="min-w-0">
                                           <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
-                                          <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                                          <p className="text-[9px] text-slate-400 font-mono">{b.reference}</p>
                                         </div>
                                         <button type="button"
                                           onClick={() => handleInlineCancel(b.id)}
                                           disabled={inlineCancellingId === b.id}
-                                          className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
+                                          className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[9px] font-bold transition">
                                           {inlineCancellingId === b.id ? "…" : "Cancel"}
                                         </button>
                                       </div>
@@ -2283,25 +2518,25 @@ export default function TravellerDashboard() {
                               </div>
                             )}
                             <button type="button" onClick={handleStripeConfirm} disabled={submittingCheckout || !stripeCardElement}
-                              className="w-full py-3.5 bg-[#635BFF] hover:bg-[#4f48cc] disabled:opacity-50 text-white font-bold rounded-xl transition text-sm">
-                              {submittingCheckout ? "Processing…" : `Pay ${detailListing.currency} ${pendingBookingAmount.toLocaleString()}`}
+                              className="w-full py-4 bg-[#635BFF] hover:bg-[#4f48cc] disabled:opacity-50 text-white font-bold rounded-2xl transition-all text-xs uppercase tracking-wider shadow-md active:scale-[0.98]">
+                              {submittingCheckout ? "Processing Payment…" : `Confirm & Pay ${detailListing.currency} ${pendingBookingAmount.toLocaleString()}`}
                             </button>
                             <button type="button" onClick={() => { setCheckoutStep("details"); setBookingError(""); }}
-                              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 transition">
-                              ← Back
+                              className="w-full text-center text-xs text-slate-400 hover:text-slate-600 font-semibold transition mt-1 py-1">
+                              ← Back to Details
                             </button>
                           </div>
                         )}
 
-                        {/* ── STEP 3: Polling / waiting for payment confirmation ── */}
+                        {/* ── STEP 3: Polling / Confirmation status ── */}
                         {checkoutStep === "polling" && (
-                          <div className="space-y-4 text-center py-4">
+                          <div className="space-y-4 text-center py-6">
                             {paymentProvider === "tara" ? (<>
-                              <div className="w-14 h-14 rounded-full bg-green-50 border border-green-200 flex items-center justify-center mx-auto text-2xl">📱</div>
-                              <p className="font-bold text-slate-800">Check your phone!</p>
-                              <p className="text-xs text-slate-500">A payment prompt has been sent to your M-Pesa number. Please approve it to complete your booking.</p>
+                              <div className="w-14 h-14 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto text-2xl animate-bounce shadow-md">📱</div>
+                              <p className="font-bold text-slate-800">Please check your phone!</p>
+                              <p className="text-xs text-slate-500 leading-relaxed px-2">A payment prompt has been sent to your M-Pesa number. Please approve it to complete your booking.</p>
                             </>) : (<>
-                              <div className="w-14 h-14 rounded-full bg-green-50 border border-green-200 flex items-center justify-center mx-auto">
+                              <div className="w-14 h-14 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center mx-auto shadow-inner">
                                 <div className="w-6 h-6 border-3 border-[#635BFF] border-t-transparent rounded-full animate-spin" />
                               </div>
                               <p className="font-bold text-slate-800">Processing payment…</p>
@@ -2312,10 +2547,10 @@ export default function TravellerDashboard() {
                               <div className="w-2 h-2 rounded-full bg-slate-300 animate-pulse" style={{ animationDelay: "0.6s" }} />
                             </div>
                             {bookingError && (
-                              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-2">
+                              <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 space-y-2">
                                 <p className="text-xs font-semibold text-red-600">{bookingError}</p>
                                 {bookingError.toLowerCase().includes("pending") && (
-                                  <div className="space-y-2 pt-1">
+                                  <div className="space-y-2 pt-1 text-left">
                                     {loadingInlinePending && (
                                       <div className="flex items-center gap-2 text-xs text-red-500">
                                         <div className="w-3 h-3 border-2 border-red-300 border-t-red-600 rounded-full animate-spin" />
@@ -2324,20 +2559,20 @@ export default function TravellerDashboard() {
                                     )}
                                     {inlinePending.length === 0 && !loadingInlinePending && (
                                       <button type="button" onClick={fetchInlinePending}
-                                        className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition">
+                                        className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition">
                                         Show pending reservations
                                       </button>
                                     )}
                                     {inlinePending.map((b) => (
-                                      <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-lg px-3 py-2">
+                                      <div key={b.id} className="flex items-center justify-between gap-2 bg-white border border-red-200 rounded-xl px-3 py-2">
                                         <div className="min-w-0">
                                           <p className="text-xs font-bold text-slate-800 truncate">{b.listingTitle || "Reservation"}</p>
-                                          <p className="text-[10px] text-slate-400 font-mono">{b.reference}</p>
+                                          <p className="text-[9px] text-slate-400 font-mono">{b.reference}</p>
                                         </div>
                                         <button type="button"
                                           onClick={() => handleInlineCancel(b.id)}
                                           disabled={inlineCancellingId === b.id}
-                                          className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[10px] font-bold transition">
+                                          className="shrink-0 px-2.5 py-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg text-[9px] font-bold transition">
                                           {inlineCancellingId === b.id ? "…" : "Cancel"}
                                         </button>
                                       </div>
@@ -2351,7 +2586,7 @@ export default function TravellerDashboard() {
                       </form>
                     )}
 
-                    <div className="flex items-center justify-center gap-2 mt-5 text-slate-400 text-xs font-medium hover:text-slate-600 cursor-pointer transition">
+                    <div className="flex items-center justify-center gap-2 mt-5 text-slate-400 text-xs font-semibold hover:text-slate-600 cursor-pointer transition">
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" /></svg>
                       Report this listing
                     </div>
@@ -2402,11 +2637,10 @@ export default function TravellerDashboard() {
                     <button
                       key={key}
                       onClick={() => { setSearchCategory(key); }}
-                      className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition border ${
-                        searchCategory === key
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition border ${searchCategory === key
                           ? "bg-white text-[#0c2614] border-white shadow-md"
                           : "bg-white/15 text-white border-white/30 hover:bg-white/25 backdrop-blur-sm"
-                      }`}
+                        }`}
                     >
                       {icon}
                       {label}
@@ -2676,6 +2910,38 @@ export default function TravellerDashboard() {
               </div>
             </section>
 
+            {/* ── BROWSE-TIME PROMOTION & VOUCHER BANNERS ── */}
+            {(categoryPromotion || personalVouchers.length > 0) && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-3">
+                {categoryPromotion && (
+                  <ActivityPromoBanner
+                    bannerTitle={categoryPromotion.bannerTitle ?? categoryPromotion.name}
+                    bannerSubtitle={categoryPromotion.bannerSubtitle ?? categoryPromotion.description}
+                    labelText={categoryPromotion.labelText}
+                    validUntil={categoryPromotion.validUntil}
+                  />
+                )}
+                {personalVouchers.length > 0 && (
+                  <PersonalVoucherBanner
+                    vouchers={personalVouchers}
+                    voucherApplied={voucherApplied}
+                    voucherDiscount={voucherDiscount}
+                    currency="KES"
+                    dismissed={personalBannerDismissed}
+                    pendingCode={pendingVoucherCode}
+                    onDismiss={() => setPersonalBannerDismissed(true)}
+                    onApply={(code) => {
+                      if (selectedListingId && detailListing) {
+                        handleVoucherApply(code);
+                      } else {
+                        setPendingVoucherCode(code);
+                      }
+                    }}
+                  />
+                )}
+              </div>
+            )}
+
             {/* ── STAY IN EXCELLENCE ── */}
             <section className="bg-[#f7f6f3] py-16 border-y border-slate-200/60">
               <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -2724,7 +2990,16 @@ export default function TravellerDashboard() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {featuredListings.slice(0, 8).map((listing) => (
-                      <ListingCard key={listing.id} listing={listing} onSelect={handleSelectListing} />
+                      <ListingCard
+                        key={listing.id}
+                        listing={listing}
+                        onSelect={handleSelectListing}
+                        promotionBadge={
+                          categoryPromotion?.labelText
+                            ? { label: categoryPromotion.labelText, colour: categoryPromotion.labelColour ?? "#C84B2F" }
+                            : undefined
+                        }
+                      />
                     ))}
                   </div>
                 )}
@@ -2905,7 +3180,7 @@ export default function TravellerDashboard() {
                     { rating: 5, text: "Travelling across Africa has never been this organised. The car rental feature integrated with my hotel booking saved me so much time.", name: "Sarah Louw", location: "Cape Town, SA", initials: "SL" },
                   ].map((t) => (
                     <div key={t.name} className="bg-white rounded-2xl p-6 space-y-4 border border-slate-100 shadow-sm">
-                      <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className="text-amber-400 text-base">★</span>)}</div>
+                      <div className="flex gap-0.5">{[1, 2, 3, 4, 5].map(s => <span key={s} className="text-amber-400 text-base">★</span>)}</div>
                       <p className="text-slate-600 text-sm leading-relaxed font-light">&ldquo;{t.text}&rdquo;</p>
                       <div className="flex items-center gap-3 pt-1 border-t border-slate-100">
                         <div className="w-9 h-9 rounded-full bg-[#0c2614] text-white flex items-center justify-center text-[10px] font-bold shrink-0">{t.initials}</div>
@@ -3015,6 +3290,38 @@ export default function TravellerDashboard() {
                 </button>
               </div>
             </div>
+
+            {/* Browse-time promotion & voucher banners — full width */}
+            {categoryPromotion && (
+              <div className="lg:col-span-12">
+                <ActivityPromoBanner
+                  bannerTitle={categoryPromotion.bannerTitle ?? categoryPromotion.name}
+                  bannerSubtitle={categoryPromotion.bannerSubtitle ?? categoryPromotion.description}
+                  labelText={categoryPromotion.labelText}
+                  validUntil={categoryPromotion.validUntil}
+                />
+              </div>
+            )}
+            {personalVouchers.length > 0 && (
+              <div className="lg:col-span-12">
+                <PersonalVoucherBanner
+                  vouchers={personalVouchers}
+                  voucherApplied={voucherApplied}
+                  voucherDiscount={voucherDiscount}
+                  currency={detailListing?.currency ?? "KES"}
+                  dismissed={personalBannerDismissed}
+                  pendingCode={pendingVoucherCode}
+                  onDismiss={() => setPersonalBannerDismissed(true)}
+                  onApply={(code) => {
+                    if (selectedListingId && detailListing) {
+                      handleVoucherApply(code);
+                    } else {
+                      setPendingVoucherCode(code);
+                    }
+                  }}
+                />
+              </div>
+            )}
 
             {/* Mobile filter + sort bar (hidden on desktop) */}
             <div className="lg:hidden col-span-1 flex items-center gap-2">
@@ -3267,6 +3574,11 @@ export default function TravellerDashboard() {
                         onSelect={handleSelectListing}
                         hoveredId={mapHoveredId}
                         onHover={setMapHoveredId}
+                        promotionBadge={
+                          categoryPromotion?.labelText
+                            ? { label: categoryPromotion.labelText, colour: categoryPromotion.labelColour ?? "#C84B2F" }
+                            : undefined
+                        }
                       />
                     ))}
                   </div>
@@ -3298,213 +3610,277 @@ export default function TravellerDashboard() {
           </div>
         ) : activeTab === "bookings" ? (
           // VIEW 4: MY RESERVATIONS
-          <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6 text-left">
+          <>
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-6 text-left">
 
-            {/* Page header */}
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-serif font-bold text-slate-900">My Reservations</h1>
-                <p className="text-sm text-slate-500 mt-1">
-                  {bookingsList.length > 0
-                    ? `${bookingsList.length} booking${bookingsList.length !== 1 ? "s" : ""} total`
-                    : "Manage your itineraries and trips"}
-                </p>
+              {/* Page header */}
+              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                <div>
+                  <h1 className="text-3xl font-serif font-bold text-slate-900">My Reservations</h1>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {bookingsList.length > 0
+                      ? `${bookingsList.length} booking${bookingsList.length !== 1 ? "s" : ""} total`
+                      : "Manage your itineraries and trips"}
+                  </p>
+                </div>
+                <button
+                  onClick={fetchGuestBookings}
+                  disabled={loadingBookings}
+                  className="self-start sm:self-auto flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-[#1D8D2B] hover:border-[#1D8D2B] transition shadow-sm disabled:opacity-50 uppercase tracking-wide"
+                >
+                  <svg className={`w-3.5 h-3.5 ${loadingBookings ? "animate-spin" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </button>
               </div>
-              <button
-                onClick={fetchGuestBookings}
-                disabled={loadingBookings}
-                className="self-start sm:self-auto flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-[#1D8D2B] hover:border-[#1D8D2B] transition shadow-sm disabled:opacity-50 uppercase tracking-wide"
-              >
-                <svg className={`w-3.5 h-3.5 ${loadingBookings ? "animate-spin" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Refresh
-              </button>
-            </div>
 
-            {/* Status filter chips */}
-            {!loadingBookings && bookingsList.length > 0 && (
-              <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
-                {[
-                  { key: "all", label: "All" },
-                  { key: "confirmed", label: "Confirmed" },
-                  { key: "pending_payment", label: "Pending" },
-                  { key: "completed", label: "Completed" },
-                  { key: "cancelled", label: "Cancelled" },
-                ].map(({ key, label }) => {
-                  const count =
-                    key === "all"
-                      ? bookingsList.length
-                      : key === "cancelled"
-                        ? bookingsList.filter((b) => b.status.startsWith("cancelled")).length
-                        : bookingsList.filter((b) => b.status === key).length;
-                  if (count === 0 && key !== "all") return null;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => setReservationStatusFilter(key)}
-                      className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold border transition ${reservationStatusFilter === key
-                        ? "bg-[#0c2614] text-white border-[#1D8D2B]"
-                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                        }`}
-                    >
-                      {label}
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${reservationStatusFilter === key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
-                        }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+              {/* Status filter chips */}
+              {!loadingBookings && bookingsList.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+                  {[
+                    { key: "all", label: "All" },
+                    { key: "confirmed", label: "Confirmed" },
+                    { key: "pending_payment", label: "Pending" },
+                    { key: "completed", label: "Completed" },
+                    { key: "cancelled", label: "Cancelled" },
+                  ].map(({ key, label }) => {
+                    const count =
+                      key === "all"
+                        ? bookingsList.length
+                        : key === "cancelled"
+                          ? bookingsList.filter((b) => b.status.startsWith("cancelled")).length
+                          : bookingsList.filter((b) => b.status === key).length;
+                    if (count === 0 && key !== "all") return null;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setReservationStatusFilter(key)}
+                        className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold border transition ${reservationStatusFilter === key
+                          ? "bg-[#0c2614] text-white border-[#1D8D2B]"
+                          : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                          }`}
+                      >
+                        {label}
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${reservationStatusFilter === key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                          }`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
 
-            {/* Content */}
-            {loadingBookings ? (
-              // Skeleton cards
-              <div className="space-y-4">
-                {[1, 2, 3].map((n) => (
-                  <div key={n} className="animate-pulse bg-white border border-slate-100 rounded-2xl overflow-hidden flex flex-col sm:flex-row shadow-sm">
-                    <div className="sm:w-44 h-44 sm:h-auto bg-slate-200 shrink-0" />
-                    <div className="flex-1 p-5 space-y-3">
-                      <div className="flex justify-between items-start gap-2">
-                        <div className="space-y-2 flex-1">
-                          <div className="h-4 bg-slate-200 rounded-full w-20" />
-                          <div className="h-5 bg-slate-200 rounded w-3/4" />
-                          <div className="h-3 bg-slate-200 rounded w-1/3" />
+              {/* Content */}
+              {loadingBookings ? (
+                // Skeleton cards
+                <div className="space-y-4">
+                  {[1, 2, 3].map((n) => (
+                    <div key={n} className="animate-pulse bg-white border border-slate-100 rounded-2xl overflow-hidden flex flex-col sm:flex-row shadow-sm">
+                      <div className="sm:w-44 h-44 sm:h-auto bg-slate-200 shrink-0" />
+                      <div className="flex-1 p-5 space-y-3">
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="space-y-2 flex-1">
+                            <div className="h-4 bg-slate-200 rounded-full w-20" />
+                            <div className="h-5 bg-slate-200 rounded w-3/4" />
+                            <div className="h-3 bg-slate-200 rounded w-1/3" />
+                          </div>
+                          <div className="h-7 bg-slate-200 rounded w-24 shrink-0" />
                         </div>
-                        <div className="h-7 bg-slate-200 rounded w-24 shrink-0" />
-                      </div>
-                      <div className="flex gap-4 pt-1">
-                        <div className="h-3 bg-slate-200 rounded w-36" />
-                        <div className="h-3 bg-slate-200 rounded w-24" />
-                      </div>
-                      <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
-                        <div className="h-3 bg-slate-200 rounded w-16" />
-                        <div className="h-8 bg-slate-200 rounded-xl w-28" />
+                        <div className="flex gap-4 pt-1">
+                          <div className="h-3 bg-slate-200 rounded w-36" />
+                          <div className="h-3 bg-slate-200 rounded w-24" />
+                        </div>
+                        <div className="border-t border-slate-100 pt-3 flex justify-between items-center">
+                          <div className="h-3 bg-slate-200 rounded w-16" />
+                          <div className="h-8 bg-slate-200 rounded-xl w-28" />
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : filteredBookings.length === 0 ? (
-              // Empty state
-              <div className="text-center py-20 bg-white border border-slate-100 rounded-3xl shadow-sm">
-                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-5">
-                  <svg className="w-9 h-9 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
+                  ))}
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-1">
-                  {reservationStatusFilter === "all" ? "No reservations yet" : `No ${reservationStatusFilter.replace("_", " ")} reservations`}
-                </h3>
-                <p className="text-slate-500 text-sm max-w-xs mx-auto leading-relaxed">
-                  {reservationStatusFilter === "all"
-                    ? "Book your next stay or car rental to see it here."
-                    : "Try switching to a different filter tab."}
-                </p>
-                {reservationStatusFilter === "all" && (
-                  <button
-                    onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                    className="mt-6 inline-flex items-center gap-2 bg-[#0c2614] text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-[#081b0d] transition shadow-md"
-                  >
-                    Explore Listings
-                  </button>
-                )}
-              </div>
-            ) : (
-              // Reservation cards
-              <div className="space-y-4">
-                {filteredBookings.map((b) => (
-                  <div key={b.id} className="space-y-2">
-                    <ReservationCard
-                      booking={b}
-                      onCancel={handleCancelBooking}
-                      cancellingId={cancellingId}
-                    />
-
-                    {/* Leave Review — only for completed bookings not yet reviewed */}
-                    {b.status === "completed" && !reviewedBookingIds.includes(b.id) && (
-                      reviewingBookingId === b.id ? (
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-bold text-slate-800">Leave a Review</p>
-                            <button onClick={() => setReviewingBookingId(null)} className="text-slate-400 hover:text-slate-600">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                          </div>
-
-                          {/* Star rating */}
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <button
-                                key={star}
-                                type="button"
-                                onClick={() => setReviewRating(star)}
-                                className={`text-2xl transition-transform hover:scale-110 ${star <= reviewRating ? "text-amber-400" : "text-slate-200"}`}
-                              >
-                                ★
-                              </button>
-                            ))}
-                            <span className="ml-2 text-xs font-semibold text-slate-500">
-                              {["", "Poor", "Fair", "Good", "Very Good", "Excellent"][reviewRating]}
-                            </span>
-                          </div>
-
-                          <input
-                            type="text"
-                            placeholder="Review title (optional)"
-                            value={reviewTitle}
-                            onChange={(e) => setReviewTitle(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]"
-                          />
-                          <textarea
-                            placeholder="Share your experience…"
-                            value={reviewBody}
-                            onChange={(e) => setReviewBody(e.target.value)}
-                            rows={3}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B] resize-none"
-                          />
-
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setReviewingBookingId(null)}
-                              className="flex-1 py-2.5 border border-slate-200 text-sm font-semibold text-slate-600 rounded-xl hover:bg-slate-50 transition"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => handleSubmitReview(b.id)}
-                              disabled={submittingReview}
-                              className="flex-1 py-2.5 bg-[#0c2614] text-white text-sm font-bold rounded-xl hover:bg-[#081b0d] disabled:opacity-50 transition"
-                            >
-                              {submittingReview ? "Submitting…" : "Submit Review"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => { setReviewingBookingId(b.id); setReviewRating(5); setReviewTitle(""); setReviewBody(""); }}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 border border-amber-200 bg-amber-50 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-100 transition"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                          Leave a Review for {b.listingTitle}
-                        </button>
-                      )
-                    )}
-
-                    {/* Already reviewed badge */}
-                    {b.status === "completed" && reviewedBookingIds.includes(b.id) && (
-                      <div className="flex items-center justify-center gap-2 py-2 text-xs text-emerald-600 font-semibold">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        Review submitted — thank you!
-                      </div>
-                    )}
+              ) : filteredBookings.length === 0 ? (
+                // Empty state
+                <div className="text-center py-20 bg-white border border-slate-100 rounded-3xl shadow-sm">
+                  <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-5">
+                    <svg className="w-9 h-9 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
                   </div>
-                ))}
+                  <h3 className="text-lg font-bold text-slate-900 mb-1">
+                    {reservationStatusFilter === "all" ? "No reservations yet" : `No ${reservationStatusFilter.replace("_", " ")} reservations`}
+                  </h3>
+                  <p className="text-slate-500 text-sm max-w-xs mx-auto leading-relaxed">
+                    {reservationStatusFilter === "all"
+                      ? "Book your next stay or car rental to see it here."
+                      : "Try switching to a different filter tab."}
+                  </p>
+                  {reservationStatusFilter === "all" && (
+                    <button
+                      onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
+                      className="mt-6 inline-flex items-center gap-2 bg-[#0c2614] text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-[#081b0d] transition shadow-md"
+                    >
+                      Explore Listings
+                    </button>
+                  )}
+                </div>
+              ) : (
+                // Reservation cards
+                <div className="space-y-4">
+                  {filteredBookings.map((b) => (
+                    <div key={b.id} className="space-y-2">
+                      <ReservationCard
+                        booking={b}
+                        onCancel={handleCancelBooking}
+                        cancellingId={cancellingId}
+                      />
+
+                      {/* Leave Review — only for completed bookings not yet reviewed */}
+                      {b.status === "completed" && !reviewedBookingIds.includes(b.id) && (
+                        reviewingBookingId === b.id ? (
+                          <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-bold text-slate-800">Leave a Review</p>
+                              <button onClick={() => setReviewingBookingId(null)} className="text-slate-400 hover:text-slate-600">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+
+                            {/* Star rating */}
+                            <div className="flex items-center gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button
+                                  key={star}
+                                  type="button"
+                                  onClick={() => setReviewRating(star)}
+                                  className={`text-2xl transition-transform hover:scale-110 ${star <= reviewRating ? "text-amber-400" : "text-slate-200"}`}
+                                >
+                                  ★
+                                </button>
+                              ))}
+                              <span className="ml-2 text-xs font-semibold text-slate-500">
+                                {["", "Poor", "Fair", "Good", "Very Good", "Excellent"][reviewRating]}
+                              </span>
+                            </div>
+
+                            <input
+                              type="text"
+                              placeholder="Review title (optional)"
+                              value={reviewTitle}
+                              onChange={(e) => setReviewTitle(e.target.value)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]"
+                            />
+                            <textarea
+                              placeholder="Share your experience…"
+                              value={reviewBody}
+                              onChange={(e) => setReviewBody(e.target.value)}
+                              rows={3}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B] resize-none"
+                            />
+
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => setReviewingBookingId(null)}
+                                className="flex-1 py-2.5 border border-slate-200 text-sm font-semibold text-slate-600 rounded-xl hover:bg-slate-50 transition"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => handleSubmitReview(b.id)}
+                                disabled={submittingReview}
+                                className="flex-1 py-2.5 bg-[#0c2614] text-white text-sm font-bold rounded-xl hover:bg-[#081b0d] disabled:opacity-50 transition"
+                              >
+                                {submittingReview ? "Submitting…" : "Submit Review"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setReviewingBookingId(b.id); setReviewRating(5); setReviewTitle(""); setReviewBody(""); }}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 border border-amber-200 bg-amber-50 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-100 transition"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                            Leave a Review for {b.listingTitle}
+                          </button>
+                        )
+                      )}
+
+                      {/* Already reviewed badge */}
+                      {b.status === "completed" && reviewedBookingIds.includes(b.id) && (
+                        <div className="flex items-center justify-center gap-2 py-2 text-xs text-emerald-600 font-semibold">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                          Review submitted — thank you!
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── FOOTER ── */}
+            <footer className="bg-[#0c2614] text-green-300/70 py-14">
+              <div className="max-w-7xl mx-auto px-4 sm:px-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
+                  {/* Brand */}
+                  <div className="col-span-2 md:col-span-1">
+                    <p className="text-white font-serif text-xl font-light mb-1">Kainook</p>
+                    <p className="text-[10px] text-[#58B430]/70 uppercase tracking-[0.2em] mb-3">Private Collections</p>
+                    <p className="text-xs leading-relaxed mb-5">Redefining the standards of luxury travel through curated storytelling and architectural excellence.</p>
+                    <div className="flex gap-3">
+                      {[
+                        { label: "Twitter/X", path: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" },
+                        { label: "Instagram", path: "M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" },
+                        { label: "LinkedIn", path: "M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" },
+                      ].map(({ label, path }) => (
+                        <a key={label} href="#" aria-label={label} className="text-green-300 hover:text-white transition">
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d={path} /></svg>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Explore */}
+                  <div>
+                    <p className="text-white text-[10px] font-semibold uppercase tracking-[0.25em] mb-4">Explore</p>
+                    <ul className="space-y-2.5 text-xs">
+                      {["Destinations", "Hotels", "Villas", "Car Rentals", "Experiences"].map(l => <li key={l}><a href="#" className="hover:text-white transition-colors">{l}</a></li>)}
+                    </ul>
+                  </div>
+                  {/* Company */}
+                  <div>
+                    <p className="text-white text-[10px] font-semibold uppercase tracking-[0.25em] mb-4">Kainook</p>
+                    <ul className="space-y-2.5 text-xs">
+                      {["Our Story", "Sustainability", "Rewards Program", "Press & Media", "Contact Us"].map(l => <li key={l}><a href="#" className="hover:text-white transition-colors">{l}</a></li>)}
+                    </ul>
+                  </div>
+                  {/* Newsletter */}
+                  <div>
+                    <p className="text-white text-[10px] font-semibold uppercase tracking-[0.25em] mb-4">Newsletter</p>
+                    <p className="text-xs mb-4 leading-relaxed">Receive curated travel inspiration and exclusive member offers.</p>
+                    <div className="space-y-2">
+                      <input type="email" placeholder="Your email address" className="w-full bg-[#081b0d]/60 border border-[#081b0d] rounded-lg px-3 py-2 text-xs text-white placeholder-green-600 focus:outline-none focus:border-white/40" />
+                      <button className="w-full bg-white hover:bg-green-50 text-[#0c2614] text-xs font-semibold py-2 rounded-lg transition">Subscribe</button>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-t border-[#081b0d]/60 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <p className="text-[10px] tracking-wide">© {new Date().getFullYear()} Kainook · All rights reserved.</p>
+                  <div className="flex items-center gap-4">
+                    {[
+                      { label: "Twitter/X", path: "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" },
+                      { label: "Instagram", path: "M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" },
+                      { label: "LinkedIn", path: "M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" },
+                    ].map(({ label, path }) => (
+                      <a key={label} href="#" aria-label={label} className="text-green-300 hover:text-white transition">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d={path} /></svg>
+                      </a>
+                    ))}
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+            </footer>
+          </>
         ) : null}
       </main>
 
@@ -3802,7 +4178,7 @@ export default function TravellerDashboard() {
       )}
 
 
-      {/* footer lives inside the home tab only — no global footer here */}
+      {/* footer lives inside the home and bookings tabs */}
     </div>
   );
 }

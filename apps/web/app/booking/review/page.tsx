@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { paymentApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
 
@@ -408,9 +409,9 @@ export default function BookingReviewPage() {
 
         {/* ── Header ── */}
         <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-3 flex items-center justify-between shadow-sm">
-          <span className="text-xl font-bold text-[#0B1E3F] tracking-tight flex items-center gap-2">
-            <span className="bg-[#0B1E3F] text-white px-2.5 py-1 rounded-xl text-sm shadow-sm">Kainook</span>
-          </span>
+          <Link href="/traveller" className="flex items-center">
+            <img src="/images/kainook-logo.jpeg" alt="Kainook" className="h-9 w-auto object-contain" />
+          </Link>
 
           {/* Timer */}
           {step !== "confirmed" && (

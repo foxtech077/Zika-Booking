@@ -8,6 +8,7 @@ interface ListingCardProps {
   onSelect: (id: string) => void;
   hoveredId?: string | null;
   onHover?: (id: string | null) => void;
+  promotionBadge?: { label: string; colour: string };
 }
 
 const CAT_LABEL: Record<string, string> = {
@@ -42,6 +43,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   onSelect,
   hoveredId,
   onHover,
+  promotionBadge,
 }) => {
   const [isFav, setIsFav] = React.useState(listing.isFavourited ?? false);
   const isHovered = hoveredId === listing.id;
@@ -86,7 +88,15 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             ⚡ Instant Book
           </span>
         )}
-        {hasPromo && (
+        {promotionBadge && (
+          <span
+            className="backdrop-blur-sm text-white text-[9px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full shadow"
+            style={{ backgroundColor: promotionBadge.colour || "#C84B2F" }}
+          >
+            {promotionBadge.label}
+          </span>
+        )}
+        {hasPromo && !promotionBadge && (
           <span className="bg-[#E31C5F]/90 backdrop-blur-sm text-white text-[9px] font-semibold uppercase tracking-widest px-2.5 py-1 rounded-full shadow">
             {discountPct}% OFF
           </span>
