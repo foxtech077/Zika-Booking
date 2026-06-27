@@ -189,6 +189,16 @@ export async function payoutRoutes(app: FastifyInstance) {
       },
     });
 
+    // Dispatch payout_sent push/in-app notification
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO auth."Notification" (id, "userId", type, title, body, data, "createdAt")
+       VALUES (gen_random_uuid()::text, $1, 'payout_sent', $2, $3, $4::jsonb, NOW())`,
+      updated.providerId,
+      "Payout Disbursed! 💰",
+      `Your payout of ${updated.amount} ${updated.currency} for booking ${updated.bookingId} has been successfully processed.`,
+      JSON.stringify({ bookingId: updated.bookingId, amount: Number(updated.amount), currency: updated.currency })
+    ).catch((err: any) => req.log.error({ err }, "Failed to send payout notification"));
+
     reply.send({ success: true, data: updated });
   });
 
@@ -212,6 +222,9 @@ export async function payoutRoutes(app: FastifyInstance) {
     if (!payout) return sendError(reply, 404, "NOT_FOUND", "Payout not found.");
     if (payout.status === "paid") return sendError(reply, 400, "ALREADY_PAID", "Cannot cancel a paid payout.");
     if (payout.status === "cancelled") return sendError(reply, 400, "ALREADY_CANCELLED", "Payout is already cancelled.");
+    if (payout.status === "processing") {
+      return sendError(reply, 400, "PROCESSING", "Cannot cancel a payout that is currently processing.");
+    }
 
     const updated = await prisma.payout.update({
       where: { id },

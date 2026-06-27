@@ -179,3 +179,11 @@ model Payout {
   @@index([providerId])
   @@schema("payments")
 }
+
+model StripeWebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+
+  @@schema("payments")
+}

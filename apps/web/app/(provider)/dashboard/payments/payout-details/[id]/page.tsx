@@ -1,8 +1,8 @@
 "use client";
 
+import { use, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { use } from "react";
 import {
   ArrowLeft,
   Banknote,
@@ -10,112 +10,40 @@ import {
   CalendarDays,
   CheckCircle2,
   CreditCard,
-  Hash,
   RefreshCw,
-  User,
+  XCircle,
 } from "lucide-react";
-import { listingApi } from "@/lib/listing-api";
+import { getPayoutDetail, type Payout } from "@/lib/payment-api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface PayoutDetail {
-  id: string;
-  bookingReference: string;
-  guestName: string;
-  listingName: string;
-  checkIn: string;
-  checkOut: string;
-  // Financial breakdown
-  grossAmount: number;
-  platformCommission: number;
-  commissionRate: number;
-  netEarnings: number;
-  taxes: number;
-  adjustments: number;
-  adjustmentNote: string;
-  // Transaction info
-  transactionReference: string;
-  payoutDate: string;
-  payoutMethod: string;
-  status: string;
-  currency: string;
+function readNumber(value: unknown, fallback = 0): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
-// ─── Normalisation ────────────────────────────────────────────────────────────
-
-function readNumber(v: unknown, fallback = 0): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+function extractStatusCode(error: unknown): number | undefined {
+  const err = error as { response?: { status?: number } };
+  return err?.response?.status;
 }
 
-function readString(v: unknown, fallback = ""): string {
-  return typeof v === "string" && v.trim() ? v : fallback;
+function extractErrorMessage(error: unknown, fallback: string): string {
+  const err = error as { response?: { data?: { message?: string } } };
+  return err?.response?.data?.message ?? (error instanceof Error ? error.message : fallback);
 }
 
-function unwrap(payload: unknown): Record<string, unknown> {
-  const root = payload as Record<string, unknown>;
-  return (root?.data as Record<string, unknown>) ?? root ?? {};
+function payoutAmount(payout: Payout): number {
+  return readNumber(payout.amount);
 }
-
-function normalizeDetail(payload: unknown): PayoutDetail {
-  const data = unwrap(payload);
-  const m = data as Record<string, unknown>;
-  const booking = (m.booking ?? {}) as Record<string, unknown>;
-  const listing = (m.listing ?? m.property ?? {}) as Record<string, unknown>;
-  const guest = (m.guest ?? m.customer ?? {}) as Record<string, unknown>;
-  const financial = (m.financial ?? m.breakdown ?? {}) as Record<string, unknown>;
-  const transaction = (m.transaction ?? m.transactionDetails ?? {}) as Record<string, unknown>;
-
-  const gross = readNumber(m.grossAmount ?? financial.grossAmount ?? m.totalAmount ?? booking.totalAmount);
-  const commissionRate = readNumber(m.commissionRate ?? financial.commissionRate ?? m.platformCommissionRate, 15);
-  const commission = readNumber(m.platformCommission ?? financial.platformCommission ?? financial.commission, (gross * commissionRate) / 100);
-  const taxes = readNumber(m.taxes ?? financial.taxes);
-  const adjustments = readNumber(m.adjustments ?? financial.adjustments);
-  const net = readNumber(m.netEarnings ?? m.netPayout ?? financial.netEarnings, gross - commission - taxes - adjustments);
-
-  return {
-    id: readString(m.id ?? m._id ?? m.payoutId, ""),
-    bookingReference: readString(m.bookingReference ?? booking.reference ?? booking.id ?? m.bookingId, "N/A"),
-    guestName: readString(m.guestName ?? guest.name ?? guest.fullName ?? booking.guestName, "Guest"),
-    listingName: readString(m.listingName ?? listing.name ?? listing.title ?? m.propertyName, "Listing"),
-    checkIn: readString(m.checkIn ?? booking.checkIn ?? booking.checkInDate, ""),
-    checkOut: readString(m.checkOut ?? booking.checkOut ?? booking.checkOutDate, ""),
-    grossAmount: gross,
-    platformCommission: commission,
-    commissionRate,
-    netEarnings: net,
-    taxes,
-    adjustments,
-    adjustmentNote: readString(m.adjustmentNote ?? financial.adjustmentNote ?? financial.note),
-    transactionReference: readString(m.transactionReference ?? transaction.reference ?? transaction.id ?? m.transactionId, "—"),
-    payoutDate: readString(m.payoutDate ?? transaction.date ?? m.processedAt ?? m.createdAt, ""),
-    payoutMethod: readString(m.payoutMethod ?? transaction.method ?? transaction.paymentMethod, "Platform Wallet"),
-    status: readString(m.status ?? m.payoutStatus, "pending"),
-    currency: readString(m.currency, "USD"),
-  };
-}
-
-async function fetchPayoutDetail(id: string): Promise<PayoutDetail | null> {
-  try {
-    const res = await listingApi.get(`/provider/payments/payouts/${id}`);
-    return normalizeDetail(res.data);
-  } catch {
-    return null;
-  }
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
 
 function InfoRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-start justify-between gap-4 py-3 border-b border-slate-100 last:border-0">
+    <div className="flex items-start justify-between gap-4 py-3">
       <span className="text-sm text-slate-500 shrink-0">{label}</span>
       <span className={mono ? "font-mono text-xs text-right text-slate-700" : "text-sm font-semibold text-right text-slate-900"}>
-        {value || "—"}
+        {value || "N/A"}
       </span>
     </div>
   );
@@ -127,8 +55,8 @@ function SectionCard({
   children,
 }: {
   title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
+  icon: ReactNode;
+  children: ReactNode;
 }) {
   return (
     <Card>
@@ -143,92 +71,98 @@ function SectionCard({
   );
 }
 
-function FinancialRow({
-  label,
-  value,
-  tone,
-  large,
-  note,
-}: {
-  label: string;
-  value: string;
-  tone?: string;
-  large?: boolean;
-  note?: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-slate-100 last:border-0">
-      <div>
-        <span className="text-sm text-slate-600">{label}</span>
-        {note && <p className="mt-0.5 text-xs text-slate-400">{note}</p>}
-      </div>
-      <span className={large ? "text-lg font-bold text-emerald-700" : tone ?? "text-sm font-semibold text-slate-900"}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
 function SkeletonPage() {
   return (
     <div className="space-y-5">
       <div className="h-8 w-64 rounded-xl bg-slate-100 animate-pulse" />
       <div className="grid gap-5 lg:grid-cols-2">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-48 rounded-2xl bg-slate-100 animate-pulse" />
+        {[0, 1, 2, 3].map((index) => (
+          <div key={index} className="h-48 rounded-2xl bg-slate-100 animate-pulse" />
         ))}
       </div>
     </div>
   );
 }
 
-function NotFound() {
+function NotFoundState() {
   return (
-    <div className="flex min-h-[400px] flex-col items-center justify-center text-center">
+    <div className="flex min-h-[420px] flex-col items-center justify-center text-center">
       <Banknote className="h-14 w-14 text-slate-200" />
       <p className="mt-4 text-lg font-bold text-slate-700">Payout not found</p>
-      <p className="mt-1 text-sm text-slate-400">
-        This payout record may have been removed or does not exist.
-      </p>
+      <p className="mt-1 text-sm text-slate-400">This payout record may not exist or you may not have access to it.</p>
       <Link href="/dashboard/payments/payout-history" className="mt-6">
-        <Button variant="outline" icon={<ArrowLeft />}>Back to Payout History</Button>
+        <Button variant="outline" icon={<ArrowLeft />}>
+          Back to Payout History
+        </Button>
       </Link>
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex min-h-[420px] flex-col items-center justify-center rounded-2xl border border-red-100 bg-red-50 text-center">
+      <XCircle className="h-14 w-14 text-red-400" />
+      <p className="mt-4 text-lg font-bold text-red-800">Unable to load payout details</p>
+      <p className="mt-1 max-w-lg text-sm text-red-700">{message}</p>
+      <Button className="mt-6" variant="outline" icon={<RefreshCw />} onClick={onRetry}>
+        Retry
+      </Button>
+    </div>
+  );
+}
 
 export default function PayoutDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const payoutId = id?.trim() ?? "";
 
-  const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["provider-payout-detail", id],
-    queryFn: () => fetchPayoutDetail(id),
+  const {
+    data,
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["provider-payout-detail", payoutId],
+    queryFn: () => getPayoutDetail(payoutId),
+    enabled: Boolean(payoutId),
     staleTime: 5 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 
+  if (!payoutId) return <NotFoundState />;
   if (isLoading) return <SkeletonPage />;
-  if (!data) return <NotFound />;
 
-  const finalNet = data.netEarnings;
-  const hasAdjustments = data.adjustments !== 0;
+  const statusCode = extractStatusCode(error);
+  if (isError) {
+    if (statusCode === 404) return <NotFoundState />;
+    return <ErrorState message={extractErrorMessage(error, "The payout detail request failed.")} onRetry={() => refetch()} />;
+  }
+
+  if (!data) return <NotFoundState />;
+
+  const payout = data.data;
+  const amount = payoutAmount(payout);
+  const method = payout.merchant?.payoutMethod ?? "N/A";
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* ── Header ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
           <Link href="/dashboard/payments/payout-history">
-            <Button variant="ghost" size="sm" icon={<ArrowLeft />}>Back</Button>
+            <Button variant="ghost" size="sm" icon={<ArrowLeft />}>
+              Back
+            </Button>
           </Link>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payout Details</h1>
-              <Badge label={data.status} status={data.status} dot />
+              <Badge label={payout.status} status={payout.status} dot />
             </div>
             <p className="mt-0.5 text-sm text-slate-500">
-              Transaction ref: <span className="font-mono">{data.transactionReference}</span>
+              Payout ID: <span className="font-mono">{payout.id}</span>
             </p>
           </div>
         </div>
@@ -237,115 +171,68 @@ export default function PayoutDetailPage({ params }: { params: Promise<{ id: str
         </Button>
       </div>
 
-      {/* ── Net payout hero ── */}
       <div className="rounded-2xl bg-gradient-to-br from-emerald-600 to-green-700 p-6 text-white shadow-lg">
-        <p className="text-sm font-medium text-emerald-100">Net Payout Amount</p>
-        <p className="mt-2 text-4xl font-bold">{formatCurrency(finalNet, data.currency)}</p>
+        <p className="text-sm font-medium text-emerald-100">Payout Amount</p>
+        <p className="mt-2 text-4xl font-bold">{formatCurrency(amount, payout.currency)}</p>
         <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-emerald-100">
-          <span>Gross: {formatCurrency(data.grossAmount, data.currency)}</span>
-          <span>Commission: −{formatCurrency(data.platformCommission, data.currency)}</span>
-          {hasAdjustments && (
-            <span>Adjustments: {data.adjustments > 0 ? "+" : "−"}{formatCurrency(Math.abs(data.adjustments), data.currency)}</span>
-          )}
+          <span>Status: {payout.status}</span>
+          <span>Booking ID: {payout.bookingId}</span>
+          <span>Method: {method}</span>
         </div>
       </div>
 
-      {/* ── 4 detail cards ── */}
       <div className="grid gap-5 lg:grid-cols-2">
-        {/* Booking Information */}
-        <SectionCard title="Booking Information" icon={<BookOpen />}>
-          <InfoRow label="Booking Reference" value={data.bookingReference} mono />
-          <InfoRow label="Guest Name" value={data.guestName} />
-          <InfoRow label="Listing Name" value={data.listingName} />
-          <InfoRow label="Check-in Date" value={data.checkIn ? formatDate(data.checkIn) : "—"} />
-          <InfoRow label="Check-out Date" value={data.checkOut ? formatDate(data.checkOut) : "—"} />
+        <SectionCard title="Payout Information" icon={<BookOpen />}>
+          <InfoRow label="Payout ID" value={payout.id} mono />
+          <InfoRow label="Booking ID" value={payout.bookingId} mono />
+          <InfoRow label="Provider ID" value={payout.providerId} mono />
+          <InfoRow label="Merchant ID" value={payout.merchantId} mono />
+          <InfoRow label="Provider Payout ID" value={payout.providerPayoutId ?? "N/A"} mono />
         </SectionCard>
 
-        {/* Financial Breakdown */}
-        <SectionCard title="Financial Breakdown" icon={<Banknote />}>
-          <FinancialRow
-            label="Gross Booking Amount"
-            value={formatCurrency(data.grossAmount, data.currency)}
-          />
-          <FinancialRow
-            label={`Platform Commission (${data.commissionRate}%)`}
-            value={`−${formatCurrency(data.platformCommission, data.currency)}`}
-            tone="text-red-600 text-sm font-semibold"
-          />
-          {data.taxes > 0 && (
-            <FinancialRow
-              label="Taxes"
-              value={`−${formatCurrency(data.taxes, data.currency)}`}
-              tone="text-red-500 text-sm font-semibold"
-            />
-          )}
-          {hasAdjustments && (
-            <FinancialRow
-              label="Adjustments"
-              value={`${data.adjustments > 0 ? "+" : "−"}${formatCurrency(Math.abs(data.adjustments), data.currency)}`}
-              tone={data.adjustments > 0 ? "text-emerald-600 text-sm font-semibold" : "text-red-500 text-sm font-semibold"}
-              note={data.adjustmentNote || undefined}
-            />
-          )}
-          <FinancialRow
-            label="Net Earnings"
-            value={formatCurrency(finalNet, data.currency)}
-            large
-          />
+        <SectionCard title="Timing" icon={<CalendarDays />}>
+          <InfoRow label="Scheduled Date" value={formatDate(payout.scheduledAt)} />
+          <InfoRow label="Paid Date" value={payout.processedAt ? formatDate(payout.processedAt) : "N/A"} />
+          <InfoRow label="Created Date" value={formatDateTime(payout.createdAt)} />
+          <InfoRow label="Updated Date" value={formatDateTime(payout.updatedAt)} />
+          <InfoRow label="Current Status" value={payout.status} />
         </SectionCard>
 
-        {/* Transaction Information */}
-        <SectionCard title="Transaction Information" icon={<CreditCard />}>
-          <InfoRow label="Transaction Reference" value={data.transactionReference} mono />
-          <InfoRow label="Payout Date" value={data.payoutDate ? formatDate(data.payoutDate) : "Pending"} />
-          <InfoRow label="Payout Method" value={data.payoutMethod} />
-          <div className="flex items-start justify-between gap-4 py-3">
-            <span className="text-sm text-slate-500">Payout Status</span>
-            <Badge label={data.status} status={data.status} dot />
-          </div>
+        <SectionCard title="Merchant Setup" icon={<CreditCard />}>
+          <InfoRow label="Payout Method" value={method} />
+          <InfoRow label="Merchant Verified" value={payout.merchant?.isVerified ? "Verified" : "Not verified"} />
+          <InfoRow label="Currency" value={payout.currency} />
+          <InfoRow label="Amount" value={formatCurrency(amount, payout.currency)} />
         </SectionCard>
 
-        {/* Platform Policy */}
         <Card>
           <div className="mb-4 flex items-center gap-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-600 [&>svg]:h-4 [&>svg]:w-4">
               <CheckCircle2 />
             </span>
-            <h3 className="font-bold text-slate-800">Payout Policy</h3>
+            <h3 className="font-bold text-slate-800">Audit Fields</h3>
           </div>
-          <div className="space-y-3">
-            {[
-              { icon: <User />, text: "Payments are collected from travellers by the platform." },
-              { icon: <CheckCircle2 />, text: "Earnings are held until guest check-in is confirmed." },
-              { icon: <CalendarDays />, text: "A T+24h holding period applies after check-in." },
-              { icon: <Banknote />, text: "Commission is deducted before payout is released." },
-              { icon: <Hash />, text: "Each payout is assigned a unique transaction reference." },
-            ].map(({ icon, text }, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-xl bg-slate-50 p-3">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-white text-green-700 shadow-sm [&>svg]:h-3.5 [&>svg]:w-3.5">
-                  {icon}
-                </span>
-                <p className="text-sm text-slate-600">{text}</p>
-              </div>
-            ))}
+          <div className="divide-y divide-slate-100">
+            <InfoRow label="Failure Reason" value={payout.failureReason ?? "N/A"} />
+            <InfoRow label="Merchant Status" value={payout.merchant?.isVerified ? "Ready for payouts" : "Verification pending"} />
+            <InfoRow label="Last Updated" value={formatDateTime(payout.updatedAt)} />
+            <InfoRow label="First Recorded" value={formatDateTime(payout.createdAt)} />
           </div>
         </Card>
       </div>
 
-      {/* ── Actions ── */}
       <div className="flex flex-wrap gap-3">
         <Link href="/dashboard/payments/payout-history">
-          <Button variant="outline" icon={<ArrowLeft />}>Back to Payout History</Button>
+          <Button variant="outline" icon={<ArrowLeft />}>
+            Back to Payout History
+          </Button>
         </Link>
-        <Link href={`/dashboard/bookings?ref=${data.bookingReference}`}>
-          <Button variant="ghost" icon={<BookOpen />}>View Booking</Button>
+        <Link href="/dashboard/bookings">
+          <Button variant="ghost" icon={<BookOpen />}>
+            View Bookings
+          </Button>
         </Link>
-        <Button
-          variant="ghost"
-          icon={<RefreshCw />}
-          loading={isFetching}
-          onClick={() => refetch()}
-        >
+        <Button variant="ghost" icon={<RefreshCw />} loading={isFetching} onClick={() => refetch()}>
           Refresh
         </Button>
       </div>

@@ -118,9 +118,10 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
         let stripeCustomerId: string; //  declared only once now
 
         if (!customerAccount) {
-          const customer = await stripe.customers.create({
-            metadata: { userId },
-          });
+          const customer = await stripe.customers.create(
+            { metadata: { userId } },
+            { idempotencyKey: `stripe-cust-${userId}` }
+          );
 
           customerAccount = await prisma.customerAccount.create({
             data: {
