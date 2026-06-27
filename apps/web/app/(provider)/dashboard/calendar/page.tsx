@@ -1,34 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   AlertCircle,
-  Ban,
   BookOpen,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
-  CreditCard,
   Eye,
   Filter,
   Link2,
-  Loader2,
   Lock,
-  Mail,
-  MapPin,
-  Phone,
-  Plus,
-  RefreshCw,
   Search,
-  Trash2,
   User,
   X,
   XCircle,
 } from "lucide-react";
-import { api } from "@/lib/api";
 import { listingApi } from "@/lib/listing-api";
 import { cn, formatDate } from "@/lib/utils";
 import { Badge } from "@/components/ui/Badge";
@@ -61,15 +51,7 @@ interface Booking {
   notes: string;
   specialRequests: string;
   serviceDetails: string;
-}
-
-interface IcalFeed {
-  id: string;
-  name: string;
-  url: string;
-  platform: string;
-  lastSyncAt?: string;
-  status: "active" | "syncing" | "failed" | "paused" | "synced";
+  currency: string;
 }
 
 interface BlockedDate {
@@ -79,11 +61,6 @@ interface BlockedDate {
   reason: string;
   type: "blocked" | "maintenance" | "unavailable" | "synced";
   platform?: string;
-}
-
-interface Notice {
-  type: "success" | "error";
-  message: string;
 }
 
 const STATUS_OPTIONS = [
@@ -110,13 +87,6 @@ const RANGE_OPTIONS = [
   { value: "custom", label: "Custom Range" },
 ];
 
-const PLATFORM_OPTIONS = [
-  { value: "Airbnb", label: "Airbnb" },
-  { value: "Booking.com", label: "Booking.com" },
-  { value: "Google Calendar", label: "Google Calendar" },
-  { value: "Custom iCal URL", label: "Custom iCal URL" },
-];
-
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const statusStyles: Record<BookingStatus, string> = {
@@ -127,13 +97,7 @@ const statusStyles: Record<BookingStatus, string> = {
   completed: "border-green-200 bg-green-50 text-green-800",
 };
 
-const eventDotStyles: Record<BookingStatus, string> = {
-  pending: "bg-yellow-500",
-  confirmed: "bg-emerald-500",
-  cancelled: "bg-red-500",
-  failed: "bg-orange-500",
-  completed: "bg-green-500",
-};
+const cancellationStatuses = new Set(["cancelled", "cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"]);
 
 function unwrapList<T>(payload: unknown, keys: string[]): T[] {
   const root = payload as Record<string, unknown>;
@@ -155,6 +119,8 @@ function safeString(value: unknown, fallback = "") {
 
 function normalizeStatus(value: unknown): BookingStatus {
   const status = safeString(value, "pending").toLowerCase();
+  if (status === "pending_payment") return "pending";
+  if (cancellationStatuses.has(status)) return "cancelled";
   if (["pending", "confirmed", "cancelled", "failed", "completed"].includes(status)) {
     return status as BookingStatus;
   }
@@ -166,6 +132,13 @@ function normalizePaymentStatus(value: unknown): PaymentStatus {
   if (["paid", "pending", "failed", "refunded"].includes(status)) {
     return status as PaymentStatus;
   }
+  return "pending";
+}
+
+function inferPaymentStatus(status: BookingStatus): PaymentStatus {
+  if (status === "confirmed" || status === "completed") return "paid";
+  if (status === "cancelled") return "refunded";
+  if (status === "failed") return "failed";
   return "pending";
 }
 
@@ -215,53 +188,68 @@ function normalizeBooking(raw: unknown): Booking {
   const payment = (item.payment ?? {}) as Record<string, unknown>;
   const listing = (item.listing ?? item.property ?? item.service ?? item.vehicle ?? {}) as Record<string, unknown>;
   const id = safeString(item.id ?? item._id ?? item.bookingId, "unknown-booking");
+  const status = normalizeStatus(item.status);
+  const firstName = safeString(item.guestFirstName ?? customer.firstName);
+  const lastName = safeString(item.guestLastName ?? customer.lastName);
+  const providerGuestName = [firstName, lastName].filter(Boolean).join(" ");
+  const guestName = item.customerName ?? item.guestName ?? (providerGuestName || customer.name || customer.fullName);
+  const checkIn = safeString(item.checkIn ?? item.checkInDate ?? item.startDate ?? item.start ?? item.pickupDatetime, new Date().toISOString());
+  const checkOut = safeString(item.checkOut ?? item.checkOutDate ?? item.endDate ?? item.end ?? item.returnDatetime, checkIn);
 
   return {
     id,
     bookingId: safeString(item.bookingId ?? item.reference ?? item.code, id),
-    customerName: formatGuestName(safeString(
-      item.customerName ?? item.guestName ?? customer.name ?? customer.fullName,
-      "Guest"
-    )),
-    phone: "Hidden",
-    email: "Hidden",
-    propertyName: getNestedString(item, ["listing", "property", "service", "vehicle", "listingName", "propertyName"], "Listing"),
-    checkIn: safeString(item.checkIn ?? item.checkInDate ?? item.startDate ?? item.start, new Date().toISOString()),
-    checkOut: safeString(item.checkOut ?? item.checkOutDate ?? item.endDate ?? item.end, new Date().toISOString()),
+    customerName: formatGuestName(safeString(guestName, "Guest")),
+    phone: safeString(item.guestPhone ?? customer.phone, "Hidden"),
+    email: safeString(item.guestEmail ?? customer.email, "Hidden"),
+    propertyName: getNestedString(item, ["listing", "property", "service", "vehicle", "listingTitle", "listingName", "propertyName"], "Listing"),
+    checkIn,
+    checkOut,
     bookingDate: safeString(item.bookingDate ?? item.createdAt ?? item.date, new Date().toISOString()),
-    status: normalizeStatus(item.status),
-    paymentStatus: normalizePaymentStatus(item.paymentStatus ?? payment.status),
+    status,
+    paymentStatus: normalizePaymentStatus(item.paymentStatus ?? payment.status ?? inferPaymentStatus(status)),
     guestCount: Number(item.guestCount ?? item.guests ?? item.adults ?? 1),
-    totalAmount: Number(item.totalAmount ?? item.amount ?? payment.amount ?? 0),
+    totalAmount: Number(item.providerPayout ?? item.totalAmount ?? item.amount ?? payment.amount ?? 0),
     paymentMethod: safeString(item.paymentMethod ?? payment.method, "Not provided"),
     transactionId: safeString(item.transactionId ?? payment.transactionId ?? payment.id, "Not provided"),
     notes: safeString(item.notes, "No notes"),
     specialRequests: safeString(item.specialRequests ?? item.requests, "No special requests"),
     serviceDetails: safeString(
-      item.serviceDetails ?? listing.name ?? listing.title,
+      item.serviceDetails ?? item.listingCategory ?? listing.name ?? listing.title,
       getNestedString(item, ["listing", "property", "service", "vehicle"], "Reservation")
     ),
+    currency: safeString(item.currency, "USD"),
   };
 }
 
-function normalizeFeedStatus(status: string): IcalFeed["status"] {
-  const s = status?.toLowerCase();
-  if (s === "error" || s === "failed") return "failed";
-  if (s === "pending" || s === "syncing") return "syncing";
-  if (s === "paused") return "paused";
-  return "synced";
-}
-
-function normalizeFeed(raw: unknown): IcalFeed {
+function normalizeAvailabilityBooking(raw: unknown, listing?: Listing): Booking | null {
   const item = raw as Record<string, unknown>;
-  const rawStatus = safeString(item.status ?? item.syncStatus, "synced");
+  const start = safeString(item.start);
+  const end = safeString(item.end, start);
+  if (!start) return null;
+  const status = normalizeStatus(item.status);
+  const id = safeString(item.id ?? item.reference, crypto.randomUUID());
+
   return {
-    id: safeString(item.id ?? item._id ?? item.feedId, crypto.randomUUID()),
-    name: safeString(item.name ?? item.feedName, "External Calendar"),
-    url: safeString(item.url ?? item.feedUrl, ""),
-    platform: safeString(item.platform ?? item.source, "Custom iCal URL"),
-    lastSyncAt: safeString(item.lastSyncAt ?? item.lastSyncTime ?? item.updatedAt),
-    status: normalizeFeedStatus(rawStatus),
+    id,
+    bookingId: safeString(item.reference, id),
+    customerName: formatGuestName(safeString(item.guestName, "Guest")),
+    phone: "Hidden",
+    email: "Hidden",
+    propertyName: listing?.name ?? "Selected listing",
+    checkIn: start,
+    checkOut: end,
+    bookingDate: start,
+    status,
+    paymentStatus: inferPaymentStatus(status),
+    guestCount: 1,
+    totalAmount: 0,
+    paymentMethod: "Not provided",
+    transactionId: "Not provided",
+    notes: "No notes",
+    specialRequests: "No special requests",
+    serviceDetails: listing?.category ?? "Reservation",
+    currency: listing?.currency ?? "USD",
   };
 }
 
@@ -339,16 +327,18 @@ function bookingTouchesDay(booking: Booking, day: string) {
   return dateInRange(day, booking.checkIn, booking.checkOut);
 }
 
+function rangesOverlap(start: string, end: string, rangeStart: string, rangeEnd: string) {
+  const from = toISODate(start);
+  const to = toISODate(end);
+  return from <= rangeEnd && to >= rangeStart;
+}
+
 function moveDate(date: Date, view: CalendarView, direction: -1 | 1) {
   const d = new Date(date);
   if (view === "day") d.setDate(d.getDate() + direction);
   if (view === "week") d.setDate(d.getDate() + direction * 7);
   if (view === "month") d.setMonth(d.getMonth() + direction);
   return d;
-}
-
-function money(value: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value || 0);
 }
 
 async function fetchListings() {
@@ -358,21 +348,40 @@ async function fetchListings() {
 
 async function fetchBookings(params: Record<string, string>) {
   try {
-    const response = await api.get("/guests/me/bookings", { params });
-    return unwrapList<unknown>(response.data, ["bookings", "items", "results"]).map(normalizeBooking);
+    const limit = 50;
+    const { from, to, paymentStatus, status, search } = params;
+    const apiParams: Record<string, string | number> = { offset: 0, limit };
+    if (status && status !== "failed") apiParams.status = status === "pending" ? "pending_payment" : status;
+    if (search) apiParams.search = search;
+
+    const response = await listingApi.get("/provider/bookings", { params: apiParams });
+    const data = response.data?.data ?? response.data;
+    const total = Number(data?.total ?? 0);
+    const bookings = unwrapList<unknown>(response.data, ["bookings", "items", "results"]).map(normalizeBooking);
+
+    for (let offset = limit; offset < total; offset += limit) {
+      const page = await listingApi.get("/provider/bookings", { params: { ...apiParams, offset, limit } });
+      bookings.push(...unwrapList<unknown>(page.data, ["bookings", "items", "results"]).map(normalizeBooking));
+    }
+
+    return bookings.filter((booking) => {
+      if (from && to && !rangesOverlap(booking.checkIn, booking.checkOut, from, to)) return false;
+      if (status && booking.status !== status) return false;
+      if (paymentStatus && booking.paymentStatus !== paymentStatus) return false;
+      return true;
+    });
   } catch {
     return [];
   }
 }
 
-async function fetchBookingDetails(id: string) {
-  const response = await api.get(`/guests/me/bookings/${id}`);
-  return normalizeBooking((response.data?.data ?? response.data) as unknown);
-}
-
-async function fetchIcalFeeds(listingId: string) {
-  const response = await listingApi.get(`/listings/${listingId}/ical-feeds`);
-  return unwrapList<unknown>(response.data, ["feeds", "icalFeeds", "items", "results"]).map(normalizeFeed);
+async function fetchAvailability(listingId: string, from: string, to: string) {
+  const response = await listingApi.get(`/provider/availability/${listingId}`, { params: { from, to } });
+  const data = response.data?.data ?? response.data;
+  return {
+    bookedRanges: unwrapList<unknown>(data, ["bookedRanges"]),
+    blockedRanges: unwrapList<unknown>(data, ["blockedRanges"]).map(normalizeBlockedDate),
+  };
 }
 
 async function fetchBlockedDates(listingId: string) {
@@ -417,7 +426,6 @@ function CalendarSkeleton() {
 }
 
 export default function CalendarPage() {
-  const queryClient = useQueryClient();
   const [view, setView] = useState<CalendarView>("month");
   const [cursorDate, setCursorDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(toISODate(new Date()));
@@ -429,141 +437,8 @@ export default function CalendarPage() {
   const [customTo, setCustomTo] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const [feedForm, setFeedForm] = useState({ name: "", url: "", platform: "Airbnb" });
-
-  // Date range selection state for actions (Section 12.4)
-  const [rangeStart, setRangeStart] = useState<string | null>(null);
-  const [rangeEnd, setRangeEnd] = useState<string | null>(null);
-  
-  // Custom blocks & offers persistence
-  const [manualBlocks, setManualBlocks] = useState<Array<{ start: string; end: string; reason: string }>>([]);
-  const [customOffers, setCustomOffers] = useState<Array<{ start: string; end: string; type: "percentage" | "fixed"; value: number; label: string }>>([]);
-
-  // Form states for adding custom offer
-  const [offerForm, setOfferForm] = useState({ type: "percentage" as "percentage" | "fixed", value: 0, label: "" });
-  const [blockReason, setBlockReason] = useState("Maintenance");
-
-  useEffect(() => {
-    if (!selectedListing) {
-      setManualBlocks([]);
-      setCustomOffers([]);
-      return;
-    }
-    const blocksKey = `zika:blocks:${selectedListing}`;
-    const offersKey = `zika:offers:${selectedListing}`;
-    try {
-      const saved = localStorage.getItem(blocksKey);
-      setManualBlocks(saved ? JSON.parse(saved) : []);
-    } catch {
-      setManualBlocks([]);
-    }
-    try {
-      const saved = localStorage.getItem(offersKey);
-      setCustomOffers(saved ? JSON.parse(saved) : []);
-    } catch {
-      setCustomOffers([]);
-    }
-  }, [selectedListing]);
-
   const handleDateClick = (dayKey: string) => {
     setSelectedDate(dayKey);
-    if (!rangeStart || (rangeStart && rangeEnd)) {
-      setRangeStart(dayKey);
-      setRangeEnd(null);
-    } else {
-      if (dayKey >= rangeStart) {
-        setRangeEnd(dayKey);
-      } else {
-        setRangeStart(dayKey);
-        setRangeEnd(null);
-      }
-    }
-  };
-
-  const handleBlockDates = () => {
-    if (!selectedListing || !rangeStart) return;
-    const start = rangeStart;
-    const end = rangeEnd || rangeStart;
-    
-    const newBlock = { start, end, reason: blockReason };
-    const updated = [...manualBlocks, newBlock];
-    setManualBlocks(updated);
-    localStorage.setItem(`zika:blocks:${selectedListing}`, JSON.stringify(updated));
-    
-    setNotice({ type: "success", message: `Dates blocked! Immediately pushed VEVENT BUSY block to the listing's iCal feed.` });
-    setRangeStart(null);
-    setRangeEnd(null);
-  };
-
-  const handleUnblockDates = () => {
-    if (!selectedListing || !rangeStart) return;
-    const start = rangeStart;
-    const end = rangeEnd || rangeStart;
-    
-    const updated = manualBlocks.filter(b => b.end < start || b.start > end);
-    setManualBlocks(updated);
-    localStorage.setItem(`zika:blocks:${selectedListing}`, JSON.stringify(updated));
-    
-    setNotice({ type: "success", message: "Dates unblocked." });
-    setRangeStart(null);
-    setRangeEnd(null);
-  };
-
-  const handleActivateOffer = () => {
-    if (!selectedListing || !rangeStart) return;
-    const start = rangeStart;
-    const end = rangeEnd || rangeStart;
-    
-    if (!offerForm.label.trim()) {
-      setNotice({ type: "error", message: "Please specify a label for the offer (max 6 chars)." });
-      return;
-    }
-
-    const newOffer = { start, end, type: offerForm.type, value: Number(offerForm.value), label: offerForm.label.slice(0, 6) };
-    const updated = [...customOffers, newOffer];
-    setCustomOffers(updated);
-    localStorage.setItem(`zika:offers:${selectedListing}`, JSON.stringify(updated));
-    
-    setNotice({ type: "success", message: `Activated offer "${offerForm.label}" for selected dates.` });
-    setOfferForm({ type: "percentage", value: 0, label: "" });
-    setRangeStart(null);
-    setRangeEnd(null);
-  };
-
-  const handleRemoveOffer = () => {
-    if (!selectedListing || !rangeStart) return;
-    const start = rangeStart;
-    const end = rangeEnd || rangeStart;
-    
-    const updated = customOffers.filter(o => o.end < start || o.start > end);
-    setCustomOffers(updated);
-    localStorage.setItem(`zika:offers:${selectedListing}`, JSON.stringify(updated));
-    
-    setNotice({ type: "success", message: "Offer removed." });
-    setRangeStart(null);
-    setRangeEnd(null);
-  };
-
-  // Helper matching states
-  const isDateInRanges = (day: string, ranges: Array<{ start: string; end: string }>) => {
-    return ranges.some(r => day >= r.start.slice(0, 10) && day <= r.end.slice(0, 10));
-  };
-
-  const getProviderOfferForDay = (day: string) => {
-    return customOffers.find(o => day >= o.start.slice(0, 10) && day <= o.end.slice(0, 10));
-  };
-
-  const isPromoDay = (day: string, dayOfWeek: number) => {
-    return dayOfWeek === 0 || dayOfWeek === 6; // Mock promo on weekends
-  };
-
-  const isSyncDelayed = (feed: any) => {
-    if (feed.status === "failed") return true;
-    if (!feed.lastSyncAt) return false;
-    const lastSyncTime = new Date(feed.lastSyncAt).getTime();
-    const thirtyMinsMs = 30 * 60 * 1000;
-    return (new Date().getTime() - lastSyncTime) > thirtyMinsMs;
   };
 
   const dateRange = useMemo(
@@ -583,8 +458,6 @@ export default function CalendarPage() {
     queryKey: ["calendar-bookings", dateRange, statusFilter, paymentFilter, searchTerm],
     queryFn: () =>
       fetchBookings({
-        page: "1",
-        limit: "100",
         from: dateRange.from,
         to: dateRange.to,
         ...(statusFilter !== "all" ? { status: statusFilter } : {}),
@@ -593,15 +466,14 @@ export default function CalendarPage() {
       }),
   });
 
-  const { data: selectedBooking, isLoading: detailsLoading } = useQuery({
-    queryKey: ["calendar-booking-details", selectedBookingId],
-    queryFn: () => fetchBookingDetails(selectedBookingId!),
-    enabled: !!selectedBookingId,
-  });
+  const selectedListingRecord = useMemo(
+    () => listings.find((listing) => listing.id === selectedListing),
+    [listings, selectedListing]
+  );
 
-  const { data: feeds = [], isLoading: feedsLoading } = useQuery({
-    queryKey: ["calendar-ical-feeds", selectedListing],
-    queryFn: () => fetchIcalFeeds(selectedListing),
+  const { data: availability, isLoading: availabilityLoading } = useQuery({
+    queryKey: ["calendar-availability", selectedListing, dateRange],
+    queryFn: () => fetchAvailability(selectedListing, dateRange.from, dateRange.to),
     enabled: !!selectedListing,
   });
 
@@ -611,78 +483,35 @@ export default function CalendarPage() {
     enabled: !!selectedListing,
   });
 
-  const actionMutation = useMutation({
-    mutationFn: async ({ id, action }: { id: string; action: "confirm" | "cancel" | "fail" }) => {
-      if (action === "confirm") return api.patch(`/bookings/${id}/confirm`);
-      if (action === "fail") return api.patch(`/bookings/${id}/fail`);
-      return api.post(`/provider/bookings/${id}/cancel`);
-    },
-    onSuccess: (_, variables) => {
-      setNotice({ type: "success", message: `Booking ${variables.action} action completed.` });
-      queryClient.invalidateQueries({ queryKey: ["calendar-bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["calendar-booking-details"] });
-    },
-    onError: () => setNotice({ type: "error", message: "Booking action failed. Please try again." }),
-  });
-
-  const addFeedMutation = useMutation({
-    mutationFn: () =>
-      listingApi.post(`/listings/${selectedListing}/ical-feeds`, {
-        name: feedForm.name,
-        feedName: feedForm.name,
-        url: feedForm.url,
-        feedUrl: feedForm.url,
-        platform: feedForm.platform,
-        source: feedForm.platform,
-      }),
-    onSuccess: () => {
-      setFeedForm({ name: "", url: "", platform: "Airbnb" });
-      setNotice({ type: "success", message: "iCal feed added." });
-      queryClient.invalidateQueries({ queryKey: ["calendar-ical-feeds", selectedListing] });
-      queryClient.invalidateQueries({ queryKey: ["calendar-blocked-dates", selectedListing] });
-    },
-    onError: () => setNotice({ type: "error", message: "Could not add iCal feed." }),
-  });
-
-  const deleteFeedMutation = useMutation({
-    mutationFn: (feedId: string) => listingApi.delete(`/listings/${selectedListing}/ical-feeds/${feedId}`),
-    onSuccess: () => {
-      setNotice({ type: "success", message: "iCal feed removed." });
-      queryClient.invalidateQueries({ queryKey: ["calendar-ical-feeds", selectedListing] });
-      queryClient.invalidateQueries({ queryKey: ["calendar-blocked-dates", selectedListing] });
-    },
-    onError: () => setNotice({ type: "error", message: "Could not delete iCal feed." }),
-  });
-
-  const syncFeedMutation = useMutation({
-    mutationFn: (feedId: string) => listingApi.post(`/listings/${selectedListing}/ical-feeds/${feedId}/sync`),
-    onSuccess: () => {
-      setNotice({ type: "success", message: "Calendar sync started." });
-      queryClient.invalidateQueries({ queryKey: ["calendar-ical-feeds", selectedListing] });
-      queryClient.invalidateQueries({ queryKey: ["calendar-blocked-dates", selectedListing] });
-    },
-    onError: () => setNotice({ type: "error", message: "Calendar sync failed." }),
-  });
-
   const visibleDays = useMemo(() => getVisibleDays(cursorDate, view), [cursorDate, view]);
   const today = toISODate(new Date());
   const currentMonthLabel = cursorDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-  const selectedDateBookings = bookings.filter((booking) => bookingTouchesDay(booking, selectedDate));
+  const availabilityBookings = useMemo(
+    () => (availability?.bookedRanges ?? [])
+      .map((range) => normalizeAvailabilityBooking(range, selectedListingRecord))
+      .filter((booking): booking is Booking => Boolean(booking)),
+    [availability?.bookedRanges, selectedListingRecord]
+  );
+  const calendarBookings = selectedListing ? availabilityBookings : bookings;
+  const calendarBlockedDates = selectedListing && availability?.blockedRanges ? availability.blockedRanges : blockedDates;
+  const calendarLoading = bookingsLoading || (!!selectedListing && availabilityLoading);
+  const selectedBooking = selectedBookingId ? calendarBookings.find((booking) => booking.id === selectedBookingId) : undefined;
+  const selectedDateBookings = calendarBookings.filter((booking) => bookingTouchesDay(booking, selectedDate));
 
   const summary = useMemo(() => {
-    const todayCheckIns = bookings.filter((booking) => toISODate(booking.checkIn) === today).length;
-    const todayCheckOuts = bookings.filter((booking) => toISODate(booking.checkOut) === today).length;
+    const todayCheckIns = calendarBookings.filter((booking) => toISODate(booking.checkIn) === today).length;
+    const todayCheckOuts = calendarBookings.filter((booking) => toISODate(booking.checkOut) === today).length;
     return {
-      total: bookings.length,
+      total: calendarBookings.length,
       todayCheckIns,
       todayCheckOuts,
-      pending: bookings.filter((booking) => booking.status === "pending").length,
-      confirmed: bookings.filter((booking) => booking.status === "confirmed").length,
-      cancelled: bookings.filter((booking) => booking.status === "cancelled").length,
+      pending: calendarBookings.filter((booking) => booking.status === "pending").length,
+      confirmed: calendarBookings.filter((booking) => booking.status === "confirmed").length,
+      cancelled: calendarBookings.filter((booking) => booking.status === "cancelled").length,
     };
-  }, [bookings, today]);
+  }, [calendarBookings, today]);
 
-  const showEmpty = !bookingsLoading && bookings.length === 0;
+  const showEmpty = !calendarLoading && calendarBookings.length === 0 && calendarBlockedDates.length === 0;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -703,25 +532,6 @@ export default function CalendarPage() {
           </Button>
         }
       />
-
-      {notice && (
-        <div
-          className={cn(
-            "flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm",
-            notice.type === "success"
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-red-200 bg-red-50 text-red-800"
-          )}
-        >
-          <span className="flex items-center gap-2">
-            {notice.type === "success" ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-            {notice.message}
-          </span>
-          <button onClick={() => setNotice(null)} className="rounded-lg p-1 hover:bg-white/70">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Total Bookings" count={summary.total} icon={<BookOpen />} tone="bg-green-700 text-white" />
@@ -794,13 +604,13 @@ export default function CalendarPage() {
               <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-slate-300" />Blocked</span>
             </div>
 
-            {bookingsLoading ? (
+            {calendarLoading ? (
               <CalendarSkeleton />
             ) : showEmpty ? (
               <div className="flex min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed border-border text-center">
                 <CalendarDays className="h-12 w-12 text-slate-300" />
-                <p className="mt-3 font-semibold text-slate-900">No bookings scheduled</p>
-                <p className="mt-1 text-sm text-slate-500">Upcoming reservations will appear here.</p>
+                <p className="mt-3 font-semibold text-slate-900">No calendar entries scheduled</p>
+                <p className="mt-1 text-sm text-slate-500">Reservations and blocked dates will appear here.</p>
               </div>
             ) : (
               <>
@@ -814,26 +624,17 @@ export default function CalendarPage() {
                 <div className="grid grid-cols-7">
                   {visibleDays.map((day) => {
                     const dayKey = toISODate(day);
-                    const dayOfWeek = day.getDay();
-                    const dayBookings = bookings.filter((booking) => bookingTouchesDay(booking, dayKey));
-                    const dayBlocks = blockedDates.filter((blocked) => dateInRange(dayKey, blocked.start, blocked.end));
+                    const dayBookings = calendarBookings.filter((booking) => bookingTouchesDay(booking, dayKey));
+                    const dayBlocks = calendarBlockedDates.filter((blocked) => dateInRange(dayKey, blocked.start, blocked.end));
                     const isToday = dayKey === today;
                     const isSelected = dayKey === selectedDate;
-                    
-                    const hasManualBlock = isDateInRanges(dayKey, manualBlocks);
                     const hasExternalHold = dayBlocks.length > 0;
                     const hasBooking = dayBookings.some(b => b.status === "confirmed" || b.status === "completed");
                     const hasActiveLock = dayBookings.some(b => b.status === "pending");
-                    const providerOffer = getProviderOfferForDay(dayKey);
-                    const hasPromo = isPromoDay(dayKey, dayOfWeek);
-                    
-                    const isInSelection = rangeStart && (rangeEnd ? (dayKey >= rangeStart && dayKey <= rangeEnd) : (dayKey === rangeStart));
                     const isOutsideMonth = view === "month" && day.getMonth() !== cursorDate.getMonth();
                     
                     let cellBgClass = "bg-white text-slate-800";
-                    if (hasManualBlock) {
-                      cellBgClass = "bg-slate-700 text-white border-slate-800";
-                    } else if (hasExternalHold) {
+                    if (hasExternalHold) {
                       cellBgClass = "bg-[repeating-linear-gradient(45deg,#f8fafc,#f8fafc_8px,#f1f5f9_8px,#f1f5f9_16px)] text-slate-500 border-slate-200";
                     } else if (hasBooking) {
                       cellBgClass = "bg-emerald-600 text-white border-emerald-700";
@@ -848,9 +649,8 @@ export default function CalendarPage() {
                         className={cn(
                           "min-h-[116px] border-b border-r border-border p-2 text-left transition-colors relative hover:opacity-90",
                           view === "day" && "col-span-7 min-h-[300px]",
-                          isOutsideMonth && !hasBooking && !hasManualBlock && "opacity-40",
-                          cellBgClass,
-                          isInSelection && "ring-2 ring-primary ring-inset bg-primary/10"
+                          isOutsideMonth && !hasBooking && "opacity-40",
+                          cellBgClass
                         )}
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
@@ -864,25 +664,9 @@ export default function CalendarPage() {
                             {day.getDate()}
                           </span>
                           
-                          <div className="flex flex-wrap gap-1 items-center">
-                            {hasPromo && (
-                              <span className="rounded bg-red-600 text-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider">
-                                Promo
-                              </span>
-                            )}
-                            {providerOffer && (
-                              <span className="rounded bg-orange-500 text-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider">
-                                {providerOffer.label}
-                              </span>
-                            )}
-                          </div>
+                          <div className="flex flex-wrap gap-1 items-center" />
                         </div>
                         <div className="space-y-1">
-                          {hasManualBlock && (
-                            <div className="truncate rounded-md bg-slate-800/80 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
-                              Blocked
-                            </div>
-                          )}
                           {hasExternalHold && (
                             <div className="truncate rounded-md bg-slate-200/80 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
                               Hold: {dayBlocks[0]?.platform || "iCal"}
@@ -910,76 +694,6 @@ export default function CalendarPage() {
           </div>
 
           <aside className="border-t border-border bg-slate-50 p-4 lg:border-l lg:border-t-0 space-y-6">
-            {/* Range Action Panel (Section 12.4 Actions) */}
-            {rangeStart && (
-              <div className="rounded-2xl border border-primary/20 bg-white p-4 shadow-sm space-y-4">
-                <div>
-                  <h4 className="text-sm font-bold text-slate-900">Manage Date Range</h4>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Selected: {formatDate(rangeStart)} {rangeEnd && `to ${formatDate(rangeEnd)}`}
-                  </p>
-                </div>
-                
-                <div className="space-y-3 pt-2 border-t border-slate-100">
-                  {/* Block dates form */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Block Dates</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Reason (e.g. Maintenance)"
-                        value={blockReason}
-                        onChange={(e) => setBlockReason(e.target.value)}
-                        className="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:outline-none"
-                      />
-                      <Button size="sm" onClick={handleBlockDates}>Block</Button>
-                    </div>
-                  </div>
-
-                  {/* Activate offer form */}
-                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Activate Offer</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={offerForm.type}
-                        onChange={(e) => setOfferForm(f => ({ ...f, type: e.target.value as "percentage" | "fixed" }))}
-                        className="rounded-xl border border-slate-200 px-2 py-1.5 text-xs focus:outline-none bg-white"
-                      >
-                        <option value="percentage">Percentage (%)</option>
-                        <option value="fixed">Fixed ($)</option>
-                      </select>
-                      <input
-                        type="number"
-                        placeholder="Value (e.g. 20)"
-                        value={offerForm.value || ""}
-                        onChange={(e) => setOfferForm(f => ({ ...f, value: Number(e.target.value) }))}
-                        className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex gap-2 mt-1">
-                      <input
-                        type="text"
-                        placeholder="Badge Label (max 6 chars, e.g. 20%)"
-                        value={offerForm.label}
-                        maxLength={6}
-                        onChange={(e) => setOfferForm(f => ({ ...f, label: e.target.value }))}
-                        className="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:outline-none"
-                      />
-                      <Button size="sm" variant="success" onClick={handleActivateOffer}>Activate</Button>
-                    </div>
-                  </div>
-
-                  {/* Range reset & removal actions */}
-                  <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-100">
-                    <Button size="xs" variant="outline" onClick={handleUnblockDates}>Unblock Dates</Button>
-                    <Button size="xs" variant="outline" onClick={handleRemoveOffer}>Remove Offer</Button>
-                    <Button size="xs" variant="ghost" onClick={() => { setRangeStart(null); setRangeEnd(null); }}>Cancel</Button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Single Day Booking Details */}
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <div>
@@ -1008,18 +722,6 @@ export default function CalendarPage() {
                       </div>
                       <p className="text-xs text-slate-500">{booking.propertyName}</p>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {booking.status === "pending" && (
-                          <>
-                            <Button size="xs" variant="success" onClick={() => actionMutation.mutate({ id: booking.id, action: "confirm" })}>Confirm</Button>
-                            <Button size="xs" variant="danger" onClick={() => actionMutation.mutate({ id: booking.id, action: "cancel" })}>Cancel</Button>
-                          </>
-                        )}
-                        {booking.status === "confirmed" && (
-                          <>
-                            <Button size="xs" variant="outline" onClick={() => actionMutation.mutate({ id: booking.id, action: "fail" })}>Mark Failed</Button>
-                            <Button size="xs" variant="danger" onClick={() => actionMutation.mutate({ id: booking.id, action: "cancel" })}>Cancel</Button>
-                          </>
-                        )}
                         <Button size="xs" variant="ghost" icon={<Eye />} onClick={() => setSelectedBookingId(booking.id)}>Details</Button>
                       </div>
                     </div>
@@ -1040,24 +742,24 @@ export default function CalendarPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-xl bg-emerald-50 p-4">
               <p className="text-xs font-medium text-emerald-700">Occupied Dates</p>
-              <p className="mt-2 text-2xl font-bold text-emerald-900">{new Set(bookings.flatMap((booking) => [toISODate(booking.checkIn), toISODate(booking.checkOut)])).size}</p>
+              <p className="mt-2 text-2xl font-bold text-emerald-900">{new Set(calendarBookings.flatMap((booking) => [toISODate(booking.checkIn), toISODate(booking.checkOut)])).size}</p>
             </div>
             <div className="rounded-xl bg-slate-100 p-4">
               <p className="text-xs font-medium text-slate-600">Blocked Dates</p>
-              <p className="mt-2 text-2xl font-bold text-slate-900">{blockedDates.length}</p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">{calendarBlockedDates.length}</p>
             </div>
             <div className="rounded-xl bg-green-50 p-4">
               <p className="text-xs font-medium text-green-700">Synced Reservations</p>
-              <p className="mt-2 text-2xl font-bold text-green-900">{blockedDates.filter((date) => date.type === "synced" || date.platform).length}</p>
+              <p className="mt-2 text-2xl font-bold text-green-900">{calendarBlockedDates.filter((date) => date.type === "synced" || date.platform).length}</p>
             </div>
           </div>
           <div className="mt-4 space-y-2">
-            {blockedLoading ? (
+            {blockedLoading || (!!selectedListing && availabilityLoading) ? (
               <div className="h-20 rounded-xl bg-slate-100 animate-pulse" />
-            ) : blockedDates.length === 0 ? (
+            ) : calendarBlockedDates.length === 0 ? (
               <p className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">No blocked, maintenance, unavailable, or synced dates found.</p>
             ) : (
-              blockedDates.slice(0, 5).map((blocked) => (
+              calendarBlockedDates.slice(0, 5).map((blocked) => (
                 <div key={blocked.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
                   <div className="flex items-center gap-3">
                     <Lock className="h-4 w-4 text-slate-500" />
@@ -1088,55 +790,29 @@ export default function CalendarPage() {
             />
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_160px]">
-            <Input placeholder="Feed name" value={feedForm.name} onChange={(event) => setFeedForm((form) => ({ ...form, name: event.target.value }))} />
-            <Input placeholder="https://example.com/calendar.ics" value={feedForm.url} onChange={(event) => setFeedForm((form) => ({ ...form, url: event.target.value }))} />
-            <Select value={feedForm.platform} onChange={(event) => setFeedForm((form) => ({ ...form, platform: event.target.value }))} options={PLATFORM_OPTIONS} />
-          </div>
-          <div className="mt-3 flex justify-end">
-            <Button
-              icon={<Plus />}
-              disabled={!selectedListing || !feedForm.name || !feedForm.url}
-              loading={addFeedMutation.isPending}
-              onClick={() => addFeedMutation.mutate()}
-            >
-              Add Feed
-            </Button>
+          <div className="rounded-xl border border-border bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase text-slate-500">Export URL</p>
+            <p className="mt-2 break-all text-sm font-medium text-slate-800">
+              {selectedListing ? `/listings/${selectedListing}/ical` : "Select a listing to view its iCal export endpoint."}
+            </p>
+            <p className="mt-2 text-xs text-slate-500">The current API list exposes iCal and blocked-date reads only. Feed import/add/sync controls are hidden until those APIs are available.</p>
           </div>
 
           <div className="mt-5 space-y-2">
             {!selectedListing ? (
-              <p className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">Select a listing to manage external calendar feeds.</p>
-            ) : feedsLoading ? (
-              <div className="h-24 rounded-xl bg-slate-100 animate-pulse" />
-            ) : feeds.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">No iCal feeds connected yet.</p>
+              <p className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">Select a listing to view connected calendar data.</p>
             ) : (
-              feeds.map((feed) => (
-                <div key={feed.id} className="rounded-xl border border-border p-3">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-semibold text-slate-900">{feed.name}</p>
-                        <Badge label={feed.status} status={feed.status === "failed" ? "failed" : "confirmed"} />
-                        {isSyncDelayed(feed) && (
-                          <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 animate-pulse border border-red-200">
-                            Warning: Sync Outdated/Failed ({">"}30m)
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 truncate text-xs text-slate-500">{feed.url}</p>
-                      <p className="mt-1 text-xs text-slate-400">{feed.platform} · Last sync {feed.lastSyncAt ? formatDate(feed.lastSyncAt) : "Never"}</p>
-                    </div>
-                    <div className="flex shrink-0 gap-2">
-                      <Button size="xs" variant="outline" icon={<RefreshCw />} loading={syncFeedMutation.isPending} onClick={() => syncFeedMutation.mutate(feed.id)}>
-                        Sync Now
-                      </Button>
-                      <Button size="xs" variant="ghost" icon={<Trash2 />} onClick={() => deleteFeedMutation.mutate(feed.id)} />
-                    </div>
+              <div className="rounded-xl border border-border p-4">
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">iCal export ready</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Use the endpoint above wherever an external platform asks for the ZikaBooking calendar URL. Imported external feeds can be added here later when a feed-management API is available.
+                    </p>
                   </div>
                 </div>
-              ))
+              </div>
             )}
           </div>
         </Card>
@@ -1156,10 +832,9 @@ export default function CalendarPage() {
               <Button variant="ghost" icon={<X />} onClick={() => setSelectedBookingId(null)} />
             </div>
 
-            {detailsLoading || !selectedBooking ? (
+            {!selectedBooking ? (
               <div className="flex min-h-[300px] items-center justify-center text-slate-500">
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Loading booking details
+                Select a visible reservation to view details.
               </div>
             ) : (
               <div className="space-y-5">
@@ -1188,7 +863,7 @@ export default function CalendarPage() {
                 <div className="rounded-xl border border-border p-4">
                   <h4 className="mb-3 font-semibold text-slate-900">Payment Details</h4>
                   <div className="grid gap-3 text-sm sm:grid-cols-2">
-                    <Info label="Net Payout" value={<NetCurrency amount={selectedBooking.totalAmount * 0.95} />} />
+                    <Info label="Net Payout" value={<NetCurrency amount={selectedBooking.totalAmount} currency={selectedBooking.currency} />} />
                     <Info label="Payment Method" value={selectedBooking.paymentMethod} />
                     <Info label="Payment Status" value={selectedBooking.paymentStatus} />
                     <Info label="Transaction ID" value={selectedBooking.transactionId} />
@@ -1203,19 +878,8 @@ export default function CalendarPage() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-                  {selectedBooking.status === "pending" && (
-                    <>
-                      <Button variant="success" icon={<CheckCircle2 />} onClick={() => actionMutation.mutate({ id: selectedBooking.id, action: "confirm" })}>Confirm Booking</Button>
-                      <Button variant="danger" icon={<Ban />} onClick={() => actionMutation.mutate({ id: selectedBooking.id, action: "cancel" })}>Cancel Booking</Button>
-                    </>
-                  )}
-                  {selectedBooking.status === "confirmed" && (
-                    <>
-                      <Button variant="outline" icon={<CreditCard />} onClick={() => actionMutation.mutate({ id: selectedBooking.id, action: "fail" })}>Mark Failed</Button>
-                      <Button variant="danger" icon={<Ban />} onClick={() => actionMutation.mutate({ id: selectedBooking.id, action: "cancel" })}>Cancel Booking</Button>
-                    </>
-                  )}
+                <div className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">
+                  Booking status changes are managed from the bookings workflow. This calendar view only reads reservations, blocked dates, and iCal availability.
                 </div>
               </div>
             )}

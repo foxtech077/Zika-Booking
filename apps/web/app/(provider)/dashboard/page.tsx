@@ -66,7 +66,6 @@ interface Booking {
   guestCount?: number;
   createdAt?: string;
 }
-console.log("WEB PROVIDER DASHBOARD");
 interface Review {
   id: string;
   guestName: string;
