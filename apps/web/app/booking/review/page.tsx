@@ -962,12 +962,12 @@ function ConfirmedView({
         >
           <span>⬇</span> Download Voucher PDF
         </button>
-        <Link
+        {/* <Link
           href={`/traveller/reviews?bookingId=${encodeURIComponent(confirmed.bookingId)}&listingId=${encodeURIComponent(ctx.listingId)}${ctx.listingTitle ? `&listingName=${encodeURIComponent(ctx.listingTitle)}` : ""}`}
           className="flex-1 py-3.5 border-2 border-[#0B1E3F] text-[#0B1E3F] font-bold rounded-xl hover:bg-[#0B1E3F]/5 transition text-sm flex items-center justify-center gap-2"
         >
           <span>★</span> Leave a Review
-        </Link>
+        </Link> */}
         <button
           onClick={onViewBookings}
           className="flex-1 py-3.5 bg-[#166534] text-white font-bold rounded-xl hover:bg-[#14532d] transition text-sm"

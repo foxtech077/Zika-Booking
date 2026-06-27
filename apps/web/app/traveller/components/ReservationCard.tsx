@@ -130,7 +130,7 @@ export default function ReservationCard({ booking, onCancel, cancellingId }: Pro
               {booking.currency} {booking.totalAmount.toLocaleString()}
             </p>
             <div className="flex items-center gap-2">
-              {booking.status === "completed" && (
+              {(booking.status === "completed") && (
                 <Link
                   href={`/traveller/reviews?bookingId=${encodeURIComponent(booking.id)}&listingId=${encodeURIComponent(booking.listingId)}&listingName=${encodeURIComponent(booking.listingTitle ?? "")}`}
                   className="text-[11px] font-semibold px-3 py-1 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 transition"
