@@ -766,7 +766,8 @@ export default function ManualBookingPage() {
         listingType,
         listingId,
         listingName,
-        ...(isAccommodation ? { checkIn, checkOut } : { pickupDatetime: pickup, returnDatetime: returnDt }),
+        checkIn: isAccommodation ? checkIn : pickup,
+        checkOut: isAccommodation ? checkOut : returnDt,
         guests: String(guests),
       };
 
