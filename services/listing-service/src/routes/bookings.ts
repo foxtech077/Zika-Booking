@@ -13,6 +13,7 @@ import { calculateBilling } from "../services/billing.service.js";
 import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
 import { logLoyaltyTransaction } from "./loyalty.js";
+import { convertCurrency } from "../services/fx.services";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 
@@ -1328,8 +1329,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         });
 
         // Award loyalty points — cross-schema update to auth."User"
-        // Earning rate: 1 point per $1 of totalAmount paid, multiplied by tier bonus
-        const basePoints = Math.floor(Number(booking.totalAmount));
+        // Earning rate: 1 point per $1 of totalAmount paid, multiplied by tier bonus (converted to USD)
+        const amountInUSD = await convertCurrency(Number(booking.totalAmount), booking.currency, "USD");
+        const basePoints = Math.floor(amountInUSD);
         if (basePoints > 0) {
           // Fetch current user tier and points AFTER points were already deducted at checkout
           const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number, currentTier: string, country: string }[]>(`

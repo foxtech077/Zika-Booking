@@ -92,6 +92,7 @@ async function dispatchWebPush(
   if (!VAPID_PUBLIC || !VAPID_PRIVATE) return;
 
   // Dynamic import keeps web-push optional at startup
+  // @ts-ignore - module may not have type definitions at compile time
   const webpush = await import("web-push");
   webpush.default.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
 
