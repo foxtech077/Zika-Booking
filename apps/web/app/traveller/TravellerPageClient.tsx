@@ -1,12 +1,12 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
 import ListingImage from "./components/ListingImage";
 import { TravellerWorkspaceNav } from "./components/TravellerWorkspaceNav";
+import { TravellerHeader } from "./components/TravellerHeader";
 import { MessageProviderButton } from "./components/MessageProviderButton";
 import { PublicReviewsSection } from "./components/PublicReviewsSection";
 import { GiveReviewEntry } from "./components/GiveReviewEntry";
@@ -1341,113 +1341,20 @@ export default function TravellerDashboard() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans selection:bg-[#0c2614] selection:text-white antialiased">
       {/* Header */}
-      {lockToken ? (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex items-center justify-between">
-          <button
-            onClick={() => { setSelectedListingId(null); setDetailListing(null); abandonLock(); }}
-            className="text-xl font-serif font-bold text-[#0c2614] tracking-tight hover:opacity-80 transition"
-          >
-            Kainook
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="bg-slate-50 border border-slate-200 px-4 py-1.5 rounded-full text-xs font-mono tracking-wider flex items-center gap-2 text-[#0c2614]">
-              <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
-            </div>
-            <button onClick={handleLogout} className="text-xs font-medium text-slate-400 hover:text-red-500 transition">
-              Logout
-            </button>
-          </div>
-        </header>
-      ) : (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-10">
-            <Link
-              href="/traveller"
-              onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-              className="text-xl font-serif font-bold text-[#0c2614] tracking-tight"
-            >
-              Kainook
-            </Link>
-            <nav className="hidden md:flex items-center gap-8">
-              <button
-                onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "home" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Destinations
-              </button>
-              <button
-                onClick={() => { setSearchCategory("hotel"); setSelectedListingId(null); handleSearch(undefined, "hotel"); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "hotel" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Hotels
-              </button>
-              <button
-                onClick={() => { setSearchCategory("apartment"); setSelectedListingId(null); handleSearch(undefined, "apartment"); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "apartment" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Apartments
-              </button>
-              <button
-                onClick={() => { setSearchCategory("car"); setSelectedListingId(null); handleSearch(undefined, "car"); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "car" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Car Rentals
-              </button>
-              {user && (
-                <button
-                  onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); }}
-                  className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "bookings" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-                >
-                  My Reservations
-                </button>
-              )}
-            </nav>
-            <TravellerWorkspaceNav showHome={false} className="hidden xl:flex" />
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Mobile menu */}
-            <button onClick={() => setMobileNavOpen(true)} className="md:hidden flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 hover:bg-slate-50 transition" aria-label="Open menu">
-              <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-            </button>
-
-            {!hasAuthToken && (
-              <>
-                <Link href="/auth/login" className="hidden sm:block text-sm font-medium text-slate-500 hover:text-[#0c2614] transition">
-                  Sign In
-                </Link>
-                <Link href="/auth/login" className="rounded-full bg-[#0c2614] hover:bg-[#081b0d] px-5 py-2 text-sm font-semibold text-white transition shadow-sm">
-                  Sign Up
-                </Link>
-              </>
-            )}
-
-            {(user || hasAuthToken) && !user && (
-              <button onClick={handleLogout} className="text-sm font-medium text-slate-400 hover:text-red-500 transition">Logout</button>
-            )}
-
-            {user && (
-              <div className="flex items-center gap-3">
-                <button onClick={handleLogout} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-red-500 transition">
-                  Logout
-                </button>
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full py-1.5 px-3 shadow-sm cursor-pointer hover:shadow-md transition">
-                  <div className="w-7 h-7 rounded-full bg-[#0c2614] text-white flex items-center justify-center font-bold uppercase text-xs">
-                    {user.firstName[0]}
-                  </div>
-                  <div className="hidden sm:block text-left">
-                    <p className="text-xs font-semibold text-slate-800">{user.firstName}</p>
-                    <p className="text-[10px] text-[#1D8D2B] font-bold uppercase tracking-widest">{user.currentTier || "Bronze"}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </header>
-      )}
+      <TravellerHeader
+        activeTab={activeTab}
+        searchCategory={searchCategory}
+        isLocked={!!lockToken}
+        lockSecondsLeft={secondsLeft}
+        onExitLock={() => { setSelectedListingId(null); setDetailListing(null); abandonLock(); }}
+        onDestinations={() => { setActiveTab("home"); setSelectedListingId(null); }}
+        onHotels={() => { setSearchCategory("hotel"); setSelectedListingId(null); handleSearch(undefined, "hotel"); }}
+        onApartments={() => { setSearchCategory("apartment"); setSelectedListingId(null); handleSearch(undefined, "apartment"); }}
+        onCarRentals={() => { setSearchCategory("car"); setSelectedListingId(null); handleSearch(undefined, "car"); }}
+        onReservations={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); }}
+        onMobileMenu={() => setMobileNavOpen(true)}
+        hasAuthToken={hasAuthToken}
+      />
 
       {/* Main Layout Area */}
       <main className="min-h-[calc(100vh-76px)]">
@@ -2565,7 +2472,7 @@ export default function TravellerDashboard() {
                   </div>
 
                   {/* Trending chips */}
-                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
+                  {/* <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
                     <span className="text-white/50 font-medium tracking-wide">Trending:</span>
                     {[["Cape Town", "South Africa"], ["Marrakesh", "Morocco"], ["Nairobi", "Kenya"], ["Lagos", "Nigeria"]].map(([city, country]) => (
                       <button key={city} type="button"
@@ -2574,7 +2481,7 @@ export default function TravellerDashboard() {
                         {city}
                       </button>
                     ))}
-                  </div>
+                  </div> */}
                 </form>
               </div>
             </div>
@@ -3428,7 +3335,7 @@ export default function TravellerDashboard() {
               </button>
             </div>
             <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
-              <TravellerWorkspaceNav orientation="stack" showHome={false} className="mb-3" />
+              <TravellerWorkspaceNav orientation="stack" showHome={false} showAvatar={false} className="mb-3" />
               <button
                 onClick={() => { setActiveTab("home"); setSelectedListingId(null); setMobileNavOpen(false); }}
                 className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "home" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}

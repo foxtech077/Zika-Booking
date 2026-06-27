@@ -28,7 +28,7 @@ import {
   type ConversationMessage,
   type TravellerConversation,
 } from "@/services/traveller";
-import { TravellerWorkspaceNav } from "../components/TravellerWorkspaceNav";
+import { TravellerHeader } from "../components/TravellerHeader";
 
 function shortId(value?: string | null) {
   return value ? value.replace(/-/g, "").slice(0, 8).toUpperCase() : "—";
@@ -291,18 +291,17 @@ export default function TravellerMessagesPage() {
   };
 
   return (
+    <>
+      <TravellerHeader />
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_40%),linear-gradient(180deg,_#f8fafc_0%,_#f3f7f2_100%)]">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Card className="mb-6 border-emerald-100 bg-white/90 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur" padding="lg">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Traveller inbox</p>
-              <h1 className="text-3xl font-bold text-slate-950">Messages</h1>
-              <p className="max-w-3xl text-sm leading-6 text-slate-500">
-                Start and continue live conversations with providers. The inbox stays in sync with the messaging API and shows only traveller-safe data.
-              </p>
-            </div>
-            <TravellerWorkspaceNav className="w-full lg:w-auto" />
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">Traveller inbox</p>
+            <h1 className="text-3xl font-bold text-slate-950">Messages</h1>
+            <p className="max-w-3xl text-sm leading-6 text-slate-500">
+              Start and continue live conversations with providers.
+            </p>
           </div>
         </Card>
 
@@ -581,5 +580,6 @@ export default function TravellerMessagesPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }
