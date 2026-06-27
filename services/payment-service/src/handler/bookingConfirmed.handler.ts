@@ -4,7 +4,7 @@ import { sendGuestEmail, sendAdminAlert } from "../services/email.services.js";
 import { sendHostEmail } from "../services/hostemail.service.js";
 import { prisma } from "../lib/prisma.js";
 import { cdnUrl, downloadBuffer } from "../lib/s3.js";
-import { schedulePayout } from "../services/payout.service.js";
+import { createPendingPayout } from "../services/payout.service.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
 const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
@@ -143,25 +143,19 @@ export async function bookingConfirmedHandler(payment: any) {
   console.log("[PAYOUT TRACE] currency =", rawBooking.currency);
   console.log("[PAYOUT TRACE] listingType =", rawBooking.listingType);
 
-  // Schedule provider payout for 24 hours after check-in (idempotent)
+  // Create pending payout (idempotent, does not schedule yet)
   if (rawBooking.providerId && Number(rawBooking.providerPayout) > 0) {
-    const isCar = rawBooking.listingType === "car";
-    const checkInRaw = isCar ? rawBooking.pickupDatetime : rawBooking.checkIn;
-    console.log("[PAYOUT TRACE] checkInRaw =", checkInRaw);
-    if (checkInRaw) {
-      console.log("[PAYOUT TRACE] About to call schedulePayout()");
-      try {
-        await schedulePayout({
-          bookingId: rawBooking.id,
-          providerId: rawBooking.providerId,
-          amount: Number(rawBooking.providerPayout),
-          currency: rawBooking.currency,
-          checkInAt: new Date(checkInRaw),
-        });
-        console.log("[PAYOUT TRACE] schedulePayout() completed");
-      } catch (err) {
-        console.error("[PAYOUT TRACE] schedulePayout() failed", err);
-      }
+    console.log("[PAYOUT TRACE] About to call createPendingPayout()");
+    try {
+      await createPendingPayout({
+        bookingId: rawBooking.id,
+        providerId: rawBooking.providerId,
+        amount: Number(rawBooking.providerPayout),
+        currency: rawBooking.currency,
+      });
+      console.log("[PAYOUT TRACE] createPendingPayout() completed");
+    } catch (err) {
+      console.error("[PAYOUT TRACE] createPendingPayout() failed", err);
     }
   }
 

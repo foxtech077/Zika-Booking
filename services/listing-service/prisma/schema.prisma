@@ -428,6 +428,7 @@ enum BookingStatus {
   draft
   pending_payment
   confirmed
+  checked_in
   completed
   cancelled_by_guest
   cancelled_by_provider
@@ -806,6 +807,35 @@ model AuditLog {
   timestamp  DateTime  @default(now())
 
   @@map("AuditLog")
+  @@schema("auth")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String   @db.VarChar(50)
+  title     String   @db.VarChar(100)
+  body      String   @db.Text
+  isRead    Boolean  @default(false)
+  data      Json?    @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("Notification")
+  @@schema("auth")
+}
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @db.VarChar(500)
+  platform  String   @db.VarChar(10)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@map("DeviceToken")
   @@schema("auth")
 }
 
