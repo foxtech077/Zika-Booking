@@ -221,35 +221,7 @@ export default function PromotionsPage() {
     }
   });
 
-  // Seed default promotions if the database returns an empty list
-  useEffect(() => {
-    if (_hasHydrated && token && data && data.promotions.length === 0 && hasManagePermission) {
-      const seedDefaults = async () => {
-        for (const promo of DEFAULT_PROMOTIONS) {
-          try {
-            await listingApi.post("/admin/promotions", {
-              activity: promo.activity,
-              labelText: promo.labelText,
-              labelColour: promo.labelColour,
-              discountType: promo.discountType,
-              discountValue: promo.discountValue,
-              validFrom: new Date(promo.validFrom).toISOString(),
-              validUntil: new Date(promo.validUntil).toISOString(),
-              applyToBooking: promo.applyToBooking,
-              bannerTitle: promo.bannerTitle,
-              bannerSubtitle: promo.bannerSubtitle,
-              status: promo.status === "superseded" ? "scheduled" : promo.status, // POST constraints
-              countryScope: promo.countryScope === "all" ? null : promo.countryScope
-            });
-          } catch (e) {
-            console.error("Failed to seed default promo", e);
-          }
-        }
-        qc.invalidateQueries({ queryKey: ["admin-promotions"] });
-      };
-      seedDefaults();
-    }
-  }, [data, token, _hasHydrated, hasManagePermission]);
+
 
   // Form actions
   const openCreate = () => {
