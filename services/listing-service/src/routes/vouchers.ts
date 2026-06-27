@@ -218,6 +218,7 @@ export async function voucherRoutes(app: FastifyInstance) {
           properties: {
             totalAmount: { type: "number", minimum: 0, description: "The booking total amount in the listing's currency" },
             currency:    { type: "string", description: "ISO 4217 currency code" },
+            activity:    { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"], description: "Booking activity type — filters out vouchers scoped to other activities" },
           },
         },
         response: {
@@ -264,8 +265,9 @@ export async function voucherRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const guestId = (req as any).providerId as string;
-        const q = req.query as { totalAmount?: string; currency?: string };
+        const q = req.query as { totalAmount?: string; currency?: string; activity?: string };
       const totalAmount = parseFloat(q.totalAmount ?? "0");
+      const activity = q.activity;
       const now = new Date();
 
       // Fetch the guest's current loyalty tier from auth.User
@@ -309,8 +311,16 @@ export async function voucherRoutes(app: FastifyInstance) {
         // Tier eligibility: empty applicableTiers = universal (all tiers)
         const applicableTiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
         if (applicableTiers.length > 0 && !applicableTiers.includes(guestTier)) {
-          // Not eligible for this tier — skip entirely
           continue;
+        }
+
+        // Activity scope: skip vouchers that don't apply to the current booking type
+        if (activity) {
+          const scope: string = (v as any).activityScope ?? "universal";
+          if (scope !== "universal") {
+            const allowed = scope === "hotels_apartments" ? ["hotels", "apartments"] : [scope];
+            if (!allowed.includes(activity)) continue;
+          }
         }
 
         // Global usage limit
@@ -408,6 +418,13 @@ export async function voucherRoutes(app: FastifyInstance) {
         tags: ["Vouchers"],
         summary: "Get the authenticated guest's voucher wallet (auto-assigned vouchers)",
         security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          properties: {
+            activity: { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"], description: "Current booking activity context" },
+            guestCountry: { type: "string", description: "Guest's ISO 3166-1 alpha-2 country code" },
+          },
+        },
         response: {
           200: {
             type: "object",
@@ -449,6 +466,7 @@ export async function voucherRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const guestId = (req as any).providerId as string;
+        const q = req.query as { activity?: string; guestCountry?: string };
         const now = new Date();
 
         // Auto-assigned wallet entries use the bookingId prefix "wallet-"
@@ -475,6 +493,18 @@ export async function voucherRoutes(app: FastifyInstance) {
             status:           (v as any).status ?? "active",
             assignedAt:       a.createdAt.toISOString(),
           };
+        }).filter((item) => {
+          if (q.activity && item.activityScope !== "universal") {
+            const allowed = item.activityScope === "hotels_apartments" 
+              ? ["hotels", "apartments"] 
+              : [item.activityScope];
+            if (!allowed.includes(q.activity)) return false;
+          }
+          if (q.guestCountry) {
+            const vRaw = assignments.find((a) => a.voucher.id === item.voucherId)?.voucher as any;
+            if (vRaw?.countryScope && vRaw.countryScope !== q.guestCountry) return false;
+          }
+          return true;
         });
 
         return sendSuccess(reply, 200, { vouchers });
@@ -746,7 +776,19 @@ export async function voucherRoutes(app: FastifyInstance) {
         const skip  = (page - 1) * limit;
 
         const where: any = {};
-        if (q.status)   where.status   = q.status;
+
+        if (q.status) {
+          // Caller explicitly requested a specific status (including 'superseded') — honour it.
+          where.status = q.status;
+        } else {
+          // Default: exclude 'superseded' promotions.
+          // When a new promotion is created it sets the previous active/scheduled one to
+          // 'superseded' (see POST /admin/promotions, supersede block) but leaves the row
+          // in the database. Without this exclusion, deleting the latest promotion causes
+          // the old superseded row to reappear in the list on refresh.
+          where.status = { not: "superseded" };
+        }
+
         if (q.activity) where.activity = q.activity;
 
         const [promotions, total] = await Promise.all([
@@ -982,6 +1024,37 @@ export async function voucherRoutes(app: FastifyInstance) {
       } catch (err) {
         req.log.error({ err }, "Failed to toggle voucher status");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating voucher status.");
+      }
+    },
+  );
+
+  // ── DELETE /admin/vouchers/:id — delete a voucher ────────────────────
+  app.delete(
+    "/admin/vouchers/:id",
+    {
+      schema: {
+        tags: ["Admin Vouchers"],
+        summary: "Delete a voucher (admin)",
+        security: [{ bearerAuth: [] }],
+        params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
+        response: {
+          200: { type: "object", properties: { success: { type: "boolean" } } },
+          404: errSchema,
+        },
+      },
+      preHandler: [requireAdmin],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = req.params as { id: string };
+        const existing = await prisma.voucher.findUnique({ where: { id } });
+        if (!existing) return sendError(reply, 404, "NOT_FOUND", "Voucher not found.");
+        await prisma.voucherRedemption.deleteMany({ where: { voucherId: id } });
+        await prisma.voucher.delete({ where: { id } });
+        return sendSuccess(reply, 200, { deleted: true });
+      } catch (err) {
+        req.log.error({ err }, "Failed to delete voucher");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while deleting voucher.");
       }
     },
   );

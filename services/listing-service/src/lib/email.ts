@@ -202,6 +202,30 @@ export async function sendCommissionRateChangeEmail(
   });
 }
 
+export async function sendNewMessageEmail(
+  to: string,
+  recipientName: string,
+  opts: { senderName: string; preview: string; conversationUrl: string },
+): Promise<void> {
+  await sendWithRetry({
+    to,
+    from: FROM,
+    subject: `New message from ${opts.senderName} on Kainook`,
+    html: emailLayout(`
+        <h2 style="color:#0f3443;margin-top:0">You have a new message</h2>
+        <p>Hi ${recipientName},</p>
+        <p><strong>${opts.senderName}</strong> sent you a message:</p>
+        <blockquote style="border-left:3px solid #16a34a;margin:0 0 16px;padding:8px 16px;color:#374151;font-style:italic">
+          ${opts.preview}
+        </blockquote>
+        <a href="${opts.conversationUrl}"
+           style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">
+          View Message
+        </a>
+        <p style="color:#6b7280;font-size:13px;margin-top:16px">You are receiving this because you are not currently active in the conversation.</p>`),
+  });
+}
+
 export async function sendBookingCancellationEmail(
   to: string,
   guestName: string,
