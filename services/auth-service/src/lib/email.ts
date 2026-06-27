@@ -16,14 +16,14 @@ const FROM = {
 };
 
 const WEB = (process.env["WEB_BASE_URL"] ?? "https://Kainook.com").trim().replace(/\/$/, "");
-const LOGO_URL = (process.env["EMAIL_LOGO_URL"] ?? "https://zika-storage.s3.af-south-1.amazonaws.com/brand/kainook-logo.png").trim();
+const LOGO_URL = (process.env["EMAIL_LOGO_URL"] ?? "https://zika-storage.s3.af-south-1.amazonaws.com/brand/kainook-logo-v2.jpeg").trim();
 
 function emailLayout(body: string): string {
   return `
     <div style="font-family:Arial,sans-serif;background:#f4f4f5;padding:32px 16px">
       <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
         <div style="background:#ffffff;padding:24px 32px;border-bottom:1px solid #e5e7eb;text-align:center">
-          <img src="${LOGO_URL}" alt="Kainook" style="height:64px;width:auto" />
+          <img src="${LOGO_URL}" alt="KAINOOK" width="120" height="120" style="display:inline-block; max-width:100%; height:auto; border:0; outline:none; text-decoration:none;" />
         </div>
         <div style="padding:32px">
           ${body}

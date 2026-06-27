@@ -19,6 +19,8 @@ import { messagingRoutes } from "./routes/messaging.js";
 import { startCommissionScheduler } from "./lib/commissionScheduler.js";
 import { bookingDocumentRoutes } from "./routes/booking-documents.js";
 import { loyaltyRoutes } from "./routes/loyalty.js";
+import { locationRoutes } from "./routes/location.js";
+import { notificationRoutes } from "./routes/notifications.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
@@ -97,6 +99,11 @@ async function build() {
 
   await app.register(helmet, { contentSecurityPolicy: false });
   const isDev = process.env["NODE_ENV"] !== "production";
+  const LOCALHOST_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3002",
+    "http://localhost:3005",
+  ];
   await app.register(cors, {
     // In development, allow all origins so the Expo mobile app (which sends no
     // Origin header from React Native) can reach the API. In production, lock
@@ -106,7 +113,9 @@ async function build() {
       : [
           process.env["WEB_BASE_URL"] ?? "http://localhost:3000",
           process.env["ADMIN_BASE_URL"] ?? "http://localhost:3002",
-          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3004",
+          process.env["PROVIDER_BASE_URL"] ?? "http://localhost:3005",
+          "https://kainook.com",
+          ...LOCALHOST_ORIGINS,
         ],
     credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
@@ -128,6 +137,170 @@ async function build() {
 
   app.get("/health", async () => ({ status: "ok", timestamp: new Date().toISOString() }));
 
+  // ── Proxy merchant requests to payment-service ──────────────────────────────
+  const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
+  app.all("/merchant/*", async (req, reply) => {
+    try {
+      const subPath = (req.params as any)["*"];
+      const queryParams = new URLSearchParams(req.query as Record<string, string>).toString();
+      const url = `${PAYMENT_SERVICE_URL}/merchant/${subPath}${queryParams ? `?${queryParams}` : ""}`;
+      
+      const headers: Record<string, string> = {
+        "Accept": "application/json",
+      };
+      if (req.headers.authorization) {
+        headers["Authorization"] = req.headers.authorization;
+      }
+      if (req.headers["content-type"]) {
+        headers["Content-Type"] = req.headers["content-type"];
+      }
+
+      const fetchOptions: any = {
+        method: req.method,
+        headers,
+      };
+
+      if (["POST", "PATCH", "PUT"].includes(req.method) && req.body) {
+        fetchOptions.body = JSON.stringify(req.body);
+      }
+
+      const res = await fetch(url, fetchOptions);
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+      
+      reply.status(res.status).send(data);
+    } catch (err) {
+      req.log.error({ err }, "Failed to proxy merchant request to payment-service");
+      reply.status(502).send({ success: false, error: { code: "BAD_GATEWAY", message: "Failed to communicate with payment service." } });
+    }
+
+    // ── Proxy admin payouts requests to payment-service ──────────────────────────
+
+  });
+
+  app.all("/admin/payouts", async (req, reply) => {
+  try {
+    const queryParams = new URLSearchParams(
+      req.query as Record<string, string>
+    ).toString();
+
+    const url =
+      `${PAYMENT_SERVICE_URL}/admin/payouts` +
+      (queryParams ? `?${queryParams}` : "");
+
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+
+    if (req.headers.authorization) {
+      headers.Authorization = req.headers.authorization;
+    }
+
+    if (req.headers["content-type"]) {
+      headers["Content-Type"] = req.headers["content-type"];
+    }
+
+    const fetchOptions: any = {
+      method: req.method,
+      headers,
+    };
+
+    if (["POST", "PATCH", "PUT"].includes(req.method) && req.body) {
+      fetchOptions.body = JSON.stringify(req.body);
+    }
+
+    const res = await fetch(url, fetchOptions);
+    const text = await res.text();
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+
+    reply.status(res.status).send(data);
+  } catch (err) {
+    req.log.error(
+      { err },
+      "Failed to proxy admin payouts request to payment-service"
+    );
+
+    reply.status(502).send({
+      success: false,
+      error: {
+        code: "BAD_GATEWAY",
+        message: "Failed to communicate with payment service.",
+      },
+    });
+  }
+});
+
+app.all("/admin/payouts/*", async (req, reply) => {
+  try {
+    const subPath = (req.params as any)["*"];
+
+    const queryParams = new URLSearchParams(
+      req.query as Record<string, string>
+    ).toString();
+
+    const url =
+      `${PAYMENT_SERVICE_URL}/admin/payouts/${subPath}` +
+      (queryParams ? `?${queryParams}` : "");
+
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+
+    if (req.headers.authorization) {
+      headers.Authorization = req.headers.authorization;
+    }
+
+    if (req.headers["content-type"]) {
+      headers["Content-Type"] = req.headers["content-type"];
+    }
+
+    const fetchOptions: any = {
+      method: req.method,
+      headers,
+    };
+
+    if (["POST", "PATCH", "PUT"].includes(req.method) && req.body) {
+      fetchOptions.body = JSON.stringify(req.body);
+    }
+
+    const res = await fetch(url, fetchOptions);
+    const text = await res.text();
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+
+    reply.status(res.status).send(data);
+  } catch (err) {
+    req.log.error(
+      { err },
+      "Failed to proxy admin payouts subpath request to payment-service"
+    );
+
+    reply.status(502).send({
+      success: false,
+      error: {
+        code: "BAD_GATEWAY",
+        message: "Failed to communicate with payment service.",
+      },
+    });
+  }
+});
+
   await app.register(listingRoutes);
   await app.register(adminListingRoutes);
   await app.register(bookingRoutes);
@@ -140,18 +313,8 @@ async function build() {
   await app.register(messagingRoutes);
   await app.register(bookingDocumentRoutes);
   await app.register(loyaltyRoutes);
-
-  app.setErrorHandler((error: { statusCode?: number; message: string }, _req, reply) => {
-    app.log.error(error);
-    const statusCode = error.statusCode ?? 500;
-    reply.status(statusCode).send({
-      success: false,
-      error: {
-        code: "SERVER_ERROR",
-        message: statusCode === 500 ? "An unexpected error occurred." : error.message,
-      },
-    });
-  });
+  await app.register(locationRoutes);
+  await app.register(notificationRoutes);
 
   return app;
 }

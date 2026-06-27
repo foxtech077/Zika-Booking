@@ -23,7 +23,9 @@ export async function requireUser(req: FastifyRequest, reply: FastifyReply): Pro
     const { payload } = await jwtVerify(token, JWT_SECRET, { algorithms: ["HS256"] });
     if (!payload.sub) throw new Error("Missing sub");
     (req as GuestRequest).userId = payload.sub;
-    (req as GuestRequest).userType = (payload as { userType?: string }).userType ?? "guest";
+    // JWT tokens use "type" as the claim name; fall back to "userType" for compatibility
+    const p = payload as { type?: string; userType?: string };
+    (req as GuestRequest).userType = p.type ?? p.userType ?? "guest";
   } catch {
     sendError(reply, 401, "INVALID_TOKEN", "Token invalid or expired.");
   }
@@ -51,3 +53,18 @@ export async function requireAdmin(req: FastifyRequest, reply: FastifyReply): Pr
     sendError(reply, 401, "INVALID_TOKEN", "Admin token invalid or expired.");
   }
 }
+
+const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
+
+export async function requireInternalService(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const token = req.headers["x-service-key"];
+  if (!INTERNAL_SERVICE_KEY) {
+    sendError(reply, 503, "SERVICE_UNAVAILABLE", "Internal service key not configured.");
+    return;
+  }
+  if (!token || token !== INTERNAL_SERVICE_KEY) {
+    sendError(reply, 401, "UNAUTHORIZED", "Invalid or missing service token.");
+    return;
+  }
+}
+

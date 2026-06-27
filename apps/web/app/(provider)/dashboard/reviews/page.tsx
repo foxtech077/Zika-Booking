@@ -220,7 +220,7 @@ function StatCard({
     <Card className="min-h-[108px]">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-[15px] font-medium text-slate-500">{label}</p>
+          <p className="text-[12px] font-medium text-slate-500">{label}</p>
           <p className="mt-2 text-2xl font-bold text-slate-950">{value}</p>
         </div>
         <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl [&>svg]:h-5 [&>svg]:w-5", tone)}>

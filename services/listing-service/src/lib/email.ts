@@ -8,14 +8,14 @@ const rawKey = process.env["SENDGRID_API_KEY"] ?? "";
 const cleanKey = rawKey.replace(/^["']|["']$/g, "");
 sgMail.setApiKey(cleanKey);
 
-const LOGO_URL = (process.env["EMAIL_LOGO_URL"] ?? "https://zika-storage.s3.af-south-1.amazonaws.com/brand/kainook-logo.png").trim();
+const LOGO_URL = (process.env["EMAIL_LOGO_URL"] ?? "https://zika-storage.s3.af-south-1.amazonaws.com/brand/kainook-logo.jpeg").trim();
 
 function emailLayout(body: string): string {
   return `
     <div style="font-family:Arial,sans-serif;background:#f4f4f5;padding:32px 16px">
       <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
         <div style="background:#ffffff;padding:24px 32px;border-bottom:1px solid #e5e7eb;text-align:center">
-          <img src="${LOGO_URL}" alt="Kainook" style="height:64px;width:auto" />
+          <img src="${LOGO_URL}" alt="KAINOOK" width="120" height="120" style="display:inline-block; max-width:100%; height:auto; border:0; outline:none; text-decoration:none;" />
         </div>
         <div style="padding:32px">
           ${body}
@@ -199,6 +199,30 @@ export async function sendCommissionRateChangeEmail(
         <p><strong>Note:</strong> This change applies to new bookings confirmed on or after ${opts.effectiveDate}. Your existing confirmed bookings are not affected.</p>
         <p><a href="${WEB_BASE}/dashboard/earnings" style="color:#16a34a">View your earnings dashboard</a></p>
         <p>The Kainook Team</p>`),
+  });
+}
+
+export async function sendNewMessageEmail(
+  to: string,
+  recipientName: string,
+  opts: { senderName: string; preview: string; conversationUrl: string },
+): Promise<void> {
+  await sendWithRetry({
+    to,
+    from: FROM,
+    subject: `New message from ${opts.senderName} on Kainook`,
+    html: emailLayout(`
+        <h2 style="color:#0f3443;margin-top:0">You have a new message</h2>
+        <p>Hi ${recipientName},</p>
+        <p><strong>${opts.senderName}</strong> sent you a message:</p>
+        <blockquote style="border-left:3px solid #16a34a;margin:0 0 16px;padding:8px 16px;color:#374151;font-style:italic">
+          ${opts.preview}
+        </blockquote>
+        <a href="${opts.conversationUrl}"
+           style="display:inline-block;padding:12px 24px;background:#16a34a;color:#fff;border-radius:6px;text-decoration:none;font-weight:600">
+          View Message
+        </a>
+        <p style="color:#6b7280;font-size:13px;margin-top:16px">You are receiving this because you are not currently active in the conversation.</p>`),
   });
 }
 

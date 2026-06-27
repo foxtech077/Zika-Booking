@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { sendCommissionRateChangeEmail } from "../lib/email.js";
+import { fireNotification } from "../lib/notifications.js";
 
 // ── Role helpers ─────────────────────────────────────────────────────────────
 
@@ -255,8 +256,10 @@ export async function commissionRoutes(app: FastifyInstance) {
         });
 
         if (notifyProviders) {
-          // Fire-and-forget batch email to all active providers
           sendGlobalCommissionEmails(body.rate, oldGlobalRate, effectiveDate, body.reason).catch(() => null);
+          prisma.listing.findMany({ where: { status: "active" }, select: { providerId: true }, distinct: ["providerId"] })
+            .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), "All markets", body.rate, effectiveDate))
+            .catch(() => null);
         }
       } else {
         // Schedule for future
@@ -311,7 +314,7 @@ export async function commissionRoutes(app: FastifyInstance) {
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const admin = req as AdminRequest;
     
-    const whereClause = isSuperAdmin(admin.adminRole) || admin.adminRole === "finance_agent" 
+    const whereClause = isSuperAdmin(admin.adminRole) || admin.adminRole === "admin" || admin.adminRole === "finance_agent" 
       ? {} 
       : { country: { in: admin.countryScope } };
 
@@ -395,7 +398,7 @@ export async function commissionRoutes(app: FastifyInstance) {
     const isImmediate = effectiveDate <= todayUtc;
     const notifyProviders = body.notifyProviders ?? false;
 
-    if (!isSuperAdmin(admin.adminRole) && !admin.countryScope.includes(countryCode)) {
+    if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && !admin.countryScope.includes(countryCode)) {
       return sendError(reply, 403, "FORBIDDEN", "You do not have permission to modify this country.");
     }
 
@@ -447,6 +450,9 @@ export async function commissionRoutes(app: FastifyInstance) {
 
         if (notifyProviders) {
           sendCountryCommissionEmail(countryCode, body.rate, oldRate, effectiveDate, body.reason).catch(() => null);
+          prisma.listing.findMany({ where: { status: "active", country: countryCode }, select: { providerId: true }, distinct: ["providerId"] })
+            .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), countryCode, body.rate, effectiveDate))
+            .catch(() => null);
         }
       } else {
         // Schedule — supersedes any existing pending change (PRD 15.5)
@@ -602,6 +608,9 @@ export async function commissionRoutes(app: FastifyInstance) {
           const old = existingMap.get(code);
           const oldRate = old ? Number(old.rate) : Number(globalSettings.globalCommissionRate);
           sendCountryCommissionEmail(code, body.rate, oldRate, effectiveDate, body.reason).catch(() => null);
+          prisma.listing.findMany({ where: { status: "active", country: code }, select: { providerId: true }, distinct: ["providerId"] })
+            .then((rows) => fireCommissionNotifications(rows.map((r) => r.providerId), code, body.rate, effectiveDate))
+            .catch(() => null);
         }
       }
 
@@ -652,7 +661,7 @@ export async function commissionRoutes(app: FastifyInstance) {
     const { country } = req.params as { country: string };
     const countryCode = country.toUpperCase();
 
-    if (!isSuperAdmin(admin.adminRole) && !admin.countryScope.includes(countryCode)) {
+    if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && !admin.countryScope.includes(countryCode)) {
       return sendError(reply, 403, "FORBIDDEN", "You do not have permission to modify this country.");
     }
 
@@ -736,7 +745,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
       const where: Record<string, unknown> = {};
 
-      if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "finance_agent") {
+      if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && admin.adminRole !== "finance_agent") {
         where["OR"] = [
           { scope: "global" },
           { countryCode: { in: admin.countryScope } }
@@ -745,7 +754,7 @@ export async function commissionRoutes(app: FastifyInstance) {
 
       if (q.country) {
         const c = q.country.toUpperCase();
-        if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "finance_agent" && !admin.countryScope.includes(c)) {
+        if (!isSuperAdmin(admin.adminRole) && admin.adminRole !== "admin" && admin.adminRole !== "finance_agent" && !admin.countryScope.includes(c)) {
           return sendError(reply, 403, "FORBIDDEN", "You do not have permission to view this country.");
         }
         where["countryCode"] = c;
@@ -965,6 +974,23 @@ async function sendGlobalCommissionEmails(
       effectiveDate: effectiveDate.toISOString().split("T")[0]!,
       reason,
     }).catch(() => null);
+  }
+}
+
+async function fireCommissionNotifications(
+  providerIds: string[],
+  scope: string,
+  newRate: number,
+  effectiveDate: Date,
+): Promise<void> {
+  const effectiveDateStr = effectiveDate.toISOString().split("T")[0];
+  for (const providerId of providerIds) {
+    fireNotification(providerId, {
+      type:  "commission_update",
+      title: "Commission Rate Update",
+      body:  `The commission rate for ${scope} has been updated to ${(newRate * 100).toFixed(2)}%, effective ${effectiveDateStr}.`,
+      data:  { scope, newRate, effectiveDate: effectiveDateStr },
+    });
   }
 }
 

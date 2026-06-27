@@ -78,6 +78,23 @@ export async function webhookRoutes(app: FastifyInstance) {
       });
     }
   
+    //  DEDUPLICATE WEBHOOK DELIVERY AT DATABASE LEVEL
+    try {
+      await prisma.stripeWebhookEvent.create({
+        data: {
+          id: event.id,
+          type: event.type,
+        },
+      });
+    } catch (dbErr: any) {
+      if (dbErr.code === "P2002") {
+        app.log.info(`[stripe-webhook] Duplicate webhook event ${event.id} detected and skipped.`);
+        return reply.send({ received: true });
+      }
+      req.log.error(dbErr, `[stripe-webhook] Database error checking event ${event.id}`);
+      return reply.code(500).send({ error: "Database error verifying webhook event." });
+    }
+
     console.log("Event:", event.type);
   
 

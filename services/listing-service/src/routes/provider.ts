@@ -229,8 +229,8 @@ export async function providerRoutes(app: FastifyInstance) {
             limit: { type: "integer", default: 20, description: "Page size (max 50)" },
             status: {
               type: "string",
-              enum: ["all", "pending_payment", "confirmed", "completed", "cancelled"],
-              description: "Filter by booking status",
+              enum: ["all", "pending_payment", "confirmed", "completed", "cancelled", "cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"],
+              description: "Filter by booking status. Use 'cancelled' to match all cancellation types.",
             },
             search: {
               type: "string",
@@ -251,7 +251,11 @@ export async function providerRoutes(app: FastifyInstance) {
       const search   = q["search"];
 
       const where: Record<string, unknown> = { providerId };
-      if (status && status !== "all") where["status"] = status;
+      if (status && status !== "all") {
+        where["status"] = status === "cancelled"
+          ? { in: ["cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"] }
+          : status;
+      }
       if (search) {
         where["OR"] = [
           { reference:      { contains: search, mode: "insensitive" } },
@@ -600,5 +604,58 @@ export async function providerRoutes(app: FastifyInstance) {
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching listing availability.");
       }
     },
+  );
+
+  // ── Proxy payouts requests to payment-service ────────────────────────────────
+  const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
+
+  app.get(
+    "/provider/me/payouts",
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const queryParams = new URLSearchParams(req.query as Record<string, string>).toString();
+        const url = `${PAYMENT_SERVICE_URL}/provider/me/payouts${queryParams ? `?${queryParams}` : ""}`;
+        
+        const headers: Record<string, string> = {
+          "Accept": "application/json",
+        };
+        if (req.headers.authorization) {
+          headers["Authorization"] = req.headers.authorization;
+        }
+
+        const res = await fetch(url, { headers });
+        const data = await res.json() as any;
+        
+        reply.status(res.status).send(data);
+      } catch (err) {
+        req.log.error({ err }, "Failed to proxy payouts request to payment-service");
+        return sendError(reply, 502, "BAD_GATEWAY", "Failed to communicate with payment service.");
+      }
+    }
+  );
+
+  app.get(
+    "/provider/me/payouts/:id",
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const { id } = req.params as { id: string };
+        const url = `${PAYMENT_SERVICE_URL}/provider/me/payouts/${id}`;
+        
+        const headers: Record<string, string> = {
+          "Accept": "application/json",
+        };
+        if (req.headers.authorization) {
+          headers["Authorization"] = req.headers.authorization;
+        }
+
+        const res = await fetch(url, { headers });
+        const data = await res.json() as any;
+        
+        reply.status(res.status).send(data);
+      } catch (err) {
+        req.log.error({ err }, "Failed to proxy payouts detail request to payment-service");
+        return sendError(reply, 502, "BAD_GATEWAY", "Failed to communicate with payment service.");
+      }
+    }
   );
 }
