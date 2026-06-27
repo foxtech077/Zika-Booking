@@ -42,6 +42,14 @@ interface CheckoutCtx {
   deliveryAddress?: string;
 }
 
+interface WalletVoucher {
+  id: string;
+  code: string;
+  description?: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+}
+
 interface ConfirmedBooking {
   reference: string;
   bookingId: string;
@@ -126,6 +134,13 @@ export default function BookingReviewPage() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showVoucher, setShowVoucher] = useState(false);
 
+  // ── Voucher State ────────────────────────────────────────────────────────────
+  const [reviewVoucherCode, setReviewVoucherCode] = useState("");
+  const [reviewVoucherError, setReviewVoucherError] = useState("");
+  const [reviewVoucherApplying, setReviewVoucherApplying] = useState(false);
+  const [walletVouchers, setWalletVouchers] = useState<WalletVoucher[]>([]);
+  const [loadingWalletVouchers, setLoadingWalletVouchers] = useState(false);
+
   // ── Payment State ────────────────────────────────────────────────────────────
   const [mobileNumber, setMobileNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -154,6 +169,7 @@ export default function BookingReviewPage() {
     try {
       const data: CheckoutCtx = JSON.parse(raw);
       setCtx(data);
+      if (data.voucherCode) setReviewVoucherCode(data.voucherCode);
       setProvider(AFRICAN_COUNTRIES.has(data.listingCountry) ? "tara" : "stripe");
       if ((data as any).mobileNumber) setMobileNumber((data as any).mobileNumber ?? "");
 
@@ -161,6 +177,13 @@ export default function BookingReviewPage() {
       const expiresAt = new Date(data.lockExpiresAt).getTime();
       const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
       setSecondsLeft(remaining);
+
+      // Fetch wallet vouchers for the dropdown
+      setLoadingWalletVouchers(true);
+      listingApi.get<any>("/vouchers/wallet")
+        .then((res) => { if (res.data.success) setWalletVouchers(res.data.data ?? []); })
+        .catch(() => {})
+        .finally(() => setLoadingWalletVouchers(false));
     } catch {
       router.replace("/traveller");
     }
@@ -376,6 +399,41 @@ export default function BookingReviewPage() {
     router.push("/traveller");
   }
 
+  async function handleReviewVoucherApply(codeOverride?: string) {
+    const code = codeOverride ?? reviewVoucherCode;
+    if (!ctx || !code.trim()) return;
+    setReviewVoucherError("");
+    setReviewVoucherApplying(true);
+    try {
+      const base = ctx.pricePerNight * ctx.nightsOrDays;
+      const res = await listingApi.post<any>("/vouchers/validate", {
+        code: code.trim(),
+        orderValue: base,
+        listingId: ctx.listingId,
+        category: ctx.listingCategory,
+        country: ctx.listingCountry,
+      });
+      if (res.data.success) {
+        const vDiscount: number = res.data.data.discountAmount || 0;
+        const updated: CheckoutCtx = {
+          ...ctx,
+          voucherCode: code.trim(),
+          voucherDiscount: vDiscount,
+          discountSource: "voucher",
+          promotionId: undefined,
+        };
+        setCtx(updated);
+        sessionStorage.setItem("zika:checkout", JSON.stringify(updated));
+      } else {
+        setReviewVoucherError(res.data?.error?.message ?? "Invalid voucher code");
+      }
+    } catch (err: any) {
+      setReviewVoucherError(err?.response?.data?.error?.message ?? "Invalid voucher code");
+    } finally {
+      setReviewVoucherApplying(false);
+    }
+  }
+
   function handleDownloadPDF() {
     setShowVoucher(true);
     setTimeout(() => window.print(), 300);
@@ -401,7 +459,7 @@ export default function BookingReviewPage() {
       {/* Print-only voucher overlay */}
       {showVoucher && confirmed && (
         <div className="print-only fixed inset-0 z-[9999] bg-white p-8 overflow-auto" id="voucher-print">
-          <VoucherLayout confirmed={confirmed} ctx={ctx} pricing={pricing!} />
+          <VoucherLayout confirmed={confirmed} ctx={ctx} />
         </div>
       )}
 
@@ -451,7 +509,6 @@ export default function BookingReviewPage() {
             <ConfirmedView
               confirmed={confirmed}
               ctx={ctx}
-              pricing={pricing!}
               onDownload={handleDownloadPDF}
               onViewBookings={() => router.push("/traveller?tab=bookings")}
             />
@@ -573,6 +630,160 @@ export default function BookingReviewPage() {
                         <InfoRow label="Phone" value={ctx.phone || "—"} />
                         {ctx.specialRequests && <InfoRow label="Special requests" value={ctx.specialRequests} />}
                       </div>
+                    </SectionCard>
+
+                    {/* Voucher / promo code */}
+                    <SectionCard title="Discount Code">
+                      {ctx.discountSource === "voucher" && ctx.voucherCode ? (
+                        /* ── Voucher applied ── */
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-emerald-700">
+                            ✓ {ctx.voucherCode} — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated: CheckoutCtx = { ...ctx, voucherCode: undefined, voucherDiscount: 0, discountSource: undefined };
+                              setCtx(updated);
+                              setReviewVoucherCode("");
+                              sessionStorage.setItem("zika:checkout", JSON.stringify(updated));
+                            }}
+                            className="text-xs text-slate-400 hover:text-red-500 transition font-medium"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : ctx.discountSource === "promotion" ? (
+                        /* ── Promotion active — user can still override with a higher voucher ── */
+                        <div className="space-y-3">
+                          <p className="text-sm text-emerald-700 font-semibold flex items-center gap-1.5">
+                            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                            Promotion applied — saves {ctx.currency} {fmt(ctx.voucherDiscount ?? 0)}
+                          </p>
+                          <p className="text-xs text-slate-500">Have a voucher that saves more? Select or enter it below:</p>
+
+                          {/* Wallet dropdown */}
+                          {loadingWalletVouchers ? (
+                            <div className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
+                              <div className="w-3 h-3 border-2 border-slate-300 border-t-[#0B1E3F] rounded-full animate-spin" />
+                              Loading your vouchers…
+                            </div>
+                          ) : walletVouchers.length > 0 ? (
+                            <div className="relative">
+                              <select
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const code = e.target.value;
+                                  if (!code) return;
+                                  setReviewVoucherCode(code);
+                                  handleReviewVoucherApply(code);
+                                }}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#0B1E3F] pr-7"
+                              >
+                                <option value="">Select a voucher from wallet…</option>
+                                {walletVouchers.map((v) => (
+                                  <option key={v.id} value={v.code}>
+                                    {v.code}
+                                    {v.description
+                                      ? ` — ${v.description}`
+                                      : v.discountType === "percentage"
+                                      ? ` — ${v.discountValue}% off`
+                                      : ` — ${ctx.currency} ${v.discountValue} off`}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {/* Manual code input */}
+                          <div className="flex gap-2 items-center border border-slate-200 rounded-xl px-3 py-2 bg-slate-50">
+                            <input
+                              type="text"
+                              placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Voucher code"}
+                              value={reviewVoucherCode}
+                              onChange={(e) => setReviewVoucherCode(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && handleReviewVoucherApply()}
+                              className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleReviewVoucherApply()}
+                              disabled={reviewVoucherApplying || !reviewVoucherCode.trim()}
+                              className="text-xs font-bold text-[#0B1E3F] border border-[#0B1E3F] px-3 py-1.5 rounded-lg hover:bg-[#0B1E3F] hover:text-white disabled:opacity-40 transition shrink-0"
+                            >
+                              {reviewVoucherApplying ? "…" : "Apply"}
+                            </button>
+                          </div>
+                          {reviewVoucherError && <p className="text-xs text-red-600 font-medium">{reviewVoucherError}</p>}
+                        </div>
+                      ) : (
+                        /* ── No discount yet ── */
+                        <div className="space-y-2.5">
+                          {/* Wallet dropdown */}
+                          {loadingWalletVouchers ? (
+                            <div className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
+                              <div className="w-3 h-3 border-2 border-slate-300 border-t-[#0B1E3F] rounded-full animate-spin" />
+                              Loading your vouchers…
+                            </div>
+                          ) : walletVouchers.length > 0 ? (
+                            <div className="relative">
+                              <select
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const code = e.target.value;
+                                  if (!code) return;
+                                  setReviewVoucherCode(code);
+                                  handleReviewVoucherApply(code);
+                                }}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#0B1E3F] pr-7"
+                              >
+                                <option value="">Select a voucher from wallet…</option>
+                                {walletVouchers.map((v) => (
+                                  <option key={v.id} value={v.code}>
+                                    {v.code}
+                                    {v.description
+                                      ? ` — ${v.description}`
+                                      : v.discountType === "percentage"
+                                      ? ` — ${v.discountValue}% off`
+                                      : ` — ${ctx.currency} ${v.discountValue} off`}
+                                  </option>
+                                ))}
+                              </select>
+                              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {/* Manual code input */}
+                          <div className="flex gap-2 items-center border border-slate-200 rounded-xl px-3 py-2 bg-slate-50">
+                            <input
+                              type="text"
+                              placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Promo / voucher code"}
+                              value={reviewVoucherCode}
+                              onChange={(e) => setReviewVoucherCode(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && handleReviewVoucherApply()}
+                              className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleReviewVoucherApply()}
+                              disabled={reviewVoucherApplying || !reviewVoucherCode.trim()}
+                              className="text-xs font-bold text-[#0B1E3F] border border-[#0B1E3F] px-3 py-1.5 rounded-lg hover:bg-[#0B1E3F] hover:text-white disabled:opacity-40 transition shrink-0"
+                            >
+                              {reviewVoucherApplying ? "…" : "Apply"}
+                            </button>
+                          </div>
+                          {reviewVoucherError && <p className="text-xs text-red-600 font-medium">{reviewVoucherError}</p>}
+                        </div>
+                      )}
                     </SectionCard>
 
                     <button
@@ -826,11 +1037,10 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: ReturnType<
 // ─── Confirmed View ───────────────────────────────────────────────────────────
 
 function ConfirmedView({
-  confirmed, ctx, pricing, onDownload, onViewBookings,
+  confirmed, ctx, onDownload, onViewBookings,
 }: {
   confirmed: ConfirmedBooking;
   ctx: CheckoutCtx;
-  pricing: ReturnType<typeof calcPricing>;
   onDownload: () => void;
   onViewBookings: () => void;
 }) {
@@ -956,11 +1166,10 @@ function ConfirmedView({
 // ─── Voucher (print layout) ───────────────────────────────────────────────────
 
 function VoucherLayout({
-  confirmed, ctx, pricing,
+  confirmed, ctx,
 }: {
   confirmed: ConfirmedBooking;
   ctx: CheckoutCtx;
-  pricing: ReturnType<typeof calcPricing>;
 }) {
   const isCar = ctx.listingCategory === "car";
   return (

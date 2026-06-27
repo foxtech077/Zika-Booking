@@ -61,6 +61,16 @@ interface ApplicableVoucher {
   discountAmount: number;
 }
 
+interface WalletVoucher {
+  id: string;
+  code: string;
+  description?: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  minOrderValue?: number;
+  validUntil?: string;
+}
+
 
 // Countries where Tara Mobile Money is the recommended payment method
 const AFRICAN_COUNTRIES = new Set([
@@ -234,11 +244,14 @@ export default function TravellerDashboard() {
   // Promotion state
   const [activePromotion, setActivePromotion] = useState<ActivePromotion | null>(null);
   const [promotionDiscount, setPromotionDiscount] = useState<number>(0);
-  const [discountSource, setDiscountSource] = useState<"voucher" | "promotion" | null>(null);
 
-  // Auto-applicable vouchers (auto-assigned, shown during checkout)
+  // Auto-applicable vouchers (context-filtered, fetched after lock)
   const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucher[]>([]);
   const [loadingApplicableVouchers, setLoadingApplicableVouchers] = useState(false);
+
+  // Full wallet — all vouchers assigned to this user (GET /vouchers/wallet)
+  const [walletVouchers, setWalletVouchers] = useState<WalletVoucher[]>([]);
+  const [loadingWalletVouchers, setLoadingWalletVouchers] = useState(false);
 
   // Checkout inputs
   const [firstName, setFirstName] = useState("");
@@ -351,10 +364,44 @@ export default function TravellerDashboard() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFiltersDrawer, setShowFiltersDrawer] = useState(false);
 
+  // Client-side filter state (applied on top of API results)
+  const [filterBedrooms, setFilterBedrooms] = useState<number | null>(null);
+  const [filterBathrooms, setFilterBathrooms] = useState<number | null>(null);
+  const [filterPropertyTypes, setFilterPropertyTypes] = useState<string[]>([]);
+
   // Timer Ref for lock countdown
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   // Derived guest count
   const searchGuests = searchAdults + searchChildren;
+
+  // Client-side filtered listings (bedrooms / bathrooms applied on top of API results)
+  const displayedListings = React.useMemo(() => {
+    let result = listings;
+    if (filterBedrooms !== null) {
+      result = result.filter((l) => {
+        const beds = l.bedrooms ?? 0;
+        return filterBedrooms >= 3 ? beds >= 3 : beds === filterBedrooms;
+      });
+    }
+    if (filterBathrooms !== null) {
+      result = result.filter((l) => {
+        const baths = l.bathrooms ?? 0;
+        return filterBathrooms >= 3 ? baths >= 3 : baths === filterBathrooms;
+      });
+    }
+    return result;
+  }, [listings, filterBedrooms, filterBathrooms]);
+
+  // Derived discount — voucher wins only when it saves more than the promotion.
+  // Neither stacks with the other; we always pick the higher value.
+  const effectiveDiscountSource: "voucher" | "promotion" | null =
+    voucherApplied && voucherDiscount >= promotionDiscount ? "voucher"
+    : promotionDiscount > 0 ? "promotion"
+    : null;
+  const bestDiscount =
+    effectiveDiscountSource === "voucher" ? voucherDiscount
+    : effectiveDiscountSource === "promotion" ? promotionDiscount
+    : 0;
 
   // 1. Redirect provider accounts away from traveller page
   useEffect(() => {
@@ -626,12 +673,15 @@ export default function TravellerDashboard() {
       }
 
       // Step 2: Build search params
+      // When the user hasn't typed a destination and the call is programmatic (nav button browse),
+      // use a global radius so all listings are returned regardless of location.
+      const isGlobalBrowse = !e && !searchDestination.trim() && !destinationOverride;
       const params: Record<string, any> = {
         category: activeCategory,
         limit: 20,
         lat,
         lng,
-        radius_km: 5000,
+        radius_km: isGlobalBrowse ? 20000 : 5000,
       };
 
       if (searchGuests > 1) params.guests = searchGuests;
@@ -730,8 +780,8 @@ export default function TravellerDashboard() {
     setVoucherError("");
     setActivePromotion(null);
     setPromotionDiscount(0);
-    setDiscountSource(null);
     setApplicableVouchers([]);
+    setWalletVouchers([]);
     setDetailCheckIn("");
     setDetailCheckOut("");
     setDetailPickupDate("");
@@ -779,6 +829,12 @@ export default function TravellerDashboard() {
         addToRecentlyViewed(details);
         listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
         fetchActivePromotion(details.category);
+        // Fetch wallet + applicable vouchers as soon as the listing opens so the
+        // dropdown is populated in the details step (before the booking lock).
+        if (hasAuthToken) {
+          fetchWalletVouchers();
+          fetchApplicableVouchers(details.id, details.category, details.country);
+        }
       } else {
         setDetailListing(null);
       }
@@ -832,7 +888,7 @@ export default function TravellerDashboard() {
   }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
 
   // Recompute promotion discount whenever dates or active promotion changes.
-  // Auto-sets discountSource to "promotion" when no voucher is applied and promotion beats zero.
+  // effectiveDiscountSource is derived — no state mutation needed here.
   useEffect(() => {
     if (!activePromotion || !detailListing) { setPromotionDiscount(0); return; }
     const isCar = detailListing.category === "car";
@@ -845,13 +901,6 @@ export default function TravellerDashboard() {
       ? Math.round(base * activePromotion.discountValue / 100)
       : Math.round(activePromotion.discountValue);
     setPromotionDiscount(pDiscount);
-    if (!voucherApplied) {
-      setDiscountSource(pDiscount > 0 ? "promotion" : null);
-    } else {
-      // Keep whichever is higher — never stack
-      setDiscountSource(pDiscount > voucherDiscount ? "promotion" : "voucher");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePromotion, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
 
   // Helper: calculate nights/days between two date strings
@@ -900,6 +949,7 @@ export default function TravellerDashboard() {
         setPaymentId(null);
         if (paymentPollRef.current) clearInterval(paymentPollRef.current);
         fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country);
+        fetchWalletVouchers();
       } else {
         const msg = res.data?.error?.message ?? (res.data as any)?.message ?? "Unable to hold these dates. Please try again.";
         setBookingError(msg);
@@ -955,8 +1005,7 @@ export default function TravellerDashboard() {
         const vDiscount = res.data.data.discountAmount || 0;
         setVoucherApplied(true);
         setVoucherDiscount(vDiscount);
-        // Apply only the highest-value discount — never stack
-        setDiscountSource(vDiscount >= promotionDiscount ? "voucher" : "promotion");
+        // effectiveDiscountSource is derived — picks whichever is higher automatically
       } else {
         setVoucherError(res.data?.error?.message ?? "Invalid voucher code");
       }
@@ -978,9 +1027,9 @@ export default function TravellerDashboard() {
     }
   }
 
-  // Fetch auto-assigned vouchers applicable to the current booking context
+  // Fetch auto-assigned vouchers applicable to the current booking context.
+  // Guard removed: if a lock was obtained, the backend already confirmed the user is authenticated.
   async function fetchApplicableVouchers(listingId: string, category: string, country: string) {
-    if (!isAuthenticated) return;
     setLoadingApplicableVouchers(true);
     try {
       const res = await listingApi.get<any>("/vouchers/applicable", {
@@ -993,6 +1042,21 @@ export default function TravellerDashboard() {
       setApplicableVouchers([]);
     } finally {
       setLoadingApplicableVouchers(false);
+    }
+  }
+
+  // Fetch the user's full voucher wallet — GET /vouchers/wallet (no booking context needed).
+  async function fetchWalletVouchers() {
+    setLoadingWalletVouchers(true);
+    try {
+      const res = await listingApi.get<any>("/vouchers/wallet");
+      if (res.data.success) {
+        setWalletVouchers(res.data.data ?? []);
+      }
+    } catch {
+      setWalletVouchers([]);
+    } finally {
+      setLoadingWalletVouchers(false);
     }
   }
 
@@ -1056,8 +1120,8 @@ export default function TravellerDashboard() {
       body.deliveryRequested = deliveryRequested;
       body.deliveryAddress = deliveryAddress;
     }
-    if (discountSource === "voucher" && voucherApplied) body.voucherCode = voucherCode;
-    if (discountSource === "promotion" && activePromotion) body.promotionId = activePromotion.id;
+    if (effectiveDiscountSource === "voucher" && voucherApplied) body.voucherCode = voucherCode;
+    if (effectiveDiscountSource === "promotion" && activePromotion) body.promotionId = activePromotion.id;
 
     try {
       // Step 1: Create booking
@@ -1227,10 +1291,10 @@ export default function TravellerDashboard() {
       children: searchChildren,
       lockToken,
       lockExpiresAt: new Date(Date.now() + (secondsLeft ?? 0) * 1000).toISOString(),
-      voucherCode: discountSource === "voucher" && voucherApplied ? voucherCode : undefined,
-      voucherDiscount: discountSource === "voucher" ? voucherDiscount : discountSource === "promotion" ? promotionDiscount : 0,
-      promotionId: discountSource === "promotion" && activePromotion ? activePromotion.id : undefined,
-      discountSource: discountSource ?? undefined,
+      voucherCode: effectiveDiscountSource === "voucher" && voucherApplied ? voucherCode : undefined,
+      voucherDiscount: bestDiscount,
+      promotionId: effectiveDiscountSource === "promotion" && activePromotion ? activePromotion.id : undefined,
+      discountSource: effectiveDiscountSource ?? undefined,
       firstName, lastName, email, phone, specialRequests,
       driverFirstName: isCar ? (driverFirstName || firstName) : undefined,
       driverLastName: isCar ? (driverLastName || lastName) : undefined,
@@ -1394,52 +1458,54 @@ export default function TravellerDashboard() {
           </div>
         </header>
       ) : (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-10">
+        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-6 lg:px-8 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-8 lg:gap-10">
             <Link
               href="/traveller"
               onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-              className="text-xl font-serif font-bold text-[#0c2614] tracking-tight"
+              className="text-xl font-bold text-[#0c2614] tracking-tight shrink-0"
             >
               Kainook
             </Link>
-            <nav className="hidden md:flex items-center gap-8">
-              <button
-                onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "home" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Destinations
-              </button>
-              <button
-                onClick={() => { setSearchCategory("hotel"); setSelectedListingId(null); handleSearch(undefined, "hotel"); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "hotel" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Hotels
-              </button>
-              <button
-                onClick={() => { setSearchCategory("apartment"); setSelectedListingId(null); handleSearch(undefined, "apartment"); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "apartment" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Apartments
-              </button>
-              <button
-                onClick={() => { setSearchCategory("car"); setSelectedListingId(null); handleSearch(undefined, "car"); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "car" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Car Rentals
-              </button>
+            <nav className="hidden md:flex items-center gap-1">
+              {([
+                { label: "Hotels", cat: "hotel" as const },
+                { label: "Apartments", cat: "apartment" as const },
+                { label: "Cars", cat: "car" as const },
+              ] as const).map(({ label, cat }) => {
+                const isActive = activeTab === "search" && searchCategory === cat;
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => { setSearchCategory(cat); setSelectedListingId(null); handleSearch(undefined, cat); }}
+                    className={`relative px-4 py-2 text-sm font-medium tracking-wide transition-colors ${
+                      isActive ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"
+                    }`}
+                  >
+                    {label}
+                    {isActive && (
+                      <span className="absolute bottom-0 left-4 right-4 h-0.5 bg-[#0c2614] rounded-full" />
+                    )}
+                  </button>
+                );
+              })}
               {user && (
                 <button
                   onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); }}
-                  className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "bookings" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
+                  className={`relative px-4 py-2 text-sm font-medium tracking-wide transition-colors ${
+                    activeTab === "bookings" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"
+                  }`}
                 >
                   My Reservations
+                  {activeTab === "bookings" && (
+                    <span className="absolute bottom-0 left-4 right-4 h-0.5 bg-[#0c2614] rounded-full" />
+                  )}
                 </button>
               )}
             </nav>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 lg:gap-4">
             {/* Mobile menu */}
             <button onClick={() => setMobileNavOpen(true)} className="md:hidden flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 hover:bg-slate-50 transition" aria-label="Open menu">
               <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -1447,11 +1513,14 @@ export default function TravellerDashboard() {
 
             {!hasAuthToken && (
               <>
-                <Link href="/auth/login" className="hidden sm:block text-sm font-medium text-slate-500 hover:text-[#0c2614] transition">
+                <button
+                  onClick={() => { setActiveTab("bookings"); fetchGuestBookings(); }}
+                  className="hidden sm:block text-sm font-medium text-slate-500 hover:text-[#0c2614] transition"
+                >
+                  Join Loyalty
+                </button>
+                <Link href="/auth/login" className="rounded-full bg-[#0c2614] hover:bg-[#1D8D2B] px-5 py-2 text-sm font-semibold text-white transition shadow-sm">
                   Sign In
-                </Link>
-                <Link href="/auth/login" className="rounded-full bg-[#0c2614] hover:bg-[#081b0d] px-5 py-2 text-sm font-semibold text-white transition shadow-sm">
-                  Sign Up
                 </Link>
               </>
             )}
@@ -1674,7 +1743,7 @@ export default function TravellerDashboard() {
                       const days = calcDays(start, end);
                       const baseTotal = detailListing.pricePerNight * days;
                       const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
-                      const sidebarDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
+                      const sidebarDiscount = bestDiscount;
                       const grandTotal = Math.max(0, baseTotal + serviceFee - sidebarDiscount);
 
                       return (
@@ -1823,7 +1892,7 @@ export default function TravellerDashboard() {
                               </div>
                               {sidebarDiscount > 0 && (
                                 <div className="flex justify-between text-emerald-600 font-semibold">
-                                  <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                  <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                   <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
                                 </div>
                               )}
@@ -1888,7 +1957,6 @@ export default function TravellerDashboard() {
                           const serviceFee = Math.ceil(base * 0.05);
                           const taxRate = TAX_RATES[detailListing.country] ?? 0;
                           const taxAmount = Math.ceil(base * taxRate);
-                          const bestDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
                           const grandTotal = Math.max(0, base + serviceFee + taxAmount - bestDiscount);
                           const fmt = (d: string | null | undefined) =>
                             d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
@@ -1948,28 +2016,79 @@ export default function TravellerDashboard() {
                                 )}
                                 {bestDiscount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                     <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                {/* Voucher input — hide if promotion already applied or voucher already applied */}
-                                {!voucherApplied && discountSource !== "promotion" && (
-                                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex gap-2 items-center">
-                                    <input type="text" placeholder="Promo / voucher code" value={voucherCode}
-                                      onChange={(e) => setVoucherCode(e.target.value)}
-                                      className="bg-transparent border-0 focus:ring-0 focus:outline-none text-xs text-slate-800 flex-1 min-w-0" />
-                                    <button type="button" onClick={() => handleVoucherApply()}
-                                      className="text-[10px] font-bold text-[#1D8D2B] border border-[#1D8D2B] px-2.5 py-1 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
+
+                                {/* Promotion badge — always visible when a promotion exists */}
+                                {promotionDiscount > 0 && activePromotion && (
+                                  <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5">
+                                    <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                                    <span>{activePromotion.name} — saves {detailListing.currency} {promotionDiscount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                {discountSource === "promotion" && (
-                                  <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                                    <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                    Promotion applied automatically
-                                  </p>
+
+                                {/* Voucher selector — dropdown from wallet + manual fallback */}
+                                {!voucherApplied && (
+                                  <div className="space-y-1.5">
+                                    {/* Wallet dropdown */}
+                                    {loadingWalletVouchers ? (
+                                      <div className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
+                                        <div className="w-3 h-3 border-2 border-slate-300 border-t-[#1D8D2B] rounded-full animate-spin" />
+                                        Loading your vouchers…
+                                      </div>
+                                    ) : walletVouchers.length > 0 ? (
+                                      <div className="relative">
+                                        <select
+                                          defaultValue=""
+                                          onChange={(e) => {
+                                            const code = e.target.value;
+                                            if (!code) return;
+                                            setVoucherCode(code);
+                                            handleVoucherApply(code);
+                                          }}
+                                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#1D8D2B] pr-7"
+                                        >
+                                          <option value="">Select a voucher…</option>
+                                          {walletVouchers.map((v) => (
+                                            <option key={v.id} value={v.code}>
+                                              {v.code}
+                                              {v.description
+                                                ? ` — ${v.description}`
+                                                : v.discountType === "percentage"
+                                                ? ` — ${v.discountValue}% off`
+                                                : ` — ${detailListing.currency} ${v.discountValue} off`}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                                        </div>
+                                      </div>
+                                    ) : null}
+
+                                    {/* Manual code input */}
+                                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex gap-2 items-center">
+                                      <input
+                                        type="text"
+                                        placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Enter voucher code"}
+                                        value={voucherCode}
+                                        onChange={(e) => setVoucherCode(e.target.value)}
+                                        onKeyDown={(e) => e.key === "Enter" && handleVoucherApply()}
+                                        className="bg-transparent border-0 focus:ring-0 focus:outline-none text-xs text-slate-800 flex-1 min-w-0"
+                                      />
+                                      <button type="button" onClick={() => handleVoucherApply()}
+                                        className="text-[10px] font-bold text-[#1D8D2B] border border-[#1D8D2B] px-2.5 py-1 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
+                                    </div>
+                                  </div>
                                 )}
-                                {voucherApplied && discountSource === "voucher" && (
-                                  <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied</p>
+                                {voucherApplied && (
+                                  <p className="text-xs font-semibold text-emerald-600">
+                                    {effectiveDiscountSource === "voucher"
+                                      ? `✓ Voucher applied — saves ${detailListing.currency} ${voucherDiscount.toLocaleString()}`
+                                      : `✓ Voucher applied. Promotion gives more savings — using promotion discount`}
+                                  </p>
                                 )}
                                 {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
@@ -2016,30 +2135,64 @@ export default function TravellerDashboard() {
                             )}
                           </div>
 
-                          {/* Discount section — auto-assigned vouchers, promotion, manual voucher entry */}
+                          {/* Discount section — promotion badge + wallet vouchers + manual entry always visible */}
                           <div className="space-y-2">
-                            {/* Promotion auto-applied */}
-                            {discountSource === "promotion" && activePromotion && (
+                            {/* Promotion badge — always shown when a promotion exists */}
+                            {promotionDiscount > 0 && activePromotion && (
                               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
                                 <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                  {activePromotion.name} applied
+                                  {activePromotion.name}
+                                  {effectiveDiscountSource === "voucher" && (
+                                    <span className="text-slate-400 font-normal"> (voucher saves more)</span>
+                                  )}
                                 </span>
                                 <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {promotionDiscount.toLocaleString()}</span>
                               </div>
                             )}
 
-                            {/* Auto-assigned applicable vouchers (fetched after lock) */}
-                            {applicableVouchers.length > 0 && !voucherApplied && discountSource !== "promotion" && (
+                            {/* Wallet dropdown — all user vouchers from GET /vouchers/wallet */}
+                            {!voucherApplied && (
                               <div className="space-y-1.5">
-                                {loadingApplicableVouchers ? (
+                                {loadingWalletVouchers ? (
                                   <div className="flex items-center gap-2 text-xs text-slate-400 py-1">
                                     <div className="w-3 h-3 border-2 border-slate-300 border-t-[#166534] rounded-full animate-spin" />
                                     Loading your vouchers…
                                   </div>
-                                ) : (
-                                  <>
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Your Vouchers</p>
+                                ) : walletVouchers.length > 0 ? (
+                                  <div className="relative">
+                                    <select
+                                      defaultValue=""
+                                      onChange={(e) => {
+                                        const code = e.target.value;
+                                        if (!code) return;
+                                        setVoucherCode(code);
+                                        handleVoucherApply(code);
+                                      }}
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#1D8D2B] pr-7"
+                                    >
+                                      <option value="">Select a voucher…</option>
+                                      {walletVouchers.map((v) => (
+                                        <option key={v.id} value={v.code}>
+                                          {v.code}
+                                          {v.description
+                                            ? ` — ${v.description}`
+                                            : v.discountType === "percentage"
+                                            ? ` — ${v.discountValue}% off`
+                                            : ` — ${detailListing.currency} ${v.discountValue} off`}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                                    </div>
+                                  </div>
+                                ) : null}
+
+                                {/* Applicable vouchers (context-filtered) shown as pills below dropdown */}
+                                {applicableVouchers.length > 0 && !loadingApplicableVouchers && (
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Best for this booking</p>
                                     {applicableVouchers.map((v) => (
                                       <button
                                         key={v.id}
@@ -2048,24 +2201,33 @@ export default function TravellerDashboard() {
                                         className="w-full flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
                                       >
                                         <span>{v.description || v.code}</span>
-                                        <span className="font-bold">−{detailListing.currency} {v.discountAmount.toLocaleString()}</span>
+                                        <span className="font-bold shrink-0 ml-2">−{detailListing.currency} {v.discountAmount.toLocaleString()}</span>
                                       </button>
                                     ))}
-                                  </>
+                                  </div>
                                 )}
+
+                                {/* Manual code input */}
+                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex gap-2 items-center">
+                                  <input
+                                    type="text"
+                                    placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Enter voucher code"}
+                                    value={voucherCode}
+                                    onChange={(e) => setVoucherCode(e.target.value)}
+                                    onKeyDown={(e) => e.key === "Enter" && handleVoucherApply()}
+                                    className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0"
+                                  />
+                                  <button type="button" onClick={() => handleVoucherApply()} className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-1.5 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
+                                </div>
                               </div>
                             )}
 
-                            {/* Manual voucher code entry — hidden when promotion or voucher already applied */}
-                            {!voucherApplied && discountSource !== "promotion" && (
-                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex gap-2 items-center">
-                                <input type="text" placeholder="Promo / voucher code" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0" />
-                                <button type="button" onClick={() => handleVoucherApply()} className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-1.5 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
-                              </div>
-                            )}
-
-                            {voucherApplied && discountSource === "voucher" && (
-                              <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied — {detailListing.currency} {voucherDiscount.toLocaleString()} off</p>
+                            {voucherApplied && (
+                              <p className="text-xs font-semibold text-emerald-600">
+                                {effectiveDiscountSource === "voucher"
+                                  ? `✓ Voucher applied — saves ${detailListing.currency} ${voucherDiscount.toLocaleString()}`
+                                  : `✓ Voucher saved. Promotion gives more savings — using promotion discount`}
+                              </p>
                             )}
                             {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
                           </div>
@@ -2172,7 +2334,6 @@ export default function TravellerDashboard() {
                             const days = calcDays(start, end);
                             const baseTotal = detailListing.pricePerNight * days;
                             const serviceFee = Math.ceil(baseTotal * 0.05);
-                            const bestDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
                             const grandTotal = Math.max(0, baseTotal + serviceFee - bestDiscount);
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
@@ -2183,7 +2344,7 @@ export default function TravellerDashboard() {
                                 <div className="flex justify-between"><span>Service fee (5%)</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
                                 {bestDiscount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                     <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
                                   </div>
                                 )}
@@ -2983,175 +3144,134 @@ export default function TravellerDashboard() {
             </footer>
           </div>
         ) : activeTab === "search" ? (
-          // VIEW 2: DYNAMIC SPLIT SEARCH RESULTS VIEW & COORDINATE PRICE MAP
-          <div className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
-            <div className="lg:col-span-12 flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/60">
-              <div className="text-left">
-                <h1 className="text-2xl font-serif font-bold text-slate-900 capitalize">
-                  {searchCategory === "car" ? "Cars" : `${searchCategory.charAt(0).toUpperCase() + searchCategory.slice(1)}s`} in {searchDestination.split(",")[0]}
-                </h1>
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
-                  {searching ? "Searching..." : `${totalCount > 0 ? totalCount : listings.length} match${(totalCount || listings.length) !== 1 ? "es" : ""} found`}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {/* Quick sort dropdown in header (mirrors sidebar) */}
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="hidden sm:block bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none shadow-sm"
-                >
-                  <option value="distance_asc">Nearest First</option>
-                  <option value="price_asc">Price ↑</option>
-                  <option value="price_desc">Price ↓</option>
-                  <option value="rating_desc">Best Rated</option>
-                  <option value="popularity_desc">Popular</option>
-                </select>
-                <button
-                  onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                  className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-2 rounded-xl hover:bg-[#0c2614] hover:text-white transition uppercase tracking-wide"
-                >
-                  New Search
-                </button>
-              </div>
-            </div>
+          // VIEW 2: REDESIGNED SEARCH RESULTS — sidebar + cards feed
+          <div className="flex min-h-[calc(100vh-76px)]">
 
-            {/* Mobile filter + sort bar (hidden on desktop) */}
-            <div className="lg:hidden col-span-1 flex items-center gap-2">
-              <button
-                onClick={() => setShowFiltersDrawer(true)}
-                className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm hover:border-slate-400 transition"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
-                </svg>
-                Filters
-                {(showInstantOnly || selectedAmenities.length > 0 || !!selectedRating || priceMin > 0 || priceMax < 499999) && (
-                  <span className="w-2 h-2 rounded-full bg-[#E31C5F] inline-block" />
-                )}
-              </button>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:outline-none shadow-sm"
-              >
-                <option value="distance_asc">Nearest First</option>
-                <option value="price_asc">Price: Low → High</option>
-                <option value="price_desc">Price: High → Low</option>
-                <option value="rating_desc">Best Rated</option>
-                <option value="popularity_desc">Most Popular</option>
-              </select>
-            </div>
-
-            {/* Filters left sidebar widget (3 Cols) */}
-            <div className="hidden lg:block lg:col-span-3 space-y-4 text-left">
-              <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm space-y-5">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h3 className="text-base font-serif font-bold text-slate-900">Filters</h3>
-                  <button
-                    onClick={() => { setPriceMin(0); setPriceMax(500000); setSelectedRating(null); setSelectedCancellation(""); setSortBy("distance_asc"); setSelectedAmenities([]); setShowInstantOnly(false); }}
-                    className="text-[10px] font-bold text-slate-400 hover:text-slate-700 uppercase tracking-wider"
-                  >
-                    Reset all
-                  </button>
+            {/* ── LEFT SIDEBAR — Refine Search ── */}
+            <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 bg-white border-r border-slate-200 overflow-y-auto">
+              <div className="p-6 space-y-6">
+                {/* Header */}
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                    </svg>
+                    <h2 className="text-base font-bold text-slate-900">Refine Search</h2>
+                  </div>
+                  <p className="text-[11px] text-slate-400 pl-6">Luxury Preferences</p>
                 </div>
 
-                {/* Sort */}
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Sort By</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none"
-                  >
-                    <option value="distance_asc">Nearest First</option>
-                    <option value="price_asc">Price: Low → High</option>
-                    <option value="price_desc">Price: High → Low</option>
-                    <option value="rating_desc">Best Rated</option>
-                    <option value="popularity_desc">Most Popular</option>
-                  </select>
+                {/* Price Range slider */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700">Price Range</label>
+                    <span className="text-xs font-semibold text-slate-500">
+                      {priceMin > 0 ? `KES ${priceMin.toLocaleString()}` : "KES 500"} – {priceMax >= 499999 ? "KES 5,000+" : `KES ${priceMax.toLocaleString()}`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={50000}
+                    step={500}
+                    value={priceMax >= 499999 ? 50000 : priceMax}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setPriceMax(v >= 50000 ? 500000 : v);
+                    }}
+                    className="w-full h-1.5 accent-[#1D8D2B] cursor-pointer"
+                  />
                 </div>
 
-                {/* Instant Book toggle */}
-                <div className="flex items-center justify-between">
+                {/* Bedrooms & Bathrooms */}
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs font-semibold text-slate-700">⚡ Instant Book</p>
-                    <p className="text-[10px] text-slate-400">Book without waiting for approval</p>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Bedrooms</label>
+                    <select
+                      value={filterBedrooms ?? ""}
+                      onChange={(e) => setFilterBedrooms(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-[#1D8D2B] transition"
+                    >
+                      <option value="">Any</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3+</option>
+                    </select>
                   </div>
-                  <button
-                    onClick={() => setShowInstantOnly((v) => !v)}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${showInstantOnly ? "bg-[#0c2614]" : "bg-slate-200"}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInstantOnly ? "translate-x-5" : ""}`} />
-                  </button>
-                </div>
-
-                {/* Price range */}
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Price Range / {searchCategory === "car" ? "day" : "night"}</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={priceMin || ""}
-                      onChange={(e) => setPriceMin(e.target.value ? Number(e.target.value) : 0)}
-                      placeholder="Min"
-                      min={0}
-                      step={500}
-                      className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none"
-                    />
-                    <input
-                      type="number"
-                      value={priceMax >= 499999 ? "" : priceMax}
-                      onChange={(e) => setPriceMax(e.target.value ? Number(e.target.value) : 500000)}
-                      placeholder="Max"
-                      min={0}
-                      step={500}
-                      className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none"
-                    />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Bathrooms</label>
+                    <select
+                      value={filterBathrooms ?? ""}
+                      onChange={(e) => setFilterBathrooms(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-[#1D8D2B] transition"
+                    >
+                      <option value="">Any</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3+</option>
+                    </select>
                   </div>
                 </div>
 
-                {/* Rating */}
+                {/* Property Type (hotels/apartments) */}
                 {searchCategory !== "car" && (
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min. Rating</label>
-                    <div className="flex gap-1.5">
-                      {[3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          onClick={() => setSelectedRating(star === selectedRating ? null : star)}
-                          className={`flex-1 py-1.5 border rounded-xl text-xs font-semibold transition ${star === selectedRating ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
-                        >
-                          ★ {star}+
-                        </button>
-                      ))}
+                    <label className="block text-xs font-semibold text-slate-700">Property Type</label>
+                    <div className="space-y-2 pt-0.5">
+                      {(searchCategory === "hotel"
+                        ? ["Standard", "Boutique", "Resort"]
+                        : ["Studio", "Penthouse", "Villa"]
+                      ).map((type) => {
+                        const active = filterPropertyTypes.includes(type);
+                        return (
+                          <label key={type} className="flex items-center gap-3 cursor-pointer group py-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setFilterPropertyTypes((prev) =>
+                                active ? prev.filter((t) => t !== type) : [...prev, type]
+                              )}
+                              className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
+                                active ? "bg-[#0c2614] border-[#0c2614]" : "border-slate-300 group-hover:border-[#1D8D2B]"
+                              }`}
+                            >
+                              {active && (
+                                <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                            <span className="text-sm text-slate-700">{type}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* Amenities */}
+                {/* Amenities chips */}
                 {searchCategory !== "car" && (
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Amenities</label>
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Amenities</label>
+                    <div className="flex flex-wrap gap-2 pt-0.5">
                       {[
-                        { key: "wifi", label: "Wi-Fi" },
-                        { key: "pool", label: "Pool" },
-                        { key: "parking", label: "Parking" },
-                        { key: "ac", label: "A/C" },
-                        { key: "gym", label: "Gym" },
-                        { key: "kitchen", label: "Kitchen" },
+                        { key: "kitchen", label: "Full Kitchen" },
+                        { key: "wifi", label: "Workspace" },
+                        { key: "pool", label: "Balcony" },
+                        { key: "pool", label: "Infinity Pool" },
+                        { key: "gym", label: "24/7 Gym" },
                       ].map(({ key, label }) => {
                         const active = selectedAmenities.includes(key);
                         return (
                           <button
-                            key={key}
-                            onClick={() =>
-                              setSelectedAmenities((prev) =>
-                                active ? prev.filter((a) => a !== key) : [...prev, key]
-                              )
-                            }
-                            className={`py-1.5 px-2 border rounded-xl text-[10px] font-semibold transition text-left ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+                            key={label}
+                            onClick={() => setSelectedAmenities((prev) =>
+                              active ? prev.filter((a) => a !== key) : [...prev, key]
+                            )}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
+                              active
+                                ? "bg-[#0c2614] text-white border-[#0c2614]"
+                                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                            }`}
                           >
                             {label}
                           </button>
@@ -3161,37 +3281,22 @@ export default function TravellerDashboard() {
                   </div>
                 )}
 
-                {/* Cancellation policy */}
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Cancellation</label>
-                  <select
-                    value={selectedCancellation}
-                    onChange={(e) => setSelectedCancellation(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none"
-                  >
-                    <option value="">Any Policy</option>
-                    <option value="flexible">Flexible</option>
-                    <option value="moderate">Moderate</option>
-                    <option value="strict">Strict</option>
-                  </select>
-                </div>
-
-                {/* Car-specific filters */}
+                {/* Car transmission */}
                 {searchCategory === "car" && (
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Transmission</label>
-                    <div className="flex gap-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Transmission</label>
+                    <div className="flex gap-2 pt-0.5">
                       {["automatic", "manual"].map((t) => {
                         const active = selectedAmenities.includes(t);
                         return (
                           <button
                             key={t}
-                            onClick={() =>
-                              setSelectedAmenities((prev) =>
-                                active ? prev.filter((a) => a !== t) : [...prev, t]
-                              )
-                            }
-                            className={`flex-1 py-1.5 border rounded-xl text-xs font-semibold capitalize transition ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+                            onClick={() => setSelectedAmenities((prev) =>
+                              active ? prev.filter((a) => a !== t) : [...prev, t]
+                            )}
+                            className={`flex-1 py-2 border rounded-xl text-xs font-semibold capitalize transition ${
+                              active ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                            }`}
                           >
                             {t}
                           </button>
@@ -3200,99 +3305,281 @@ export default function TravellerDashboard() {
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Middle Listings Cards Feed (5 Cols) */}
-            <div className="lg:col-span-5 space-y-5">
-              {/* Result header */}
-              {!searching && listings.length > 0 && (
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span className="font-semibold">
-                    {listings.length}{totalCount > listings.length ? ` of ${totalCount}` : ""} {searchCategory}s found
-                  </span>
-                  {(showInstantOnly || selectedAmenities.length > 0 || selectedRating || priceMin > 0 || priceMax < 499999) && (
-                    <span className="text-[#1D8D2B] font-bold">Filters active</span>
-                  )}
-                </div>
-              )}
+                {/* Min Rating */}
+                {searchCategory !== "car" && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-700">Min. Rating</label>
+                    <div className="flex gap-2 pt-0.5">
+                      {[3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          onClick={() => setSelectedRating(star === selectedRating ? null : star)}
+                          className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${
+                            star === selectedRating ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                          }`}
+                        >
+                          ★ {star}+
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-              {searching ? (
-                /* Skeleton loading state */
-                <div className="grid grid-cols-1 gap-4">
-                  {[1, 2, 3].map((n) => (
-                    <div key={n} className="animate-pulse bg-white border border-slate-100 rounded-3xl overflow-hidden flex shadow-sm">
-                      <div className="w-2/5 bg-slate-200 min-h-[140px]" />
-                      <div className="flex-1 p-5 space-y-3">
-                        <div className="h-2.5 bg-slate-200 rounded w-1/4" />
-                        <div className="h-4 bg-slate-200 rounded w-3/4" />
-                        <div className="h-3 bg-slate-200 rounded w-1/2" />
-                        <div className="h-3 bg-slate-200 rounded w-2/3 mt-2" />
-                        <div className="flex justify-between pt-2 border-t border-slate-100 mt-2">
-                          <div className="h-5 bg-slate-200 rounded w-24" />
-                          <div className="h-5 bg-slate-200 rounded w-16" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : listings.length === 0 ? (
-                <div className="py-20 flex flex-col items-center gap-4 bg-white border border-slate-200 rounded-3xl px-6 text-center shadow-sm">
-                  <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl">🔍</div>
-                  {searchError && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-xs text-red-600 font-semibold max-w-xs">
-                      {searchError}
-                    </div>
-                  )}
+                {/* Instant Book */}
+                <div className="flex items-center justify-between py-1">
                   <div>
-                    <p className="text-slate-800 font-bold text-lg font-serif">No {searchCategory}s found</p>
-                    <p className="text-slate-400 text-sm mt-1 max-w-sm">
-                      Try removing some filters or searching a broader area.
-                    </p>
+                    <p className="text-xs font-semibold text-slate-700">⚡ Instant Book</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">No approval needed</p>
                   </div>
                   <button
-                    onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                    className="mt-2 px-6 py-2.5 bg-[#0c2614] text-white text-xs font-bold rounded-xl uppercase tracking-wider hover:bg-[#081b0d] transition"
+                    onClick={() => setShowInstantOnly((v) => !v)}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${showInstantOnly ? "bg-[#0c2614]" : "bg-slate-200"}`}
                   >
-                    Try a Different Search
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInstantOnly ? "translate-x-5" : ""}`} />
                   </button>
                 </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 gap-4">
-                    {listings.map((l) => (
+
+                {/* Apply Filters button */}
+                <button
+                  onClick={() => handleSearch()}
+                  className="w-full py-3 bg-[#0c2614] text-white text-sm font-semibold rounded-xl hover:bg-[#1D8D2B] transition shadow-sm"
+                >
+                  Apply Filters
+                </button>
+
+                {/* Reset */}
+                <button
+                  onClick={() => {
+                    setPriceMin(0); setPriceMax(500000); setSelectedRating(null);
+                    setSelectedCancellation(""); setSortBy("distance_asc");
+                    setSelectedAmenities([]); setShowInstantOnly(false);
+                    setFilterBedrooms(null); setFilterBathrooms(null); setFilterPropertyTypes([]);
+                  }}
+                  className="w-full text-xs font-bold text-slate-400 hover:text-slate-700 transition"
+                >
+                  Reset all filters
+                </button>
+              </div>
+            </aside>
+
+            {/* ── RIGHT CONTENT AREA ── */}
+            <div className="flex-1 overflow-y-auto min-w-0">
+
+              {/* Mobile filter + sort bar */}
+              <div className="lg:hidden flex items-center gap-2 px-4 pt-4">
+                <button
+                  onClick={() => setShowFiltersDrawer(true)}
+                  className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm hover:border-slate-400 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                  </svg>
+                  Filters
+                  {(showInstantOnly || selectedAmenities.length > 0 || !!selectedRating || priceMin > 0 || priceMax < 499999) && (
+                    <span className="w-2 h-2 rounded-full bg-[#E31C5F] inline-block" />
+                  )}
+                </button>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:outline-none shadow-sm"
+                >
+                  <option value="distance_asc">Nearest First</option>
+                  <option value="price_asc">Price: Low → High</option>
+                  <option value="price_desc">Price: High → Low</option>
+                  <option value="rating_desc">Best Rated</option>
+                  <option value="popularity_desc">Most Popular</option>
+                </select>
+              </div>
+
+              {/* Results header */}
+              <div className="px-6 lg:px-8 pt-6 pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900">
+                      {searching ? "Searching..." : `Found ${totalCount > 0 ? totalCount : displayedListings.length} Properties`}
+                    </h1>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                      {searchDestination
+                        ? `${searchCategory === "car" ? "Car rentals" : searchCategory === "hotel" ? "Hotels" : "Apartments"} in ${searchDestination.split(",")[0]}`
+                        : `Browse ${searchCategory === "car" ? "car rentals" : searchCategory + "s"} worldwide`}
+                    </p>
+                  </div>
+                  <div className="hidden lg:flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sort By</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none shadow-sm"
+                    >
+                      <option value="distance_asc">Nearest First</option>
+                      <option value="price_asc">Price: Low to High</option>
+                      <option value="price_desc">Price: High to Low</option>
+                      <option value="rating_desc">Best Rated</option>
+                      <option value="popularity_desc">Popular</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Listings content */}
+              <div className="px-6 lg:px-8 pb-10">
+                {searching ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((n) => (
+                      <div key={n} className="animate-pulse bg-white border border-slate-100 rounded-2xl overflow-hidden flex shadow-sm" style={{ minHeight: 190 }}>
+                        <div className="w-[42%] bg-slate-200 shrink-0" />
+                        <div className="flex-1 p-5 space-y-3">
+                          <div className="h-2.5 bg-slate-200 rounded w-1/4" />
+                          <div className="h-5 bg-slate-200 rounded w-3/4" />
+                          <div className="h-3 bg-slate-200 rounded w-1/2" />
+                          <div className="flex gap-4 mt-1">
+                            <div className="h-3 bg-slate-200 rounded w-16" />
+                            <div className="h-3 bg-slate-200 rounded w-16" />
+                            <div className="h-3 bg-slate-200 rounded w-16" />
+                          </div>
+                          <div className="flex justify-between items-end pt-4 border-t border-slate-100 mt-4">
+                            <div className="h-7 bg-slate-200 rounded w-28" />
+                            <div className="h-9 bg-slate-200 rounded w-32" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : displayedListings.length === 0 ? (
+                  <div className="py-20 flex flex-col items-center gap-4 bg-white border border-slate-200 rounded-3xl px-6 text-center shadow-sm">
+                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl">🔍</div>
+                    {searchError && (
+                      <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-xs text-red-600 font-semibold max-w-xs">
+                        {searchError}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-slate-800 font-bold text-lg">No {searchCategory}s found</p>
+                      <p className="text-slate-400 text-sm mt-1 max-w-sm">
+                        Try removing some filters or searching a broader area.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
+                      className="mt-2 px-6 py-2.5 bg-[#0c2614] text-white text-xs font-bold rounded-xl uppercase tracking-wider hover:bg-[#081b0d] transition"
+                    >
+                      Try a Different Search
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {/* First featured card */}
+                    {displayedListings[0] && (
                       <ListingCard
-                        key={l.id}
-                        listing={l}
+                        listing={displayedListings[0]}
                         onSelect={handleSelectListing}
                         hoveredId={mapHoveredId}
                         onHover={setMapHoveredId}
+                        variant="featured"
                       />
-                    ))}
-                  </div>
-                  {listings.length < totalCount && (
-                    <button
-                      onClick={loadMoreListings}
-                      disabled={loadingMore}
-                      className="w-full py-3 border-2 border-[#1D8D2B] text-[#1D8D2B] text-sm font-bold rounded-2xl hover:bg-[#0c2614] hover:text-white transition disabled:opacity-50"
-                    >
-                      {loadingMore ? "Loading..." : `Load More (${totalCount - listings.length} remaining)`}
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
+                    )}
 
-            {/* Real Leaflet map (4 Cols) — hidden on mobile */}
-            <div className="lg:col-span-4 hidden lg:block">
-              <div className="sticky top-28 rounded-3xl overflow-hidden aspect-[4/5] border border-slate-200 shadow-md">
-                <MapView
-                  listings={listings}
-                  hoveredId={mapHoveredId}
-                  onHover={setMapHoveredId}
-                  onSelect={handleSelectListing}
-                  searchDestination={searchDestination}
-                />
+                    {/* Promotional banner — shown after first result */}
+                    {displayedListings.length >= 1 && (() => {
+                      const promoEnd = new Date("2026-07-05T14:22:00");
+                      const now = Date.now();
+                      const diffMs = Math.max(0, promoEnd.getTime() - now);
+                      const pDays = Math.floor(diffMs / 86400000);
+                      const pHrs = Math.floor((diffMs % 86400000) / 3600000);
+                      const pMins = Math.floor((diffMs % 3600000) / 60000);
+                      return (
+                        <div className="relative overflow-hidden rounded-2xl text-white"
+                          style={{ background: "linear-gradient(135deg, #1a5c2a 0%, #2d9147 60%, #1a5c2a 100%)" }}>
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 p-6 lg:p-8">
+                            <div className="flex-1 min-w-0">
+                              <span className="inline-block bg-white/20 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full mb-3">
+                                Exclusive Deal
+                              </span>
+                              <h3 className="text-2xl lg:text-3xl font-bold mb-2">Limited Time Offer</h3>
+                              <p className="text-sm text-white/75 max-w-xs leading-relaxed">
+                                Book any {searchCategory === "hotel" ? "hotel" : searchCategory === "apartment" ? "penthouse" : "car"} for 3+ nights and receive a private chauffeur for your entire stay. Valid until July 5.
+                              </p>
+                            </div>
+                            <div className="flex flex-col items-start sm:items-end gap-4 shrink-0">
+                              <div>
+                                <p className="text-[10px] font-bold text-white/50 uppercase tracking-widest mb-2 sm:text-right">Starts In</p>
+                                <div className="flex items-end gap-2">
+                                  {[
+                                    { v: pDays, l: "DAYS" },
+                                    { v: pHrs, l: "HRS" },
+                                    { v: pMins, l: "MINS" },
+                                  ].map(({ v, l }) => (
+                                    <div key={l} className="flex flex-col items-center">
+                                      <div className="bg-[#0c2614] rounded-xl w-12 h-12 lg:w-14 lg:h-14 flex items-center justify-center">
+                                        <span className="text-xl lg:text-2xl font-bold tabular-nums">{String(v).padStart(2, "0")}</span>
+                                      </div>
+                                      <span className="text-[9px] font-bold text-white/50 mt-1 tracking-widest">{l}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleSearch()}
+                                className="bg-white text-[#0c2614] text-sm font-bold px-6 py-2.5 rounded-full hover:bg-slate-100 transition shadow-sm"
+                              >
+                                Unlock Offer
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Cards 2 and 3 as featured */}
+                    {displayedListings[1] && (
+                      <ListingCard
+                        listing={displayedListings[1]}
+                        onSelect={handleSelectListing}
+                        hoveredId={mapHoveredId}
+                        onHover={setMapHoveredId}
+                        variant="featured"
+                      />
+                    )}
+                    {displayedListings[2] && (
+                      <ListingCard
+                        listing={displayedListings[2]}
+                        onSelect={handleSelectListing}
+                        hoveredId={mapHoveredId}
+                        onHover={setMapHoveredId}
+                        variant="featured"
+                      />
+                    )}
+
+                    {/* Remaining cards in 2-column compact grid */}
+                    {displayedListings.length > 3 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        {displayedListings.slice(3).map((l) => (
+                          <ListingCard
+                            key={l.id}
+                            listing={l}
+                            onSelect={handleSelectListing}
+                            hoveredId={mapHoveredId}
+                            onHover={setMapHoveredId}
+                            variant="compact"
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Load More */}
+                    {listings.length < totalCount && (
+                      <button
+                        onClick={loadMoreListings}
+                        disabled={loadingMore}
+                        className="w-full py-3 border-2 border-[#1D8D2B] text-[#1D8D2B] text-sm font-bold rounded-2xl hover:bg-[#0c2614] hover:text-white transition disabled:opacity-50"
+                      >
+                        {loadingMore ? "Loading..." : `Load More (${totalCount - listings.length} remaining)`}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
