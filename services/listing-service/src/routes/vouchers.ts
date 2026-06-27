@@ -418,6 +418,13 @@ export async function voucherRoutes(app: FastifyInstance) {
         tags: ["Vouchers"],
         summary: "Get the authenticated guest's voucher wallet (auto-assigned vouchers)",
         security: [{ bearerAuth: [] }],
+        querystring: {
+          type: "object",
+          properties: {
+            activity: { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"], description: "Current booking activity context" },
+            guestCountry: { type: "string", description: "Guest's ISO 3166-1 alpha-2 country code" },
+          },
+        },
         response: {
           200: {
             type: "object",
@@ -459,6 +466,7 @@ export async function voucherRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const guestId = (req as any).providerId as string;
+        const q = req.query as { activity?: string; guestCountry?: string };
         const now = new Date();
 
         // Auto-assigned wallet entries use the bookingId prefix "wallet-"
@@ -485,6 +493,18 @@ export async function voucherRoutes(app: FastifyInstance) {
             status:           (v as any).status ?? "active",
             assignedAt:       a.createdAt.toISOString(),
           };
+        }).filter((item) => {
+          if (q.activity && item.activityScope !== "universal") {
+            const allowed = item.activityScope === "hotels_apartments" 
+              ? ["hotels", "apartments"] 
+              : [item.activityScope];
+            if (!allowed.includes(q.activity)) return false;
+          }
+          if (q.guestCountry) {
+            const vRaw = assignments.find((a) => a.voucher.id === item.voucherId)?.voucher as any;
+            if (vRaw?.countryScope && vRaw.countryScope !== q.guestCountry) return false;
+          }
+          return true;
         });
 
         return sendSuccess(reply, 200, { vouchers });
@@ -756,7 +776,19 @@ export async function voucherRoutes(app: FastifyInstance) {
         const skip  = (page - 1) * limit;
 
         const where: any = {};
-        if (q.status)   where.status   = q.status;
+
+        if (q.status) {
+          // Caller explicitly requested a specific status (including 'superseded') — honour it.
+          where.status = q.status;
+        } else {
+          // Default: exclude 'superseded' promotions.
+          // When a new promotion is created it sets the previous active/scheduled one to
+          // 'superseded' (see POST /admin/promotions, supersede block) but leaves the row
+          // in the database. Without this exclusion, deleting the latest promotion causes
+          // the old superseded row to reappear in the list on refresh.
+          where.status = { not: "superseded" };
+        }
+
         if (q.activity) where.activity = q.activity;
 
         const [promotions, total] = await Promise.all([

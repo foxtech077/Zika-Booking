@@ -96,7 +96,7 @@ export default function PayoutManagementPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-payouts"],
     queryFn: () =>
-      listingApi.get("/admin/payouts", { params: { limit: "1000" } }).then((r) => {
+      listingApi.get("/admin/payouts", { params: { limit: "100" } }).then((r) => {
         return r.data?.data ?? r.data ?? [];
       }),
   });

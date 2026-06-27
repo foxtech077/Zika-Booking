@@ -16,13 +16,11 @@ import { paymentApi } from "@/lib/payment-api";
 import { canAccess } from "@/permissions/rbac";
 import { SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea, CustomDropdown } from "@/components/ui/Input";
+import { Input, Textarea, CustomDropdown } from "@/components/ui/Input";
 import { formatCurrency, cn } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useAlert } from "@/hooks/useAlert";
-
-const UISelect = Select;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,6 +41,9 @@ interface PriceSummary {
   tax: number;
   total: number;
   currency: string;
+  nights?: number;
+  pricePerNight?: number;
+  commissionRate?: number;
 }
 
 interface AvailabilityData {
@@ -443,7 +444,31 @@ export default function ManualBookingPage() {
   const [calSelectStep, setCalSelectStep] = useState<"checkIn" | "checkOut">("checkIn");
 
   // ── Section 4: Price ──────────────────────────────────────────────────────────
-  const [price, setPrice] = useState<PriceSummary | null>(null);
+  const [price, _setPrice] = useState<PriceSummary | null>(null);
+  const [selectedPromoId, setSelectedPromoId] = useState<string>("");
+  const [selectedVoucherId, setSelectedVoucherId] = useState<string>("");
+
+  const setPrice = (val: PriceSummary | null) => {
+    _setPrice(val);
+    if (val === null) {
+      setSelectedPromoId("");
+      setSelectedVoucherId("");
+    }
+  };
+
+  // Fetch active vouchers (isActive=true)
+  const { data: vouchersData } = useQuery({
+    queryKey: ["admin-vouchers-active"],
+    queryFn: () => listingApi.get("/admin/vouchers", { params: { isActive: "true" } }).then((r) => r.data?.data ?? r.data),
+  });
+  const activeVouchersList = vouchersData?.vouchers ?? (Array.isArray(vouchersData) ? vouchersData : []);
+
+  // Fetch active promotions (status=active)
+  const { data: promotionsData } = useQuery({
+    queryKey: ["admin-promotions-active"],
+    queryFn: () => listingApi.get("/admin/promotions", { params: { status: "active" } }).then((r) => r.data?.data ?? r.data),
+  });
+  const activePromotionsList = promotionsData?.promotions ?? (Array.isArray(promotionsData) ? promotionsData : []);
 
   // ── Section 5: Payment ────────────────────────────────────────────────────────
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("stripe");
@@ -603,10 +628,78 @@ export default function ManualBookingPage() {
     return Math.max(0, Math.ceil(diff / 86400000));
   })();
 
-  const pricePerNight = price && nights > 0 ? price.baseAmount / nights : null;
-  const pricePerGuest = price && guests > 0 ? price.total / guests : null;
-  const serviceFeeRate = price && price.baseAmount > 0 ? (price.serviceFee / price.baseAmount) * 100 : null;
-  const taxRate = price && price.baseAmount > 0 ? (price.tax / price.baseAmount) * 100 : null;
+  const computedPricing = (() => {
+    if (!price) return null;
+
+    const baseAmount = price.baseAmount;
+
+    // 1. Calculate Promotion Discount
+    let promotionDiscount = 0;
+    const activePromo = activePromotionsList.find((p: any) => p.id === selectedPromoId);
+    if (activePromo && activePromo.applyToBooking) {
+      if (activePromo.discountType === "percentage") {
+        promotionDiscount = Math.round(baseAmount * (activePromo.discountValue / 100) * 100) / 100;
+      } else if (activePromo.discountType === "fixed") {
+        promotionDiscount = Math.min(baseAmount, activePromo.discountValue);
+      }
+    }
+
+    // 2. Calculate Voucher Discount
+    let voucherDiscount = 0;
+    const activeVoucher = activeVouchersList.find((v: any) => v.id === selectedVoucherId);
+    if (activeVoucher && activeVoucher.isActive) {
+      const scope = activeVoucher.activityScope ?? "universal";
+      const isVoucherApplicable =
+        scope === "universal" ||
+        (listingType === "hotel" && (scope === "hotels" || scope === "hotels_apartments")) ||
+        (listingType === "apartment" && scope === "apartments") ||
+        (listingType === "car" && scope === "cars");
+
+      if (isVoucherApplicable) {
+        if (activeVoucher.discountType === "percentage") {
+          voucherDiscount = Math.round(baseAmount * (activeVoucher.discountValue / 100) * 100) / 100;
+        } else if (activeVoucher.discountType === "fixed") {
+          voucherDiscount = Math.min(baseAmount, activeVoucher.discountValue);
+        }
+      }
+    }
+
+    // PRD formula: discount = best(promotion_discount, voucher_discount)
+    const discount = Math.max(promotionDiscount, voucherDiscount);
+    const subtotal = Math.max(0, baseAmount - discount);
+
+    // Recalculate service fee based on discounted subtotal
+    const commRate = price.commissionRate ?? (price.baseAmount > 0 ? price.serviceFee / price.baseAmount : 0);
+    const serviceFee = Math.ceil(subtotal * commRate * 100) / 100;
+
+    // Recalculate tax based on discounted subtotal
+    const tRate = price.baseAmount > 0 ? price.tax / price.baseAmount : 0;
+    const tax = Math.round(subtotal * tRate * 100) / 100;
+
+    // Grand total
+    const total = Math.max(0, subtotal + serviceFee + tax);
+
+    return {
+      baseAmount,
+      promotionDiscount,
+      voucherDiscount,
+      discount,
+      subtotal,
+      serviceFee,
+      tax,
+      total,
+      currency: price.currency,
+      nights: price.nights ?? nights,
+      pricePerNight: price.pricePerNight ?? (nights > 0 ? baseAmount / nights : 0),
+      commissionRate: commRate,
+    };
+  })();
+
+  const pricePerNight = computedPricing ? computedPricing.pricePerNight : null;
+  const pricePerGuest = computedPricing && guests > 0 ? computedPricing.total / guests : null;
+  const serviceFeeRate = computedPricing && computedPricing.baseAmount > 0 ? (computedPricing.serviceFee / computedPricing.baseAmount) * 100 : null;
+  const taxRate = computedPricing && computedPricing.baseAmount > 0 ? (computedPricing.tax / computedPricing.baseAmount) * 100 : null;
+  const commissionRate = computedPricing ? computedPricing.commissionRate * 100 : null;
 
   const formatDateLabel = (dateStr: string) => {
     if (!dateStr) return "—";
@@ -684,17 +777,36 @@ export default function ManualBookingPage() {
       const res = await listingApi.get("/admin/bookings/availability", { params });
       const d = res.data?.data ?? res.data;
       setAvailStatus(d.available ? "available" : "unavailable");
-      if (d.available && d.pricing) {
-        setPrice({
-          baseAmount: d.pricing.baseAmount ?? 0,
-          discount: d.pricing.discount ?? 0,
-          voucherDiscount: d.pricing.voucherDiscount,
-          promotionDiscount: d.pricing.promotionDiscount,
-          serviceFee: d.pricing.serviceFee ?? 0,
-          tax: d.pricing.tax ?? 0,
-          total: d.pricing.total ?? 0,
-          currency: d.pricing.currency ?? getCurrencyForCountry(country),
-        });
+      if (d.available && (d.pricing || d.subtotal !== undefined)) {
+        if (d.pricing) {
+          setPrice({
+            baseAmount: d.pricing.baseAmount ?? 0,
+            discount: d.pricing.discount ?? 0,
+            voucherDiscount: d.pricing.voucherDiscount,
+            promotionDiscount: d.pricing.promotionDiscount,
+            serviceFee: d.pricing.serviceFee ?? 0,
+            tax: d.pricing.tax ?? 0,
+            total: d.pricing.total ?? 0,
+            currency: d.pricing.currency ?? getCurrencyForCountry(country),
+            nights: d.nights ?? 0,
+            pricePerNight: d.pricePerNight ?? 0,
+            commissionRate: d.commissionRate ?? 0,
+          });
+        } else {
+          setPrice({
+            baseAmount: d.subtotal ?? 0,
+            discount: 0,
+            voucherDiscount: undefined,
+            promotionDiscount: undefined,
+            serviceFee: d.commissionAmount ?? 0,
+            tax: 0,
+            total: d.totalAmount ?? 0,
+            currency: d.currency ?? getCurrencyForCountry(country),
+            nights: d.nights ?? 0,
+            pricePerNight: d.pricePerNight ?? 0,
+            commissionRate: d.commissionRate ?? 0,
+          });
+        }
       }
       // The admin endpoint never returns bookedRanges/lockedRanges directly.
       // If it found conflicts (available: false), refresh the calendar from
@@ -723,65 +835,43 @@ export default function ManualBookingPage() {
           // ignore — calendar already has data from the initial fetch
         }
       }
-    } catch {
-      // Mock fallback
-      const today = new Date();
-      const rel = (startOffset: number, endOffset: number) => {
-        const s = new Date(today);
-        s.setDate(s.getDate() + startOffset);
-        const e = new Date(today);
-        e.setDate(e.getDate() + endOffset);
-        return { start: toYMD(s), end: toYMD(e) };
-      };
+// Duplicate saveDraftMut block removed to fix syntax errors
+      const saveDraftMut = useMutation({
+    mutationFn: () => {
+      const rate = computedPricing && nights > 0
+        ? computedPricing.subtotal / nights
+        : (price?.baseAmount ?? 0);
+      return listingApi
+        .post("/admin/bookings/draft", {
+          listingId,
+          listingType,
+          listingName,
+          guestFirstName: firstName,
 
-      const mockAvail = {
-        bookedRanges: [rel(2, 5), rel(10, 14), rel(22, 25)],
-        lockedRanges: [rel(7, 9), rel(18, 20)],
-      };
-
-      if (!availability) {
-        setAvailability(mockAvail);
-      }
-
-      const activeAvail = availability || mockAvail;
-      const rangeStatus = getSelectedRangeStatus(activeAvail);
-      setAvailStatus(rangeStatus === "available" ? "available" : "unavailable");
-
-      const base = nights * 120;
-      setPrice({
-        baseAmount: base,
-        discount: 0,
-        serviceFee: Math.round(base * 0.05),
-        tax: Math.round(base * 0.10),
-        total: Math.round(base * 1.15),
-        currency: getCurrencyForCountry(country),
-      });
-    }
-  }
-
-  const renderClearDate = (setter: (v: string) => void) => (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.preventDefault();
-        setter("");
-        setAvailStatus("idle");
-        setPrice(null);
-      }}
-      className="mr-11 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer pointer-events-auto z-10"
-      title="Clear date"
-    >
-      <X className="h-4 w-4" />
+        .then((r) => r.data);
+    },
+    onSuccess: () => {
+      setErrors({});
+      showAlert({ type: "success", title: "Draft Saved", message: "Booking draft saved successfully." });
+    },
+    onError: (err) => {
+      setErrors((p) => ({ ...p, _api: err?.response?.data?.error?.message ?? "Draft save failed." }));
+      showAlert({ type: "warning", title: "Draft Not Saved", message: "Backend not yet active — data stored locally." });
+    },
+  });
     </button>
   );
 
 
 
 
-  // ── Save Draft ────────────────────────────────────────────────────────────────
   const saveDraftMut = useMutation({
-    mutationFn: () =>
-      listingApi.post("/admin/bookings/draft", {
+    mutationFn: () => {
+      const rate = computedPricing && nights > 0
+        ? computedPricing.subtotal / nights
+        : (price?.baseAmount ?? 0);
+
+      return listingApi.post("/admin/bookings/draft", {
         listingId, listingType, listingName,
         guestFirstName: firstName, guestLastName: lastName,
         guestEmail: email, guestPhone: phone, nationality,
@@ -789,7 +879,7 @@ export default function ManualBookingPage() {
         checkIn: isAccommodation ? (checkIn ? new Date(checkIn).toISOString() : undefined) : (pickup ? new Date(pickup).toISOString() : undefined),
         checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : undefined) : (returnDt ? new Date(returnDt).toISOString() : undefined),
         nightsOrDays: nights,
-        nightlyRate: price?.baseAmount ?? 0,
+        nightlyRate: rate,
         guestId: "",
       }).then((r) => r.data),
     onSuccess: () => {
@@ -1356,35 +1446,55 @@ export default function ManualBookingPage() {
                   </div>
                 </>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <DatePicker
-                    id={`${uid}-pickup`}
-                    label="Pickup"
-                    required
-                    value={pickup}
-                    onChange={(val) => { setPickup(val); setAvailStatus("idle"); setPrice(null); }}
-                    error={errors.pickup}
-                  />
-                  <DatePicker
-                    id={`${uid}-return`}
-                    label="Return"
-                    required
-                    minDate={pickup || undefined}
-                    value={returnDt}
-                    onChange={(val) => { setReturnDt(val); setAvailStatus("idle"); setPrice(null); }}
-                    error={errors.returnDt}
-                  />
-                </div>
+                <>
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 flex items-center gap-2">
+                    <CalendarDays className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                    <p className="text-xs text-primary">
+                      You can also click dates directly on the calendar →{" "}
+                      <strong>{!pickup || (pickup && returnDt) ? "Select Pickup Date" : "Select Return Date"}</strong>
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <DatePicker
+                      id={`${uid}-pickup`}
+                      label="Pickup Date"
+                      required
+                      value={pickup}
+                      onChange={(val) => { setPickup(val); setAvailStatus("idle"); setPrice(null); }}
+                      error={errors.pickup}
+                    />
+                    <DatePicker
+                      id={`${uid}-return`}
+                      label="Return Date"
+                      required
+                      minDate={pickup || undefined}
+                      value={returnDt}
+                      onChange={(val) => { setReturnDt(val); setAvailStatus("idle"); setPrice(null); }}
+                      error={errors.returnDt}
+                    />
+                  </div>
+                  {nights > 0 && (
+                    <p className="text-xs text-slate-500">
+                      <CalendarDays className="inline h-3.5 w-3.5 mr-1 text-primary" />
+                      {nights} day{nights !== 1 ? "s" : ""} rental
+                    </p>
+                  )}
+                  <div className="space-y-1">
+                    <label htmlFor={`${uid}-car-guests`} className="block text-sm font-medium text-slate-700">
+                      Passengers <span className="text-danger">*</span>
+                    </label>
+                    <input
+                      id={`${uid}-car-guests`}
+                      type="number" min={1} max={20}
+                      value={guests}
+                      onChange={(e) => setGuests(Math.max(1, Number(e.target.value)))}
+                      onFocus={(e) => { const t = e.target; setTimeout(() => t.select(), 0); }}
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                      className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
+                    />
+                  </div>
+                </>
               )}
-              <div className="grid grid-cols-2 gap-4">
-                <UISelect id={`${uid}-guests`} label="Guests" required value={String(guests)} onChange={(e) => setGuests(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
-                {listingType === "hotel" && (
-                  <UISelect id={`${uid}-rooms`} label="Rooms" required value={String(rooms)} onChange={(e) => setRooms(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
-                )}
-                {listingType === "apartment" && (
-                  <UISelect id={`${uid}-units`} label="Units" required value={String(units)} onChange={(e) => setUnits(Number(e.target.value))} options={Array.from({ length: 10 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))} />
-                )}
-              </div>
             </div>
           </SectionCard>
 
@@ -1433,8 +1543,8 @@ export default function ManualBookingPage() {
                     type="button"
                     onClick={() => setPaymentMethod("stripe")}
                     className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${paymentMethod === "stripe"
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-border text-slate-600 hover:border-slate-300"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-slate-600 hover:border-slate-300"
                       }`}
                   >
                     <CreditCard className="h-4 w-4" />
@@ -1444,8 +1554,8 @@ export default function ManualBookingPage() {
                     type="button"
                     onClick={() => setPaymentMethod("tara")}
                     className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${paymentMethod === "tara"
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-border text-slate-600 hover:border-slate-300"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-slate-600 hover:border-slate-300"
                       }`}
                   >
                     <CreditCard className="h-4 w-4" />
@@ -1460,7 +1570,7 @@ export default function ManualBookingPage() {
               </p>
 
               {/* Price summary (shown when available) */}
-              {price && (
+              {price && computedPricing && (
                 <div className="space-y-4">
                   {/* Booking Summary */}
                   <div className="rounded-lg border border-border bg-slate-50/60 p-5 space-y-4">
@@ -1491,27 +1601,118 @@ export default function ManualBookingPage() {
                     </div>
                   </div>
 
+                  {/* Apply Promotion or Voucher */}
+                  <div className="rounded-lg border border-border bg-white p-5 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Apply Promotion or Voucher</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Promotion Selector */}
+                      <div className="space-y-1">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Promotion</label>
+                        <select
+                          value={selectedPromoId}
+                          onChange={(e) => setSelectedPromoId(e.target.value)}
+                          className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
+                        >
+                          <option value="">No promotion applied</option>
+                          {activePromotionsList
+                            .filter((p: any) => p.activity === listingType && (p.countryScope === country || p.countryScope === "*" || p.countryScope === "all" || !p.countryScope))
+                            .map((p: any) => (
+                              <option key={p.id} value={p.id}>
+                                {p.labelText || p.bannerTitle} ({p.discountType === "percentage" ? `${p.discountValue}% off` : `${formatCurrency(p.discountValue, price.currency)} off`})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      {/* Voucher Selector */}
+                      <div className="space-y-1">
+                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Voucher Discount</label>
+                        <select
+                          value={selectedVoucherId}
+                          onChange={(e) => setSelectedVoucherId(e.target.value)}
+                          className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
+                        >
+                          <option value="">No voucher applied</option>
+                          {activeVouchersList
+                            .filter((v: any) => {
+                              if (!v.isActive) return false;
+                              
+                              // Country filter
+                              const isCountryMatch = !v.countryScope || v.countryScope === "*" || v.countryScope === "all" || v.countryScope === country;
+                              if (!isCountryMatch) return false;
+
+                              // Activity category filter
+                              const scope = v.activityScope ?? "universal";
+                              if (scope === "universal") return true;
+                              if (listingType === "hotel") {
+                                return scope === "hotels" || scope === "hotels_apartments";
+                              }
+                              if (listingType === "apartment") {
+                                return scope === "apartments";
+                              }
+                              if (listingType === "car") {
+                                return scope === "cars";
+                              }
+                              return false;
+                            })
+                            .map((v: any) => (
+                              <option key={v.id} value={v.id}>
+                                {v.code} ({v.discountType === "percentage" ? `${v.discountValue}% off` : `${formatCurrency(v.discountValue, price.currency)} off`})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Pricing Breakdown */}
                   <div className="rounded-lg border border-border bg-slate-50/60 p-5 space-y-4">
                     <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Pricing Breakdown</h3>
 
                     <div className="pt-2 space-y-1.5">
-                      <InfoRow label="Base Booking Amount" value={formatCurrency(price.baseAmount, price.currency)} />
-                      {price.voucherDiscount !== undefined && price.voucherDiscount > 0 && <InfoRow label="Voucher Discount" value={`-${formatCurrency(price.voucherDiscount, price.currency)}`} />}
-                      {price.promotionDiscount !== undefined && price.promotionDiscount > 0 && <InfoRow label="Promotion Discount" value={`-${formatCurrency(price.promotionDiscount, price.currency)}`} />}
-                      {price.discount > 0 && !price.voucherDiscount && !price.promotionDiscount && <InfoRow label="Discount" value={`-${formatCurrency(price.discount, price.currency)}`} />}
+                      <InfoRow
+                        label={isAccommodation ? "Number of Nights" : "Number of Days"}
+                        value={`${nights} ${isAccommodation ? (nights === 1 ? "night" : "nights") : (nights === 1 ? "day" : "days")}`}
+                      />
+                      <InfoRow
+                        label={isAccommodation ? "Unit Price (Per Night)" : "Unit Price (Per Day)"}
+                        value={pricePerNight !== null ? formatCurrency(pricePerNight, computedPricing.currency) : "—"}
+                      />
+                      <InfoRow label="Base Amount" value={formatCurrency(computedPricing.baseAmount, computedPricing.currency)} />
                     </div>
 
                     <div className="pt-2 border-t border-slate-200 space-y-1.5">
-                      <InfoRow label="Subtotal" value={formatCurrency(price.baseAmount - price.discount, price.currency)} />
-                      <InfoRow label={serviceFeeRate !== null ? `Service Fee (${formatRate(serviceFeeRate)})` : "Service Fee"} value={formatCurrency(price.serviceFee, price.currency)} />
-                      <InfoRow label={taxRate !== null ? `Tax (${formatRate(taxRate)})` : "Tax"} value={formatCurrency(price.tax, price.currency)} />
+                      <InfoRow
+                        label="Applied Promotion Discount"
+                        value={computedPricing.promotionDiscount > 0 ? `-${formatCurrency(computedPricing.promotionDiscount, computedPricing.currency)}` : "—"}
+                      />
+                      <InfoRow
+                        label="Applied Voucher Discount"
+                        value={computedPricing.voucherDiscount > 0 ? `-${formatCurrency(computedPricing.voucherDiscount, computedPricing.currency)}` : "—"}
+                      />
+                      <InfoRow
+                        label="Best Discount Applied"
+                        value={computedPricing.discount > 0 ? `-${formatCurrency(computedPricing.discount, computedPricing.currency)}` : "—"}
+                      />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                      <InfoRow label="Subtotal" value={formatCurrency(computedPricing.subtotal, computedPricing.currency)} />
+                      <InfoRow
+                        label="Commission Rate Applied"
+                        value={commissionRate !== null ? formatRate(commissionRate) : "—"}
+                      />
+                      <InfoRow label="Service Fee / Commission Amount" value={formatCurrency(computedPricing.serviceFee, computedPricing.currency)} />
+                      <InfoRow
+                        label="Taxes"
+                        value={formatCurrency(computedPricing.tax, computedPricing.currency)}
+                      />
                     </div>
 
                     <div className="pt-3 border-t border-slate-200">
                       <div className="flex items-center justify-between">
-                        <span className="text-base font-bold text-slate-900">Grand Total</span>
-                        <span className="text-lg font-bold text-primary">{formatCurrency(price.total, price.currency)}</span>
+                        <span className="text-base font-bold text-slate-900">Total Amount Payable</span>
+                        <span className="text-lg font-bold text-primary">{formatCurrency(computedPricing.total, computedPricing.currency)}</span>
                       </div>
                     </div>
                   </div>
@@ -1612,28 +1813,92 @@ export default function ManualBookingPage() {
         </div>
 
         {/* Right column - Availability Calendar sidebar */}
-        <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-6 self-start">
+        <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-6 self-start space-y-4">
+          {/* Calendar — shown for all listing types.
+              For cars: pickup = checkIn, returnDt = checkOut, and clicking
+              dates sets pickup/return rather than checkIn/checkOut. */}
           <AvailabilityCalendar
-            checkIn={checkIn}
-            checkOut={checkOut}
+            checkIn={isAccommodation ? checkIn : pickup}
+            checkOut={isAccommodation ? checkOut : returnDt}
             availability={availability}
             loading={calLoading}
             onSelectDate={(date) => {
-              if (calSelectStep === "checkIn") {
-                setCheckIn(date);
-                setCheckOut("");
-                setCalSelectStep("checkOut");
-              } else {
-                if (date > checkIn) {
-                  setCheckOut(date);
-                  setCalSelectStep("checkIn");
-                } else {
+              if (isAccommodation) {
+                // Hotel / Apartment — two-step check-in → check-out selection
+                if (calSelectStep === "checkIn") {
                   setCheckIn(date);
                   setCheckOut("");
+                  setCalSelectStep("checkOut");
+                } else {
+                  if (date > checkIn) {
+                    setCheckOut(date);
+                    setCalSelectStep("checkIn");
+                  } else {
+                    setCheckIn(date);
+                    setCheckOut("");
+                  }
+                }
+              } else {
+                // Car rental — two-step pickup → return selection
+                if (!pickup || (pickup && returnDt)) {
+                  // Start fresh: set pickup, clear return
+                  setPickup(date);
+                  setReturnDt("");
+                  setAvailStatus("idle");
+                  setPrice(null);
+                } else {
+                  // pickup is set, no return yet
+                  if (date > pickup) {
+                    setReturnDt(date);
+                    setAvailStatus("idle");
+                    setPrice(null);
+                  } else {
+                    // Clicked before current pickup — restart
+                    setPickup(date);
+                    setReturnDt("");
+                  }
                 }
               }
             }}
           />
+
+          {/* Car rental summary card — shown below the calendar for cars only */}
+          {!isAccommodation && (
+            <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60">
+                <CalendarDays className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-semibold text-slate-900 flex-1">Rental Period</h2>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between rounded-lg border border-border bg-slate-50 px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Pickup Date</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {pickup
+                        ? new Date(pickup).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+                        : <span className="text-slate-400 italic">Click a date on the calendar</span>}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-border bg-slate-50 px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Return Date</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {returnDt
+                        ? new Date(returnDt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+                        : <span className="text-slate-400 italic">{pickup ? "Click return date" : "—"}</span>}
+                    </p>
+                  </div>
+                </div>
+                {nights > 0 && (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-0.5">Duration</p>
+                    <p className="text-sm font-bold text-primary">{nights} day{nights !== 1 ? "s" : ""}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
       </div>

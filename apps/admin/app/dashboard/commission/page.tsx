@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Percent, Plus, Trash2, Globe } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
@@ -62,6 +62,16 @@ export default function CommissionPage() {
 
   const rates: CommissionRate[] = data?.rates ?? [];
   const defaultRate: number = (data as any)?.globalRate != null ? (data as any).globalRate * 100 : (data?.defaultRate ?? 5);
+
+  const filteredRates = useMemo(() => {
+    if (role === "super_admin" || role === "admin" || role === "finance" || role === "support") {
+      return rates;
+    }
+    if (role === "country_manager" || role === "sales") {
+      return rates.filter((r) => user?.countryScope?.includes(r.country));
+    }
+    return [];
+  }, [rates, role, user?.countryScope]);
 
   const upsertMut = useMutation({
     mutationFn: ({
@@ -232,7 +242,7 @@ export default function CommissionPage() {
             <p className="text-sm font-medium text-slate-600">Global Default Rate</p>
             <p className="text-3xl font-bold text-primary">{defaultRate}%</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              Applied to all countries without a custom override · {rates.length} override{rates.length !== 1 ? "s" : ""} configured
+              Applied to all countries without a custom override · {filteredRates.length} override{filteredRates.length !== 1 ? "s" : ""} configured
             </p>
           </div>
         </div>
@@ -260,7 +270,7 @@ export default function CommissionPage() {
         </div>
         <DataTable
           columns={columns}
-          data={rates}
+          data={filteredRates}
           loading={isLoading}
           emptyTitle="No overrides configured"
           emptyDescription="All countries use the global default rate."

@@ -232,11 +232,14 @@ export default function RolesPage() {
     {
       key: "scope",
       label: "Country Scope",
-      render: (op) => (
-        <span className="text-xs text-slate-600">
-          {op.countryScope?.length ? op.countryScope.join(", ") : "Global"}
-        </span>
-      ),
+      render: (op) => {
+        const isScopedRole = op.role === "country_manager" || op.role === "sales";
+        return (
+          <span className="text-xs text-slate-600">
+            {!isScopedRole ? "Global" : (op.countryScope?.length ? op.countryScope.join(", ") : "None")}
+          </span>
+        );
+      },
     },
     {
       key: "totp",
@@ -478,11 +481,16 @@ export default function RolesPage() {
               variant="primary"
               size="sm"
               loading={editMut.isPending}
-              onClick={() => editModal && editMut.mutate({
-                id: editModal.id,
-                role: editRole,
-                countryScope: editCountries,
-              })}
+              onClick={() => {
+                if (!editModal) return;
+                const isScopedRole = editRole === "country_manager" || editRole === "sales";
+                const allCountries = Object.keys(countries.getAlpha2Codes()).map((c) => c.toUpperCase());
+                editMut.mutate({
+                  id: editModal.id,
+                  role: editRole,
+                  countryScope: isScopedRole ? editCountries : allCountries,
+                });
+              }}
             >
               Save Changes
             </Button>

@@ -13,7 +13,7 @@ import countries from "i18n-iso-countries";
 import enLocale from "i18n-iso-countries/langs/en.json";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
-import { formatDate, formatCurrency } from "@/lib/utils";
+import { formatDate, formatCurrency, formatDateTime } from "@/lib/utils";
 import type { Promotion } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useAuthStore } from "@/stores/auth";
@@ -111,6 +111,14 @@ export default function PromotionsPage() {
   const role = user?.role;
   const hasManagePermission = canAccess(role, "manage_promotions");
   const { showAlert } = useAlert();
+
+  const todayYMD = (() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  })();
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -266,10 +274,18 @@ export default function PromotionsPage() {
 
   const openEdit = (p: Promotion, e: React.MouseEvent) => {
     e.stopPropagation();
-    // Parse ISO dates back to YYYY-MM-DD
-    const parseYMD = (dateStr: string) => {
+    // Parse ISO dates back to YYYY-MM-DDTHH:mm local time
+    const parseDateTimeLocal = (dateStr: string) => {
       if (!dateStr) return "";
-      return dateStr.slice(0, 10);
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "";
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const yyyy = d.getFullYear();
+      const mm = pad(d.getMonth() + 1);
+      const dd = pad(d.getDate());
+      const hh = pad(d.getHours());
+      const min = pad(d.getMinutes());
+      return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
     };
 
     setForm({
@@ -279,8 +295,8 @@ export default function PromotionsPage() {
       labelColour: p.labelColour || "#C84B2F",
       discountType: p.discountType,
       discountValue: String(p.discountValue || ""),
-      validFrom: parseYMD(p.validFrom),
-      validUntil: parseYMD(p.validUntil),
+      validFrom: parseDateTimeLocal(p.validFrom),
+      validUntil: parseDateTimeLocal(p.validUntil),
       applyToBooking: p.applyToBooking,
       bannerTitle: p.bannerTitle,
       bannerSubtitle: p.bannerSubtitle || "",
@@ -304,7 +320,7 @@ export default function PromotionsPage() {
       setFormError("Validity dates are required.");
       return false;
     }
-    if (form.validUntil < form.validFrom) {
+    if (new Date(form.validUntil).getTime() <= new Date(form.validFrom).getTime()) {
       setFormError("Valid Until date must be after Valid From date.");
       return false;
     }
@@ -425,8 +441,8 @@ export default function PromotionsPage() {
       label: "Validity Dates",
       render: (p) => (
         <div className="text-xs text-slate-600 space-y-0.5">
-          <p><span className="text-slate-400">From:</span> {formatDate(p.validFrom)}</p>
-          <p><span className="text-slate-400">Until:</span> {formatDate(p.validUntil)}</p>
+          <p><span className="text-slate-400">From:</span> {formatDateTime(p.validFrom)}</p>
+          <p><span className="text-slate-400">Until:</span> {formatDateTime(p.validUntil)}</p>
         </div>
       ),
     },
@@ -635,8 +651,8 @@ export default function PromotionsPage() {
 
             <div className="bg-slate-50/60 rounded-xl p-5 border border-slate-100 space-y-4">
               <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Validity & Audit</h3>
-              <InfoRow label="Valid From" value={formatDate(selected.validFrom)} />
-              <InfoRow label="Valid Until" value={formatDate(selected.validUntil)} />
+              <InfoRow label="Valid From" value={formatDateTime(selected.validFrom)} />
+              <InfoRow label="Valid Until" value={formatDateTime(selected.validUntil)} />
               <InfoRow label="Created At" value={formatDate(selected.createdAt)} />
               <InfoRow label="Created By" value={selected.createdBy || "System"} />
             </div>
@@ -755,6 +771,8 @@ export default function PromotionsPage() {
               label="Valid From"
               value={form.validFrom}
               onChange={(val) => setForm((f) => ({ ...f, validFrom: val }))}
+              minDate={todayYMD}
+              showTime
               required
             />
 
@@ -763,7 +781,8 @@ export default function PromotionsPage() {
               label="Valid Until"
               value={form.validUntil}
               onChange={(val) => setForm((f) => ({ ...f, validUntil: val }))}
-              minDate={form.validFrom || undefined}
+              minDate={form.validFrom || todayYMD}
+              showTime
               required
             />
 
