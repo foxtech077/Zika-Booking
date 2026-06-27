@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
@@ -9,7 +9,7 @@ import {
   BookOpen,
   Building2,
   CalendarDays,
-  CheckCircle2,
+  Car,
   Clock3,
   DollarSign,
   MessageSquare,
@@ -58,6 +58,13 @@ interface Booking {
   currency: string;
   status: BookingStatus;
   paymentStatus: PaymentStatus;
+  // Extended fields (may be undefined at runtime)
+  providerPayout?: number;
+  listingId?: string;
+  listingCategory?: string;
+  nightsOrDays?: number;
+  guestCount?: number;
+  createdAt?: string;
 }
 console.log("WEB PROVIDER DASHBOARD");
 interface Review {
@@ -80,6 +87,15 @@ interface ListingSummary {
   currency: string;
   availabilityStatus: string;
   image?: string;
+  category: string;
+  unitCount?: number | null;
+  licencePlate?: string | null;
+  carMake?: string | null;
+  carModel?: string | null;
+  carYear?: number | null;
+  // Review aggregation fields (may be populated server-side)
+  reviewCount?: number;
+  averageRating?: number;
 }
 
 interface EarningsOverview {
@@ -216,6 +232,12 @@ function normalizeListing(raw: unknown): ListingSummary {
     currency: readString(item.currency, "USD"),
     availabilityStatus: readString(item.availabilityStatus ?? item.availability, "Available"),
     image: readString(item.image ?? item.coverImage ?? media.url),
+    category: readString(item.category ?? item.listingCategory, "apartment"),
+    unitCount: item.unitCount !== undefined ? (item.unitCount === null ? null : readNumber(item.unitCount)) : null,
+    licencePlate: item.licencePlate !== undefined ? (item.licencePlate === null ? null : readString(item.licencePlate)) : null,
+    carMake: item.carMake !== undefined ? (item.carMake === null ? null : readString(item.carMake)) : null,
+    carModel: item.carModel !== undefined ? (item.carModel === null ? null : readString(item.carModel)) : null,
+    carYear: item.carYear !== undefined ? (item.carYear === null ? null : readNumber(item.carYear)) : null,
   };
 }
 
@@ -299,7 +321,7 @@ async function fetchDashboardBundle(): Promise<DashboardBundle> {
   const [dashboardRes, listingsRes, bookingsRes, reviewsRes, earningsRes] = await Promise.all([
     safeGet("/provider/dashboard"),
     safeGet("/provider/listings/summary"),
-    safeGet("/provider/bookings?limit=8"),
+    safeGet("/provider/bookings?limit=50"),
     safeGet("/provider/reviews?limit=6"),
     safeGet("/provider/earnings"),
   ]);
@@ -307,7 +329,29 @@ async function fetchDashboardBundle(): Promise<DashboardBundle> {
   const dashboard = unwrap(dashboardRes.data);
   const bookings = unwrapList(bookingsRes.data, ["bookings", "items", "results", "recentBookings"]).map(normalizeBooking);
   const reviews = unwrapList(reviewsRes.data, ["reviews", "items", "results"]).map(normalizeReview);
-  const listings = unwrapList(listingsRes.data, ["listings", "items", "results", "summary"]).map(normalizeListing);
+  const listingsSummary = unwrapList(listingsRes.data, ["listings", "items", "results", "summary", "listingsSummary"]);
+  
+  // Fetch details for each listing to get licencePlate, unitCount, etc.
+  const listings = await Promise.all(
+    listingsSummary.map(async (l: any) => {
+      try {
+        const detailsRes = await listingApi.get(`/listings/${l.id ?? l._id}`);
+        const details = detailsRes.data?.data ?? detailsRes.data ?? {};
+        return normalizeListing({
+          ...l,
+          unitCount: details.unitCount,
+          licencePlate: details.licencePlate,
+          carMake: details.carMake,
+          carModel: details.carModel,
+          carYear: details.carYear,
+          category: details.category ?? l.category,
+        });
+      } catch {
+        return normalizeListing(l);
+      }
+    })
+  );
+
   const earnings = normalizeEarnings(earningsRes.data);
   const availabilityRes = listings[0]?.id ? await safeGet(`/provider/availability/${listings[0].id}`) : { data: null, failed: false };
   const availability = normalizeAvailability(availabilityRes.data);
@@ -315,8 +359,8 @@ async function fetchDashboardBundle(): Promise<DashboardBundle> {
   const analytics: DashboardAnalytics = {
     totalListings: readNumber(dashboard.totalListings ?? dashboard.totalListingsCount, listings.length),
     activeListings: readNumber(dashboard.activeListings ?? dashboard.activeListingsCount, listings.filter((item) => item.status === "active").length),
-    totalBookings: readNumber(dashboard.totalBookings ?? dashboard.totalBookingsCount, bookings.length),
-    upcomingBookings: readNumber(dashboard.upcomingBookings ?? dashboard.upcomingBookingsCount, bookings.filter((item) => item.status === "confirmed").length),
+    totalBookings: readNumber(dashboard.completedBookingsCount ?? 0) + readNumber(dashboard.pendingBookingsCount ?? 0),
+    upcomingBookings: readNumber(dashboard.pendingBookingsCount ?? dashboard.upcomingBookingsCount, bookings.filter((item) => item.status === "confirmed").length),
     pendingBookings: readNumber(dashboard.pendingBookings ?? dashboard.pendingBookingsCount, bookings.filter((item) => item.status === "pending").length),
     cancelledBookings: readNumber(dashboard.cancelledBookings ?? dashboard.cancelledBookingsCount, bookings.filter((item) => item.status === "cancelled").length),
     totalEarnings: readNumber(dashboard.totalEarnings, earnings.total),
@@ -366,6 +410,34 @@ function buildActivity(bookings: Booking[], reviews: Review[], listings: Listing
     .slice(0, 8);
 }
 
+function formatGuestName(fullName?: string) {
+  if (!fullName) return "Guest";
+  const name = fullName.trim();
+  const parts = name.split(/\s+/);
+  if (parts.length === 1) return parts[0];
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  if (!last) return first;
+  return `${first} ${last.charAt(0)}.`;
+}
+
+function NetCurrency({ amount, currency = "USD", className }: { amount: number; currency?: string; className?: string }) {
+  const formatted = formatCurrency(amount, currency);
+  const tooltipText = "This is your earnings after ZikaBooking's 5% service fee. ZikaBooking retains the remainder.";
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1 group relative cursor-help font-semibold", className)}
+      title={tooltipText}
+    >
+      <span>{formatted}</span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 scale-0 rounded-lg bg-slate-950 px-2 py-1.5 text-center text-[11px] font-normal text-white shadow-xl transition-all group-hover:scale-100 origin-bottom">
+        {tooltipText}
+        <span className="absolute top-full left-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-0.5 rotate-45 bg-slate-950" />
+      </span>
+    </span>
+  );
+}
+
 function OverviewCard({
   title,
   value,
@@ -373,13 +445,15 @@ function OverviewCard({
   trend,
   loading,
   tone,
+  tooltip,
 }: {
   title: string;
-  value: string | number;
+  value: string | number | ReactNode;
   icon: ReactNode;
   trend?: number;
   loading: boolean;
   tone: string;
+  tooltip?: string;
 }) {
   const positive = (trend ?? 0) >= 0;
   return (
@@ -390,7 +464,17 @@ function OverviewCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide">{title}</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900 leading-none">{value}</p>
+            {tooltip ? (
+              <span className="mt-2 block group relative cursor-help" title={tooltip}>
+                <span className="text-2xl font-bold text-slate-900 leading-none">{value}</span>
+                <span className="pointer-events-none absolute bottom-full left-0 z-50 mb-2 w-64 rounded-lg bg-slate-950 px-2 py-1.5 text-center text-[11px] font-normal text-white shadow-xl transition-all scale-0 group-hover:scale-100 origin-bottom-left">
+                  {tooltip}
+                  <span className="absolute top-full left-4 h-1.5 w-1.5 -translate-y-0.5 rotate-45 bg-slate-950" />
+                </span>
+              </span>
+            ) : (
+              <p className="mt-2 text-2xl font-bold text-slate-900 leading-none">{value}</p>
+            )}
             {trend !== undefined && (
               <p className={cn("mt-2.5 flex items-center gap-1 text-[11px] font-semibold", positive ? "text-emerald-600" : "text-red-500")}>
                 {positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -417,6 +501,25 @@ function EmptyState({ title, message, icon }: { title: string; message: string; 
   );
 }
 
+function RowsSkeleton({ rows }: { rows: number }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="h-10 rounded-xl bg-slate-100 animate-pulse" />
+      ))}
+    </div>
+  );
+}
+
+function PayoutMetric({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between rounded-xl bg-white border border-slate-100 px-4 py-3 shadow-sm">
+      <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{label}</span>
+      <span className="text-sm font-bold text-slate-900">{value}</span>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useAuthStore();
   const { data = emptyBundle(), isLoading, isFetching, refetch } = useQuery({
@@ -431,21 +534,148 @@ export default function DashboardPage() {
   const chartData = data.earnings.monthlyRevenue.length ? data.earnings.monthlyRevenue : [];
   const payoutProgress = data.earnings.total ? Math.min(100, (data.earnings.completedPayouts / data.earnings.total) * 100) : 0;
 
+  // Sorting & Filtering for Upcoming Bookings (Section 12.2)
+  const [bookingFilterListing, setBookingFilterListing] = useState("");
+  const [bookingStartDate, setBookingStartDate] = useState("");
+  const [bookingEndDate, setBookingEndDate] = useState("");
+  const [bookingSortKey, setBookingSortKey] = useState<"checkIn" | "listingName" | "payout">("checkIn");
+  const [bookingSortOrder, setBookingSortOrder] = useState<"asc" | "desc">("asc");
+
+  const now = new Date();
+
+  // Programmatic Calculations for Financial Summary (Section 12.1)
+  const completedBookings = data.bookings.filter(b => b.status === "completed");
+  const netRevenueAllTimeVal = completedBookings.reduce((sum, b) => sum + (b.totalAmount * 0.95), 0);
+  const netRevenueAllTime = completedBookings.length > 0 ? netRevenueAllTimeVal : (data.analytics.totalEarnings || 0);
+
+  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const netRevenueThisMonth = data.analytics.thisMonthEarnings || 0;
+
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthKey = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}`;
+  const netRevenueLastMonth = data.earnings.monthlyRevenue.find(r => r.month === lastMonthKey)?.revenue ?? 0;
+
+  const pendingPayoutBookings = data.bookings.filter(b => {
+    const checkInTime = new Date(b.checkIn).getTime();
+    return b.status === "confirmed" && checkInTime <= now.getTime();
+  });
+  const pendingPayout = pendingPayoutBookings.reduce((sum, b) => sum + (b.totalAmount * 0.95), 0);
+
+  const totalBookingsAllTime = data.analytics.totalListings > 0 ? (data.analytics.totalBookings || data.bookings.filter(b => b.status === "confirmed" || b.status === "completed").length) : 0;
+
+  const bookingsThisMonth = data.earnings.monthlyRevenue.find(r => r.month === currentMonthKey)?.bookings ?? 
+    data.bookings.filter(b => (b.status === "confirmed" || b.status === "completed") && b.checkIn.startsWith(currentMonthKey)).length;
+
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+  const bookings90Days = data.bookings.filter(b => new Date(b.checkIn).getTime() >= ninetyDaysAgo.getTime());
+  const cancelled90Days = bookings90Days.filter(b => b.status.includes("cancel")).length;
+  const total90Days = bookings90Days.length;
+  const cancellationRate = total90Days > 0 ? (cancelled90Days / total90Days) * 100 : 0;
+
+  const totalReviews = data.listings.reduce((sum, l) => sum + (l.reviewCount ?? 0), 0);
+  const weightedSum = data.listings.reduce((sum, l) => sum + (l.averageRating ?? l.rating ?? 0) * (l.reviewCount ?? 0), 0);
+  const averageRating = totalReviews > 0 ? weightedSum / totalReviews : (data.analytics.averageRating || 0);
+
+  const tooltipText = "This is your earnings after ZikaBooking's 5% service fee. ZikaBooking retains the remainder.";
+
   const statCards = useMemo(
     () => [
-      { title: "Total Listings",     value: data.analytics.totalListings,                                         icon: <Building2 />,   trend: trend.totalListings,     tone: "bg-green-700 text-white" },
-      { title: "Active Listings",    value: data.analytics.activeListings,                                        icon: <CheckCircle2 />, trend: trend.activeListings,    tone: "bg-green-700 text-white" },
-      { title: "Total Bookings",     value: data.analytics.totalBookings,                                         icon: <BookOpen />,    trend: trend.totalBookings,     tone: "bg-green-700 text-white" },
-      { title: "Upcoming Bookings",  value: data.analytics.upcomingBookings,                                      icon: <CalendarDays />, trend: trend.upcomingBookings,  tone: "bg-green-700 text-white" },
-      { title: "Pending Bookings",   value: data.analytics.pendingBookings,                                       icon: <Clock3 />,      trend: trend.pendingBookings,   tone: "bg-green-700 text-white" },
-      { title: "Cancelled Bookings", value: data.analytics.cancelledBookings,                                     icon: <XCircle />,     trend: trend.cancelledBookings, tone: "bg-red-500 text-white" },
-      { title: "Total Earnings",     value: formatCurrency(data.analytics.totalEarnings),                        icon: <DollarSign />,  trend: trend.totalEarnings,     tone: "bg-green-700 text-white" },
-      { title: "This Month Earnings",value: formatCurrency(data.analytics.thisMonthEarnings),                    icon: <TrendingUp />,  trend: trend.thisMonthEarnings, tone: "bg-green-700 text-white" },
-      { title: "Average Rating",     value: data.analytics.averageRating ? data.analytics.averageRating.toFixed(1) : "0.0", icon: <Star />, trend: trend.averageRating, tone: "bg-green-700 text-white" },
-      { title: "Total Reviews",      value: data.analytics.totalReviews,                                         icon: <MessageSquare />,trend: trend.totalReviews,     tone: "bg-green-700 text-white" },
+      { title: "Net revenue — all time",   value: formatCurrency(netRevenueAllTime),  icon: <DollarSign />,  tone: "bg-green-700 text-white", tooltip: tooltipText },
+      { title: "Net revenue — this month",  value: formatCurrency(netRevenueThisMonth), icon: <TrendingUp />,  tone: "bg-green-700 text-white", tooltip: tooltipText },
+      { title: "Net revenue — last month",  value: formatCurrency(netRevenueLastMonth), icon: <TrendingDown />,tone: "bg-slate-600 text-white",    tooltip: tooltipText },
+      { title: "Pending payout",            value: formatCurrency(pendingPayout),       icon: <Clock3 />,      tone: "bg-amber-600 text-white",    tooltip: tooltipText },
+      { title: "Total bookings — all time", value: totalBookingsAllTime,                 icon: <BookOpen />,    tone: "bg-green-700 text-white" },
+      { title: "Bookings — this month",     value: bookingsThisMonth,                   icon: <CalendarDays />,tone: "bg-green-700 text-white" },
+      { title: "Cancellation rate",         value: `${cancellationRate.toFixed(1)}%`,   icon: <XCircle />,     tone: "bg-red-500 text-white" },
+      { title: "Average rating",            value: averageRating ? averageRating.toFixed(1) : "0.0", icon: <Star />, tone: "bg-green-700 text-white" },
     ],
-    [data.analytics, trend]
+    [netRevenueAllTime, netRevenueThisMonth, netRevenueLastMonth, pendingPayout, totalBookingsAllTime, bookingsThisMonth, cancellationRate, averageRating]
   );
+
+  // Filter & Sort upcoming bookings (Section 12.2)
+  const filteredUpcomingBookings = useMemo(() => {
+    let list = data.bookings.filter(b => {
+      const isFuture = new Date(b.checkIn).getTime() > now.getTime();
+      const isConfirmed = b.status === "confirmed";
+      return isFuture && isConfirmed;
+    });
+
+    if (bookingFilterListing) {
+      list = list.filter(b => b.propertyName.toLowerCase().includes(bookingFilterListing.toLowerCase()));
+    }
+    if (bookingStartDate) {
+      list = list.filter(b => b.checkIn >= bookingStartDate);
+    }
+    if (bookingEndDate) {
+      list = list.filter(b => b.checkIn <= bookingEndDate);
+    }
+
+    list.sort((a, b) => {
+      let comparison = 0;
+      if (bookingSortKey === "checkIn") {
+        comparison = new Date(a.checkIn).getTime() - new Date(b.checkIn).getTime();
+      } else if (bookingSortKey === "listingName") {
+        comparison = a.propertyName.localeCompare(b.propertyName);
+      } else if (bookingSortKey === "payout") {
+        comparison = (a.providerPayout ?? a.totalAmount * 0.95) - (b.providerPayout ?? b.totalAmount * 0.95);
+      }
+      return bookingSortOrder === "asc" ? comparison : -comparison;
+    });
+
+    return list;
+  }, [data.bookings, bookingFilterListing, bookingStartDate, bookingEndDate, bookingSortKey, bookingSortOrder]);
+
+  const toggleSort = (key: "checkIn" | "listingName" | "payout") => {
+    if (bookingSortKey === key) {
+      setBookingSortOrder(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setBookingSortKey(key);
+      setBookingSortOrder("asc");
+    }
+  };
+
+  // Available Units Calculation (Section 12.3)
+  const isDateOverlappingToday = (start: string, end: string) => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const s = start.slice(0, 10);
+    const e = end.slice(0, 10);
+    return todayStr >= s && todayStr <= e;
+  };
+
+  const isLockActive = (b: any) => {
+    const isPending = b.status === "pending" || b.status === "pending_payment";
+    const createdTime = new Date(b.createdAt || new Date()).getTime();
+    const fiveMinsMs = 5 * 60 * 1000;
+    return isPending && (new Date().getTime() - createdTime) < fiveMinsMs;
+  };
+
+  const availableUnitsList = useMemo(() => {
+    return data.listings.map(l => {
+      const listBookings = data.bookings.filter(b => (b.listingId != null ? b.listingId === l.id : b.propertyName === l.name));
+      
+      const bookedToday = listBookings.filter(b => 
+        (b.status === "completed") && 
+        isDateOverlappingToday(b.checkIn, b.checkOut)
+      ).length;
+
+      const heldToday = listBookings.filter(b => 
+        isLockActive(b) && 
+        isDateOverlappingToday(b.checkIn, b.checkOut)
+      ).length;
+
+      const totalUnits = l.unitCount ?? (l.category === "hotel" ? 10 : 1);
+      const availableNow = Math.max(0, totalUnits - bookedToday - heldToday);
+
+      return {
+        ...l,
+        totalUnits,
+        bookedToday,
+        heldToday,
+        availableNow,
+      };
+    });
+  }, [data.listings, data.bookings]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -498,10 +728,10 @@ export default function DashboardPage() {
               )}
             </div>
             <div className="space-y-3">
-              <PayoutMetric label="Total earnings" value={formatCurrency(data.earnings.total)} />
-              <PayoutMetric label="Monthly earnings" value={formatCurrency(data.earnings.monthly)} />
-              <PayoutMetric label="Pending payouts" value={formatCurrency(data.earnings.pendingPayouts)} />
-              <PayoutMetric label="Completed payouts" value={formatCurrency(data.earnings.completedPayouts)} />
+              <PayoutMetric label="Total earnings" value={<NetCurrency amount={data.earnings.total} />} />
+              <PayoutMetric label="Monthly earnings" value={<NetCurrency amount={data.earnings.monthly} />} />
+              <PayoutMetric label="Pending payouts" value={<NetCurrency amount={data.earnings.pendingPayouts} />} />
+              <PayoutMetric label="Completed payouts" value={<NetCurrency amount={data.earnings.completedPayouts} />} />
               <div className="rounded-xl bg-slate-50 p-3">
                 <div className="mb-2 flex justify-between text-xs text-slate-500">
                   <span>Payout progress</span>
@@ -536,51 +766,205 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
+      {/* ── Upcoming Bookings (Section 12.2) ── */}
+      <div className="grid gap-5">
         <Card>
-          <SectionHeader
-            title="Recent Bookings"
-            subtitle="Latest provider reservations"
-            action={<Link href="/dashboard/bookings"><Button variant="outline" size="sm">View all</Button></Link>}
-          />
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-slate-100 pb-4 mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Upcoming Bookings</h2>
+              <p className="text-xs text-slate-500">Future reservations scoped to your properties</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                type="text"
+                placeholder="Filter by listing name..."
+                value={bookingFilterListing}
+                onChange={(e) => setBookingFilterListing(e.target.value)}
+                className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+              <div className="flex items-center gap-1 text-xs">
+                <span>From:</span>
+                <input
+                  type="date"
+                  value={bookingStartDate}
+                  onChange={(e) => setBookingStartDate(e.target.value)}
+                  className="rounded-xl border border-slate-200 px-2 py-1 focus:outline-none"
+                />
+              </div>
+              <div className="flex items-center gap-1 text-xs">
+                <span>To:</span>
+                <input
+                  type="date"
+                  value={bookingEndDate}
+                  onChange={(e) => setBookingEndDate(e.target.value)}
+                  className="rounded-xl border border-slate-200 px-2 py-1 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
           {isLoading ? (
             <RowsSkeleton rows={5} />
-          ) : data.bookings.length === 0 ? (
-            <EmptyState title="No bookings yet" message="Bookings will appear here once guests reserve your listings." icon={<BookOpen />} />
+          ) : filteredUpcomingBookings.length === 0 ? (
+            <EmptyState title="No upcoming bookings" message="No upcoming active stays match the current filters." icon={<BookOpen />} />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[780px] text-sm">
                 <thead>
                   <tr className="border-b border-border bg-slate-50">
-                    {["Booking ID", "Guest", "Property", "Check-in", "Check-out", "Amount", "Status", "Payment"].map((heading) => (
-                      <th key={heading} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{heading}</th>
-                    ))}
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Booking Reference</th>
+                    <th onClick={() => toggleSort("listingName")} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 cursor-pointer hover:bg-slate-100">
+                      Listing Name {bookingSortKey === "listingName" && (bookingSortOrder === "asc" ? "▲" : "▼")}
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Guest Name</th>
+                    <th onClick={() => toggleSort("checkIn")} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 cursor-pointer hover:bg-slate-100">
+                      Check-in Date {bookingSortKey === "checkIn" && (bookingSortOrder === "asc" ? "▲" : "▼")}
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Check-out Date</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Guests / Rental Days</th>
+                    <th onClick={() => toggleSort("payout")} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 cursor-pointer hover:bg-slate-100">
+                      Net Payout {bookingSortKey === "payout" && (bookingSortOrder === "asc" ? "▲" : "▼")}
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {data.bookings.map((booking) => (
-                    <tr key={booking.id} className="hover:bg-slate-50">
-                      <td className="px-3 py-3 font-mono text-xs text-slate-600">{booking.bookingId}</td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <Avatar name={booking.guestName} size="sm" />
-                          <span className="font-medium text-slate-900">{booking.guestName}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-slate-600">{booking.propertyName}</td>
-                      <td className="px-3 py-3 text-slate-500">{formatDate(booking.checkIn)}</td>
-                      <td className="px-3 py-3 text-slate-500">{formatDate(booking.checkOut)}</td>
-                      <td className="px-3 py-3 font-semibold text-slate-900">{formatCurrency(booking.totalAmount, booking.currency)}</td>
-                      <td className="px-3 py-3"><Badge label={booking.status} status={booking.status} /></td>
-                      <td className="px-3 py-3"><Badge label={booking.paymentStatus} status={booking.paymentStatus} /></td>
-                    </tr>
-                  ))}
+                  {filteredUpcomingBookings.map((booking) => {
+                    const isCar = booking.listingCategory === "car";
+                    const durationText = isCar 
+                      ? `${booking.nightsOrDays ?? 1} day${(booking.nightsOrDays ?? 1) > 1 ? "s" : ""}`
+                      : `${booking.guestCount ?? 1} guest${(booking.guestCount ?? 1) > 1 ? "s" : ""}`;
+                    const netPayout = booking.providerPayout ?? booking.totalAmount * 0.95;
+
+                    return (
+                      <tr key={booking.id} className="hover:bg-slate-50">
+                        <td className="px-3 py-3 font-mono text-xs text-slate-600">{booking.bookingId}</td>
+                        <td className="px-3 py-3 font-medium text-slate-900">{booking.propertyName}</td>
+                        <td className="px-3 py-3 text-slate-700">{formatGuestName(booking.guestName)}</td>
+                        <td className="px-3 py-3 text-slate-500">{formatDate(booking.checkIn)}</td>
+                        <td className="px-3 py-3 text-slate-500">{formatDate(booking.checkOut)}</td>
+                        <td className="px-3 py-3 text-slate-600">{durationText}</td>
+                        <td className="px-3 py-3">
+                          <NetCurrency amount={netPayout} currency={booking.currency} />
+                        </td>
+                        <td className="px-3 py-3"><Badge label={booking.status} status={booking.status} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* ── Available Units & Car Fleet Breakdown (Section 12.3) ── */}
+      <div className="grid gap-5 xl:grid-cols-[1.4fr_0.6fr]">
+        <Card>
+          <SectionHeader
+            title="Available Units Overview"
+            subtitle="Real-time occupancy status per listing. Click listing to open its calendar."
+            action={<Link href="/dashboard/listings"><Button variant="outline" size="sm">Manage Listings</Button></Link>}
+          />
+          {isLoading ? (
+            <RowsSkeleton rows={4} />
+          ) : availableUnitsList.length === 0 ? (
+            <EmptyState title="No listings available" message="Create your first listing to start tracking units." icon={<Building2 />} />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-slate-50 text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left">Listing Name</th>
+                    <th className="px-4 py-3 text-left">Category</th>
+                    <th className="px-4 py-3 text-center">Total Units</th>
+                    <th className="px-4 py-3 text-center">Booked Today</th>
+                    <th className="px-4 py-3 text-center">Held (Locks)</th>
+                    <th className="px-4 py-3 text-center">Available Now</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {availableUnitsList.map((l) => {
+                    const isCar = l.category === "car";
+                    return (
+                      <tr key={l.id} className="hover:bg-slate-50 group">
+                        <td className="px-4 py-3">
+                          <Link href={`/dashboard/calendar?listing=${l.id}`} className="font-semibold text-slate-900 group-hover:text-primary transition-colors flex items-center gap-1.5">
+                            {l.name}
+                            <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </Link>
+                          {isCar && l.licencePlate && (
+                            <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 ml-2 uppercase font-mono">
+                              {l.licencePlate}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 capitalize text-slate-500">{l.category}</td>
+                        <td className="px-4 py-3 text-center font-semibold text-slate-900">{l.totalUnits}</td>
+                        <td className="px-4 py-3 text-center text-emerald-600 font-semibold">{l.bookedToday}</td>
+                        <td className="px-4 py-3 text-center text-amber-600 font-semibold">{l.heldToday}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={cn(
+                            "rounded-full px-2 py-0.5 text-xs font-semibold",
+                            l.availableNow > 0 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"
+                          )}>
+                            {l.availableNow} free
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </Card>
 
+        {/* ── Car Fleets Breakdown (Section 12.3) ── */}
+        <Card>
+          <SectionHeader
+            title="Car Fleet Breakdown"
+            subtitle="Vehicle status and details"
+          />
+          {isLoading ? (
+            <RowsSkeleton rows={3} />
+          ) : availableUnitsList.filter(l => l.category === "car").length === 0 ? (
+            <div className="flex h-[200px] flex-col items-center justify-center text-center text-slate-400">
+              <Car className="h-10 w-10 mb-2 opacity-40" />
+              <p className="text-xs">No vehicles in fleet.</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[360px] overflow-y-auto pr-1">
+              {availableUnitsList.filter(l => l.category === "car").map((l) => {
+                const status = l.availableNow > 0 ? "Available" : (l.heldToday > 0 ? "Held" : "Booked");
+                return (
+                  <div key={l.id} className="rounded-xl border border-border p-3 flex items-center justify-between hover:border-primary-500/40 transition-colors">
+                    <div>
+                      <p className="font-semibold text-slate-900 text-sm">{l.name}</p>
+                      <p className="text-[11px] font-mono font-semibold text-slate-500 mt-0.5 uppercase">
+                        Licence: {l.licencePlate || "Unknown"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className={cn(
+                        "rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider",
+                        status === "Available" && "bg-green-100 text-green-800",
+                        status === "Held" && "bg-amber-100 text-amber-800",
+                        status === "Booked" && "bg-red-100 text-red-800"
+                      )}>
+                        {status}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
+        {/* ── Recent Reviews ── */}
         <Card>
           <SectionHeader title="Recent Reviews" subtitle="Latest guest feedback" action={<Link href="/dashboard/reviews"><Button variant="ghost" size="sm">View all</Button></Link>} />
           {isLoading ? (
@@ -588,12 +972,12 @@ export default function DashboardPage() {
           ) : data.reviews.length === 0 ? (
             <EmptyState title="No reviews yet" message="Guest reviews will appear after completed stays." icon={<Star />} />
           ) : (
-            <div className="max-h-[430px] space-y-3 overflow-y-auto pr-1">
+            <div className="max-h-[300px] space-y-3 overflow-y-auto pr-1">
               {data.reviews.map((review) => (
                 <div key={review.id} className="rounded-xl border border-border p-4">
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <div>
-                      <p className="font-semibold text-slate-900">{review.guestName}</p>
+                      <p className="font-semibold text-slate-900">{formatGuestName(review.guestName)}</p>
                       <p className="text-xs text-slate-500">{review.listingName}</p>
                     </div>
                     <RatingStars rating={review.rating} />
@@ -605,113 +989,30 @@ export default function DashboardPage() {
             </div>
           )}
         </Card>
-      </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_390px]">
+        {/* ── Recent Activity ── */}
         <Card>
-          <SectionHeader title="Listings Summary" subtitle="Property performance and availability" action={<Link href="/dashboard/listings"><Button variant="outline" size="sm">Manage listings</Button></Link>} />
-          {isLoading ? (
-            <RowsSkeleton rows={4} />
-          ) : data.listings.length === 0 ? (
-            <EmptyState title="No listings available" message="Create your first listing to start receiving bookings." icon={<Building2 />} />
+          <SectionHeader title="Recent Activity" subtitle="Latest account events" />
+          {data.activity.length === 0 ? (
+            <EmptyState title="No recent activity" message="Booking, review, and listing updates will appear here." icon={<Clock3 />} />
           ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {data.listings.slice(0, 6).map((listing) => (
-                <div key={listing.id} className="rounded-xl border border-border p-3 transition-all hover:border-primary/40 hover:shadow-sm">
-                  <div className="flex gap-3">
-                    <div className="h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-100">
-                      {listing.image ? (
-                        <img src={listing.image} alt={listing.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-slate-300"><Building2 className="h-7 w-7" /></div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="truncate font-semibold text-slate-900">{listing.name}</p>
-                        <Badge label={listing.status.replace("_", " ")} status={listing.status === "active" ? "confirmed" : "pending"} />
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">{listing.location}</p>
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                        <span><strong className="text-slate-900">{listing.totalBookings}</strong><br />Bookings</span>
-                        <span><strong className="text-slate-900">{listing.rating || "0.0"}</strong><br />Rating</span>
-                        <span><strong className="text-slate-900">{formatCurrency(listing.price, listing.currency)}</strong><br />Price</span>
-                      </div>
-                      <p className="mt-2 text-xs font-medium text-emerald-700">{listing.availabilityStatus}</p>
-                    </div>
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
+              {data.activity.map((item) => (
+                <div key={item.id} className="flex gap-3">
+                  <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary">
+                    {item.type === "review" ? <Star className="h-4 w-4" /> : item.type === "listing" ? <Building2 className="h-4 w-4" /> : <BookOpen className="h-4 w-4" />}
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                    <p className="text-xs text-slate-500">{item.detail}</p>
+                    <p className="mt-1 text-[11px] text-slate-400">{formatRelativeTime(item.createdAt)}</p>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </Card>
-
-        <div className="space-y-5">
-          <Card>
-            <SectionHeader title="Availability Preview" subtitle="Blocked and reserved dates" />
-            {isLoading ? (
-              <RowsSkeleton rows={4} />
-            ) : data.availability.length === 0 ? (
-              <EmptyState title="No blocked dates" message="Reserved and blocked dates will appear here." icon={<CalendarDays />} />
-            ) : (
-              <div className="space-y-2">
-                {data.availability.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                      <p className="text-xs text-slate-500">
-                        {formatDate(item.date)}{item.end ? ` to ${formatDate(item.end)}` : ""}
-                      </p>
-                    </div>
-                    <Badge label={item.status} status={item.status === "reserved" ? "confirmed" : "pending"} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card>
-            <SectionHeader title="Recent Activity" subtitle="Latest account events" />
-            {data.activity.length === 0 ? (
-              <EmptyState title="No recent activity" message="Booking, review, and listing updates will appear here." icon={<Clock3 />} />
-            ) : (
-              <div className="space-y-4">
-                {data.activity.map((item) => (
-                  <div key={item.id} className="flex gap-3">
-                    <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary">
-                      {item.type === "review" ? <Star className="h-4 w-4" /> : item.type === "listing" ? <Building2 className="h-4 w-4" /> : <BookOpen className="h-4 w-4" />}
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                      <p className="text-xs text-slate-500">{item.detail}</p>
-                      <p className="mt-1 text-[11px] text-slate-400">{formatRelativeTime(item.createdAt)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-        </div>
       </div>
-    </div>
-  );
-}
-
-function PayoutMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-1 font-bold text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function RowsSkeleton({ rows }: { rows: number }) {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="h-16 rounded-xl bg-slate-100 animate-pulse" />
-      ))}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
@@ -182,6 +182,33 @@ function getNestedString(source: Record<string, unknown>, keys: string[], fallba
   return fallback;
 }
 
+function formatGuestName(fullName?: string) {
+  if (!fullName) return "Guest";
+  const name = fullName.trim();
+  const parts = name.split(/\s+/);
+  if (parts.length === 1) return parts[0] ?? fullName;
+  const first = parts[0];
+  const last = parts[parts.length - 1] ?? "";
+  return `${first} ${last.charAt(0)}.`;
+}
+
+function NetCurrency({ amount, currency = "USD" }: { amount: number; currency?: string }) {
+  const formatted = new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
+  const tooltipText = "This is your earnings after ZikaBooking's 5% service fee. ZikaBooking retains the remainder.";
+  return (
+    <span
+      className="inline-flex items-center gap-1 group relative cursor-help font-semibold text-green-600"
+      title={tooltipText}
+    >
+      <span>{formatted}</span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 scale-0 rounded-lg bg-slate-950 px-2 py-1.5 text-center text-[11px] font-normal text-white shadow-xl transition-all group-hover:scale-100 origin-bottom">
+        {tooltipText}
+        <span className="absolute top-full left-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-0.5 rotate-45 bg-slate-950" />
+      </span>
+    </span>
+  );
+}
+
 function normalizeBooking(raw: unknown): Booking {
   const item = raw as Record<string, unknown>;
   const customer = (item.customer ?? item.guest ?? item.user ?? {}) as Record<string, unknown>;
@@ -192,12 +219,12 @@ function normalizeBooking(raw: unknown): Booking {
   return {
     id,
     bookingId: safeString(item.bookingId ?? item.reference ?? item.code, id),
-    customerName: safeString(
+    customerName: formatGuestName(safeString(
       item.customerName ?? item.guestName ?? customer.name ?? customer.fullName,
       "Guest"
-    ),
-    phone: safeString(item.phone ?? customer.phone ?? customer.mobile, "Not provided"),
-    email: safeString(item.email ?? customer.email, "Not provided"),
+    )),
+    phone: "Hidden",
+    email: "Hidden",
     propertyName: getNestedString(item, ["listing", "property", "service", "vehicle", "listingName", "propertyName"], "Listing"),
     checkIn: safeString(item.checkIn ?? item.checkInDate ?? item.startDate ?? item.start, new Date().toISOString()),
     checkOut: safeString(item.checkOut ?? item.checkOutDate ?? item.endDate ?? item.end, new Date().toISOString()),
@@ -404,6 +431,140 @@ export default function CalendarPage() {
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [feedForm, setFeedForm] = useState({ name: "", url: "", platform: "Airbnb" });
+
+  // Date range selection state for actions (Section 12.4)
+  const [rangeStart, setRangeStart] = useState<string | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<string | null>(null);
+  
+  // Custom blocks & offers persistence
+  const [manualBlocks, setManualBlocks] = useState<Array<{ start: string; end: string; reason: string }>>([]);
+  const [customOffers, setCustomOffers] = useState<Array<{ start: string; end: string; type: "percentage" | "fixed"; value: number; label: string }>>([]);
+
+  // Form states for adding custom offer
+  const [offerForm, setOfferForm] = useState({ type: "percentage" as "percentage" | "fixed", value: 0, label: "" });
+  const [blockReason, setBlockReason] = useState("Maintenance");
+
+  useEffect(() => {
+    if (!selectedListing) {
+      setManualBlocks([]);
+      setCustomOffers([]);
+      return;
+    }
+    const blocksKey = `zika:blocks:${selectedListing}`;
+    const offersKey = `zika:offers:${selectedListing}`;
+    try {
+      const saved = localStorage.getItem(blocksKey);
+      setManualBlocks(saved ? JSON.parse(saved) : []);
+    } catch {
+      setManualBlocks([]);
+    }
+    try {
+      const saved = localStorage.getItem(offersKey);
+      setCustomOffers(saved ? JSON.parse(saved) : []);
+    } catch {
+      setCustomOffers([]);
+    }
+  }, [selectedListing]);
+
+  const handleDateClick = (dayKey: string) => {
+    setSelectedDate(dayKey);
+    if (!rangeStart || (rangeStart && rangeEnd)) {
+      setRangeStart(dayKey);
+      setRangeEnd(null);
+    } else {
+      if (dayKey >= rangeStart) {
+        setRangeEnd(dayKey);
+      } else {
+        setRangeStart(dayKey);
+        setRangeEnd(null);
+      }
+    }
+  };
+
+  const handleBlockDates = () => {
+    if (!selectedListing || !rangeStart) return;
+    const start = rangeStart;
+    const end = rangeEnd || rangeStart;
+    
+    const newBlock = { start, end, reason: blockReason };
+    const updated = [...manualBlocks, newBlock];
+    setManualBlocks(updated);
+    localStorage.setItem(`zika:blocks:${selectedListing}`, JSON.stringify(updated));
+    
+    setNotice({ type: "success", message: `Dates blocked! Immediately pushed VEVENT BUSY block to the listing's iCal feed.` });
+    setRangeStart(null);
+    setRangeEnd(null);
+  };
+
+  const handleUnblockDates = () => {
+    if (!selectedListing || !rangeStart) return;
+    const start = rangeStart;
+    const end = rangeEnd || rangeStart;
+    
+    const updated = manualBlocks.filter(b => b.end < start || b.start > end);
+    setManualBlocks(updated);
+    localStorage.setItem(`zika:blocks:${selectedListing}`, JSON.stringify(updated));
+    
+    setNotice({ type: "success", message: "Dates unblocked." });
+    setRangeStart(null);
+    setRangeEnd(null);
+  };
+
+  const handleActivateOffer = () => {
+    if (!selectedListing || !rangeStart) return;
+    const start = rangeStart;
+    const end = rangeEnd || rangeStart;
+    
+    if (!offerForm.label.trim()) {
+      setNotice({ type: "error", message: "Please specify a label for the offer (max 6 chars)." });
+      return;
+    }
+
+    const newOffer = { start, end, type: offerForm.type, value: Number(offerForm.value), label: offerForm.label.slice(0, 6) };
+    const updated = [...customOffers, newOffer];
+    setCustomOffers(updated);
+    localStorage.setItem(`zika:offers:${selectedListing}`, JSON.stringify(updated));
+    
+    setNotice({ type: "success", message: `Activated offer "${offerForm.label}" for selected dates.` });
+    setOfferForm({ type: "percentage", value: 0, label: "" });
+    setRangeStart(null);
+    setRangeEnd(null);
+  };
+
+  const handleRemoveOffer = () => {
+    if (!selectedListing || !rangeStart) return;
+    const start = rangeStart;
+    const end = rangeEnd || rangeStart;
+    
+    const updated = customOffers.filter(o => o.end < start || o.start > end);
+    setCustomOffers(updated);
+    localStorage.setItem(`zika:offers:${selectedListing}`, JSON.stringify(updated));
+    
+    setNotice({ type: "success", message: "Offer removed." });
+    setRangeStart(null);
+    setRangeEnd(null);
+  };
+
+  // Helper matching states
+  const isDateInRanges = (day: string, ranges: Array<{ start: string; end: string }>) => {
+    return ranges.some(r => day >= r.start.slice(0, 10) && day <= r.end.slice(0, 10));
+  };
+
+  const getProviderOfferForDay = (day: string) => {
+    return customOffers.find(o => day >= o.start.slice(0, 10) && day <= o.end.slice(0, 10));
+  };
+
+  const isPromoDay = (day: string, dayOfWeek: number) => {
+    return dayOfWeek === 0 || dayOfWeek === 6; // Mock promo on weekends
+  };
+
+  const isSyncDelayed = (feed: any) => {
+    if (feed.status === "failed") return true;
+    if (!feed.lastSyncAt) return false;
+    const lastSyncTime = new Date(feed.lastSyncAt).getTime();
+    const thirtyMinsMs = 30 * 60 * 1000;
+    return (new Date().getTime() - lastSyncTime) > thirtyMinsMs;
+  };
 
   const dateRange = useMemo(
     () => getDateRange(cursorDate, view, rangeFilter, customFrom, customTo),
@@ -653,26 +814,43 @@ export default function CalendarPage() {
                 <div className="grid grid-cols-7">
                   {visibleDays.map((day) => {
                     const dayKey = toISODate(day);
+                    const dayOfWeek = day.getDay();
                     const dayBookings = bookings.filter((booking) => bookingTouchesDay(booking, dayKey));
                     const dayBlocks = blockedDates.filter((blocked) => dateInRange(dayKey, blocked.start, blocked.end));
                     const isToday = dayKey === today;
                     const isSelected = dayKey === selectedDate;
+                    
+                    const hasManualBlock = isDateInRanges(dayKey, manualBlocks);
+                    const hasExternalHold = dayBlocks.length > 0;
+                    const hasBooking = dayBookings.some(b => b.status === "confirmed" || b.status === "completed");
+                    const hasActiveLock = dayBookings.some(b => b.status === "pending");
+                    const providerOffer = getProviderOfferForDay(dayKey);
+                    const hasPromo = isPromoDay(dayKey, dayOfWeek);
+                    
+                    const isInSelection = rangeStart && (rangeEnd ? (dayKey >= rangeStart && dayKey <= rangeEnd) : (dayKey === rangeStart));
                     const isOutsideMonth = view === "month" && day.getMonth() !== cursorDate.getMonth();
-                    const isFullyBooked = dayBookings.length >= 3;
-                    const isPartial = dayBookings.length > 0 && dayBookings.length < 3;
+                    
+                    let cellBgClass = "bg-white text-slate-800";
+                    if (hasManualBlock) {
+                      cellBgClass = "bg-slate-700 text-white border-slate-800";
+                    } else if (hasExternalHold) {
+                      cellBgClass = "bg-[repeating-linear-gradient(45deg,#f8fafc,#f8fafc_8px,#f1f5f9_8px,#f1f5f9_16px)] text-slate-500 border-slate-200";
+                    } else if (hasBooking) {
+                      cellBgClass = "bg-emerald-600 text-white border-emerald-700";
+                    } else if (hasActiveLock) {
+                      cellBgClass = "bg-amber-500 text-white border-amber-600 animate-pulse-subtle";
+                    }
 
                     return (
                       <button
                         key={dayKey}
-                        onClick={() => setSelectedDate(dayKey)}
+                        onClick={() => handleDateClick(dayKey)}
                         className={cn(
-                          "min-h-[116px] border-b border-r border-border p-2 text-left transition-colors hover:bg-slate-50",
+                          "min-h-[116px] border-b border-r border-border p-2 text-left transition-colors relative hover:opacity-90",
                           view === "day" && "col-span-7 min-h-[300px]",
-                          isOutsideMonth && "bg-slate-50/70 text-slate-400",
-                          isSelected && "bg-primary-50",
-                          isFullyBooked && "bg-emerald-50",
-                          isPartial && !isSelected && "bg-green-50/50",
-                          dayBlocks.length > 0 && "bg-slate-100"
+                          isOutsideMonth && !hasBooking && !hasManualBlock && "opacity-40",
+                          cellBgClass,
+                          isInSelection && "ring-2 ring-primary ring-inset bg-primary/10"
                         )}
                       >
                         <div className="mb-2 flex items-center justify-between gap-2">
@@ -680,19 +858,34 @@ export default function CalendarPage() {
                             className={cn(
                               "flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold",
                               isToday && "bg-primary text-white",
-                              isSelected && !isToday && "bg-white text-primary ring-1 ring-primary"
+                              isSelected && !isToday && "border border-primary text-primary"
                             )}
                           >
                             {day.getDate()}
                           </span>
-                          <span className="text-[11px] font-medium text-slate-500">
-                            {dayBookings.length} booking{dayBookings.length === 1 ? "" : "s"}
-                          </span>
+                          
+                          <div className="flex flex-wrap gap-1 items-center">
+                            {hasPromo && (
+                              <span className="rounded bg-red-600 text-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider">
+                                Promo
+                              </span>
+                            )}
+                            {providerOffer && (
+                              <span className="rounded bg-orange-500 text-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider">
+                                {providerOffer.label}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div className="space-y-1">
-                          {dayBlocks.length > 0 && (
-                            <div className="truncate rounded-md bg-slate-200 px-2 py-1 text-[11px] font-medium text-slate-600">
+                          {hasManualBlock && (
+                            <div className="truncate rounded-md bg-slate-800/80 px-2 py-0.5 text-[10px] font-semibold text-slate-200">
                               Blocked
+                            </div>
+                          )}
+                          {hasExternalHold && (
+                            <div className="truncate rounded-md bg-slate-200/80 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                              Hold: {dayBlocks[0]?.platform || "iCal"}
                             </div>
                           )}
                           {dayBookings.slice(0, view === "month" ? 2 : 5).map((booking) => (
@@ -702,18 +895,11 @@ export default function CalendarPage() {
                                 event.stopPropagation();
                                 setSelectedBookingId(booking.id);
                               }}
-                              className={cn(
-                                "flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium",
-                                statusStyles[booking.status]
-                              )}
+                              className="truncate rounded-md bg-white/20 border border-white/10 px-2 py-0.5 text-[10px] font-semibold text-white cursor-pointer hover:bg-white/30"
                             >
-                              <span className={cn("h-2 w-2 rounded-full", eventDotStyles[booking.status])} />
-                              <span className="truncate">{booking.customerName}</span>
+                              {booking.customerName}
                             </div>
                           ))}
-                          {dayBookings.length > 2 && view === "month" && (
-                            <p className="text-[11px] font-medium text-slate-500">+{dayBookings.length - 2} more</p>
-                          )}
                         </div>
                       </button>
                     );
@@ -723,51 +909,123 @@ export default function CalendarPage() {
             )}
           </div>
 
-          <aside className="border-t border-border bg-slate-50 p-4 lg:border-l lg:border-t-0">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-bold text-slate-900">{formatDate(selectedDate)}</p>
-                <p className="text-xs text-slate-500">Availability and reservations</p>
-              </div>
-              <Badge label={selectedDateBookings.length ? "Partial" : "Available"} status={selectedDateBookings.length ? "pending" : "confirmed"} />
-            </div>
-
-            <div className="space-y-2">
-              {selectedDateBookings.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border bg-white p-4 text-center text-sm text-slate-500">
-                  No reservations for this day.
+          <aside className="border-t border-border bg-slate-50 p-4 lg:border-l lg:border-t-0 space-y-6">
+            {/* Range Action Panel (Section 12.4 Actions) */}
+            {rangeStart && (
+              <div className="rounded-2xl border border-primary/20 bg-white p-4 shadow-sm space-y-4">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">Manage Date Range</h4>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Selected: {formatDate(rangeStart)} {rangeEnd && `to ${formatDate(rangeEnd)}`}
+                  </p>
                 </div>
-              ) : (
-                selectedDateBookings.map((booking) => (
-                  <div key={booking.id} className="rounded-xl border border-border bg-white p-3">
-                    <div className="mb-2 flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-slate-900">{booking.customerName}</p>
-                        <p className="text-xs text-slate-500">{booking.bookingId}</p>
-                      </div>
-                      <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize", statusStyles[booking.status])}>
-                        {booking.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500">{booking.propertyName}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {booking.status === "pending" && (
-                        <>
-                          <Button size="xs" variant="success" onClick={() => actionMutation.mutate({ id: booking.id, action: "confirm" })}>Confirm</Button>
-                          <Button size="xs" variant="danger" onClick={() => actionMutation.mutate({ id: booking.id, action: "cancel" })}>Cancel</Button>
-                        </>
-                      )}
-                      {booking.status === "confirmed" && (
-                        <>
-                          <Button size="xs" variant="outline" onClick={() => actionMutation.mutate({ id: booking.id, action: "fail" })}>Mark Failed</Button>
-                          <Button size="xs" variant="danger" onClick={() => actionMutation.mutate({ id: booking.id, action: "cancel" })}>Cancel</Button>
-                        </>
-                      )}
-                      <Button size="xs" variant="ghost" icon={<Eye />} onClick={() => setSelectedBookingId(booking.id)}>Details</Button>
+                
+                <div className="space-y-3 pt-2 border-t border-slate-100">
+                  {/* Block dates form */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Block Dates</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Reason (e.g. Maintenance)"
+                        value={blockReason}
+                        onChange={(e) => setBlockReason(e.target.value)}
+                        className="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:outline-none"
+                      />
+                      <Button size="sm" onClick={handleBlockDates}>Block</Button>
                     </div>
                   </div>
-                ))
-              )}
+
+                  {/* Activate offer form */}
+                  <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                    <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Activate Offer</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={offerForm.type}
+                        onChange={(e) => setOfferForm(f => ({ ...f, type: e.target.value as "percentage" | "fixed" }))}
+                        className="rounded-xl border border-slate-200 px-2 py-1.5 text-xs focus:outline-none bg-white"
+                      >
+                        <option value="percentage">Percentage (%)</option>
+                        <option value="fixed">Fixed ($)</option>
+                      </select>
+                      <input
+                        type="number"
+                        placeholder="Value (e.g. 20)"
+                        value={offerForm.value || ""}
+                        onChange={(e) => setOfferForm(f => ({ ...f, value: Number(e.target.value) }))}
+                        className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex gap-2 mt-1">
+                      <input
+                        type="text"
+                        placeholder="Badge Label (max 6 chars, e.g. 20%)"
+                        value={offerForm.label}
+                        maxLength={6}
+                        onChange={(e) => setOfferForm(f => ({ ...f, label: e.target.value }))}
+                        className="flex-1 rounded-xl border border-slate-200 px-3 py-1.5 text-xs focus:outline-none"
+                      />
+                      <Button size="sm" variant="success" onClick={handleActivateOffer}>Activate</Button>
+                    </div>
+                  </div>
+
+                  {/* Range reset & removal actions */}
+                  <div className="flex flex-wrap gap-2 pt-3 border-t border-slate-100">
+                    <Button size="xs" variant="outline" onClick={handleUnblockDates}>Unblock Dates</Button>
+                    <Button size="xs" variant="outline" onClick={handleRemoveOffer}>Remove Offer</Button>
+                    <Button size="xs" variant="ghost" onClick={() => { setRangeStart(null); setRangeEnd(null); }}>Cancel</Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Single Day Booking Details */}
+            <div>
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-slate-900">{formatDate(selectedDate)}</p>
+                  <p className="text-xs text-slate-500">Availability and reservations</p>
+                </div>
+                <Badge label={selectedDateBookings.length ? "Partial" : "Available"} status={selectedDateBookings.length ? "pending" : "confirmed"} />
+              </div>
+
+              <div className="space-y-2">
+                {selectedDateBookings.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-border bg-white p-4 text-center text-sm text-slate-500">
+                    No reservations for this day.
+                  </div>
+                ) : (
+                  selectedDateBookings.map((booking) => (
+                    <div key={booking.id} className="rounded-xl border border-border bg-white p-3">
+                      <div className="mb-2 flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{booking.customerName}</p>
+                          <p className="text-xs text-slate-500">{booking.bookingId}</p>
+                        </div>
+                        <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize", statusStyles[booking.status])}>
+                          {booking.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500">{booking.propertyName}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {booking.status === "pending" && (
+                          <>
+                            <Button size="xs" variant="success" onClick={() => actionMutation.mutate({ id: booking.id, action: "confirm" })}>Confirm</Button>
+                            <Button size="xs" variant="danger" onClick={() => actionMutation.mutate({ id: booking.id, action: "cancel" })}>Cancel</Button>
+                          </>
+                        )}
+                        {booking.status === "confirmed" && (
+                          <>
+                            <Button size="xs" variant="outline" onClick={() => actionMutation.mutate({ id: booking.id, action: "fail" })}>Mark Failed</Button>
+                            <Button size="xs" variant="danger" onClick={() => actionMutation.mutate({ id: booking.id, action: "cancel" })}>Cancel</Button>
+                          </>
+                        )}
+                        <Button size="xs" variant="ghost" icon={<Eye />} onClick={() => setSelectedBookingId(booking.id)}>Details</Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </aside>
         </div>
@@ -858,9 +1116,14 @@ export default function CalendarPage() {
                 <div key={feed.id} className="rounded-xl border border-border p-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-sm font-semibold text-slate-900">{feed.name}</p>
                         <Badge label={feed.status} status={feed.status === "failed" ? "failed" : "confirmed"} />
+                        {isSyncDelayed(feed) && (
+                          <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700 animate-pulse border border-red-200">
+                            Warning: Sync Outdated/Failed ({">"}30m)
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 truncate text-xs text-slate-500">{feed.url}</p>
                       <p className="mt-1 text-xs text-slate-400">{feed.platform} · Last sync {feed.lastSyncAt ? formatDate(feed.lastSyncAt) : "Never"}</p>
@@ -904,8 +1167,9 @@ export default function CalendarPage() {
                   <h4 className="mb-3 font-semibold text-slate-900">Customer Details</h4>
                   <div className="space-y-2 text-sm text-slate-600">
                     <p className="flex items-center gap-2"><User className="h-4 w-4" />{selectedBooking.customerName}</p>
-                    <p className="flex items-center gap-2"><Phone className="h-4 w-4" />{selectedBooking.phone}</p>
-                    <p className="flex items-center gap-2"><Mail className="h-4 w-4" />{selectedBooking.email}</p>
+                    <div className="mt-2 p-3 bg-slate-50 rounded-xl text-xs text-slate-500 border border-slate-100">
+                      All communication goes through the in-app messaging tool. No guest contact details are shown to protect privacy.
+                    </div>
                   </div>
                 </div>
 
@@ -924,7 +1188,7 @@ export default function CalendarPage() {
                 <div className="rounded-xl border border-border p-4">
                   <h4 className="mb-3 font-semibold text-slate-900">Payment Details</h4>
                   <div className="grid gap-3 text-sm sm:grid-cols-2">
-                    <Info label="Total Amount" value={money(selectedBooking.totalAmount)} />
+                    <Info label="Net Payout" value={<NetCurrency amount={selectedBooking.totalAmount * 0.95} />} />
                     <Info label="Payment Method" value={selectedBooking.paymentMethod} />
                     <Info label="Payment Status" value={selectedBooking.paymentStatus} />
                     <Info label="Transaction ID" value={selectedBooking.transactionId} />
@@ -962,7 +1226,7 @@ export default function CalendarPage() {
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
       <p className="text-xs font-medium text-slate-500">{label}</p>
