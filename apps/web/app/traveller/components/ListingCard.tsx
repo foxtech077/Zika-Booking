@@ -1,13 +1,17 @@
 "use client";
 import React from "react";
+import { useRouter } from "next/navigation";
 import type { PublicListingDetail } from "@/types";
 import ListingImage from "./ListingImage";
+import { useAuthStore } from "@/stores/auth";
+import { addFavourite, removeFavourite } from "@/services/traveller";
 
 interface ListingCardProps {
   listing: PublicListingDetail;
   onSelect: (id: string) => void;
   hoveredId?: string | null;
   onHover?: (id: string | null) => void;
+  onFavToggle?: (id: string, isFavourited: boolean) => void;
 }
 
 const CAT_LABEL: Record<string, string> = {
@@ -42,9 +46,17 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   onSelect,
   hoveredId,
   onHover,
+  onFavToggle,
 }) => {
+  const router = useRouter();
+  const { isAuthenticated } = useAuthStore();
   const [isFav, setIsFav] = React.useState(listing.isFavourited ?? false);
+  const [favLoading, setFavLoading] = React.useState(false);
   const isHovered = hoveredId === listing.id;
+
+  React.useEffect(() => {
+    setIsFav(listing.isFavourited ?? false);
+  }, [listing.isFavourited]);
 
   const basePrice = listing.pricePerNight || 0;
   const isCar = listing.category === "car";
@@ -59,6 +71,30 @@ export const ListingCard: React.FC<ListingCardProps> = ({
         ? `${Math.round(listing.distanceKm * 1000)} m`
         : `${listing.distanceKm.toFixed(1)} km`
       : null;
+
+  async function handleFavToggle(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!isAuthenticated) {
+      router.push("/auth/login");
+      return;
+    }
+    if (favLoading) return;
+    const newState = !isFav;
+    setIsFav(newState);
+    setFavLoading(true);
+    try {
+      if (newState) {
+        await addFavourite(listing.id);
+      } else {
+        await removeFavourite(listing.id);
+      }
+      onFavToggle?.(listing.id, newState);
+    } catch {
+      setIsFav(!newState);
+    } finally {
+      setFavLoading(false);
+    }
+  }
 
   return (
     <div
@@ -95,8 +131,10 @@ export const ListingCard: React.FC<ListingCardProps> = ({
 
       {/* Favourite */}
       <button
-        onClick={(e) => { e.stopPropagation(); setIsFav((v) => !v); }}
-        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
+        onClick={handleFavToggle}
+        disabled={favLoading}
+        aria-label={isFav ? "Remove from favourites" : "Save to favourites"}
+        className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm disabled:opacity-60"
       >
         <svg
           className={`w-4 h-4 transition ${isFav ? "text-[#E31C5F] fill-current" : "text-slate-500"}`}
