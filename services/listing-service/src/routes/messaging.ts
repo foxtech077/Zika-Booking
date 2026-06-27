@@ -290,6 +290,31 @@ app.post(
         }
       });
 
+      if (filtered) {
+        try {
+          const redis = getRedis();
+          const violationKey = `msg:violation:count:${userId}`;
+          const count = await redis.incr(violationKey);
+          
+          if (count >= 3) {
+            // Suspend user status in DB
+            await prisma.$executeRawUnsafe(
+              `UPDATE auth."User" SET status = 'suspended', "updatedAt" = NOW() WHERE id = $1`,
+              userId
+            );
+            // Send suspension warning notification
+            fireNotification(userId, {
+              type: "messaging_suspended",
+              title: "Account Suspended ",
+              body: "Your account has been suspended for repeated violations of our contact-sharing policy.",
+              data: { reason: "repeated_contact_sharing_violations" }
+            });
+          }
+        } catch (err: any) {
+          req.log.error({ err }, "Failed to track contact sharing violation");
+        }
+      }
+
       await prisma.conversation.update({
         where: { id },
         data: { updatedAt: new Date() },

@@ -197,6 +197,16 @@ async function processSinglePayout(payout: any): Promise<void> {
         data: { status: "paid", processedAt: new Date(), providerPayoutId, updatedAt: new Date() },
       });
 
+      // Dispatch payout_sent push/in-app notification
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO auth."Notification" (id, "userId", type, title, body, data, "createdAt")
+         VALUES (gen_random_uuid()::text, $1, 'payout_sent', $2, $3, $4::jsonb, NOW())`,
+        payout.providerId,
+        "Payout Disbursed! 💰",
+        `Your payout of ${payout.amount} ${payout.currency} for booking ${payout.bookingId} has been successfully processed.`,
+        JSON.stringify({ bookingId: payout.bookingId, amount: Number(payout.amount), currency: payout.currency })
+      ).catch((err: any) => console.error("[payout] Failed to insert payout notification:", err.message));
+
       console.log(`[payout-job] Payout ${payout.id} paid via Stripe Transfer ${providerPayoutId}`);
     } else if (merchant.payoutMethod === "mobile_money") {
       // Tara disbursement — held in processing for manual/future automation
