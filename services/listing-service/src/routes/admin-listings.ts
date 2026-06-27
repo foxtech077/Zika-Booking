@@ -2041,6 +2041,32 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       });
 
+      // Log status transition to "draft"
+      await prisma.bookingStatusLog.create({
+        data: {
+          bookingId: booking.id,
+          fromStatus: null,
+          toStatus: "draft",
+          actorType: "admin",
+          changedBy: (req as AdminRequest).adminId,
+          reason: "Manual draft booking creation by admin",
+        },
+      });
+
+      // Log audit entry for manually created booking
+      await prisma.auditLog.create({
+        data: {
+          adminId: (req as AdminRequest).adminId,
+          role: (req as AdminRequest).adminRole,
+          action: "booking_created_manually",
+          targetType: "booking",
+          targetId: booking.id,
+          oldValue: null,
+          newValue: "draft",
+          ipAddress: req.ip,
+        },
+      });
+
       return sendSuccess(reply, 201, {
         bookingId: booking.id,
         bookingReference: booking.reference,
