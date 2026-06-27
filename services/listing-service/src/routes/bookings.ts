@@ -295,6 +295,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           success: true,
           data: {
             ...pricing,
+            
             country,
             paymentProvider,
           },
@@ -332,7 +333,21 @@ export async function bookingRoutes(app: FastifyInstance) {
           reference: true,
           guestEmail: true,
           guestFirstName: true,
+          guestLastName: true,
           guestPhone: true,
+          providerId: true,
+          providerPayout: true,
+          listingType: true,
+          checkIn: true,
+          checkOut: true,
+          pickupDatetime: true,
+          returnDatetime: true,
+          paymentId: true,
+          listing: {
+            select: {
+              name: true,
+            },
+          },
         },
       });
 

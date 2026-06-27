@@ -10,37 +10,58 @@ export interface SchedulePayoutParams {
 }
 
 export async function schedulePayout(params: SchedulePayoutParams): Promise<void> {
-  const { bookingId, providerId, amount, currency, checkInAt } = params;
+  console.log("========== schedulePayout ENTER ==========");
+  console.log(params);
+  try {
+    const { bookingId, providerId, amount, currency, checkInAt } = params;
 
-  if (amount <= 0) return;
+    if (amount <= 0) return;
+    console.log("[PAYOUT TRACE] amount validation passed");
 
-  const existing = await prisma.payout.findUnique({ where: { bookingId } });
-  if (existing) {
-    console.log(`[payout] Payout already exists for booking ${bookingId} (status: ${existing.status})`);
-    return;
+    console.log("[PAYOUT TRACE] checking existing payout");
+    const existing = await prisma.payout.findUnique({ where: { bookingId } });
+    console.log("[PAYOUT TRACE] existing payout =", existing);
+    if (existing) {
+      console.log(`[payout] Payout already exists for booking ${bookingId} (status: ${existing.status})`);
+      return;
+    }
+
+    console.log("[PAYOUT TRACE] merchant upsert starting");
+    const merchant = await prisma.merchant.upsert({
+      where: { userId: providerId },
+      create: { userId: providerId },
+      update: {},
+    });
+    console.log("[PAYOUT TRACE] merchant =", merchant);
+
+    // 24 hours after check-in
+    const scheduledAt = new Date(checkInAt.getTime() + 24 * 60 * 60 * 1000);
+    console.log("[PAYOUT TRACE] scheduledAt =", scheduledAt);
+
+    console.log("[PAYOUT TRACE] creating payout row");
+    await prisma.payout.create({
+      data: {
+        merchantId: merchant.id,
+        bookingId,
+        providerId,
+        amount,
+        currency,
+        scheduledAt,
+      },
+    });
+    console.log("[PAYOUT TRACE] payout row created successfully");
+
+    console.log("[PAYOUT TRACE] running verify query");
+    const verify = await prisma.payout.findUnique({
+      where: { bookingId }
+    });
+    console.log("[PAYOUT TRACE] verify payout row =", verify);
+
+    console.log(`[payout] Scheduled payout for booking ${bookingId} at ${scheduledAt.toISOString()} — amount: ${amount} ${currency}`);
+  } catch (err) {
+    console.error("[PAYOUT TRACE] schedulePayout fatal error", err);
+    throw err;
   }
-
-  const merchant = await prisma.merchant.upsert({
-    where: { userId: providerId },
-    create: { userId: providerId },
-    update: {},
-  });
-
-  // 24 hours after check-in
-  const scheduledAt = new Date(checkInAt.getTime() + 24 * 60 * 60 * 1000);
-
-  await prisma.payout.create({
-    data: {
-      merchantId: merchant.id,
-      bookingId,
-      providerId,
-      amount,
-      currency,
-      scheduledAt,
-    },
-  });
-
-  console.log(`[payout] Scheduled payout for booking ${bookingId} at ${scheduledAt.toISOString()} — amount: ${amount} ${currency}`);
 }
 
 export async function cancelPayout(bookingId: string): Promise<void> {

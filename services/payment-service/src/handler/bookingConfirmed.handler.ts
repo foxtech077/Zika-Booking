@@ -104,7 +104,11 @@ export async function bookingConfirmedHandler(payment: any) {
   // Retrieve the payment record from the database to check current flags
   const dbPayment = await prisma.payment.findUnique({
     where: { id: payment.id }
+    
   });
+  console.log(
+    `[payout] Payout already exists for booking ${bookingId}`
+  );
 
   if (!dbPayment) {
     throw new Error(`Payment record not found for ID: ${payment.id}`);
@@ -124,26 +128,40 @@ export async function bookingConfirmedHandler(payment: any) {
   const json = await res.json();
   const rawBooking = json.data;
 
+  console.log("========== PAYOUT TRACE START ==========");
+  console.log("[PAYOUT TRACE] bookingId =", bookingId);
+  console.log("[PAYOUT TRACE] rawBooking =", JSON.stringify(rawBooking, null, 2));
+
   if (!rawBooking) {
     throw new Error(`Booking ${bookingId} not found`);
   }
 
   const booking = normalizeBooking(rawBooking);
 
+  console.log("[PAYOUT TRACE] providerId =", rawBooking.providerId);
+  console.log("[PAYOUT TRACE] providerPayout =", rawBooking.providerPayout);
+  console.log("[PAYOUT TRACE] currency =", rawBooking.currency);
+  console.log("[PAYOUT TRACE] listingType =", rawBooking.listingType);
+
   // Schedule provider payout for 24 hours after check-in (idempotent)
   if (rawBooking.providerId && Number(rawBooking.providerPayout) > 0) {
     const isCar = rawBooking.listingType === "car";
     const checkInRaw = isCar ? rawBooking.pickupDatetime : rawBooking.checkIn;
+    console.log("[PAYOUT TRACE] checkInRaw =", checkInRaw);
     if (checkInRaw) {
-      schedulePayout({
-        bookingId: rawBooking.id,
-        providerId: rawBooking.providerId,
-        amount: Number(rawBooking.providerPayout),
-        currency: rawBooking.currency,
-        checkInAt: new Date(checkInRaw),
-      }).catch((err: Error) =>
-        console.error(`[payout] Failed to schedule payout for booking ${rawBooking.id}:`, err.message),
-      );
+      console.log("[PAYOUT TRACE] About to call schedulePayout()");
+      try {
+        await schedulePayout({
+          bookingId: rawBooking.id,
+          providerId: rawBooking.providerId,
+          amount: Number(rawBooking.providerPayout),
+          currency: rawBooking.currency,
+          checkInAt: new Date(checkInRaw),
+        });
+        console.log("[PAYOUT TRACE] schedulePayout() completed");
+      } catch (err) {
+        console.error("[PAYOUT TRACE] schedulePayout() failed", err);
+      }
     }
   }
 
