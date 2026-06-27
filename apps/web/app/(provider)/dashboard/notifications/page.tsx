@@ -1,11 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
-  AlertCircle,
   BellRing,
-  CalendarDays,
   CheckCircle2,
   Clock3,
   ExternalLink,
@@ -62,22 +60,6 @@ export default function NotificationsPage() {
   const hasValidRates = current >= 0 && next >= 0 && currentRate.trim() !== "" && newRate.trim() !== "";
   const isReady = notifyProviders && hasValidRates && Boolean(effectiveDate) && adminReason.trim().length >= 10;
 
-  const requirementChecks = useMemo(
-    () => [
-      { label: "Notify providers is ON", complete: notifyProviders },
-      { label: "Affected country or all markets selected", complete: Boolean(country) },
-      { label: "Current and new rates are provided", complete: hasValidRates },
-      { label: "Effective date is set", complete: Boolean(effectiveDate) },
-      { label: "Admin reason is ready for the email body", complete: adminReason.trim().length >= 10 },
-      { label: "Email includes provider dashboard earnings link", complete: true },
-      { label: "Existing confirmed bookings note is included", complete: true },
-      { label: "Batched delivery setting is selected", complete: Boolean(batchSize) },
-    ],
-    [adminReason, batchSize, country, effectiveDate, hasValidRates, notifyProviders]
-  );
-
-  const completedChecks = requirementChecks.filter((item) => item.complete).length;
-
   return (
     <div className="space-y-5 animate-fade-in">
       <SectionHeader
@@ -107,7 +89,7 @@ export default function NotificationsPage() {
         <StatusCard label="Delivery mode" value={notifyProviders ? "Enabled" : "Paused"} icon={<BellRing />} tone={notifyProviders ? "success" : "muted"} />
         <StatusCard label="Target market" value={marketLabel} icon={<ShieldCheck />} tone="neutral" />
         <StatusCard label="Send window" value="Within 1 hour" icon={<Clock3 />} tone="neutral" />
-        <StatusCard label="Readiness" value={`${completedChecks}/${requirementChecks.length}`} icon={<CheckCircle2 />} tone={isReady ? "success" : "warning"} />
+        <StatusCard label="Status" value={isReady ? "Ready" : "Incomplete"} icon={<CheckCircle2 />} tone={isReady ? "success" : "warning"} />
       </div>
 
       {prepared && (
@@ -218,23 +200,6 @@ export default function NotificationsPage() {
           </div>
         </Card>
       </div>
-
-      <Card>
-        <div className="mb-4 flex items-center gap-2">
-          <CalendarDays className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold text-slate-950">Delivery Readiness</h3>
-        </div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {requirementChecks.map((item) => (
-            <div key={item.label} className="flex items-center gap-3 rounded-xl border border-border p-3">
-              <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg", item.complete ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
-                {item.complete ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
-              </span>
-              <span className="text-sm font-medium text-slate-700">{item.label}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }
