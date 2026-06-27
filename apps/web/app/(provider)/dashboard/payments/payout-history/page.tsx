@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
@@ -9,172 +9,147 @@ import {
   Banknote,
   ChevronLeft,
   ChevronRight,
-  Download,
   Eye,
   RefreshCw,
   Search,
+  Clock3,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
-import { listingApi } from "@/lib/listing-api";
+import { getAllPayouts, type Payout, type PayoutStatus } from "@/lib/payment-api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type PayoutStatus = "pending" | "scheduled" | "processing" | "completed" | "failed";
 type SortDir = "asc" | "desc";
+type SortKey = "id" | "bookingId" | "amount" | "status" | "scheduledAt" | "processedAt" | "payoutMethod" | "providerPayoutId" | "failureReason";
 
-interface Payout {
-  id: string;
-  bookingReference: string;
-  listingName: string;
-  grossAmount: number;
-  platformCommission: number;
-  netPayout: number;
-  paymentMethod: string;
-  payoutDate: string;
-  transactionReference: string;
-  status: PayoutStatus;
+interface PayoutSummaryBucket {
+  amount: number;
+  count: number;
+}
+
+interface PayoutHistorySummary {
   currency: string;
+  total: PayoutSummaryBucket;
+  paid: PayoutSummaryBucket;
+  upcoming: PayoutSummaryBucket;
+  processing: PayoutSummaryBucket;
+  failed: PayoutSummaryBucket;
+  cancelled: PayoutSummaryBucket;
 }
 
-// ─── Normalisation ────────────────────────────────────────────────────────────
-
-function readNumber(v: unknown, fallback = 0): number {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+function readNumber(value: unknown, fallback = 0): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
-function readString(v: unknown, fallback = ""): string {
-  return typeof v === "string" && v.trim() ? v : fallback;
+function payoutAmount(payout: Payout): number {
+  return readNumber(payout.amount);
 }
 
-// ... helper to unwrap payload ...
-function unwrap(payload: unknown): Record<string, unknown> {
-  const root = payload as Record<string, unknown>;
-  return (root?.data as Record<string, unknown>) ?? root ?? {};
+function payoutActivityDate(payout: Payout): string {
+  return payout.processedAt ?? payout.scheduledAt ?? payout.createdAt;
 }
 
-function normalizeStatus(v: unknown): PayoutStatus {
-  const s = readString(v, "pending").toLowerCase();
-  if (s === "scheduled" || s === "processing" || s === "completed" || s === "failed") return s;
-  return "pending";
+function extractErrorMessage(error: unknown, fallback: string): string {
+  const err = error as { response?: { data?: { message?: string } } };
+  return err?.response?.data?.message ?? (error instanceof Error ? error.message : fallback);
 }
 
-function normalizePayout(raw: unknown): Payout {
-  const m = raw as Record<string, unknown>;
-  const booking = (m.booking ?? {}) as Record<string, unknown>;
-  const listing = (m.listing ?? m.property ?? {}) as Record<string, unknown>;
-  const id = readString(m.id ?? m._id ?? m.payoutId, crypto.randomUUID());
-  const gross = readNumber(m.grossAmount ?? m.totalAmount ?? m.amount ?? booking.totalAmount);
-  const commission = readNumber(m.platformCommission ?? m.commission ?? m.fees);
-  const net = readNumber(m.netPayout ?? m.netAmount ?? m.payout, gross - commission);
-
-  return {
-    id,
-    bookingReference: readString(m.bookingReference ?? m.bookingId ?? booking.reference, id.slice(0, 8).toUpperCase()),
-    listingName: readString(m.listingName ?? m.propertyName ?? listing.name ?? listing.title, "Listing"),
-    grossAmount: gross,
-    platformCommission: commission,
-    netPayout: net,
-    paymentMethod: readString(m.payoutMethod ?? m.paymentMethod ?? m.method, "Bank Transfer"),
-    payoutDate: readString(m.payoutDate ?? m.paidAt ?? m.processedAt ?? m.createdAt, new Date().toISOString()),
-    transactionReference: readString(m.transactionReference ?? m.transactionId ?? m.reference, "—"),
-    status: normalizeStatus(m.status ?? m.payoutStatus),
-    currency: readString(m.currency, "USD"),
+function buildSummary(payouts: Payout[]): PayoutHistorySummary {
+  const currency = payouts[0]?.currency ?? "USD";
+  const emptyBucket = (): PayoutSummaryBucket => ({ amount: 0, count: 0 });
+  const summary: PayoutHistorySummary = {
+    currency,
+    total: emptyBucket(),
+    paid: emptyBucket(),
+    upcoming: emptyBucket(),
+    processing: emptyBucket(),
+    failed: emptyBucket(),
+    cancelled: emptyBucket(),
   };
+
+  for (const payout of payouts) {
+    const amount = payoutAmount(payout);
+    summary.total.amount += amount;
+    summary.total.count += 1;
+
+    switch (payout.status) {
+      case "paid":
+        summary.paid.amount += amount;
+        summary.paid.count += 1;
+        break;
+      case "scheduled":
+        summary.upcoming.amount += amount;
+        summary.upcoming.count += 1;
+        break;
+      case "processing":
+        summary.processing.amount += amount;
+        summary.processing.count += 1;
+        break;
+      case "failed":
+        summary.failed.amount += amount;
+        summary.failed.count += 1;
+        break;
+      case "cancelled":
+        summary.cancelled.amount += amount;
+        summary.cancelled.count += 1;
+        break;
+    }
+  }
+
+  return summary;
 }
 
-async function fetchPayoutHistory(): Promise<Payout[]> {
-  try {
-    const res = await listingApi.get("/provider/payments/payout-history");
-    const data = unwrap(res.data);
-    const list = Array.isArray(data.payouts)
-      ? data.payouts
-      : Array.isArray(data.history)
-        ? data.history
-        : Array.isArray(data.transactions)
-          ? data.transactions
-          : Array.isArray(res.data)
-            ? res.data
-            : [];
-    return list.map(normalizePayout);
-  } catch {
-    return [];
+function bucketTone(status: string): string {
+  switch (status) {
+    case "total":
+      return "bg-emerald-50 border-emerald-100 text-emerald-700";
+    case "paid":
+      return "bg-emerald-50 border-emerald-100 text-emerald-700";
+    case "scheduled":
+      return "bg-amber-50 border-amber-100 text-amber-700";
+    case "processing":
+      return "bg-sky-50 border-sky-100 text-sky-700";
+    case "failed":
+      return "bg-red-50 border-red-100 text-red-600";
+    case "cancelled":
+      return "bg-slate-50 border-slate-100 text-slate-600";
+    default:
+      return "bg-slate-50 border-slate-100 text-slate-600";
   }
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const PAGE_SIZE = 10;
-
-const statusOptions = [
-  { value: "all", label: "All Statuses" },
-  { value: "pending", label: "Pending" },
-  { value: "scheduled", label: "Scheduled" },
-  { value: "processing", label: "Processing" },
-  { value: "completed", label: "Completed" },
-  { value: "failed", label: "Failed" },
-];
-
-const dateRangeOptions = [
-  { value: "all", label: "All Time" },
-  { value: "7d", label: "Last 7 Days" },
-  { value: "30d", label: "Last 30 Days" },
-  { value: "90d", label: "Last 90 Days" },
-  { value: "year", label: "This Year" },
-];
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function isWithinRange(dateStr: string, range: string): boolean {
-  if (range === "all") return true;
-  const date = new Date(dateStr).getTime();
-  const now = Date.now();
-  const days = range === "7d" ? 7 : range === "30d" ? 30 : range === "90d" ? 90 : 365;
-  return date >= now - days * 24 * 60 * 60 * 1000;
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function StatusSummary({ payouts }: { payouts: Payout[] }) {
-  const currency = payouts[0]?.currency ?? "USD";
-  const completed = payouts.filter((p) => p.status === "completed");
-  const pending = payouts.filter((p) => p.status === "pending" || p.status === "scheduled");
-  const failed = payouts.filter((p) => p.status === "failed");
-
-  const cards = [
-    {
-      label: "Completed Payouts",
-      count: completed.length,
-      total: formatCurrency(completed.reduce((s, p) => s + p.netPayout, 0), currency),
-      tone: "bg-emerald-50 border-emerald-100 text-emerald-700",
-    },
-    {
-      label: "Pending / Scheduled",
-      count: pending.length,
-      total: formatCurrency(pending.reduce((s, p) => s + p.netPayout, 0), currency),
-      tone: "bg-amber-50 border-amber-100 text-amber-700",
-    },
-    {
-      label: "Failed Payouts",
-      count: failed.length,
-      total: formatCurrency(failed.reduce((s, p) => s + p.netPayout, 0), currency),
-      tone: "bg-red-50 border-red-100 text-red-600",
-    },
-  ];
-
+function SummaryCard({
+  label,
+  value,
+  count,
+  icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  count: number;
+  icon: ReactNode;
+  tone: string;
+}) {
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
-      {cards.map((c) => (
-        <div key={c.label} className={cn("rounded-2xl border p-5", c.tone)}>
-          <p className="text-[11px] font-semibold uppercase tracking-wide opacity-70">{c.label}</p>
-          <p className="mt-1.5 text-2xl font-bold">{c.total}</p>
-          <p className="mt-1 text-sm opacity-80">{c.count} payout{c.count !== 1 ? "s" : ""}</p>
+    <div className={cn("rounded-2xl border p-5 shadow-sm", tone)}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide opacity-70">{label}</p>
+          <p className="mt-1.5 text-2xl font-bold">{value}</p>
+          <p className="mt-1 text-xs opacity-80">
+            {count} payout{count === 1 ? "" : "s"}
+          </p>
         </div>
-      ))}
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/70 shadow-sm [&>svg]:h-5 [&>svg]:w-5">
+          {icon}
+        </span>
+      </div>
     </div>
   );
 }
@@ -187,21 +162,21 @@ function SortableHeader({
   onSort,
 }: {
   label: string;
-  sortKey: string;
-  currentSort: string;
+  sortKey: SortKey;
+  currentSort: SortKey;
   dir: SortDir;
-  onSort: (key: string) => void;
+  onSort: (key: SortKey) => void;
 }) {
   const active = currentSort === sortKey;
   return (
     <th
-      className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 cursor-pointer select-none whitespace-nowrap hover:text-slate-700"
+      className="cursor-pointer select-none whitespace-nowrap px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700"
       onClick={() => onSort(sortKey)}
     >
       <span className="flex items-center gap-1">
         {label}
         <ArrowUpDown className={cn("h-3 w-3 transition-opacity", active ? "opacity-100 text-green-700" : "opacity-30")} />
-        {active && <span className="text-[9px]">{dir === "asc" ? "↑" : "↓"}</span>}
+        {active && <span className="text-[9px]">{dir === "asc" ? "^" : "v"}</span>}
       </span>
     </th>
   );
@@ -212,46 +187,163 @@ function EmptyState({ filtered }: { filtered: boolean }) {
     <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
       <Banknote className="h-12 w-12 text-slate-200" />
       <p className="mt-4 font-semibold text-slate-700">
-        {filtered ? "No results match your filters" : "No payout history yet"}
+        {filtered ? "No results match your filters" : "No payout data available yet"}
       </p>
       <p className="mt-1 max-w-sm text-sm text-slate-400">
         {filtered
           ? "Try adjusting your search, date range, or status filter."
-          : "Completed payout records will appear here after your first payout is processed."}
+          : "Payout records will appear here after the backend returns provider payout activity."}
       </p>
     </div>
+  );
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <Card>
+      <div className="flex min-h-[240px] flex-col items-center justify-center text-center">
+        <XCircle className="h-12 w-12 text-red-400" />
+        <p className="mt-4 font-semibold text-slate-800">Unable to load payout history</p>
+        <p className="mt-1 max-w-lg text-sm text-slate-500">{message}</p>
+        <Button className="mt-4" variant="outline" icon={<RefreshCw />} onClick={onRetry}>
+          Retry
+        </Button>
+      </div>
+    </Card>
   );
 }
 
 function SkeletonRows() {
   return (
-    <div className="p-5 space-y-3">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="h-14 rounded-xl bg-slate-100 animate-pulse" />
+    <div className="space-y-3 p-5">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="h-14 rounded-xl bg-slate-100 animate-pulse" />
       ))}
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+const PAGE_SIZE = 10;
+
+const statusOptions: Array<{ value: "all" | PayoutStatus; label: string }> = [
+  { value: "all", label: "All Statuses" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "processing", label: "Processing" },
+  { value: "paid", label: "Paid" },
+  { value: "failed", label: "Failed" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+const dateRangeOptions = [
+  { value: "all", label: "All Time" },
+  { value: "7d", label: "Last 7 Days" },
+  { value: "30d", label: "Last 30 Days" },
+  { value: "90d", label: "Last 90 Days" },
+  { value: "year", label: "This Year" },
+];
+
+function isWithinRange(dateStr: string, range: string): boolean {
+  if (range === "all") return true;
+  const timestamp = new Date(dateStr).getTime();
+  const now = Date.now();
+  const days = range === "7d" ? 7 : range === "30d" ? 30 : range === "90d" ? 90 : 365;
+  return timestamp >= now - days * 24 * 60 * 60 * 1000;
+}
 
 export default function PayoutHistoryPage() {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | PayoutStatus>("all");
   const [dateRange, setDateRange] = useState("all");
-  const [sortKey, setSortKey] = useState("payoutDate");
+  const [sortKey, setSortKey] = useState<SortKey>("scheduledAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
 
-  const { data = [], isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["provider-payout-history"],
-    queryFn: fetchPayoutHistory,
-    staleTime: 5 * 60_000,
+  const {
+    data: payouts = [],
+    isLoading,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["provider-payout-history", statusFilter],
+    queryFn: () => getAllPayouts(statusFilter === "all" ? undefined : { status: statusFilter }),
+    staleTime: 2 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 
-  function handleSort(key: string) {
+  const filtered = useMemo(() => {
+    const text = search.trim().toLowerCase();
+
+    return payouts
+      .filter((payout) => {
+        if (statusFilter !== "all" && payout.status !== statusFilter) return false;
+        if (!text) return true;
+
+        return [
+          payout.id,
+          payout.bookingId,
+          payout.providerPayoutId ?? "",
+          payout.failureReason ?? "",
+          payout.merchant?.payoutMethod ?? "",
+          payout.status,
+          payout.currency,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(text);
+      })
+      .filter((payout) => isWithinRange(payoutActivityDate(payout), dateRange))
+      .sort((a, b) => {
+        const getValue = (payout: Payout): string | number | null => {
+          switch (sortKey) {
+            case "id":
+              return payout.id;
+            case "bookingId":
+              return payout.bookingId;
+            case "amount":
+              return payoutAmount(payout);
+            case "status":
+              return payout.status;
+            case "scheduledAt":
+              return payout.scheduledAt;
+            case "processedAt":
+              return payout.processedAt ?? "";
+            case "payoutMethod":
+              return payout.merchant?.payoutMethod ?? "";
+            case "providerPayoutId":
+              return payout.providerPayoutId ?? "";
+            case "failureReason":
+              return payout.failureReason ?? "";
+          }
+        };
+
+        const av = getValue(a);
+        const bv = getValue(b);
+
+        if (typeof av === "number" && typeof bv === "number") {
+          return sortDir === "asc" ? av - bv : bv - av;
+        }
+
+        const aValue = String(av ?? "").toLowerCase();
+        const bValue = String(bv ?? "").toLowerCase();
+
+        if (aValue < bValue) return sortDir === "asc" ? -1 : 1;
+        if (aValue > bValue) return sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+  }, [payouts, search, statusFilter, dateRange, sortKey, sortDir]);
+
+  const summary = useMemo(() => buildSummary(filtered), [filtered]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const errorMessage = extractErrorMessage(error, "The payout history request failed.");
+
+  function handleSort(key: SortKey) {
     if (sortKey === key) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
     } else {
       setSortKey(key);
       setSortDir("desc");
@@ -259,37 +351,18 @@ export default function PayoutHistoryPage() {
     setPage(1);
   }
 
-  const filtered = useMemo(() => {
-    const text = search.trim().toLowerCase();
-    return data
-      .filter((p) => !text || [p.bookingReference, p.listingName, p.transactionReference].join(" ").toLowerCase().includes(text))
-      .filter((p) => statusFilter === "all" || p.status === statusFilter)
-      .filter((p) => isWithinRange(p.payoutDate, dateRange))
-      .sort((a, b) => {
-        let av: string | number = a[sortKey as keyof Payout] as string | number;
-        let bv: string | number = b[sortKey as keyof Payout] as string | number;
-        if (typeof av === "string") av = av.toLowerCase();
-        if (typeof bv === "string") bv = bv.toLowerCase();
-        if (av < bv) return sortDir === "asc" ? -1 : 1;
-        if (av > bv) return sortDir === "asc" ? 1 : -1;
-        return 0;
-      });
-  }, [data, search, statusFilter, dateRange, sortKey, sortDir]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* ── Header ── */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <Link href="/dashboard/payments">
-            <Button variant="ghost" size="sm" icon={<ArrowLeft />}>Back</Button>
+            <Button variant="ghost" size="sm" icon={<ArrowLeft />}>
+              Back
+            </Button>
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Payout History</h1>
-            <p className="mt-0.5 text-sm text-slate-500">All processed and pending payouts from the platform.</p>
+            <p className="mt-0.5 text-sm text-slate-500">All provider payout records returned by the backend.</p>
           </div>
         </div>
         <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !isLoading} onClick={() => refetch()}>
@@ -297,167 +370,193 @@ export default function PayoutHistoryPage() {
         </Button>
       </div>
 
-      {/* ── Status summary ── */}
-      {!isLoading && data.length > 0 && <StatusSummary payouts={data} />}
+      {isError ? (
+        <ErrorState message={errorMessage} onRetry={() => refetch()} />
+      ) : (
+        <>
+          {!isLoading && payouts.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <SummaryCard
+                label="Total Payouts"
+                value={formatCurrency(summary.total.amount, summary.currency)}
+                count={summary.total.count}
+                icon={<Banknote />}
+                tone={bucketTone("total")}
+              />
+              <SummaryCard
+                label="Paid Payouts"
+                value={formatCurrency(summary.paid.amount, summary.currency)}
+                count={summary.paid.count}
+                icon={<CheckCircle2 />}
+                tone={bucketTone("paid")}
+              />
+              <SummaryCard
+                label="Upcoming Payouts"
+                value={formatCurrency(summary.upcoming.amount, summary.currency)}
+                count={summary.upcoming.count}
+                icon={<Clock3 />}
+                tone={bucketTone("scheduled")}
+              />
+              <SummaryCard
+                label="Processing Payouts"
+                value={formatCurrency(summary.processing.amount, summary.currency)}
+                count={summary.processing.count}
+                icon={<RefreshCw />}
+                tone={bucketTone("processing")}
+              />
+              <SummaryCard
+                label="Failed Payouts"
+                value={formatCurrency(summary.failed.amount, summary.currency)}
+                count={summary.failed.count}
+                icon={<XCircle />}
+                tone={bucketTone("failed")}
+              />
+              <SummaryCard
+                label="Cancelled Payouts"
+                value={formatCurrency(summary.cancelled.amount, summary.currency)}
+                count={summary.cancelled.count}
+                icon={<XCircle />}
+                tone={bucketTone("cancelled")}
+              />
+            </div>
+          )}
 
-      {/* ── Filters ── */}
-      <Card>
-        <SectionHeader title="Filter Payouts" subtitle="Narrow down by search, date, or status" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_180px_180px]">
-          <Input
-            label="Search"
-            placeholder="Booking ref, listing, transaction…"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            leftIcon={<Search />}
-          />
-          <Select
-            label="Date Range"
-            value={dateRange}
-            onChange={(e) => { setDateRange(e.target.value); setPage(1); }}
-            options={dateRangeOptions}
-          />
-          <Select
-            label="Payout Status"
-            value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-            options={statusOptions}
-          />
-        </div>
-      </Card>
+          <Card>
+            <SectionHeader title="Filter Payouts" subtitle="Search and narrow down the records you need" />
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_180px_180px]">
+              <Input
+                label="Search"
+                placeholder="Payout ID, booking ID, reference, method..."
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+                leftIcon={<Search />}
+              />
+              <Select
+                label="Date Range"
+                value={dateRange}
+                onChange={(event) => {
+                  setDateRange(event.target.value);
+                  setPage(1);
+                }}
+                options={dateRangeOptions}
+              />
+              <Select
+                label="Payout Status"
+                value={statusFilter}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as "all" | PayoutStatus);
+                  setPage(1);
+                }}
+                options={statusOptions}
+              />
+            </div>
+          </Card>
 
-      {/* ── Table ── */}
-      <Card padding="none">
-        <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="font-semibold text-slate-900">Payout Records</h3>
-            <p className="text-xs text-slate-500">
-              {filtered.length} result{filtered.length !== 1 ? "s" : ""} · Page {page} of {totalPages}
-            </p>
-          </div>
-          <Badge label={`${filtered.length} payouts`} variant="info" />
-        </div>
+          <Card padding="none">
+            <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-semibold text-slate-900">Payout Records</h3>
+                <p className="text-xs text-slate-500">
+                  {filtered.length} result{filtered.length === 1 ? "" : "s"} - Page {page} of {totalPages}
+                </p>
+              </div>
+              <Badge label={`${filtered.length} payouts`} variant="info" />
+            </div>
 
-        {isLoading ? (
-          <SkeletonRows />
-        ) : pageItems.length === 0 ? (
-          <EmptyState filtered={filtered.length !== data.length} />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1040px] text-sm">
-              <thead>
-                <tr className="border-b border-border bg-slate-50">
-                  <SortableHeader label="Booking Ref" sortKey="bookingReference" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortableHeader label="Listing" sortKey="listingName" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortableHeader label="Gross Amount" sortKey="grossAmount" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">
-                    Commission
-                  </th>
-                  <SortableHeader label="Net Payout" sortKey="netPayout" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">
-                    Payment Method
-                  </th>
-                  <SortableHeader label="Payout Date" sortKey="payoutDate" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">
-                    Transaction Ref
-                  </th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    Status
-                  </th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {pageItems.map((payout) => (
-                  <tr key={payout.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">
-                      {payout.bookingReference}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="max-w-[180px] truncate font-medium text-slate-900">{payout.listingName}</p>
-                    </td>
-                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
-                      {formatCurrency(payout.grossAmount, payout.currency)}
-                    </td>
-                    <td className="px-4 py-3 text-red-600 whitespace-nowrap">
-                      −{formatCurrency(payout.platformCommission, payout.currency)}
-                    </td>
-                    <td className="px-4 py-3 font-bold text-emerald-700 whitespace-nowrap">
-                      {formatCurrency(payout.netPayout, payout.currency)}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 text-xs whitespace-nowrap">
-                      {payout.paymentMethod}
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
-                      {formatDate(payout.payoutDate)}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-500 whitespace-nowrap">
-                      {payout.transactionReference}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Badge label={payout.status} status={payout.status} dot />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <Link href={`/dashboard/payments/payout-details/${payout.id}`}>
-                          <Button variant="ghost" size="xs" icon={<Eye />}>View Details</Button>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          icon={<Download />}
-                          onClick={() => {
-                            const content = `RECEIPT - ZIKA BOOKING\n\nBooking Reference: ${payout.bookingReference}\nListing: ${payout.listingName}\nGross Amount: $${payout.grossAmount}\nPlatform Commission: $${payout.platformCommission}\nNet Payout: $${payout.netPayout}\nPayment Method: ${payout.paymentMethod}\nPayout Date: ${formatDate(payout.payoutDate)}\nTransaction Reference: ${payout.transactionReference}\nStatus: ${payout.status.toUpperCase()}\n\nThank you for partnering with Zika Booking.`;
-                            const blob = new Blob([content], { type: "text/plain" });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement("a");
-                            a.href = url;
-                            a.download = `receipt_${payout.bookingReference}.txt`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                          }}
-                        >
-                          Download Report
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+            {isLoading ? (
+              <SkeletonRows />
+            ) : pageItems.length === 0 ? (
+              <EmptyState filtered={filtered.length !== payouts.length} />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1260px] text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-slate-50">
+                      <SortableHeader label="Payout ID" sortKey="id" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Booking ID" sortKey="bookingId" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Amount" sortKey="amount" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Status" sortKey="status" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Scheduled Date" sortKey="scheduledAt" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Paid Date" sortKey="processedAt" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Payout Method" sortKey="payoutMethod" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Provider Payout ID" sortKey="providerPayoutId" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                      <SortableHeader label="Failure Reason" sortKey="failureReason" currentSort={sortKey} dir={sortDir} onSort={handleSort} />
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {pageItems.map((payout) => (
+                      <tr key={payout.id} className="transition-colors hover:bg-slate-50">
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">{payout.id}</td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600 whitespace-nowrap">{payout.bookingId}</td>
+                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-slate-900">
+                          {formatCurrency(payoutAmount(payout), payout.currency)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge label={payout.status} status={payout.status} dot />
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-500">{formatDate(payout.scheduledAt)}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-500">
+                          {payout.processedAt ? formatDate(payout.processedAt) : "N/A"}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+                          {payout.merchant?.payoutMethod ?? "N/A"}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap font-mono text-xs text-slate-500">
+                          {payout.providerPayoutId ?? "N/A"}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">
+                          <p className="max-w-[240px] truncate" title={payout.failureReason ?? "N/A"}>
+                            {payout.failureReason ?? "N/A"}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <Link href={`/dashboard/payments/payout-details/${payout.id}`}>
+                            <Button variant="ghost" size="xs" icon={<Eye />}>
+                              View Details
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-        {/* ── Pagination ── */}
-        <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-500">
-            Rows per page: {PAGE_SIZE} · Total: {filtered.length}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              icon={<ChevronLeft />}
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </Card>
+            <div className="flex flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-500">
+                Rows per page: {PAGE_SIZE} - Total: {filtered.length}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<ChevronLeft />}
+                  disabled={page <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

@@ -98,7 +98,7 @@ export function Sidebar() {
                   href={item.href}
                   title={collapsed ? item.label : undefined}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[17px] font-medium transition-all duration-150",
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-150",
                     isActive
                       ? "bg-white/15 text-white shadow-sm"
                       : "text-green-100/70 hover:bg-white/8 hover:text-white",
