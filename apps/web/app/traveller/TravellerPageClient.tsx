@@ -2542,15 +2542,15 @@ export default function TravellerDashboard() {
                 <div>
                   <p className="text-[10px] font-semibold text-[#1D8D2B] uppercase tracking-[0.3em] mb-2">Curated Worlds</p>
                   <h2 className="text-3xl md:text-4xl font-serif text-slate-900 leading-snug">
-                    Discover Destinations<br className="hidden sm:block" /> Selected for the<br className="hidden sm:block" /> Discerning Traveler.
+                    Discover Destinations Selected for the<br className="hidden sm:block" /> Discerning Traveler.
                   </h2>
                 </div>
-                <button
+                {/* <button
                   onClick={() => handleSearch(undefined, "hotel")}
                   className="text-sm font-semibold text-[#0c2614] hover:text-[#1D8D2B] transition underline underline-offset-4 shrink-0"
                 >
                   View All Destinations
-                </button>
+                </button> */}
               </div>
 
               {/* Asymmetric grid: 1 large left + 2 stacked right */}
