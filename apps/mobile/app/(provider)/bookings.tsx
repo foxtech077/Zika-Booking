@@ -8,8 +8,8 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { AppLayout } from "../../components/layout/AppLayout";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
@@ -197,48 +197,49 @@ export default function ProviderBookingsScreen() {
   const bookings = data?.bookings ?? [];
 
   return (
-    <View style={s.container}>
-      <SafeAreaView edges={["top"]} style={s.header}>
-        <View style={s.headerRow}>
-          <View>
-            <Text style={s.headerTitle}>Reservations</Text>
-            {data && (
-              <Text style={s.headerSub}>
-                {data.total} booking{data.total !== 1 ? "s" : ""}
-              </Text>
+    <AppLayout>
+      <View style={s.container}>
+        <View style={s.header}>
+          <View style={s.headerRow}>
+            <View>
+              <Text style={s.headerTitle}>Reservations</Text>
+              {data && (
+                <Text style={s.headerSub}>
+                  {data.total} booking{data.total !== 1 ? "s" : ""}
+                </Text>
+              )}
+            </View>
+            <View style={[s.countBadge, data?.total ? {} : { opacity: 0 }]}>
+              <Text style={s.countBadgeText}>{data?.total ?? 0}</Text>
+            </View>
+          </View>
+
+          {/* Commission notice */}
+          <View style={s.commissionBar}>
+            <Ionicons name="information-circle-outline" size={13} color={K.colors.accentLight} />
+            <Text style={s.commissionText}>Net amounts shown after Kainook's 5% service fee</Text>
+          </View>
+
+          {/* Filter tabs */}
+          <FlatList
+            data={FILTER_TABS}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(t) => t.key}
+            contentContainerStyle={s.tabsRow}
+            renderItem={({ item: tab }) => (
+              <TouchableOpacity
+                style={[s.tab, activeTab === tab.key && s.tabActive]}
+                onPress={() => setActiveTab(tab.key)}
+                activeOpacity={0.75}
+              >
+                <Text style={[s.tabText, activeTab === tab.key && s.tabTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
             )}
-          </View>
-          <View style={[s.countBadge, data?.total ? {} : { opacity: 0 }]}>
-            <Text style={s.countBadgeText}>{data?.total ?? 0}</Text>
-          </View>
+          />
         </View>
-
-        {/* Commission notice */}
-        <View style={s.commissionBar}>
-          <Ionicons name="information-circle-outline" size={13} color={K.colors.accentLight} />
-          <Text style={s.commissionText}>Net amounts shown after Kainook's 5% service fee</Text>
-        </View>
-
-        {/* Filter tabs */}
-        <FlatList
-          data={FILTER_TABS}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(t) => t.key}
-          contentContainerStyle={s.tabsRow}
-          renderItem={({ item: tab }) => (
-            <TouchableOpacity
-              style={[s.tab, activeTab === tab.key && s.tabActive]}
-              onPress={() => setActiveTab(tab.key)}
-              activeOpacity={0.75}
-            >
-              <Text style={[s.tabText, activeTab === tab.key && s.tabTextActive]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
-      </SafeAreaView>
 
       {isLoading ? (
         <View style={s.center}>
@@ -275,7 +276,8 @@ export default function ProviderBookingsScreen() {
           ListFooterComponent={() => <View style={{ height: 32 }} />}
         />
       )}
-    </View>
+      </View>
+    </AppLayout>
   );
 }
 

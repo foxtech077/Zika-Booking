@@ -56,6 +56,7 @@ interface SavedPaymentMethod {
   cardExpMonth: number | null;
   cardExpYear: number | null;
   mobileNumberMasked: string | null;
+  displayLabel?: string | null;
   isDefault: boolean;
 }
 
@@ -236,6 +237,9 @@ export default function PaymentScreen() {
   const [showDiagModal, setShowDiagModal] = useState(false);
   const [diagReport, setDiagReport] = useState("");
 
+  // ── Terms & Conditions acceptance ─────────────────────────────────────────
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
   // ── Fetch booking detail ──────────────────────────────────────────────────
   const { data: booking, isLoading: bookingLoading, error: bookingError } = useQuery<BookingDetail>({
     queryKey: ["booking-for-payment", bookingId],
@@ -277,7 +281,7 @@ export default function PaymentScreen() {
       return res.data.data.paymentMethods ?? [];
     },
     retry: 1,
-    enabled: false,
+    enabled: !!bookingId,
   });
 
   // ── Clear diagnostic log on mount (fresh session) ────────────────────────
@@ -536,6 +540,16 @@ export default function PaymentScreen() {
         if (status === "captured") {
           payLog("success", "TARA-POLL", "Status CAPTURED — navigating to success");
           clearPolling();
+          // Save mobile number for future payments if user opted in (non-critical)
+          if (saveMobileNumber && mobileNumber && !selectedSavedMethodId) {
+            try {
+              await paymentApi.post("/guests/me/payment-methods/tara", {
+                mobileNumber: `${countryPrefix}${mobileNumber}`,
+              });
+            } catch {
+              // Ignore — successful payment should not block on save failure
+            }
+          }
           navigateToSuccess();
           return;
         }
@@ -621,13 +635,15 @@ export default function PaymentScreen() {
   // ── Navigate to success ───────────────────────────────────────────────────
   function navigateToSuccess() {
     stripeSessionRef.current = null;
-    setView("success");
     void queryClient.invalidateQueries({ queryKey: ["booking", bookingId] });
     void queryClient.invalidateQueries({ queryKey: ["myBookings"] });
     // Refresh loyalty points — booking completion earns AfriPoints
     void queryClient.invalidateQueries({ queryKey: LOYALTY_QK.profile });
     void queryClient.invalidateQueries({ queryKey: LOYALTY_QK.historyInfinite });
-    router.replace("/booking/submitted");
+    router.replace({
+      pathname: "/booking/[id]" as any,
+      params: { id: bookingId, fromPayment: "true" },
+    });
   }
 
   // ── Pay button handler ────────────────────────────────────────────────────
@@ -780,10 +796,6 @@ export default function PaymentScreen() {
         // The backend status update requires a webhook; don't make the user wait for it.
         navigateToSuccess();
       } catch (err: any) {
-        console.log("[PAY] Stripe outer catch triggered");
-        console.log("[PAY] HTTP status:", err?.response?.status);
-        console.log("[PAY] Response body:", JSON.stringify(err?.response?.data, null, 2));
-        console.log("[PAY] Raw error message:", err?.message);
         payLog("error", "HANDLE-PAY", "Stripe outer catch", {
           httpStatus: err?.response?.status,
           responseBody: err?.response?.data,
@@ -836,12 +848,9 @@ export default function PaymentScreen() {
         mobileNumber: fullMobileNumber,
         ...(selectedSavedMethodId ? { savedPaymentMethodId: selectedSavedMethodId } : {}),
       };
-      console.log("[PAY] Initiating Tara payment — request body:", JSON.stringify(taraPayload, null, 2));
       payLog("info", "HANDLE-PAY", "Tara initiate — POST /payments/initiate", { bookingId, mobileNumber: `${countryPrefix}****${mobileNumber.slice(-4)}` });
 
       const res = await paymentApi.post<InitiateResponse>("/payments/initiate", taraPayload);
-      console.log("[PAY] Tara initiate SUCCESS — status:", res.status);
-      console.log("[PAY] Tara initiate response:", JSON.stringify(res.data, null, 2));
 
       const { paymentId } = res.data.data;
       capturedPaymentIdRef.current = paymentId;
@@ -852,10 +861,6 @@ export default function PaymentScreen() {
       startTaraCountdown();
       startTaraPolling(paymentId);
     } catch (err: any) {
-      console.log("[PAY] Tara initiate FAILED");
-      console.log("[PAY] HTTP status:", err?.response?.status);
-      console.log("[PAY] Response body:", JSON.stringify(err?.response?.data, null, 2));
-      console.log("[PAY] Raw error message:", err?.message);
       payLog("error", "HANDLE-PAY", "Tara initiate FAILED", {
         httpStatus: err?.response?.status,
         responseBody: err?.response?.data,
@@ -944,8 +949,12 @@ export default function PaymentScreen() {
 
   // ── Render: Tara waiting ──────────────────────────────────────────────────
   if (view === "tara_waiting") {
-    const maskedNumber =
-      `${countryPrefix} •••• ${mobileNumber.slice(-4)}`;
+    const savedTaraMethod = selectedSavedMethodId
+      ? savedMethods?.find((m) => m.id === selectedSavedMethodId)
+      : undefined;
+    const maskedNumber = savedTaraMethod
+      ? (savedTaraMethod.mobileNumberMasked ?? savedTaraMethod.displayLabel ?? "saved number")
+      : `${countryPrefix} •••• ${mobileNumber.slice(-4)}`;
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centered}>
@@ -1239,11 +1248,31 @@ export default function PaymentScreen() {
           </View>
         )}
 
+        {/* ── Terms & Conditions checkbox ───────────────────────────────── */}
+        <TouchableOpacity
+          style={styles.termsRow}
+          onPress={() => setTermsAccepted((v) => !v)}
+          activeOpacity={0.75}
+        >
+          <View style={[styles.termsCheckbox, termsAccepted && styles.termsCheckboxChecked]}>
+            {termsAccepted && <Ionicons name="checkmark" size={13} color="#fff" />}
+          </View>
+          <Text style={styles.termsLabel}>
+            I have read and agree to the{" "}
+            <Text
+              style={styles.termsLink}
+              onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)}
+            >
+              Terms &amp; Conditions
+            </Text>
+          </Text>
+        </TouchableOpacity>
+
         {/* ── Pay button ────────────────────────────────────────────────── */}
         <TouchableOpacity
-          style={[styles.primaryBtn, isProcessing && styles.primaryBtnDisabled]}
+          style={[styles.primaryBtn, (isProcessing || !termsAccepted) && styles.primaryBtnDisabled]}
           onPress={() => void handlePay()}
-          disabled={isProcessing}
+          disabled={isProcessing || !termsAccepted}
         >
           {isProcessing ? (
             <View style={styles.btnLoadingRow}>
@@ -1602,6 +1631,33 @@ const styles = StyleSheet.create({
   },
   primaryBtnDisabled: { opacity: 0.6 },
   primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+
+  // Terms & Conditions checkbox
+  termsRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  termsCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#d1d5db",
+    backgroundColor: "#f9fafb",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  termsCheckboxChecked: {
+    backgroundColor: "#16a34a",
+    borderColor: "#16a34a",
+  },
+  termsLabel: { flex: 1, fontSize: 13, color: "#374151", lineHeight: 20 },
+  termsLink:  { color: "#16a34a", fontWeight: "700", textDecorationLine: "underline" },
   secondaryBtn: {
     borderWidth: 1,
     borderColor: "#d1d5db",
@@ -1775,4 +1831,30 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   diagActionBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
+
+  // Tara form — prefix dropdown sub-label
+  prefixDropdownSub: {
+    fontSize: 11,
+    color: "#9ca3af",
+    marginTop: 1,
+  },
+
+  // Tara form — currency mismatch note
+  currencyNoteBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#fffbeb",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    marginBottom: 10,
+  },
+  currencyNoteText: {
+    flex: 1,
+    fontSize: 12.5,
+    color: "#92400e",
+    lineHeight: 18,
+  },
 });

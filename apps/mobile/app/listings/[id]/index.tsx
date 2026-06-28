@@ -582,6 +582,24 @@ export default function EditListingScreen() {
     } catch { Alert.alert("Error", "Could not delete this photo. Please try again."); }
   }
 
+  async function reorderPhoto(photoId: string, direction: "up" | "down") {
+    const idx = photos.findIndex((p) => p.id === photoId);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= photos.length) return;
+    const reordered = [...photos];
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx]!, reordered[idx]!];
+    setPhotos(reordered);
+    try {
+      await listingApi.patch(`/listings/${id}/photos/reorder`, {
+        orderedIds: reordered.map((p) => p.id),
+      });
+    } catch {
+      setPhotos(photos);
+      Alert.alert("Error", "Could not reorder photos. Please try again.");
+    }
+  }
+
   async function pickAndUploadDocument(docType: string, docLabel: string) {
     setUploadingDoc(docType);
     try {
@@ -739,7 +757,7 @@ export default function EditListingScreen() {
           {category === "hotel" && step === 4 && (
             <PhotosSection photos={photos} uploading={uploadingPhoto}
               uploadProgress={uploadProgress ?? undefined}
-              onAdd={pickAndUploadPhoto} onDelete={deletePhoto} minPhotos={1} maxPhotos={30}
+              onAdd={pickAndUploadPhoto} onDelete={deletePhoto} onReorder={reorderPhoto} minPhotos={1} maxPhotos={30}
               error={errors.photos} />
           )}
 
@@ -858,7 +876,7 @@ export default function EditListingScreen() {
               <View style={{ height: 16 }} />
               <PhotosSection photos={photos} uploading={uploadingPhoto}
                 uploadProgress={uploadProgress ?? undefined}
-                onAdd={pickAndUploadPhoto} onDelete={deletePhoto} minPhotos={3} maxPhotos={30}
+                onAdd={pickAndUploadPhoto} onDelete={deletePhoto} onReorder={reorderPhoto} minPhotos={3} maxPhotos={30}
                 error={errors.photos} />
             </View>
           )}
@@ -1029,7 +1047,7 @@ export default function EditListingScreen() {
             <View>
               <PhotosSection photos={photos} uploading={uploadingPhoto}
                 uploadProgress={uploadProgress ?? undefined}
-                onAdd={pickAndUploadPhoto} onDelete={deletePhoto} minPhotos={1} maxPhotos={30}
+                onAdd={pickAndUploadPhoto} onDelete={deletePhoto} onReorder={reorderPhoto} minPhotos={1} maxPhotos={30}
                 error={errors.photos} />
               <View style={{ height: 20 }} />
               <DocumentsSection docTypes={CAR_DOCS} documents={documents}

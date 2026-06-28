@@ -8,8 +8,8 @@ import {
   Dimensions,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import { AppLayout } from "../../components/layout/AppLayout";
 import { useQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
@@ -22,6 +22,7 @@ const CARD_W = (width - 48) / 2;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+interface CommissionRate { rate: number; country: string }
 interface MonthlyRevenue { month: string; revenue: number; bookings: number }
 interface EarningsData {
   totalEarnings: number;
@@ -180,6 +181,17 @@ export default function AnalyticsScreen() {
   const user     = useAuthStore((s) => s.user);
   const currency = getCurrencyForCountry(user?.country).code;
 
+  const commissionQ = useQuery<CommissionRate>({
+    queryKey: ["commissionRate", user?.country],
+    queryFn: async () => {
+      const country = user?.country ?? "ZA";
+      const res = await listingApi.get<{ data: CommissionRate }>(`/commission-rates/effective/${country}`);
+      return res.data.data;
+    },
+    staleTime: 300_000,
+    enabled: !!user?.country,
+  });
+
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<EarningsData>({
     queryKey: ["providerEarnings"],
     queryFn: async () => {
@@ -215,19 +227,8 @@ export default function AnalyticsScreen() {
   const momUp     = data ? data.thisMonthEarnings >= data.lastMonthEarnings : undefined;
 
   return (
-    <View style={s.container}>
-      <SafeAreaView edges={["top"]} style={s.header}>
-        <View style={s.headerRow}>
-          <View>
-            <Text style={s.headerTitle}>Analytics</Text>
-            <Text style={s.headerSub}>Earnings &amp; Performance</Text>
-          </View>
-          <View style={s.headerIcon}>
-            <Ionicons name="bar-chart" size={20} color="rgba(255,255,255,0.8)" />
-          </View>
-        </View>
-      </SafeAreaView>
-
+    <AppLayout>
+      <View style={s.container}>
       {isLoading ? (
         <View style={s.center}>
           <ActivityIndicator color={K.colors.accent} size="large" />
@@ -323,6 +324,17 @@ export default function AnalyticsScreen() {
             />
           </View>
 
+          {/* Commission rate banner */}
+          {commissionQ.data && (
+            <View style={s.commissionBanner}>
+              <Ionicons name="information-circle-outline" size={16} color={K.colors.accent} />
+              <Text style={s.commissionBannerText}>
+                Your effective commission rate for {commissionQ.data.country}:{" "}
+                <Text style={s.commissionBannerRate}>{(commissionQ.data.rate * 100).toFixed(1)}%</Text>
+              </Text>
+            </View>
+          )}
+
           {/* Charts */}
           {data.monthlyRevenue?.length > 0 && (
             <>
@@ -334,7 +346,8 @@ export default function AnalyticsScreen() {
           <View style={{ height: 32 }} />
         </ScrollView>
       )}
-    </View>
+      </View>
+    </AppLayout>
   );
 }
 
@@ -342,16 +355,6 @@ export default function AnalyticsScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F4F1" },
-
-  header: { backgroundColor: K.colors.darkGreen, paddingHorizontal: 20, paddingBottom: 18 },
-  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff", letterSpacing: -0.5 },
-  headerSub:   { fontSize: 12, color: "rgba(255,255,255,0.55)", marginTop: 3 },
-  headerIcon: {
-    width: 42, height: 42, borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.10)",
-    alignItems: "center", justifyContent: "center",
-  },
 
   scroll: { padding: 16, gap: 14 },
 
@@ -385,6 +388,21 @@ const s = StyleSheet.create({
   withdrawBtnText: { fontSize: 14, fontWeight: "700", color: K.colors.darkGreen, flex: 1 },
 
   statsRow: { flexDirection: "row", gap: 12 },
+
+  commissionBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderWidth: 1,
+    borderColor: K.colors.border,
+    ...K.shadow.sm,
+  },
+  commissionBannerText: { fontSize: 13, color: K.colors.textMuted, flex: 1 },
+  commissionBannerRate: { fontWeight: "800", color: K.colors.darkGreen },
 
   center:    { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, padding: 32 },
   errorText: { fontSize: 16, fontWeight: "700", color: K.colors.textDark, textAlign: "center" },

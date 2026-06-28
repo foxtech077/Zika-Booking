@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,10 +11,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
-import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { K } from "../../constants/theme";
 
@@ -213,26 +212,45 @@ const TABS: { key: TabFilter; label: string }[] = [
 export default function BookingsScreen() {
   const [activeTab, setActiveTab] = useState<TabFilter>("upcoming");
 
-  const { data, isLoading, isError, refetch, isRefetching } = useQuery<BookingsResponse>({
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    isRefetching,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery<BookingsResponse>({
     queryKey: ["myBookings", activeTab],
-    queryFn:  async () => {
+    queryFn: async ({ pageParam }) => {
+      const cursor = (pageParam as number) ?? 0;
       const res = await listingApi.get<{ data: BookingsResponse }>(
-        `/guests/me/bookings?status=${activeTab}&cursor=0`
+        `/guests/me/bookings?status=${activeTab}&cursor=${cursor}`
       );
       return res.data.data;
     },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });
 
-  const bookings = data?.bookings ?? [];
+  const bookings = data?.pages.flatMap((p) => p.bookings) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
+
+  const onEndReached = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      void fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Trips</Text>
-        {data?.total != null && data.total > 0 && (
+        {total > 0 && (
           <View style={styles.totalBadge}>
-            <Text style={styles.totalBadgeText}>{data.total}</Text>
+            <Text style={styles.totalBadgeText}>{total}</Text>
           </View>
         )}
       </View>
@@ -278,6 +296,15 @@ export default function BookingsScreen() {
             bookings.length === 0 && styles.listContentEmpty,
           ]}
           ListEmptyComponent={<EmptyState tab={activeTab} />}
+          ListFooterComponent={
+            isFetchingNextPage ? (
+              <ActivityIndicator
+                size="small"
+                color={K.colors.accent}
+                style={{ marginVertical: 16 }}
+              />
+            ) : null
+          }
           refreshControl={
             <RefreshControl
               refreshing={isRefetching}
@@ -286,6 +313,8 @@ export default function BookingsScreen() {
             />
           }
           ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.3}
         />
       )}
     </SafeAreaView>

@@ -242,9 +242,7 @@ export default function ProfileScreen() {
             iconName="help-circle-outline"
             label="Help Center"
             sublabel="FAQs and guides"
-            onPress={() =>
-              Alert.alert("Coming Soon", "Help Center is coming soon.", [{ text: "OK" }])
-            }
+            onPress={() => router.push("/help" as any)}
           />
           <MenuItem
             iconName="chatbubble-outline"
@@ -261,6 +259,23 @@ export default function ProfileScreen() {
             onPress={() =>
               Alert.alert("Kainook", "Version 2.4.0\nBuilt with love for African travellers.", [{ text: "OK" }])
             }
+            showBorder={false}
+          />
+        </MenuGroup>
+
+        {/* ── Legal Menu ── */}
+        <MenuGroup title="Legal">
+          <MenuItem
+            iconName="document-text-outline"
+            label="Terms & Conditions"
+            sublabel="Our terms of use"
+            onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)}
+          />
+          <MenuItem
+            iconName="shield-checkmark-outline"
+            label="Privacy Policy"
+            sublabel="How we handle your data"
+            onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)}
             showBorder={false}
           />
         </MenuGroup>

@@ -1,7 +1,6 @@
 import {
   View,
   Text,
-  Image,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
@@ -9,8 +8,8 @@ import {
   Dimensions,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { AppLayout } from "../../components/layout/AppLayout";
 import { useQuery } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
@@ -79,12 +78,6 @@ function momPct(cur: number, prev: number) {
   return { label: `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`, up: d >= 0 };
 }
 
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning,";
-  if (h < 17) return "Good afternoon,";
-  return "Good evening,";
-}
 
 const LISTING_STATUS_CFG: Record<string, { label: string; bg: string; text: string }> = {
   active:         { label: "ACTIVE",          bg: "#f0fdf4", text: "#16a34a" },
@@ -399,8 +392,6 @@ export default function ProviderHomeScreen() {
   const user          = useAuthStore(s => s.user);
   const localCurrency = useAuthStore(s => s.localCurrency);
   const currency      = localCurrency ?? "USD";
-  const initials      = ((user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "")).toUpperCase() || "P";
-
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<DashboardData>({
     queryKey: ["providerDashboard"],
     queryFn:  async () => {
@@ -450,80 +441,38 @@ export default function ProviderHomeScreen() {
     ? Math.min(99, Math.round((data.pendingBookingsCount / Math.max(data.activeListingsCount, 1)) * 100))
     : 0;
   const avgRating = reviewsData?.averageRating ?? null;
-  const unread    = data?.unreadMessages ?? 0;
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#F5F4F1" }}>
-        <SafeAreaView edges={["top"]} style={s.header}>
-          <View style={s.headerRow}>
-            <View style={s.logoWrap}>
-              <Image source={require("../../assets/kainook_logo.png")} style={s.logo} resizeMode="contain" />
-            </View>
-            <View style={s.headerRight}>
-              <View style={s.bellBtn}><Ionicons name="notifications-outline" size={20} color="#4a6150" /></View>
-              <View style={s.avatarCircle}><Text style={s.avatarText}>{initials}</Text></View>
-            </View>
-          </View>
-        </SafeAreaView>
+      <AppLayout>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
           <ActivityIndicator color={K.colors.accent} size="large" />
         </View>
-      </View>
+      </AppLayout>
     );
   }
 
   if (isError) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#F5F4F1" }}>
-        <SafeAreaView edges={["top"]} style={s.header}>
-          <View style={s.headerRow}>
-            <View style={s.logoWrap}>
-              <Image source={require("../../assets/kainook_logo.png")} style={s.logo} resizeMode="contain" />
-            </View>
-          </View>
-        </SafeAreaView>
+      <AppLayout>
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 32 }}>
           <Ionicons name="cloud-offline-outline" size={52} color="#c8d4cc" />
           <Text style={{ fontSize: 16, fontWeight: "700", color: "#0D1F0D", marginTop: 14, marginBottom: 18 }}>
             Could not load dashboard
           </Text>
-          <TouchableOpacity style={{ backgroundColor: K.colors.darkGreen, borderRadius: 12, paddingHorizontal: 28, paddingVertical: 14 }} onPress={() => refetch()}>
+          <TouchableOpacity
+            style={{ backgroundColor: K.colors.darkGreen, borderRadius: 12, paddingHorizontal: 28, paddingVertical: 14 }}
+            onPress={() => refetch()}
+          >
             <Text style={{ color: "#fff", fontWeight: "700" }}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </AppLayout>
     );
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F5F4F1" }}>
-      {/* ── Top Header ── */}
-      <SafeAreaView edges={["top"]} style={s.header}>
-        <View style={s.headerRow}>
-          {/* Logo */}
-          <View style={s.logoWrap}>
-            <Image source={require("../../assets/kainook_logo.png")} style={s.logo} resizeMode="contain" />
-          </View>
-          {/* Greeting */}
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={s.greeting}>{greeting()}</Text>
-            <Text style={s.name}>{user?.firstName ?? "Partner"}</Text>
-            <Text style={s.subtitle}>Business performance overview</Text>
-          </View>
-          {/* Bell + Avatar */}
-          <View style={s.headerRight}>
-            <TouchableOpacity style={s.bellBtn} onPress={() => router.push("/notifications" as any)}>
-              <Ionicons name="notifications-outline" size={20} color="#4a6150" />
-              {unread > 0 && <View style={s.bellDot} />}
-            </TouchableOpacity>
-            <View style={s.avatarCircle}>
-              <Text style={s.avatarText}>{initials}</Text>
-            </View>
-          </View>
-        </View>
-      </SafeAreaView>
-
+    <AppLayout>
       <ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
@@ -751,35 +700,13 @@ export default function ProviderHomeScreen() {
 
         <View style={{ height: 24 }} />
       </ScrollView>
-    </View>
+    </AppLayout>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  // Header
-  header:     { backgroundColor: "#FFFFFF" },
-  headerRow:  { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
-  logoWrap:   { width: 40, height: 40, borderRadius: 12, backgroundColor: K.colors.darkGreen, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  logo:       { width: 36, height: 36 },
-  greeting:   { fontSize: 12, color: "#7a8c82", fontWeight: "500" },
-  name:       { fontSize: 18, fontWeight: "800", color: "#0D1F0D", letterSpacing: -0.3 },
-  subtitle:   { fontSize: 11, color: "#a0b0a8", marginTop: 1 },
-  headerRight:{ flexDirection: "row", alignItems: "center", gap: 10 },
-  bellBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: "#F0F5F1",
-    alignItems: "center", justifyContent: "center",
-  },
-  bellDot: {
-    position: "absolute", top: 9, right: 9,
-    width: 7, height: 7, borderRadius: 4,
-    backgroundColor: "#ef4444", borderWidth: 1.5, borderColor: "#fff",
-  },
-  avatarCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: K.colors.darkGreen, alignItems: "center", justifyContent: "center" },
-  avatarText:   { fontSize: 14, fontWeight: "900", color: "#fff" },
-
   // Scroll
   scroll: { backgroundColor: "#F5F4F1", padding: 16, gap: 16 },
 

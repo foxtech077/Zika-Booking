@@ -72,6 +72,23 @@ interface BlockedDateItem {
   platform: string;
 }
 
+interface ChannelStatus {
+  listingId: string;
+  totalFeeds: number;
+  activeFeeds: number;
+  errorFeeds: number;
+  lastSyncAt: string | null;
+}
+
+interface AvailabilitySummary {
+  listingId: string;
+  availableDates?: number;
+  bookedDates?: number;
+  blockedDates?: number;
+  nextAvailableDate?: string | null;
+  occupancyRate?: number;
+}
+
 // ── Stripe pattern overlay (for external-block cells) ─────────────────────────
 function StripePattern({ size }: { size: number }) {
   return (
@@ -274,6 +291,30 @@ export default function CalendarSyncScreen() {
     enabled: !!selectedListingId,
   });
 
+  const channelStatusQ = useQuery<ChannelStatus>({
+    queryKey: ["channelStatus", selectedListingId],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: ChannelStatus }>(
+        `/listings/${selectedListingId}/channel-status`
+      );
+      return res.data.data;
+    },
+    enabled: !!selectedListingId,
+    staleTime: 30_000,
+  });
+
+  const availabilityQ = useQuery<AvailabilitySummary>({
+    queryKey: ["providerAvailability", selectedListingId],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: AvailabilitySummary }>(
+        `/provider/availability/${selectedListingId}`
+      );
+      return res.data.data;
+    },
+    enabled: !!selectedListingId,
+    staleTime: 60_000,
+  });
+
   // Default to first listing on load
   useEffect(() => {
     if (listingsQ.data?.listings && listingsQ.data.listings.length > 0 && !selectedListingId) {
@@ -295,6 +336,7 @@ export default function CalendarSyncScreen() {
       queryClient.invalidateQueries({ queryKey: ["providerFeeds", selectedListingId] });
       queryClient.invalidateQueries({ queryKey: ["providerBlockedDates", selectedListingId] });
       queryClient.invalidateQueries({ queryKey: ["providerListingsForSync"] });
+      queryClient.invalidateQueries({ queryKey: ["channelStatus", selectedListingId] });
       setExternalUrl("");
       Alert.alert("Channel Connected", "External calendar synchronization feed has been successfully linked!");
     },
@@ -314,6 +356,7 @@ export default function CalendarSyncScreen() {
       queryClient.invalidateQueries({ queryKey: ["providerFeeds", selectedListingId] });
       queryClient.invalidateQueries({ queryKey: ["providerBlockedDates", selectedListingId] });
       queryClient.invalidateQueries({ queryKey: ["providerListingsForSync"] });
+      queryClient.invalidateQueries({ queryKey: ["channelStatus", selectedListingId] });
       Alert.alert("Channel Removed", "The calendar synchronization feed has been disconnected.");
     },
     onError: (err: any) => {
@@ -336,6 +379,7 @@ export default function CalendarSyncScreen() {
       queryClient.invalidateQueries({ queryKey: ["providerFeeds", selectedListingId] });
       queryClient.invalidateQueries({ queryKey: ["providerBlockedDates", selectedListingId] });
       queryClient.invalidateQueries({ queryKey: ["providerListingsForSync"] });
+      queryClient.invalidateQueries({ queryKey: ["channelStatus", selectedListingId] });
       if (res.data?.error) {
         Alert.alert("Sync Issues", `Sync finished with error: ${res.data.error}`);
       } else {
@@ -403,6 +447,8 @@ export default function CalendarSyncScreen() {
       listingsQ.refetch(),
       feedsQ.refetch(),
       blockedDatesQ.refetch(),
+      channelStatusQ.refetch(),
+      availabilityQ.refetch(),
     ]);
     setRefreshing(false);
   };
@@ -512,6 +558,108 @@ export default function CalendarSyncScreen() {
 
             {selectedListingId ? (
               <>
+                {/* ── Channel Health Summary ────────────────────────────── */}
+                {channelStatusQ.data && (
+                  <View style={st.channelStatusCard}>
+                    <View style={st.channelStatusRow}>
+                      <Ionicons
+                        name={channelStatusQ.data.errorFeeds > 0 ? "warning-outline" : "checkmark-circle-outline"}
+                        size={18}
+                        color={channelStatusQ.data.errorFeeds > 0 ? "#F59E0B" : K.colors.success}
+                      />
+                      <Text style={st.channelStatusTitle}>Channel Health</Text>
+                      <View style={[
+                        st.channelStatusBadge,
+                        { backgroundColor: channelStatusQ.data.errorFeeds > 0 ? "#FEF3C7" : "#D1FAE5" },
+                      ]}>
+                        <Text style={[
+                          st.channelStatusBadgeTxt,
+                          { color: channelStatusQ.data.errorFeeds > 0 ? "#92400E" : "#065F46" },
+                        ]}>
+                          {channelStatusQ.data.errorFeeds > 0 ? "Action Required" : "All Good"}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={st.channelStatusStats}>
+                      <View style={st.channelStatusStat}>
+                        <Text style={st.channelStatusStatVal}>{channelStatusQ.data.totalFeeds}</Text>
+                        <Text style={st.channelStatusStatLbl}>Total Feeds</Text>
+                      </View>
+                      <View style={st.channelStatusStat}>
+                        <Text style={[st.channelStatusStatVal, { color: K.colors.success }]}>
+                          {channelStatusQ.data.activeFeeds}
+                        </Text>
+                        <Text style={st.channelStatusStatLbl}>Active</Text>
+                      </View>
+                      <View style={st.channelStatusStat}>
+                        <Text style={[st.channelStatusStatVal, { color: channelStatusQ.data.errorFeeds > 0 ? K.colors.error : K.colors.textMuted }]}>
+                          {channelStatusQ.data.errorFeeds}
+                        </Text>
+                        <Text style={st.channelStatusStatLbl}>Errors</Text>
+                      </View>
+                      {channelStatusQ.data.lastSyncAt && (
+                        <View style={st.channelStatusStat}>
+                          <Text style={st.channelStatusStatVal}>
+                            {new Date(channelStatusQ.data.lastSyncAt).toLocaleDateString("en", { month: "short", day: "numeric" })}
+                          </Text>
+                          <Text style={st.channelStatusStatLbl}>Last Sync</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                {/* ── Availability Summary ──────────────────────────────── */}
+                {availabilityQ.data && (
+                  <View style={st.availCard}>
+                    <View style={st.availRow}>
+                      <Ionicons name="stats-chart-outline" size={18} color={K.colors.accent} />
+                      <Text style={st.availTitle}>Availability Summary</Text>
+                      {availabilityQ.data.occupancyRate != null && (
+                        <View style={st.occupancyChip}>
+                          <Text style={st.occupancyChipTxt}>
+                            {Math.round(availabilityQ.data.occupancyRate)}% occupied
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <View style={st.availStats}>
+                      {availabilityQ.data.availableDates != null && (
+                        <View style={st.availStat}>
+                          <Text style={[st.availStatVal, { color: K.colors.success }]}>
+                            {availabilityQ.data.availableDates}
+                          </Text>
+                          <Text style={st.availStatLbl}>Available</Text>
+                        </View>
+                      )}
+                      {availabilityQ.data.bookedDates != null && (
+                        <View style={st.availStat}>
+                          <Text style={[st.availStatVal, { color: "#3B82F6" }]}>
+                            {availabilityQ.data.bookedDates}
+                          </Text>
+                          <Text style={st.availStatLbl}>Booked</Text>
+                        </View>
+                      )}
+                      {availabilityQ.data.blockedDates != null && (
+                        <View style={st.availStat}>
+                          <Text style={[st.availStatVal, { color: K.colors.textMuted }]}>
+                            {availabilityQ.data.blockedDates}
+                          </Text>
+                          <Text style={st.availStatLbl}>Blocked</Text>
+                        </View>
+                      )}
+                      {availabilityQ.data.nextAvailableDate && (
+                        <View style={st.availStat}>
+                          <Text style={[st.availStatVal, { fontSize: 13 }]}>
+                            {new Date(availabilityQ.data.nextAvailableDate).toLocaleDateString("en", { month: "short", day: "numeric" })}
+                          </Text>
+                          <Text style={st.availStatLbl}>Next Open</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                )}
+
                 {/* ── Availability Calendar ─────────────────────────────── */}
                 <Text style={st.sectionLabel}>Availability Overview</Text>
                 <View style={st.calCard}>
@@ -1424,6 +1572,106 @@ const st = StyleSheet.create({
     fontStyle: "italic",
     marginTop: 2,
   },
+  availCard: {
+    backgroundColor: "#fff",
+    borderRadius: K.radius.lg,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: K.colors.border,
+    marginBottom: 4,
+  },
+  availRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
+  availTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: K.colors.textDark,
+  },
+  occupancyChip: {
+    backgroundColor: K.colors.bgSubtle,
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: K.colors.border,
+  },
+  occupancyChipTxt: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: K.colors.textMid,
+  },
+  availStats: {
+    flexDirection: "row",
+    gap: 20,
+  },
+  availStat: {
+    alignItems: "center",
+  },
+  availStatVal: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: K.colors.textDark,
+  },
+  availStatLbl: {
+    fontSize: 10,
+    color: K.colors.textMuted,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+
+  channelStatusCard: {
+    backgroundColor: "#fff",
+    borderRadius: K.radius.lg,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: K.colors.border,
+    marginBottom: 4,
+  },
+  channelStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
+  channelStatusTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: K.colors.textDark,
+  },
+  channelStatusBadge: {
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  channelStatusBadgeTxt: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  channelStatusStats: {
+    flexDirection: "row",
+    gap: 16,
+  },
+  channelStatusStat: {
+    alignItems: "center",
+  },
+  channelStatusStatVal: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: K.colors.textDark,
+  },
+  channelStatusStatLbl: {
+    fontSize: 10,
+    color: K.colors.textMuted,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
