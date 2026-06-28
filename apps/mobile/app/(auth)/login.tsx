@@ -18,6 +18,7 @@ import { Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "../../lib/api";
+import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import type { PublicUser, ApiResponse, AuthResponse } from "@zika/types";
 
@@ -32,6 +33,19 @@ const BORDER   = "#E5E7EB";
 const INPUT_BG = "#F3F4F6";
 const ERR      = "#EF4444";
 
+// ─── import anonymous recently-viewed listings after login ────────────────────
+async function importAnonViews() {
+  try {
+    const SecureStore = await import("expo-secure-store");
+    const raw = await SecureStore.getItemAsync("zika:anon_views");
+    if (!raw) return;
+    const ids: string[] = JSON.parse(raw);
+    if (!ids.length) return;
+    await listingApi.post("/guests/me/recently-viewed/import", { listingIds: ids });
+    await SecureStore.deleteItemAsync("zika:anon_views");
+  } catch {}
+}
+
 // ─── redirect helper ─────────────────────────────────────────────────────────
 export function handleRoleAndStatusRedirect(user: PublicUser) {
   if (user.userType === "provider") {
@@ -44,42 +58,64 @@ export function handleRoleAndStatusRedirect(user: PublicUser) {
 }
 
 // ─── Google Sign-In ───────────────────────────────────────────────────────────
+// Load the native Google Sign-In module (unavailable in Expo Go — caught silently)
 let _GoogleSignin: typeof import("@react-native-google-signin/google-signin")["GoogleSignin"] | null = null;
-try { _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin; } catch { /* Expo Go */ }
-
-function configureGoogle() {
-  if (!_GoogleSignin) return;
+try {
+  _GoogleSignin = require("@react-native-google-signin/google-signin").GoogleSignin;
+  // Configure once at module load — client IDs are public, not secrets
   _GoogleSignin.configure({
-    webClientId: process.env["EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID"] ?? "",
-    iosClientId: process.env["EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID"],
-    offlineAccess: true,
+    webClientId: "397191986681-clt35826mp608u6ptq9udm8m7c7dk80u.apps.googleusercontent.com",
+    iosClientId: "397191986681-40j0eqotdon89ogv4cgvfsfpb48ehc7h.apps.googleusercontent.com",
+    offlineAccess: false,
   });
-}
+} catch { /* Expo Go or module not available */ }
 
 export function GoogleSignInButton({ onError }: { onError: (m: string) => void }) {
-  const setAuth  = useAuthStore((s) => s.setAuth);
+  const setAuth = useAuthStore((s) => s.setAuth);
+
   const mutation = useMutation({
     mutationFn: async () => {
       if (!_GoogleSignin) throw Object.assign(new Error("Expo Go"), { code: "EXPO_GO" });
-      configureGoogle();
-      await _GoogleSignin.hasPlayServices();
+
+      await _GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
       const result  = await _GoogleSignin.signIn();
       const idToken = (result as any).data?.idToken ?? (result as any).idToken;
-      if (!idToken) throw new Error("No ID token");
+      if (!idToken) throw Object.assign(new Error("No ID token returned from Google"), { code: "NO_ID_TOKEN" });
+
       const res = await api.post("auth/oauth/google", { idToken });
       return (res.data as { data: AuthResponse }).data;
     },
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
+      void importAnonViews();
       handleRoleAndStatusRedirect(data.user);
     },
     onError: (err: unknown) => {
       const code = String((err as any)?.code ?? "");
+      // User cancelled — silent
       if (code === "SIGN_IN_CANCELLED" || code === "12501") return;
-      if (code === "EXPO_GO") { Alert.alert("Not supported", "Google Sign-In needs a development build."); return; }
-      onError("Google Sign-In failed. Please use email & password.");
+      // Sign-in already in progress — silent
+      if (code === "IN_PROGRESS" || code === "10") return;
+      // Expo Go — not supported
+      if (code === "EXPO_GO") {
+        Alert.alert("Not Supported", "Google Sign-In requires a development build, not Expo Go.");
+        return;
+      }
+      // Play Services unavailable
+      if (code === "PLAY_SERVICES_NOT_AVAILABLE" || code === "2") {
+        onError("Google Play Services is not available on this device.");
+        return;
+      }
+      // No ID token — usually misconfiguration
+      if (code === "NO_ID_TOKEN") {
+        onError("Google Sign-In configuration error. Please try again or use email & password.");
+        return;
+      }
+      onError("Google Sign-In failed. Please try again or use email & password.");
     },
   });
+
   return (
     <TouchableOpacity
       style={[ss.socialBtn, mutation.isPending && { opacity: 0.6 }]}
@@ -114,6 +150,7 @@ export default function LoginScreen() {
     },
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
+      void importAnonViews();
       handleRoleAndStatusRedirect(data.user);
     },
     onError: (err: unknown) => {
@@ -273,7 +310,7 @@ function AppleButton({ onError }: { onError: (m: string) => void }) {
       });
       return (res.data as { data: AuthResponse }).data;
     },
-    onSuccess: async (data) => { await setAuth(data.user, data.tokens.accessToken); router.replace("/(tabs)"); },
+    onSuccess: async (data) => { await setAuth(data.user, data.tokens.accessToken); handleRoleAndStatusRedirect(data.user); },
     onError: () => onError("Apple Sign-In failed. Please try again."),
   });
   return (

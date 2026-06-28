@@ -36,7 +36,7 @@ const BODY_TYPE_LABELS: Record<string, string> = {
   sedan: "Sedan", suv: "SUV", minivan: "Minivan", pickup: "Pickup",
   van: "Van", convertible: "Convertible", sports: "Sports", other: "Other",
 };
-const TRANSMISSION_LABELS: Record<string, string> = { manual: "Manual", automatic: "Automatic", both: "Both" };
+const TRANSMISSION_LABELS: Record<string, string> = { manual: "Manual", automatic: "Automatic", semi_auto: "semi_auto" };
 const FUEL_TYPE_LABELS: Record<string, string> = { petrol: "Petrol", diesel: "Diesel", electric: "Electric", hybrid: "Hybrid" };
 const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Apartment", car: "Car Rental" };
 
