@@ -442,9 +442,49 @@ export async function paymentRoutes(app: FastifyInstance) {
             },
           },
         },
-        404: { description: "Booking not found", type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
-        409: { description: "Duplicate payment", type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
-        422: { description: "Validation error", type: "object", properties: { success: { type: "boolean" }, error: { type: "object" } } },
+        404: {
+          description: "Booking not found",
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" },
+              },
+            },
+          },
+        },
+        409: {
+          description: "Duplicate payment",
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" },
+              },
+            },
+          },
+        },
+        422: {
+          description: "Validation error",
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            error: {
+              type: "object",
+              properties: {
+                code: { type: "string" },
+                message: { type: "string" },
+                fields: { type: "object", additionalProperties: { type: "string" } },
+              },
+            },
+          },
+        },
       },
     }
   }, async (req, reply) => {
@@ -504,117 +544,140 @@ export async function paymentRoutes(app: FastifyInstance) {
       },
     });
 
-    // ── 6. Stripe flow ────────────────────────────────────────────────────
-    if (paymentProvider === "stripe") {
+    try {
+      // ── 6. Stripe flow ────────────────────────────────────────────────────
+      if (paymentProvider === "stripe") {
 
-      // Customer lookup
-      const customerAccount = await prisma.customerAccount.findUnique({
-        where: {
-          userId_paymentProvider: { userId, paymentProvider: "stripe" },
-        },
-      });
-
-      if (!customerAccount) {
-        return sendError(reply, 404, "CUSTOMER_NOT_FOUND", "Stripe customer account not found.");
-      }
-
-      // Saved card lookup
-      const savedMethod = await prisma.paymentMethod.findFirst({
-        where: {
-          id: paymentMethodId,
-          userId,
-          isDeleted: false,
-          paymentProvider: "stripe",
-        },
-      });
-
-      if (!savedMethod?.providerPmId) {
-        return sendError(reply, 404, "PAYMENT_METHOD_NOT_FOUND", "Saved payment method not found.");
-      }
-
-      // Create Stripe intent
-      let intent;
-      try {
-        intent = await stripe.paymentIntents.create(
-          {
-            amount: Math.round(Number(amount) * 100),
-            currency,
-            customer: customerAccount.providerCustomerId,
-            payment_method: savedMethod.providerPmId,
-            off_session: true,
-            confirm: true,
-            capture_method: "automatic",
-            metadata: {
-              bookingId,
-              booking_reference: (booking["reference"] as string | undefined) ?? "",
-            },
-            statement_descriptor_suffix: "ZIKA",
+        // Customer lookup
+        const customerAccount = await prisma.customerAccount.findUnique({
+          where: {
+            userId_paymentProvider: { userId, paymentProvider: "stripe" },
           },
-          { idempotencyKey: `pi-${bookingId}-${attemptNumber}` }, // ✅ attempt-aware
-        );
-      } catch (err: any) {
-        if (err.code === "authentication_required") {
-          const paymentIntent = err.raw?.payment_intent;
-          return sendSuccess(reply, 200, {
-            requiresAction: true,
-            clientSecret: paymentIntent?.client_secret,
-            paymentId: payment.id,
+        });
+
+        if (!customerAccount) {
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: { status: "failed", failureCode: "CUSTOMER_NOT_FOUND", failureMessage: "Stripe customer account not found." }
           });
+          return sendError(reply, 404, "CUSTOMER_NOT_FOUND", "Stripe customer account not found.");
         }
-        throw err;
+
+        // Saved card lookup
+        const savedMethod = await prisma.paymentMethod.findFirst({
+          where: {
+            id: paymentMethodId,
+            userId,
+            isDeleted: false,
+            paymentProvider: "stripe",
+          },
+        });
+
+        if (!savedMethod?.providerPmId) {
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: { status: "failed", failureCode: "PAYMENT_METHOD_NOT_FOUND", failureMessage: "Saved payment method not found." }
+          });
+          return sendError(reply, 404, "PAYMENT_METHOD_NOT_FOUND", "Saved payment method not found.");
+        }
+
+        // Create Stripe intent
+        let intent;
+        try {
+          intent = await stripe.paymentIntents.create(
+            {
+              amount: Math.round(Number(amount) * 100),
+              currency,
+              customer: customerAccount.providerCustomerId,
+              payment_method: savedMethod.providerPmId,
+              off_session: true,
+              confirm: true,
+              capture_method: "automatic",
+              metadata: {
+                bookingId,
+                booking_reference: (booking["reference"] as string | undefined) ?? "",
+              },
+              statement_descriptor_suffix: "ZIKA",
+            },
+            { idempotencyKey: `pi-${bookingId}-${attemptNumber}` }, // ✅ attempt-aware
+          );
+        } catch (err: any) {
+          if (err.code === "authentication_required") {
+            const paymentIntent = err.raw?.payment_intent;
+            return sendSuccess(reply, 200, {
+              requiresAction: true,
+              clientSecret: paymentIntent?.client_secret,
+              paymentId: payment.id,
+            });
+          }
+          throw err;
+        }
+
+        // Update payment row
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            providerPaymentId: intent.id,
+            status: "captured",
+            attemptNumber,
+            idempotencyKey,
+          },
+        });
+
+        // Confirm the booking (set status → confirmed, send emails, generate PDF)
+        bookingConfirmedHandler({ id: payment.id, metadata: { bookingId } }).catch((err) => {
+          console.error("[payments/initiate] bookingConfirmedHandler failed:", err);
+        });
+
+        return sendSuccess(reply, 201, { paymentId: payment.id });
       }
 
-      // Update payment row
+      // ── 7. Tara flow ──────────────────────────────────────────────────────
+      if (paymentProvider === "tara") {
+        if (!mobileNumber) {
+          await prisma.payment.update({
+            where: { id: payment.id },
+            data: { status: "failed", failureCode: "VALIDATION_ERROR", failureMessage: "mobileNumber is required for Tara payments." }
+          });
+          return sendError(reply, 422, "VALIDATION_ERROR", "mobileNumber is required for Tara payments.");
+        }
+
+        const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
+
+        const taraResult = await initiateTaraPayment({
+          amount: Number(amount),
+          currency,
+          mobileNumber,
+          reference: bookingReference,   // booking ref, e.g. ZIKA-001234-KE
+          description: `Booking ${bookingReference}`,
+          attemptNumber,                     // idempotency key = reference + attemptNumber
+        });
+
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            providerPaymentId: taraResult.taraReference,
+            status: "pending",
+            attemptNumber,
+            idempotencyKey: `${bookingReference}-${attemptNumber}`,
+          },
+        });
+
+        return sendSuccess(reply, 201, {
+          paymentId: payment.id,
+          taraReference: taraResult.taraReference,
+          message: "STK push sent. Please approve on your handset within 60 seconds.",
+        });
+      }
+    } catch (err: any) {
       await prisma.payment.update({
         where: { id: payment.id },
         data: {
-          providerPaymentId: intent.id,
-          status: "captured",
-          attemptNumber,
-          idempotencyKey,
+          status: "failed",
+          failureMessage: err.message ?? "Payment initiation failed",
         },
       });
-
-      // Confirm the booking (set status → confirmed, send emails, generate PDF)
-      bookingConfirmedHandler({ id: payment.id, metadata: { bookingId } }).catch((err) => {
-        console.error("[payments/initiate] bookingConfirmedHandler failed:", err);
-      });
-
-      return sendSuccess(reply, 201, { paymentId: payment.id });
-    }
-
-    // ── 7. Tara flow ──────────────────────────────────────────────────────
-    if (paymentProvider === "tara") {
-      if (!mobileNumber) {
-        return sendError(reply, 422, "VALIDATION_ERROR", "mobileNumber is required for Tara payments.");
-      }
-
-      const bookingReference = (booking["reference"] as string | undefined) ?? bookingId;
-
-      const taraResult = await initiateTaraPayment({
-        amount: Number(amount),
-        currency,
-        mobileNumber,
-        reference: bookingReference,   // booking ref, e.g. ZIKA-001234-KE
-        description: `Booking ${bookingReference}`,
-        attemptNumber,                     // idempotency key = reference + attemptNumber
-      });
-
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          providerPaymentId: taraResult.taraReference,
-          status: "pending",
-          attemptNumber,
-          idempotencyKey: `${bookingReference}-${attemptNumber}`,
-        },
-      });
-
-      return sendSuccess(reply, 201, {
-        paymentId: payment.id,
-        taraReference: taraResult.taraReference,
-        message: "STK push sent. Please approve on your handset within 60 seconds.",
-      });
+      throw err;
     }
   });
 

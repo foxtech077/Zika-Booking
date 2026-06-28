@@ -6,6 +6,7 @@ import { calculateBilling } from "../services/billing.service.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
+import { fireNotification } from "../lib/notifications.js";
 
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
@@ -1052,6 +1053,12 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
 
       sendListingApprovedEmail(listing.providerId, listing.name ?? id, starRating, listing.claimedStarRating).catch(() => null);
+      fireNotification(listing.providerId, {
+        type:  "listing_approved",
+        title: "Listing Approved! 🎉",
+        body:  `Your listing "${listing.name ?? id}" has been approved and is now live.`,
+        data:  { listingId: id },
+      });
       return sendSuccess(reply, 200, { message: "Listing approved and published." });
     } catch (err: any) {
       return sendError(reply, 400, "APPROVE_LISTING_FAILED", "Failed to approve listing. Please try again.");
@@ -1228,6 +1235,12 @@ export async function adminListingRoutes(app: FastifyInstance) {
       }
 
       sendListingRejectedEmail(listing.providerId, listing.name ?? id, reasons, providerNote ?? null).catch(() => null);
+      fireNotification(listing.providerId, {
+        type:  "listing_rejected",
+        title: "Listing Needs Changes",
+        body:  `Your listing "${listing.name ?? id}" was not approved. Please review the feedback and resubmit.`,
+        data:  { listingId: id, reasons },
+      });
       return sendSuccess(reply, 200, { message: "Listing rejected. Provider has been notified." });
     } catch (err: any) {
       return sendError(reply, 400, "REJECT_LISTING_FAILED", "Failed to reject listing. Please try again.");
@@ -2041,6 +2054,32 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       });
 
+      // Log status transition to "draft"
+      await prisma.bookingStatusLog.create({
+        data: {
+          bookingId: booking.id,
+          fromStatus: null,
+          toStatus: "draft",
+          actorType: "admin",
+          changedBy: (req as AdminRequest).adminId,
+          reason: "Manual draft booking creation by admin",
+        },
+      });
+
+      // Log audit entry for manually created booking
+      await prisma.auditLog.create({
+        data: {
+          adminId: (req as AdminRequest).adminId,
+          role: (req as AdminRequest).adminRole,
+          action: "booking_created_manually",
+          targetType: "booking",
+          targetId: booking.id,
+          oldValue: null,
+          newValue: "draft",
+          ipAddress: req.ip,
+        },
+      });
+
       return sendSuccess(reply, 201, {
         bookingId: booking.id,
         bookingReference: booking.reference,
@@ -2125,7 +2164,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
 
-    const isCountryManager = admin.adminRole === "country_manager";
+    //const isCountryManager = admin.adminRole === "country_manager";
+    const isCountryManager = admin.adminRole === "country_manager" || admin.adminRole === "sales";
 
     // Country managers are scoped to their assigned countries
     const countryFilter: any = isCountryManager
@@ -3297,6 +3337,14 @@ export async function adminListingRoutes(app: FastifyInstance) {
           adminId: admin.adminId, role: admin.adminRole, action: "booking_request_escalated",
           targetType: "booking", targetId: id, ipAddress: req.ip,
         },
+      });
+
+      // Dispatch sales_escalation push/in-app notification
+      fireNotification(booking.providerId, {
+        type:  "sales_escalation",
+        title: "Escalated Booking Request ",
+        body:  `A booking request (Ref: ${booking.reference}) for "${booking.listing.name ?? booking.listingId}" has been escalated to you by a Sales Agent. Please respond immediately.`,
+        data:  { bookingId: id, reference: booking.reference },
       });
 
       return sendSuccess(reply, 200, { message: "Request escalated to host." });

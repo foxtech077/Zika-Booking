@@ -2,6 +2,9 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, type ProviderRequest } from "../middleware/auth.js";
+import { fireNotification } from "../lib/notifications.js";
+import { sendNewMessageEmail } from "../lib/email.js";
+import { getRedis } from "../lib/redis.js";
 
 // ── Simple content filter (blocks phone numbers, emails, URLs, social handles) ──
 
@@ -287,12 +290,73 @@ app.post(
         }
       });
 
+      if (filtered) {
+        try {
+          const redis = getRedis();
+          const violationKey = `msg:violation:count:${userId}`;
+          const count = await redis.incr(violationKey);
+          
+          if (count >= 3) {
+            // Suspend user status in DB
+            await prisma.$executeRawUnsafe(
+              `UPDATE auth."User" SET status = 'suspended', "updatedAt" = NOW() WHERE id = $1`,
+              userId
+            );
+            // Send suspension warning notification
+            fireNotification(userId, {
+              type: "messaging_suspended",
+              title: "Account Suspended ",
+              body: "Your account has been suspended for repeated violations of our contact-sharing policy.",
+              data: { reason: "repeated_contact_sharing_violations" }
+            });
+          }
+        } catch (err: any) {
+          req.log.error({ err }, "Failed to track contact sharing violation");
+        }
+      }
+
       await prisma.conversation.update({
         where: { id },
-        data: {
-          updatedAt: new Date()
-        }
+        data: { updatedAt: new Date() },
       });
+
+      // Push + batched email to the other party (fire-and-forget)
+      const recipientId = senderType === "guest" ? convo.providerId : convo.guestId;
+      ;(async () => {
+        try {
+          // Push notification
+          fireNotification(recipientId, {
+            type:  "new_message",
+            title: "New Message",
+            body:  message.body.slice(0, 100),
+            data:  { conversationId: id },
+          });
+
+          // Email — batched: max 1 per conversation per 30 min via Redis
+          const redis = getRedis();
+          const batchKey = `msg:email:batch:${id}`;
+          const alreadySent = await redis.get(batchKey);
+          if (!alreadySent) {
+            await redis.set(batchKey, "1", "EX", 1800);
+            const recipientRows = await prisma.$queryRawUnsafe<
+              { firstName: string; lastName: string; email: string }[]
+            >(`SELECT "firstName", "lastName", email FROM auth."User" WHERE id = $1`, recipientId);
+            const recipient = recipientRows[0];
+            if (recipient) {
+              const senderRows = await prisma.$queryRawUnsafe<
+                { firstName: string; lastName: string }[]
+              >(`SELECT "firstName", "lastName" FROM auth."User" WHERE id = $1`, userId);
+              const sender = senderRows[0];
+              const WEB_BASE = (process.env["WEB_BASE_URL"] ?? "http://localhost:3000").replace(/\/$/, "");
+              sendNewMessageEmail(recipient.email, recipient.firstName, {
+                senderName:      sender ? `${sender.firstName} ${sender.lastName}` : "Someone",
+                preview:         message.body.slice(0, 200),
+                conversationUrl: `${WEB_BASE}/dashboard/messages/${id}`,
+              }).catch(() => {});
+            }
+          }
+        } catch { /* non-critical */ }
+      })();
 
       return sendSuccess(reply, 201, {
         id: message.id,
