@@ -1,5 +1,6 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
@@ -7,7 +8,6 @@ import { paymentApi } from "@/lib/payment-api";
 import { fetchFavourites, fetchRecentlyViewed } from "@/services/traveller";
 import ListingImage from "./components/ListingImage";
 import { TravellerWorkspaceNav } from "./components/TravellerWorkspaceNav";
-import { TravellerHeader } from "./components/TravellerHeader";
 import { MessageProviderButton } from "./components/MessageProviderButton";
 import { PublicReviewsSection } from "./components/PublicReviewsSection";
 import { GiveReviewEntry } from "./components/GiveReviewEntry";
@@ -1729,22 +1729,6 @@ export default function TravellerDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans selection:bg-[#0c2614] selection:text-white antialiased">
-      {/* Header */}
-      <TravellerHeader
-        activeTab={activeTab}
-        searchCategory={searchCategory}
-        isLocked={!!lockToken}
-        lockSecondsLeft={secondsLeft}
-        onExitLock={() => { setSelectedListingId(null); setDetailListing(null); abandonLock(); }}
-        onDestinations={() => { setActiveTab("home"); setSelectedListingId(null); }}
-        onHotels={() => { setSearchCategory("hotel"); setSelectedListingId(null); handleSearch(undefined, "hotel"); }}
-        onApartments={() => { setSearchCategory("apartment"); setSelectedListingId(null); handleSearch(undefined, "apartment"); }}
-        onCarRentals={() => { setSearchCategory("car"); setSelectedListingId(null); handleSearch(undefined, "car"); }}
-        onReservations={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); }}
-        onMobileMenu={() => setMobileNavOpen(true)}
-        hasAuthToken={hasAuthToken}
-      />
-
       {/* Main Layout Area */}
       <main className="min-h-[calc(100vh-76px)]">
         {selectedListingId ? (
@@ -2955,9 +2939,13 @@ export default function TravellerDashboard() {
                     {featuredListings.slice(0, 8).map((listing) => (
                       <ListingCard
                         key={listing.id}
-                        listing={{ ...listing, isFavourited: favouritedIds.has(listing.id) }}
+                        listing={listing}
                         onSelect={handleSelectListing}
-                        onFavToggle={handleFavToggle}
+                        variant="compact"
+                        promotionBadge={promotionBadge}
+                        activePromotion={activePromotion}
+                        isFavourited={isFavourited(listing.id)}
+                        onToggleFavourite={handleToggleFavourite}
                       />
                     ))}
                   </div>
@@ -3818,7 +3806,7 @@ export default function TravellerDashboard() {
             <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
               <TravellerWorkspaceNav orientation="stack" showHome={false} showAvatar={false} className="mb-3" />
               <button
-                onClick={() => { setActiveTab("home"); setSelectedListingId(null); setMobileNavOpen(false); }}
+                onClick={() => { setSelectedListingId(null); setMobileNavOpen(false); router.push("/traveller"); }}
                 className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "home" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
               >
                 Destinations
@@ -3826,7 +3814,11 @@ export default function TravellerDashboard() {
               {(["hotel", "apartment", "car"] as const).map((cat) => (
                 <button
                   key={cat}
-                  onClick={() => { setSearchCategory(cat); setSelectedListingId(null); handleSearch(undefined, cat); setMobileNavOpen(false); }}
+                  onClick={() => {
+                    setSelectedListingId(null);
+                    setMobileNavOpen(false);
+                    router.push(cat === "hotel" ? "/traveller/hotels" : cat === "apartment" ? "/traveller/apartments" : "/traveller/cars");
+                  }}
                   className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "search" && searchCategory === cat ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   {cat === "hotel" ? "Stays" : cat === "apartment" ? "Apartments" : "Car Rentals"}
@@ -3834,7 +3826,7 @@ export default function TravellerDashboard() {
               ))}
               {user && (
                 <button
-                  onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); setMobileNavOpen(false); }}
+                  onClick={() => { setSelectedListingId(null); setMobileNavOpen(false); router.push("/traveller?tab=bookings"); }}
                   className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "bookings" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   My Reservations

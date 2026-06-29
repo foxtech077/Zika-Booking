@@ -22,7 +22,6 @@ import { Card, SectionHeader } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cn } from "@/lib/utils";
-import { TravellerHeader } from "../components/TravellerHeader";
 
 const COUNTRIES = [
   { value: "AE", label: "United Arab Emirates" },
@@ -196,8 +195,7 @@ export default function TravellerProfilePage() {
 
   return (
     <>
-      <TravellerHeader />
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_40%),linear-gradient(180deg,_#f8fafc_0%,_#f3f7f2_100%)]">
+      <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_40%),linear-gradient(180deg,_#f8fafc_0%,_#f3f7f2_100%)]">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
 
         {/* Page header */}
