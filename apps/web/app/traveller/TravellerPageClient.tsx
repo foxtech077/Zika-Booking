@@ -1,13 +1,21 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
+import { fetchFavourites, fetchRecentlyViewed } from "@/services/traveller";
 import ListingImage from "./components/ListingImage";
+import { TravellerWorkspaceNav } from "./components/TravellerWorkspaceNav";
+import { MessageProviderButton } from "./components/MessageProviderButton";
+import { PublicReviewsSection } from "./components/PublicReviewsSection";
+import { GiveReviewEntry } from "./components/GiveReviewEntry";
 import { useAuthStore } from "@/stores/auth";
+import { useFavourites } from "@/hooks/useFavourites";
 import ListingCard from "./components/ListingCard";
+import { ActivityPromoBanner, PersonalVoucherBanner } from "./components/PromoBanner";
+import { isPromotionValid } from "./utils/promo-utils";
 import PhotoGallery from "./components/PhotoGallery";
 import ReservationCard from "./components/ReservationCard";
 import MapView from "./components/MapView";
@@ -52,6 +60,12 @@ interface ActivePromotion {
   discountValue: number;
   description?: string;
   category?: string;
+  labelText?: string;
+  labelColour?: string;
+  bannerTitle?: string;
+  bannerSubtitle?: string;
+  validUntil?: string;
+  applyToBooking?: boolean;
 }
 
 interface ApplicableVoucher {
@@ -59,6 +73,16 @@ interface ApplicableVoucher {
   code: string;
   description?: string;
   discountAmount: number;
+}
+
+interface WalletVoucher {
+  id: string;
+  code: string;
+  description?: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  minOrderValue?: number;
+  validUntil?: string;
 }
 
 
@@ -171,7 +195,11 @@ export default function TravellerDashboard() {
   const hasAuthToken = isAuthenticated;
   const ready = _hasHydrated;
 
+  const { isFavourited, toggleFavourite } = useFavourites();
+  const [showFavAuthPrompt, setShowFavAuthPrompt] = useState(false);
+
   const [recentlyViewed, setRecentlyViewed] = useState<PublicListingDetail[]>([]);
+  const [favouritedIds, setFavouritedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<"home" | "search" | "bookings">("home");
 
   // Search Context
@@ -230,15 +258,21 @@ export default function TravellerDashboard() {
   const [voucherDiscount, setVoucherDiscount] = useState<number>(0);
   const [voucherApplied, setVoucherApplied] = useState<boolean>(false);
   const [voucherError, setVoucherError] = useState<string>("");
+  // Banner-level voucher UI state (pre-checkout)
+  const [voucherBannerDismissed, setVoucherBannerDismissed] = useState<boolean>(false);
+  const [pendingVoucherCode, setPendingVoucherCode] = useState<string>("");
 
   // Promotion state
   const [activePromotion, setActivePromotion] = useState<ActivePromotion | null>(null);
   const [promotionDiscount, setPromotionDiscount] = useState<number>(0);
-  const [discountSource, setDiscountSource] = useState<"voucher" | "promotion" | null>(null);
 
-  // Auto-applicable vouchers (auto-assigned, shown during checkout)
+  // Auto-applicable vouchers (context-filtered, fetched after lock)
   const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucher[]>([]);
   const [loadingApplicableVouchers, setLoadingApplicableVouchers] = useState(false);
+
+  // Full wallet — all vouchers assigned to this user (GET /vouchers/wallet)
+  const [walletVouchers, setWalletVouchers] = useState<WalletVoucher[]>([]);
+  const [loadingWalletVouchers, setLoadingWalletVouchers] = useState(false);
 
   // Checkout inputs
   const [firstName, setFirstName] = useState("");
@@ -301,15 +335,19 @@ export default function TravellerDashboard() {
     }
   }, [user?.id]);
 
-  // Handle ?tab=bookings URL param — navigated here from booking review page after payment
+  // Handle ?tab=bookings and ?listing=<id> URL params on first mount
   const urlTabHandled = useRef(false);
   useEffect(() => {
     if (!ready || urlTabHandled.current) return;
     const tab = searchParams.get("tab");
+    const listingId = searchParams.get("listing");
     if (tab === "bookings") {
       urlTabHandled.current = true;
       setActiveTab("bookings");
       if (user) fetchGuestBookings();
+    } else if (listingId) {
+      urlTabHandled.current = true;
+      handleSelectListing(listingId);
     }
   }, [ready, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -333,14 +371,6 @@ export default function TravellerDashboard() {
   const [showQuickDrop, setShowQuickDrop] = useState(false);
   const [loadingQuickDrop, setLoadingQuickDrop] = useState(false);
 
-  // Review form state (My Bookings → Leave Review for completed bookings)
-  const [reviewingBookingId, setReviewingBookingId] = useState<string | null>(null);
-  const [reviewRating, setReviewRating] = useState(5);
-  const [reviewTitle, setReviewTitle] = useState("");
-  const [reviewBody, setReviewBody] = useState("");
-  const [submittingReview, setSubmittingReview] = useState(false);
-  const [reviewedBookingIds, setReviewedBookingIds] = useState<string[]>([]);
-
   // My Bookings history context
   const [bookingsList, setBookingsList] = useState<Booking[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
@@ -351,10 +381,54 @@ export default function TravellerDashboard() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [showFiltersDrawer, setShowFiltersDrawer] = useState(false);
 
+  // Client-side filter state (applied on top of API results)
+  const [filterBedrooms, setFilterBedrooms] = useState<number | null>(null);
+  const [filterBathrooms, setFilterBathrooms] = useState<number | null>(null);
+  const [filterPropertyTypes, setFilterPropertyTypes] = useState<string[]>([]);
+
   // Timer Ref for lock countdown
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   // Derived guest count
   const searchGuests = searchAdults + searchChildren;
+
+  // Client-side filtered listings (bedrooms / bathrooms applied on top of API results)
+  const displayedListings = React.useMemo(() => {
+    let result = listings;
+    if (filterBedrooms !== null) {
+      result = result.filter((l) => {
+        const beds = l.bedrooms ?? 0;
+        return filterBedrooms >= 3 ? beds >= 3 : beds === filterBedrooms;
+      });
+    }
+    if (filterBathrooms !== null) {
+      result = result.filter((l) => {
+        const baths = l.bathrooms ?? 0;
+        return filterBathrooms >= 3 ? baths >= 3 : baths === filterBathrooms;
+      });
+    }
+    return result;
+  }, [listings, filterBedrooms, filterBathrooms]);
+
+  // Derived discount — voucher wins only when it saves more than the promotion.
+  // Neither stacks with the other; we always pick the higher value.
+  const effectiveDiscountSource: "voucher" | "promotion" | null =
+    voucherApplied && voucherDiscount >= promotionDiscount ? "voucher"
+    : promotionDiscount > 0 ? "promotion"
+    : null;
+  const bestDiscount =
+    effectiveDiscountSource === "voucher" ? voucherDiscount
+    : effectiveDiscountSource === "promotion" ? promotionDiscount
+    : 0;
+
+  // Red badge shown on every listing card when an active activity promotion matches the active tab
+  const promotionBadge = activePromotion && isPromotionValid(activePromotion) ? {
+    label: activePromotion.labelText || (
+      activePromotion.discountType === "percentage"
+        ? `${activePromotion.discountValue}%`
+        : `${activePromotion.discountValue} OFF`
+    ),
+    colour: activePromotion.labelColour || "#C84B2F",
+  } : undefined;
 
   // 1. Redirect provider accounts away from traveller page
   useEffect(() => {
@@ -364,14 +438,46 @@ export default function TravellerDashboard() {
     }
   }, [_hasHydrated, user?.userType]);
 
-  // Load Recently Viewed from localStorage on mount
+  // Load recently-viewed and favourites from backend on mount (when authenticated)
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Clear legacy dummy data from local storage
       localStorage.removeItem("zika:recently_viewed");
-      setRecentlyViewed([]);
     }
-  }, []);
+    if (!isAuthenticated) return;
+    fetchRecentlyViewed().then((items) => {
+      setRecentlyViewed(
+        items.slice(0, 4).map((v) => ({
+          id: v.listing.id,
+          providerId: "",
+          category: v.listing.category as "hotel" | "apartment" | "car",
+          name: v.listing.title,
+          pricePerNight: v.listing.nightlyRate ?? 0,
+          currency: v.listing.currency ?? "KES",
+          primaryPhotoUrl: v.listing.primaryPhotoUrl ?? null,
+          photos: [],
+          amenities: [],
+          customAmenities: [],
+          description: "",
+          address: v.listing.city ?? "",
+          lat: 0,
+          lng: 0,
+          town: v.listing.city ?? "",
+          country: "",
+          minStayNights: 1,
+          checkinTime: "",
+          checkoutTime: "",
+          cancellationPolicy: "flexible" as const,
+          isFavourited: false,
+          isAccredited: false,
+          longStayDiscountEnabled: false,
+          instantBooking: false,
+        }))
+      );
+    }).catch(() => {});
+    fetchFavourites().then((res) => {
+      setFavouritedIds(new Set(res.favourites.map((f) => f.listingId)));
+    }).catch(() => {});
+  }, [isAuthenticated]);
 
 
   function mapSearchResult(l: any): PublicListingDetail {
@@ -420,6 +526,7 @@ export default function TravellerDashboard() {
   async function loadFeaturedListings(cat: "hotel" | "apartment" | "car") {
     setLoadingFeatured(true);
     setFeaturedCategory(cat);
+    fetchActivePromotion(cat);
     try {
       const res = await listingApi.get<any>("/search", {
         params: { category: cat, limit: 8, lat: -1.2921, lng: 36.8219, radius_km: 5000 },
@@ -469,6 +576,11 @@ export default function TravellerDashboard() {
     }
   }
 
+  // Fetch wallet vouchers for the personal banner as soon as the user is authenticated
+  useEffect(() => {
+    if (hasAuthToken) fetchWalletVouchers();
+  }, [hasAuthToken]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load featured hotel listings once when home tab is first shown
   useEffect(() => {
     if (activeTab === "home" && !featuredLoadedRef.current) {
@@ -480,11 +592,16 @@ export default function TravellerDashboard() {
   function addToRecentlyViewed(item: PublicListingDetail) {
     setRecentlyViewed((prev) => {
       const filtered = prev.filter((x) => x.id !== item.id);
-      const updated = [item, ...filtered].slice(0, 4);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("zika:recently_viewed", JSON.stringify(updated));
-      }
-      return updated;
+      return [item, ...filtered].slice(0, 4);
+    });
+  }
+
+  function handleFavToggle(listingId: string, isFavourited: boolean) {
+    setFavouritedIds((prev) => {
+      const next = new Set(prev);
+      if (isFavourited) next.add(listingId);
+      else next.delete(listingId);
+      return next;
     });
   }
 
@@ -526,6 +643,144 @@ export default function TravellerDashboard() {
   useEffect(() => {
     return () => { if (paymentPollRef.current) clearInterval(paymentPollRef.current); };
   }, []);
+
+  // Reload active promotions when searchCategory changes
+  useEffect(() => {
+    console.log("[ZikaSearch] Category changed, fetching promotions for:", searchCategory);
+    fetchActivePromotion(searchCategory);
+  }, [searchCategory]);
+
+  // Log calculation results whenever listing details, dates, or discounts change
+  useEffect(() => {
+    if (detailListing) {
+      const isCar = detailListing.category === "car";
+      const start = isCar ? detailPickupDate : detailCheckIn;
+      const end = isCar ? detailReturnDate : detailCheckOut;
+      const days = calcDays(start, end);
+      const baseTotal = detailListing.pricePerNight * days;
+      const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
+      const taxRate = TAX_RATES[detailListing.country] ?? 0;
+      const taxAmount = Math.ceil(baseTotal * taxRate);
+      const grandTotal = Math.max(0, baseTotal + serviceFee + taxAmount - bestDiscount);
+
+      console.log("[ZikaSearch] Discount/Price calculation details:", {
+        listingName: detailListing.name,
+        days,
+        baseTotal,
+        serviceFee,
+        taxAmount,
+        promotionDiscount,
+        voucherDiscount,
+        effectiveDiscountSource,
+        bestDiscountApplied: bestDiscount,
+        finalPrice: grandTotal,
+      });
+    }
+  }, [detailListing?.id, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, bestDiscount, voucherApplied, voucherDiscount, promotionDiscount]);
+
+  // Reusable Voucher dropdown & Manual entry component
+  function renderVoucherSelector() {
+    if (!detailListing) return null;
+    return (
+      <div className="space-y-3 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Voucher / Promo Code</p>
+          {voucherApplied && (
+            <button
+              type="button"
+              onClick={() => {
+                console.log("[ZikaSearch] Removing applied voucher:", voucherCode);
+                setVoucherApplied(false);
+                setVoucherDiscount(0);
+                setVoucherCode("");
+                setVoucherError("");
+              }}
+              className="text-[10px] font-bold text-slate-400 hover:text-red-500 uppercase tracking-wider"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+        {!voucherApplied && (
+          <div className="space-y-2">
+            {/* Wallet dropdown */}
+            {loadingWalletVouchers ? (
+              <div className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
+                <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-[#1D8D2B] rounded-full animate-spin" />
+                Loading your vouchers…
+              </div>
+            ) : walletVouchers.length > 0 ? (
+              <div className="relative">
+                <select
+                  value={voucherCode}
+                  onChange={(e) => {
+                    const code = e.target.value;
+                    setVoucherCode(code);
+                    if (code) {
+                      console.log("[ZikaSearch] Voucher selected from dropdown:", code);
+                      handleVoucherApply(code);
+                    }
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#1D8D2B] pr-7"
+                >
+                  <option value="">Select an available voucher…</option>
+                  {walletVouchers.map((v) => {
+                    const discountStr = v.discountType === "percentage"
+                      ? `${v.discountValue}% off`
+                      : `${detailListing.currency} ${v.discountValue.toLocaleString()} off`;
+                    const expiryStr = v.validUntil
+                      ? ` (Exp: ${new Date(v.validUntil).toLocaleDateString("en-GB", { day: "numeric", month: "short" })})`
+                      : "";
+                    const descStr = v.description ? ` — ${v.description}` : "";
+                    return (
+                      <option key={v.id} value={v.code}>
+                        {v.code}: {discountStr}{descStr}{expiryStr}
+                      </option>
+                    );
+                  })}
+                </select>
+                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Manual code input */}
+            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex gap-2 items-center">
+              <input
+                type="text"
+                placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Enter voucher code"}
+                value={voucherCode}
+                onChange={(e) => setVoucherCode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleVoucherApply();
+                  }
+                }}
+                className="bg-transparent border-0 focus:ring-0 focus:outline-none text-xs text-slate-800 flex-1 min-w-0"
+              />
+              <button
+                type="button"
+                onClick={() => handleVoucherApply()}
+                className="text-[10px] font-bold text-[#1D8D2B] border border-[#1D8D2B] px-2.5 py-1 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        )}
+        {voucherApplied && (
+          <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 text-xs font-medium text-emerald-800">
+            {effectiveDiscountSource === "voucher"
+              ? `✓ Voucher applied — saves ${detailListing.currency} ${voucherDiscount.toLocaleString()}`
+              : `✓ Voucher saved. Category promotion gives better savings — using promotion instead`}
+          </div>
+        )}
+        {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
+      </div>
+    );
+  }
 
   // Filter Debounce Handler — re-fetch whenever any filter or sort changes while on the search tab
   useEffect(() => {
@@ -583,12 +838,19 @@ export default function TravellerDashboard() {
     setSearchError(null);
     setShowQuickDrop(false);
     setActiveTab("search");
+    // Clear stale listings immediately so the grid never shows results from a previous search
+    setListings([]);
 
     // Priority: explicit override (popular destination click) → user input → default
     const queryText = destinationOverride?.trim() || searchDestination.trim() || "Nairobi, Kenya";
+    // Flag: is this a real user-typed text search (not a programmatic global browse)?
+    const isTextSearch = !!(destinationOverride?.trim() || searchDestination.trim());
 
     try {
-      // Geocode destination → lat/lng via Nominatim (free, no API key)
+      // Geocode destination → lat/lng via Nominatim (free, no API key).
+      // NOTE: geocoding is used ONLY to seed the lat/lng the API requires.
+      // It is NOT the primary matching mechanism — the `q` param and the
+      // client-side text filter handle actual text relevance.
       let lat: number | undefined;
       let lng: number | undefined;
 
@@ -625,14 +887,27 @@ export default function TravellerDashboard() {
         lng = 36.8219;
       }
 
-      // Step 2: Build search params
+      // Build search params.
+      // For ALL text searches (hotel name, apartment name, car name, city, country, etc.):
+      //   - Use radius_km = 20 000 (global) so results are NOT constrained by geography.
+      //   - Pass `q` and `name` so the backend's full-text index can match on listing names.
+      // For programmatic global browse (no user text): also use 20 000 km radius.
+      const isGlobalBrowse = !e && !searchDestination.trim() && !destinationOverride;
       const params: Record<string, any> = {
         category: activeCategory,
-        limit: 20,
+        limit: 100, // Fetch a large batch so the client-side filter has enough candidates
         lat,
         lng,
-        radius_km: 5000,
+        // Always use global radius — text searches must not be geographically constrained.
+        radius_km: 20000,
       };
+
+      // Pass the user's raw search term as both `q` (standard) and `name` (some backends).
+      // This is the primary mechanism for finding listings by name, town, or country.
+      if (isTextSearch) {
+        params.q = queryText;
+        params.name = queryText;
+      }
 
       if (searchGuests > 1) params.guests = searchGuests;
       if (searchRooms > 1) params.rooms = searchRooms;
@@ -651,16 +926,43 @@ export default function TravellerDashboard() {
         if (searchReturnDate) params.return_datetime = searchReturnDate;
       }
 
-      // Step 3: Call listing search API
+      // Call listing search API
       const res = await listingApi.get<any>("/search", { params });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
+      const mapped = results.map(mapSearchResult);
+
+      // Client-side text filter — the definitive gate that ensures ONLY matching listings
+      // are rendered, regardless of what the geo-radius API returned.
+      // Fields matched (any field containing the term wins):
+      //   Hotels / Apartments: name, town, country, address, description
+      //   Cars:                name, town, country, address, description, carMake, carModel
+      let displayListings = mapped;
+      if (isTextSearch) {
+        const term = queryText.toLowerCase().trim();
+        displayListings = mapped.filter((listing) => {
+          const fields: (string | undefined | null)[] = [
+            listing.name,
+            listing.town,
+            listing.country,
+            listing.address,
+            listing.description,
+          ];
+          if (activeCategory === "car") {
+            fields.push(listing.carMake, listing.carModel);
+          }
+          return fields.some((f) => f && String(f).toLowerCase().includes(term));
+        });
+      }
+
       setSearchOffset(0);
-      setTotalCount(data.totalCount ?? data.availableCount ?? results.length);
-      if (res.data.success && results.length > 0) {
-        setListings(results.map(mapSearchResult));
+      setTotalCount(isTextSearch ? displayListings.length : (data.totalCount ?? data.availableCount ?? displayListings.length));
+      if (displayListings.length > 0) {
+        setListings(displayListings);
+        fetchActivePromotion(activeCategory);
       } else {
         setListings([]);
+        setActivePromotion(null);
       }
     } catch (err: any) {
       const errMsg = err?.response?.data?.error?.message ?? err?.message ?? "Unknown error";
@@ -672,24 +974,31 @@ export default function TravellerDashboard() {
     }
   }
 
-  // 3b. Load More — append next page of results
+  // 3b. Load More — append next page of search results, always scoped to the active query
   async function loadMoreListings() {
     if (loadingMore) return;
     setLoadingMore(true);
     const nextOffset = searchOffset + 20;
+    const activeQuery = searchDestination.trim();
     try {
-      const destinationLower = searchDestination.trim().toLowerCase();
+      const destinationLower = activeQuery.toLowerCase();
       let lat = -1.2921, lng = 36.8219;
       if (destinationLower.includes("mombasa")) { lat = -3.982; lng = 39.726; }
       else if (destinationLower.includes("paris")) { lat = 48.8566; lng = 2.3522; }
-      else {
+      else if (activeQuery) {
         try {
-          const g = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchDestination)}&format=json&limit=1`, { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } });
+          const g = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(activeQuery)}&format=json&limit=1`, { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } });
           const gd = await g.json();
           if (gd?.[0]) { lat = parseFloat(gd[0].lat); lng = parseFloat(gd[0].lon); }
         } catch { }
       }
-      const params: Record<string, any> = { category: searchCategory, limit: 20, offset: nextOffset, lat, lng, radius_km: 5000 };
+      // Always use global radius and pass the search term so Load More stays
+      // scoped to the active query — never falls back to the full inventory.
+      const params: Record<string, any> = { category: searchCategory, limit: 100, offset: nextOffset, lat, lng, radius_km: 20000 };
+      if (activeQuery) {
+        params.q = activeQuery;
+        params.name = activeQuery;
+      }
       if (searchGuests > 1) params.guests = searchGuests;
       if (searchRooms > 1) params.rooms = searchRooms;
       if (priceMin > 0) params.price_min = priceMin;
@@ -708,12 +1017,32 @@ export default function TravellerDashboard() {
       const res = await listingApi.get<any>("/search", { params });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
-      if (results.length > 0) {
-        setListings((prev) => [...prev, ...results.map(mapSearchResult)]);
+      const mapped = results.map(mapSearchResult);
+      // Apply the same client-side text filter so appended pages are also accurate
+      const filtered = activeQuery
+        ? mapped.filter((listing) => {
+            const term = activeQuery.toLowerCase();
+            const fields: (string | undefined | null)[] = [
+              listing.name, listing.town, listing.country, listing.address, listing.description,
+            ];
+            if (searchCategory === "car") fields.push(listing.carMake, listing.carModel);
+            return fields.some((f) => f && String(f).toLowerCase().includes(term));
+          })
+        : mapped;
+      if (filtered.length > 0) {
+        setListings((prev) => [...prev, ...filtered]);
         setSearchOffset(nextOffset);
       }
     } catch { }
     finally { setLoadingMore(false); }
+  }
+
+  async function handleToggleFavourite(listingId: string) {
+    if (!hasAuthToken) {
+      setShowFavAuthPrompt(true);
+      return;
+    }
+    await toggleFavourite(listingId);
   }
 
   // 4. Fetch details callback `/listings/:id/public`
@@ -730,8 +1059,8 @@ export default function TravellerDashboard() {
     setVoucherError("");
     setActivePromotion(null);
     setPromotionDiscount(0);
-    setDiscountSource(null);
     setApplicableVouchers([]);
+    setWalletVouchers([]);
     setDetailCheckIn("");
     setDetailCheckOut("");
     setDetailPickupDate("");
@@ -779,6 +1108,12 @@ export default function TravellerDashboard() {
         addToRecentlyViewed(details);
         listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
         fetchActivePromotion(details.category);
+        // Fetch wallet + applicable vouchers as soon as the listing opens so the
+        // dropdown is populated in the details step (before the booking lock).
+        if (hasAuthToken) {
+          fetchWalletVouchers();
+          fetchApplicableVouchers(details.id, details.category, details.country);
+        }
       } else {
         setDetailListing(null);
       }
@@ -832,9 +1167,12 @@ export default function TravellerDashboard() {
   }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
 
   // Recompute promotion discount whenever dates or active promotion changes.
-  // Auto-sets discountSource to "promotion" when no voucher is applied and promotion beats zero.
+  // effectiveDiscountSource is derived — no state mutation needed here.
   useEffect(() => {
-    if (!activePromotion || !detailListing) { setPromotionDiscount(0); return; }
+    if (!activePromotion || !detailListing || !isPromotionValid(activePromotion) || activePromotion.activity !== detailListing.category) {
+      setPromotionDiscount(0);
+      return;
+    }
     const isCar = detailListing.category === "car";
     const start = isCar ? detailPickupDate : detailCheckIn;
     const end = isCar ? detailReturnDate : detailCheckOut;
@@ -845,13 +1183,6 @@ export default function TravellerDashboard() {
       ? Math.round(base * activePromotion.discountValue / 100)
       : Math.round(activePromotion.discountValue);
     setPromotionDiscount(pDiscount);
-    if (!voucherApplied) {
-      setDiscountSource(pDiscount > 0 ? "promotion" : null);
-    } else {
-      // Keep whichever is higher — never stack
-      setDiscountSource(pDiscount > voucherDiscount ? "promotion" : "voucher");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePromotion, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
 
   // Helper: calculate nights/days between two date strings
@@ -900,6 +1231,7 @@ export default function TravellerDashboard() {
         setPaymentId(null);
         if (paymentPollRef.current) clearInterval(paymentPollRef.current);
         fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country);
+        fetchWalletVouchers();
       } else {
         const msg = res.data?.error?.message ?? (res.data as any)?.message ?? "Unable to hold these dates. Please try again.";
         setBookingError(msg);
@@ -943,6 +1275,7 @@ export default function TravellerDashboard() {
     const orderValue = detailListing.pricePerNight * Math.max(1, days);
 
     try {
+      console.log("[ZikaSearch] Validating voucher code:", code, "with order value:", orderValue);
       const res = await listingApi.post<any>("/vouchers/validate", {
         code,
         orderValue,
@@ -951,48 +1284,100 @@ export default function TravellerDashboard() {
         country: detailListing.country,
         tier: user?.currentTier,
       });
+      console.log("[ZikaSearch] Voucher validation API response:", res.data);
       if (res.data.success) {
         const vDiscount = res.data.data.discountAmount || 0;
+        console.log("[ZikaSearch] Voucher discount amount computed:", vDiscount);
         setVoucherApplied(true);
         setVoucherDiscount(vDiscount);
-        // Apply only the highest-value discount — never stack
-        setDiscountSource(vDiscount >= promotionDiscount ? "voucher" : "promotion");
       } else {
-        setVoucherError(res.data?.error?.message ?? "Invalid voucher code");
+        const errMsg = res.data?.error?.message ?? "Invalid voucher code";
+        console.error("[ZikaSearch] Voucher validation failed:", errMsg);
+        setVoucherError(errMsg);
       }
     } catch (err: any) {
-      setVoucherError(err?.response?.data?.error?.message ?? "Invalid voucher code");
+      const errMsg = err?.response?.data?.error?.message ?? "Invalid voucher code";
+      console.error("[ZikaSearch] Voucher validation error:", err);
+      setVoucherError(errMsg);
     }
   }
 
   // Fetch active promotions for a listing category
   async function fetchActivePromotion(category: string) {
     try {
+      console.log("[ZikaSearch] Fetching active promotions for category:", category);
       const res = await listingApi.get<any>("/promotions/active", { params: { category } });
+      console.log("[ZikaSearch] Active promotions API response:", res.data);
       if (res.data.success) {
-        const promos: ActivePromotion[] = res.data.data ?? [];
-        setActivePromotion(promos.length > 0 ? (promos[0] ?? null) : null);
+        const raw = res.data.data ?? [];
+        const promos: ActivePromotion[] = Array.isArray(raw)
+          ? raw
+          : (raw?.promotions ?? []);
+        // Coerce discountValue to number — API may return it as a string
+        const normalised = promos.map((p: any) => ({
+          ...p,
+          discountValue: Number(p.discountValue),
+        }));
+        const matched = normalised.filter(
+          (p: any) => p.activity === category && isPromotionValid(p)
+        );
+        console.log("[Promotion] Active promotion loaded & matched:", matched);
+        console.log("[ZikaSearch] Active promotion count received & matched:", matched.length);
+        setActivePromotion(matched.length > 0 ? (matched[0] ?? null) : null);
+      } else {
+        console.warn("[ZikaSearch] Active promotions fetch was not successful:", res.data);
+        setActivePromotion(null);
       }
-    } catch {
+    } catch (err) {
+      console.error("[ZikaSearch] fetchActivePromotion error:", err);
       setActivePromotion(null);
     }
   }
 
-  // Fetch auto-assigned vouchers applicable to the current booking context
+  // Fetch auto-assigned vouchers applicable to the current booking context.
+  // Guard removed: if a lock was obtained, the backend already confirmed the user is authenticated.
   async function fetchApplicableVouchers(listingId: string, category: string, country: string) {
-    if (!isAuthenticated) return;
     setLoadingApplicableVouchers(true);
     try {
+      console.log("[ZikaSearch] Fetching applicable vouchers for listing:", listingId, category, country);
       const res = await listingApi.get<any>("/vouchers/applicable", {
         params: { listingId, category, country },
       });
+      console.log("[ZikaSearch] Applicable vouchers API response:", res.data);
       if (res.data.success) {
-        setApplicableVouchers(res.data.data ?? []);
+        const vouchers = res.data.data ?? [];
+        console.log("[ZikaSearch] Applicable vouchers count received:", vouchers.length);
+        setApplicableVouchers(vouchers);
+      } else {
+        setApplicableVouchers([]);
       }
-    } catch {
+    } catch (err) {
+      console.error("[ZikaSearch] fetchApplicableVouchers error:", err);
       setApplicableVouchers([]);
     } finally {
       setLoadingApplicableVouchers(false);
+    }
+  }
+
+  // Fetch the user's full voucher wallet — GET /vouchers/wallet (no booking context needed).
+  async function fetchWalletVouchers() {
+    setLoadingWalletVouchers(true);
+    try {
+      console.log("[ZikaSearch] Fetching wallet vouchers...");
+      const res = await listingApi.get<any>("/vouchers/wallet");
+      console.log("[ZikaSearch] Wallet vouchers API response:", res.data);
+      if (res.data.success) {
+        const vouchers = res.data.data ?? [];
+        console.log("[ZikaSearch] Wallet vouchers count received:", vouchers.length);
+        setWalletVouchers(vouchers);
+      } else {
+        setWalletVouchers([]);
+      }
+    } catch (err) {
+      console.error("[ZikaSearch] fetchWalletVouchers error:", err);
+      setWalletVouchers([]);
+    } finally {
+      setLoadingWalletVouchers(false);
     }
   }
 
@@ -1056,8 +1441,8 @@ export default function TravellerDashboard() {
       body.deliveryRequested = deliveryRequested;
       body.deliveryAddress = deliveryAddress;
     }
-    if (discountSource === "voucher" && voucherApplied) body.voucherCode = voucherCode;
-    if (discountSource === "promotion" && activePromotion) body.promotionId = activePromotion.id;
+    if (effectiveDiscountSource === "voucher" && voucherApplied) body.voucherCode = voucherCode;
+    if (effectiveDiscountSource === "promotion" && activePromotion) body.promotionId = activePromotion.id;
 
     try {
       // Step 1: Create booking
@@ -1227,10 +1612,10 @@ export default function TravellerDashboard() {
       children: searchChildren,
       lockToken,
       lockExpiresAt: new Date(Date.now() + (secondsLeft ?? 0) * 1000).toISOString(),
-      voucherCode: discountSource === "voucher" && voucherApplied ? voucherCode : undefined,
-      voucherDiscount: discountSource === "voucher" ? voucherDiscount : discountSource === "promotion" ? promotionDiscount : 0,
-      promotionId: discountSource === "promotion" && activePromotion ? activePromotion.id : undefined,
-      discountSource: discountSource ?? undefined,
+      voucherCode: effectiveDiscountSource === "voucher" && voucherApplied ? voucherCode : undefined,
+      voucherDiscount: bestDiscount,
+      promotionId: effectiveDiscountSource === "promotion" && activePromotion ? activePromotion.id : undefined,
+      discountSource: effectiveDiscountSource ?? undefined,
       firstName, lastName, email, phone, specialRequests,
       driverFirstName: isCar ? (driverFirstName || firstName) : undefined,
       driverLastName: isCar ? (driverLastName || lastName) : undefined,
@@ -1321,34 +1706,6 @@ export default function TravellerDashboard() {
     }
   }
 
-  // POST /reviews — guest submits a review for a completed booking
-  async function handleSubmitReview(bookingId: string) {
-    if (!reviewRating) return;
-    setSubmittingReview(true);
-    try {
-      const res = await listingApi.post<any>("/reviews", {
-        bookingId,
-        rating: reviewRating,
-        title: reviewTitle.trim() || undefined,
-        body: reviewBody.trim() || undefined,
-      });
-      if (res.data.success) {
-        setReviewedBookingIds((prev) => [...prev, bookingId]);
-        setReviewingBookingId(null);
-        setReviewRating(5);
-        setReviewTitle("");
-        setReviewBody("");
-      } else {
-        alert(res.data?.error?.message ?? "Review submission failed. Please try again.");
-      }
-    } catch (err: any) {
-      const msg = err?.response?.data?.error?.message ?? err?.message ?? "Review submission failed.";
-      alert(msg);
-    } finally {
-      setSubmittingReview(false);
-    }
-  }
-
   function handleLogout() {
     api.post("/auth/logout").catch(() => { });  // invalidate server-side refresh token
     clearSession();                            // clear Zustand store + sessionStorage
@@ -1372,114 +1729,6 @@ export default function TravellerDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans selection:bg-[#0c2614] selection:text-white antialiased">
-      {/* Header */}
-      {lockToken ? (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex items-center justify-between">
-          <button
-            onClick={() => { setSelectedListingId(null); setDetailListing(null); abandonLock(); }}
-            className="text-xl font-serif font-bold text-[#0c2614] tracking-tight hover:opacity-80 transition"
-          >
-            Kainook
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="bg-slate-50 border border-slate-200 px-4 py-1.5 rounded-full text-xs font-mono tracking-wider flex items-center gap-2 text-[#0c2614]">
-              <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
-            </div>
-            <button onClick={handleLogout} className="text-xs font-medium text-slate-400 hover:text-red-500 transition">
-              Logout
-            </button>
-          </div>
-        </header>
-      ) : (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-10">
-            <Link
-              href="/traveller"
-              onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-              className="text-xl font-serif font-bold text-[#0c2614] tracking-tight"
-            >
-              Kainook
-            </Link>
-            <nav className="hidden md:flex items-center gap-8">
-              <button
-                onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "home" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Destinations
-              </button>
-              <button
-                onClick={() => { setSearchCategory("hotel"); setSelectedListingId(null); handleSearch(undefined, "hotel"); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "hotel" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Hotels
-              </button>
-              <button
-                onClick={() => { setSearchCategory("apartment"); setSelectedListingId(null); handleSearch(undefined, "apartment"); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "apartment" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Apartments
-              </button>
-              <button
-                onClick={() => { setSearchCategory("car"); setSelectedListingId(null); handleSearch(undefined, "car"); }}
-                className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "search" && searchCategory === "car" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-              >
-                Car Rentals
-              </button>
-              {user && (
-                <button
-                  onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); }}
-                  className={`text-sm font-medium tracking-wide transition-colors ${activeTab === "bookings" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"}`}
-                >
-                  My Reservations
-                </button>
-              )}
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-4">
-            {/* Mobile menu */}
-            <button onClick={() => setMobileNavOpen(true)} className="md:hidden flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 hover:bg-slate-50 transition" aria-label="Open menu">
-              <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-            </button>
-
-            {!hasAuthToken && (
-              <>
-                <Link href="/auth/login" className="hidden sm:block text-sm font-medium text-slate-500 hover:text-[#0c2614] transition">
-                  Sign In
-                </Link>
-                <Link href="/auth/login" className="rounded-full bg-[#0c2614] hover:bg-[#081b0d] px-5 py-2 text-sm font-semibold text-white transition shadow-sm">
-                  Sign Up
-                </Link>
-              </>
-            )}
-
-            {(user || hasAuthToken) && !user && (
-              <button onClick={handleLogout} className="text-sm font-medium text-slate-400 hover:text-red-500 transition">Logout</button>
-            )}
-
-            {user && (
-              <div className="flex items-center gap-3">
-                <button onClick={handleLogout} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-red-500 transition">
-                  Logout
-                </button>
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full py-1.5 px-3 shadow-sm cursor-pointer hover:shadow-md transition">
-                  <div className="w-7 h-7 rounded-full bg-[#0c2614] text-white flex items-center justify-center font-bold uppercase text-xs">
-                    {user.firstName[0]}
-                  </div>
-                  <div className="hidden sm:block text-left">
-                    <p className="text-xs font-semibold text-slate-800">{user.firstName}</p>
-                    <p className="text-[10px] text-[#1D8D2B] font-bold uppercase tracking-widest">{user.currentTier || "Bronze"}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </header>
-      )}
-
       {/* Main Layout Area */}
       <main className="min-h-[calc(100vh-76px)]">
         {selectedListingId ? (
@@ -1667,6 +1916,11 @@ export default function TravellerDashboard() {
                       </div>
                     )}
 
+                    <div className="mb-4 space-y-3">
+                      <MessageProviderButton listingId={detailListing.id} />
+                      <GiveReviewEntry listingId={detailListing.id} listingName={detailListing.name} />
+                    </div>
+
                     {!lockToken ? (() => {
                       const isCar = detailListing.category === "car";
                       const start = isCar ? detailPickupDate : detailCheckIn;
@@ -1674,7 +1928,7 @@ export default function TravellerDashboard() {
                       const days = calcDays(start, end);
                       const baseTotal = detailListing.pricePerNight * days;
                       const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
-                      const sidebarDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
+                      const sidebarDiscount = bestDiscount;
                       const grandTotal = Math.max(0, baseTotal + serviceFee - sidebarDiscount);
 
                       return (
@@ -1745,6 +1999,9 @@ export default function TravellerDashboard() {
                               </>
                             )}
                           </div>
+
+                          {/* Voucher / Promo code selector */}
+                          {renderVoucherSelector()}
 
                           {/* Availability indicator */}
                           {availabilityStatus === "checking" && (
@@ -1823,7 +2080,7 @@ export default function TravellerDashboard() {
                               </div>
                               {sidebarDiscount > 0 && (
                                 <div className="flex justify-between text-emerald-600 font-semibold">
-                                  <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                  <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                   <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
                                 </div>
                               )}
@@ -1888,7 +2145,6 @@ export default function TravellerDashboard() {
                           const serviceFee = Math.ceil(base * 0.05);
                           const taxRate = TAX_RATES[detailListing.country] ?? 0;
                           const taxAmount = Math.ceil(base * taxRate);
-                          const bestDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
                           const grandTotal = Math.max(0, base + serviceFee + taxAmount - bestDiscount);
                           const fmt = (d: string | null | undefined) =>
                             d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
@@ -1948,28 +2204,18 @@ export default function TravellerDashboard() {
                                 )}
                                 {bestDiscount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                     <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                {/* Voucher input — hide if promotion already applied or voucher already applied */}
-                                {!voucherApplied && discountSource !== "promotion" && (
-                                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex gap-2 items-center">
-                                    <input type="text" placeholder="Promo / voucher code" value={voucherCode}
-                                      onChange={(e) => setVoucherCode(e.target.value)}
-                                      className="bg-transparent border-0 focus:ring-0 focus:outline-none text-xs text-slate-800 flex-1 min-w-0" />
-                                    <button type="button" onClick={() => handleVoucherApply()}
-                                      className="text-[10px] font-bold text-[#1D8D2B] border border-[#1D8D2B] px-2.5 py-1 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
-                                  </div>
-                                )}
-                                {discountSource === "promotion" && (
-                                  <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                                    <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                    Promotion applied automatically
+
+                                {renderVoucherSelector()}
+                                {voucherApplied && (
+                                  <p className="text-xs font-semibold text-emerald-600">
+                                    {effectiveDiscountSource === "voucher"
+                                      ? `✓ Voucher applied — saves ${detailListing.currency} ${voucherDiscount.toLocaleString()}`
+                                      : `✓ Voucher applied. Promotion gives more savings — using promotion discount`}
                                   </p>
-                                )}
-                                {voucherApplied && discountSource === "voucher" && (
-                                  <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied</p>
                                 )}
                                 {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
@@ -2016,58 +2262,23 @@ export default function TravellerDashboard() {
                             )}
                           </div>
 
-                          {/* Discount section — auto-assigned vouchers, promotion, manual voucher entry */}
+                          {/* Discount section — promotion badge + wallet vouchers + manual entry always visible */}
                           <div className="space-y-2">
-                            {/* Promotion auto-applied */}
-                            {discountSource === "promotion" && activePromotion && (
+                            {/* Promotion badge — always shown when a promotion exists */}
+                            {promotionDiscount > 0 && activePromotion && (
                               <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
                                 <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
                                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                  {activePromotion.name} applied
+                                  {activePromotion.name}
+                                  {effectiveDiscountSource === "voucher" && (
+                                    <span className="text-slate-400 font-normal"> (voucher saves more)</span>
+                                  )}
                                 </span>
                                 <span className="text-xs font-bold text-emerald-700">−{detailListing.currency} {promotionDiscount.toLocaleString()}</span>
                               </div>
                             )}
 
-                            {/* Auto-assigned applicable vouchers (fetched after lock) */}
-                            {applicableVouchers.length > 0 && !voucherApplied && discountSource !== "promotion" && (
-                              <div className="space-y-1.5">
-                                {loadingApplicableVouchers ? (
-                                  <div className="flex items-center gap-2 text-xs text-slate-400 py-1">
-                                    <div className="w-3 h-3 border-2 border-slate-300 border-t-[#166534] rounded-full animate-spin" />
-                                    Loading your vouchers…
-                                  </div>
-                                ) : (
-                                  <>
-                                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Your Vouchers</p>
-                                    {applicableVouchers.map((v) => (
-                                      <button
-                                        key={v.id}
-                                        type="button"
-                                        onClick={() => handleVoucherApply(v.code)}
-                                        className="w-full flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition"
-                                      >
-                                        <span>{v.description || v.code}</span>
-                                        <span className="font-bold">−{detailListing.currency} {v.discountAmount.toLocaleString()}</span>
-                                      </button>
-                                    ))}
-                                  </>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Manual voucher code entry — hidden when promotion or voucher already applied */}
-                            {!voucherApplied && discountSource !== "promotion" && (
-                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex gap-2 items-center">
-                                <input type="text" placeholder="Promo / voucher code" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} className="bg-transparent border-0 focus:ring-0 focus:outline-none text-sm text-slate-800 flex-1 min-w-0" />
-                                <button type="button" onClick={() => handleVoucherApply()} className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-1.5 rounded-lg hover:bg-[#0c2614] hover:text-white transition shrink-0">Apply</button>
-                              </div>
-                            )}
-
-                            {voucherApplied && discountSource === "voucher" && (
-                              <p className="text-xs font-semibold text-emerald-600">✓ Voucher applied — {detailListing.currency} {voucherDiscount.toLocaleString()} off</p>
-                            )}
-                            {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
+                            {renderVoucherSelector()}
                           </div>
 
                           {/* Payment method selector */}
@@ -2172,7 +2383,6 @@ export default function TravellerDashboard() {
                             const days = calcDays(start, end);
                             const baseTotal = detailListing.pricePerNight * days;
                             const serviceFee = Math.ceil(baseTotal * 0.05);
-                            const bestDiscount = discountSource === "promotion" ? promotionDiscount : discountSource === "voucher" ? voucherDiscount : 0;
                             const grandTotal = Math.max(0, baseTotal + serviceFee - bestDiscount);
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
@@ -2183,7 +2393,7 @@ export default function TravellerDashboard() {
                                 <div className="flex justify-between"><span>Service fee (5%)</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
                                 {bestDiscount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
-                                    <span>{discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
                                     <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
                                   </div>
                                 )}
@@ -2356,6 +2566,9 @@ export default function TravellerDashboard() {
                       Report this listing
                     </div>
                   </div>
+                </div>
+                <div className="lg:col-span-12">
+                  <PublicReviewsSection listingId={detailListing.id} />
                 </div>
               </>
             ) : (
@@ -2588,7 +2801,7 @@ export default function TravellerDashboard() {
                   </div>
 
                   {/* Trending chips */}
-                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
+                  {/* <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
                     <span className="text-white/50 font-medium tracking-wide">Trending:</span>
                     {[["Cape Town", "South Africa"], ["Marrakesh", "Morocco"], ["Nairobi", "Kenya"], ["Lagos", "Nigeria"]].map(([city, country]) => (
                       <button key={city} type="button"
@@ -2597,7 +2810,7 @@ export default function TravellerDashboard() {
                         {city}
                       </button>
                     ))}
-                  </div>
+                  </div> */}
                 </form>
               </div>
             </div>
@@ -2619,15 +2832,15 @@ export default function TravellerDashboard() {
                 <div>
                   <p className="text-[10px] font-semibold text-[#1D8D2B] uppercase tracking-[0.3em] mb-2">Curated Worlds</p>
                   <h2 className="text-3xl md:text-4xl font-serif text-slate-900 leading-snug">
-                    Discover Destinations<br className="hidden sm:block" /> Selected for the<br className="hidden sm:block" /> Discerning Traveler.
+                    Discover Destinations Selected for the<br className="hidden sm:block" /> Discerning Traveler.
                   </h2>
                 </div>
-                <button
+                {/* <button
                   onClick={() => handleSearch(undefined, "hotel")}
                   className="text-sm font-semibold text-[#0c2614] hover:text-[#1D8D2B] transition underline underline-offset-4 shrink-0"
                 >
                   View All Destinations
-                </button>
+                </button> */}
               </div>
 
               {/* Asymmetric grid: 1 large left + 2 stacked right */}
@@ -2724,7 +2937,16 @@ export default function TravellerDashboard() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {featuredListings.slice(0, 8).map((listing) => (
-                      <ListingCard key={listing.id} listing={listing} onSelect={handleSelectListing} />
+                      <ListingCard
+                        key={listing.id}
+                        listing={listing}
+                        onSelect={handleSelectListing}
+                        variant="compact"
+                        promotionBadge={promotionBadge}
+                        activePromotion={activePromotion}
+                        isFavourited={isFavourited(listing.id)}
+                        onToggleFavourite={handleToggleFavourite}
+                      />
                     ))}
                   </div>
                 )}
@@ -2983,175 +3205,134 @@ export default function TravellerDashboard() {
             </footer>
           </div>
         ) : activeTab === "search" ? (
-          // VIEW 2: DYNAMIC SPLIT SEARCH RESULTS VIEW & COORDINATE PRICE MAP
-          <div className="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-12 gap-8 relative">
-            <div className="lg:col-span-12 flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200/60">
-              <div className="text-left">
-                <h1 className="text-2xl font-serif font-bold text-slate-900 capitalize">
-                  {searchCategory === "car" ? "Cars" : `${searchCategory.charAt(0).toUpperCase() + searchCategory.slice(1)}s`} in {searchDestination.split(",")[0]}
-                </h1>
-                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider mt-0.5">
-                  {searching ? "Searching..." : `${totalCount > 0 ? totalCount : listings.length} match${(totalCount || listings.length) !== 1 ? "es" : ""} found`}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                {/* Quick sort dropdown in header (mirrors sidebar) */}
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="hidden sm:block bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none shadow-sm"
-                >
-                  <option value="distance_asc">Nearest First</option>
-                  <option value="price_asc">Price ↑</option>
-                  <option value="price_desc">Price ↓</option>
-                  <option value="rating_desc">Best Rated</option>
-                  <option value="popularity_desc">Popular</option>
-                </select>
-                <button
-                  onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                  className="text-xs font-bold text-[#1D8D2B] border border-[#1D8D2B] px-3 py-2 rounded-xl hover:bg-[#0c2614] hover:text-white transition uppercase tracking-wide"
-                >
-                  New Search
-                </button>
-              </div>
-            </div>
+          // VIEW 2: REDESIGNED SEARCH RESULTS — sidebar + cards feed
+          <div className="flex min-h-[calc(100vh-76px)]">
 
-            {/* Mobile filter + sort bar (hidden on desktop) */}
-            <div className="lg:hidden col-span-1 flex items-center gap-2">
-              <button
-                onClick={() => setShowFiltersDrawer(true)}
-                className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm hover:border-slate-400 transition"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
-                </svg>
-                Filters
-                {(showInstantOnly || selectedAmenities.length > 0 || !!selectedRating || priceMin > 0 || priceMax < 499999) && (
-                  <span className="w-2 h-2 rounded-full bg-[#E31C5F] inline-block" />
-                )}
-              </button>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:outline-none shadow-sm"
-              >
-                <option value="distance_asc">Nearest First</option>
-                <option value="price_asc">Price: Low → High</option>
-                <option value="price_desc">Price: High → Low</option>
-                <option value="rating_desc">Best Rated</option>
-                <option value="popularity_desc">Most Popular</option>
-              </select>
-            </div>
-
-            {/* Filters left sidebar widget (3 Cols) */}
-            <div className="hidden lg:block lg:col-span-3 space-y-4 text-left">
-              <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-sm space-y-5">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <h3 className="text-base font-serif font-bold text-slate-900">Filters</h3>
-                  <button
-                    onClick={() => { setPriceMin(0); setPriceMax(500000); setSelectedRating(null); setSelectedCancellation(""); setSortBy("distance_asc"); setSelectedAmenities([]); setShowInstantOnly(false); }}
-                    className="text-[10px] font-bold text-slate-400 hover:text-slate-700 uppercase tracking-wider"
-                  >
-                    Reset all
-                  </button>
+            {/* ── LEFT SIDEBAR — Refine Search ── */}
+            <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 bg-white border-r border-slate-200 overflow-y-auto">
+              <div className="p-6 space-y-6">
+                {/* Header */}
+                <div>
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                    </svg>
+                    <h2 className="text-base font-bold text-slate-900">Refine Search</h2>
+                  </div>
+                  <p className="text-[11px] text-slate-400 pl-6">Luxury Preferences</p>
                 </div>
 
-                {/* Sort */}
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Sort By</label>
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none"
-                  >
-                    <option value="distance_asc">Nearest First</option>
-                    <option value="price_asc">Price: Low → High</option>
-                    <option value="price_desc">Price: High → Low</option>
-                    <option value="rating_desc">Best Rated</option>
-                    <option value="popularity_desc">Most Popular</option>
-                  </select>
+                {/* Price Range slider */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-700">Price Range</label>
+                    <span className="text-xs font-semibold text-slate-500">
+                      {priceMin > 0 ? `KES ${priceMin.toLocaleString()}` : "KES 500"} – {priceMax >= 499999 ? "KES 5,000+" : `KES ${priceMax.toLocaleString()}`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={50000}
+                    step={500}
+                    value={priceMax >= 499999 ? 50000 : priceMax}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setPriceMax(v >= 50000 ? 500000 : v);
+                    }}
+                    className="w-full h-1.5 accent-[#1D8D2B] cursor-pointer"
+                  />
                 </div>
 
-                {/* Instant Book toggle */}
-                <div className="flex items-center justify-between">
+                {/* Bedrooms & Bathrooms */}
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <p className="text-xs font-semibold text-slate-700">⚡ Instant Book</p>
-                    <p className="text-[10px] text-slate-400">Book without waiting for approval</p>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Bedrooms</label>
+                    <select
+                      value={filterBedrooms ?? ""}
+                      onChange={(e) => setFilterBedrooms(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-[#1D8D2B] transition"
+                    >
+                      <option value="">Any</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3+</option>
+                    </select>
                   </div>
-                  <button
-                    onClick={() => setShowInstantOnly((v) => !v)}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${showInstantOnly ? "bg-[#0c2614]" : "bg-slate-200"}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInstantOnly ? "translate-x-5" : ""}`} />
-                  </button>
-                </div>
-
-                {/* Price range */}
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Price Range / {searchCategory === "car" ? "day" : "night"}</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      value={priceMin || ""}
-                      onChange={(e) => setPriceMin(e.target.value ? Number(e.target.value) : 0)}
-                      placeholder="Min"
-                      min={0}
-                      step={500}
-                      className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none"
-                    />
-                    <input
-                      type="number"
-                      value={priceMax >= 499999 ? "" : priceMax}
-                      onChange={(e) => setPriceMax(e.target.value ? Number(e.target.value) : 500000)}
-                      placeholder="Max"
-                      min={0}
-                      step={500}
-                      className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none"
-                    />
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">Bathrooms</label>
+                    <select
+                      value={filterBathrooms ?? ""}
+                      onChange={(e) => setFilterBathrooms(e.target.value ? Number(e.target.value) : null)}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-[#1D8D2B] transition"
+                    >
+                      <option value="">Any</option>
+                      <option value="1">1</option>
+                      <option value="2">2</option>
+                      <option value="3">3+</option>
+                    </select>
                   </div>
                 </div>
 
-                {/* Rating */}
+                {/* Property Type (hotels/apartments) */}
                 {searchCategory !== "car" && (
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min. Rating</label>
-                    <div className="flex gap-1.5">
-                      {[3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          onClick={() => setSelectedRating(star === selectedRating ? null : star)}
-                          className={`flex-1 py-1.5 border rounded-xl text-xs font-semibold transition ${star === selectedRating ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
-                        >
-                          ★ {star}+
-                        </button>
-                      ))}
+                    <label className="block text-xs font-semibold text-slate-700">Property Type</label>
+                    <div className="space-y-2 pt-0.5">
+                      {(searchCategory === "hotel"
+                        ? ["Standard", "Boutique", "Resort"]
+                        : ["Studio", "Penthouse", "Villa"]
+                      ).map((type) => {
+                        const active = filterPropertyTypes.includes(type);
+                        return (
+                          <label key={type} className="flex items-center gap-3 cursor-pointer group py-0.5">
+                            <button
+                              type="button"
+                              onClick={() => setFilterPropertyTypes((prev) =>
+                                active ? prev.filter((t) => t !== type) : [...prev, type]
+                              )}
+                              className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
+                                active ? "bg-[#0c2614] border-[#0c2614]" : "border-slate-300 group-hover:border-[#1D8D2B]"
+                              }`}
+                            >
+                              {active && (
+                                <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </button>
+                            <span className="text-sm text-slate-700">{type}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* Amenities */}
+                {/* Amenities chips */}
                 {searchCategory !== "car" && (
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Amenities</label>
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Amenities</label>
+                    <div className="flex flex-wrap gap-2 pt-0.5">
                       {[
-                        { key: "wifi", label: "Wi-Fi" },
-                        { key: "pool", label: "Pool" },
-                        { key: "parking", label: "Parking" },
-                        { key: "ac", label: "A/C" },
-                        { key: "gym", label: "Gym" },
-                        { key: "kitchen", label: "Kitchen" },
+                        { key: "kitchen", label: "Full Kitchen" },
+                        { key: "wifi", label: "Workspace" },
+                        { key: "pool", label: "Balcony" },
+                        { key: "pool", label: "Infinity Pool" },
+                        { key: "gym", label: "24/7 Gym" },
                       ].map(({ key, label }) => {
                         const active = selectedAmenities.includes(key);
                         return (
                           <button
-                            key={key}
-                            onClick={() =>
-                              setSelectedAmenities((prev) =>
-                                active ? prev.filter((a) => a !== key) : [...prev, key]
-                              )
-                            }
-                            className={`py-1.5 px-2 border rounded-xl text-[10px] font-semibold transition text-left ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+                            key={label}
+                            onClick={() => setSelectedAmenities((prev) =>
+                              active ? prev.filter((a) => a !== key) : [...prev, key]
+                            )}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
+                              active
+                                ? "bg-[#0c2614] text-white border-[#0c2614]"
+                                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                            }`}
                           >
                             {label}
                           </button>
@@ -3161,37 +3342,22 @@ export default function TravellerDashboard() {
                   </div>
                 )}
 
-                {/* Cancellation policy */}
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Cancellation</label>
-                  <select
-                    value={selectedCancellation}
-                    onChange={(e) => setSelectedCancellation(e.target.value)}
-                    className="w-full bg-[#F8FAFC] border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none"
-                  >
-                    <option value="">Any Policy</option>
-                    <option value="flexible">Flexible</option>
-                    <option value="moderate">Moderate</option>
-                    <option value="strict">Strict</option>
-                  </select>
-                </div>
-
-                {/* Car-specific filters */}
+                {/* Car transmission */}
                 {searchCategory === "car" && (
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Transmission</label>
-                    <div className="flex gap-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Transmission</label>
+                    <div className="flex gap-2 pt-0.5">
                       {["automatic", "manual"].map((t) => {
                         const active = selectedAmenities.includes(t);
                         return (
                           <button
                             key={t}
-                            onClick={() =>
-                              setSelectedAmenities((prev) =>
-                                active ? prev.filter((a) => a !== t) : [...prev, t]
-                              )
-                            }
-                            className={`flex-1 py-1.5 border rounded-xl text-xs font-semibold capitalize transition ${active ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"}`}
+                            onClick={() => setSelectedAmenities((prev) =>
+                              active ? prev.filter((a) => a !== t) : [...prev, t]
+                            )}
+                            className={`flex-1 py-2 border rounded-xl text-xs font-semibold capitalize transition ${
+                              active ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                            }`}
                           >
                             {t}
                           </button>
@@ -3200,99 +3366,286 @@ export default function TravellerDashboard() {
                     </div>
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Middle Listings Cards Feed (5 Cols) */}
-            <div className="lg:col-span-5 space-y-5">
-              {/* Result header */}
-              {!searching && listings.length > 0 && (
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span className="font-semibold">
-                    {listings.length}{totalCount > listings.length ? ` of ${totalCount}` : ""} {searchCategory}s found
-                  </span>
-                  {(showInstantOnly || selectedAmenities.length > 0 || selectedRating || priceMin > 0 || priceMax < 499999) && (
-                    <span className="text-[#1D8D2B] font-bold">Filters active</span>
-                  )}
-                </div>
-              )}
+                {/* Min Rating */}
+                {searchCategory !== "car" && (
+                  <div className="space-y-2">
+                    <label className="block text-xs font-semibold text-slate-700">Min. Rating</label>
+                    <div className="flex gap-2 pt-0.5">
+                      {[3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          onClick={() => setSelectedRating(star === selectedRating ? null : star)}
+                          className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${
+                            star === selectedRating ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                          }`}
+                        >
+                          ★ {star}+
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-              {searching ? (
-                /* Skeleton loading state */
-                <div className="grid grid-cols-1 gap-4">
-                  {[1, 2, 3].map((n) => (
-                    <div key={n} className="animate-pulse bg-white border border-slate-100 rounded-3xl overflow-hidden flex shadow-sm">
-                      <div className="w-2/5 bg-slate-200 min-h-[140px]" />
-                      <div className="flex-1 p-5 space-y-3">
-                        <div className="h-2.5 bg-slate-200 rounded w-1/4" />
-                        <div className="h-4 bg-slate-200 rounded w-3/4" />
-                        <div className="h-3 bg-slate-200 rounded w-1/2" />
-                        <div className="h-3 bg-slate-200 rounded w-2/3 mt-2" />
-                        <div className="flex justify-between pt-2 border-t border-slate-100 mt-2">
-                          <div className="h-5 bg-slate-200 rounded w-24" />
-                          <div className="h-5 bg-slate-200 rounded w-16" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : listings.length === 0 ? (
-                <div className="py-20 flex flex-col items-center gap-4 bg-white border border-slate-200 rounded-3xl px-6 text-center shadow-sm">
-                  <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl">🔍</div>
-                  {searchError && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-xs text-red-600 font-semibold max-w-xs">
-                      {searchError}
-                    </div>
-                  )}
+                {/* Instant Book */}
+                <div className="flex items-center justify-between py-1">
                   <div>
-                    <p className="text-slate-800 font-bold text-lg font-serif">No {searchCategory}s found</p>
-                    <p className="text-slate-400 text-sm mt-1 max-w-sm">
-                      Try removing some filters or searching a broader area.
-                    </p>
+                    <p className="text-xs font-semibold text-slate-700">⚡ Instant Book</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">No approval needed</p>
                   </div>
                   <button
-                    onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-                    className="mt-2 px-6 py-2.5 bg-[#0c2614] text-white text-xs font-bold rounded-xl uppercase tracking-wider hover:bg-[#081b0d] transition"
+                    onClick={() => setShowInstantOnly((v) => !v)}
+                    className={`relative w-10 h-5 rounded-full transition-colors ${showInstantOnly ? "bg-[#0c2614]" : "bg-slate-200"}`}
                   >
-                    Try a Different Search
+                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInstantOnly ? "translate-x-5" : ""}`} />
                   </button>
                 </div>
-              ) : (
-                <>
-                  <div className="grid grid-cols-1 gap-4">
-                    {listings.map((l) => (
+
+                {/* Apply Filters button */}
+                <button
+                  onClick={() => handleSearch()}
+                  className="w-full py-3 bg-[#0c2614] text-white text-sm font-semibold rounded-xl hover:bg-[#1D8D2B] transition shadow-sm"
+                >
+                  Apply Filters
+                </button>
+
+                {/* Reset */}
+                <button
+                  onClick={() => {
+                    setPriceMin(0); setPriceMax(500000); setSelectedRating(null);
+                    setSelectedCancellation(""); setSortBy("distance_asc");
+                    setSelectedAmenities([]); setShowInstantOnly(false);
+                    setFilterBedrooms(null); setFilterBathrooms(null); setFilterPropertyTypes([]);
+                  }}
+                  className="w-full text-xs font-bold text-slate-400 hover:text-slate-700 transition"
+                >
+                  Reset all filters
+                </button>
+              </div>
+            </aside>
+
+            {/* ── RIGHT CONTENT AREA ── */}
+            <div className="flex-1 overflow-y-auto min-w-0">
+
+              {/* Mobile filter + sort bar */}
+              <div className="lg:hidden flex items-center gap-2 px-4 pt-4">
+                <button
+                  onClick={() => setShowFiltersDrawer(true)}
+                  className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm hover:border-slate-400 transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+                  </svg>
+                  Filters
+                  {(showInstantOnly || selectedAmenities.length > 0 || !!selectedRating || priceMin > 0 || priceMax < 499999) && (
+                    <span className="w-2 h-2 rounded-full bg-[#E31C5F] inline-block" />
+                  )}
+                </button>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 focus:outline-none shadow-sm"
+                >
+                  <option value="distance_asc">Nearest First</option>
+                  <option value="price_asc">Price: Low → High</option>
+                  <option value="price_desc">Price: High → Low</option>
+                  <option value="rating_desc">Best Rated</option>
+                  <option value="popularity_desc">Most Popular</option>
+                </select>
+              </div>
+
+              {/* Results header */}
+              <div className="px-6 lg:px-8 pt-6 pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-2xl font-bold text-slate-900">
+                      {searching
+                        ? "Searching..."
+                        : searchDestination.trim()
+                          ? `${totalCount > 0 ? totalCount : displayedListings.length} result${(totalCount > 0 ? totalCount : displayedListings.length) !== 1 ? "s" : ""} for "${searchDestination.trim()}"`
+                          : `Found ${totalCount > 0 ? totalCount : displayedListings.length} Properties`}
+                    </h1>
+                    <p className="text-sm text-slate-500 mt-0.5">
+                      {searchDestination.trim()
+                        ? `${searchCategory === "car" ? "Car rentals" : searchCategory === "hotel" ? "Hotels" : "Apartments"} matching your search`
+                        : `Browse ${searchCategory === "car" ? "car rentals" : searchCategory + "s"} worldwide`}
+                    </p>
+                  </div>
+                  <div className="hidden lg:flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sort By</span>
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                      className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none shadow-sm"
+                    >
+                      <option value="distance_asc">Nearest First</option>
+                      <option value="price_asc">Price: Low to High</option>
+                      <option value="price_desc">Price: High to Low</option>
+                      <option value="rating_desc">Best Rated</option>
+                      <option value="popularity_desc">Popular</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Listings content */}
+              <div className="px-6 lg:px-8 pb-10">
+                {searching ? (
+                  <div className="space-y-4">
+                    {[1, 2, 3].map((n) => (
+                      <div key={n} className="animate-pulse bg-white border border-slate-100 rounded-2xl overflow-hidden flex shadow-sm" style={{ minHeight: 190 }}>
+                        <div className="w-[42%] bg-slate-200 shrink-0" />
+                        <div className="flex-1 p-5 space-y-3">
+                          <div className="h-2.5 bg-slate-200 rounded w-1/4" />
+                          <div className="h-5 bg-slate-200 rounded w-3/4" />
+                          <div className="h-3 bg-slate-200 rounded w-1/2" />
+                          <div className="flex gap-4 mt-1">
+                            <div className="h-3 bg-slate-200 rounded w-16" />
+                            <div className="h-3 bg-slate-200 rounded w-16" />
+                            <div className="h-3 bg-slate-200 rounded w-16" />
+                          </div>
+                          <div className="flex justify-between items-end pt-4 border-t border-slate-100 mt-4">
+                            <div className="h-7 bg-slate-200 rounded w-28" />
+                            <div className="h-9 bg-slate-200 rounded w-32" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : displayedListings.length === 0 ? (
+                  <div className="py-20 flex flex-col items-center gap-4 bg-white border border-slate-200 rounded-3xl px-6 text-center shadow-sm">
+                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-3xl">🔍</div>
+                    {searchError && (
+                      <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2 text-xs text-red-600 font-semibold max-w-xs">
+                        {searchError}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-slate-800 font-bold text-lg">
+                        {searchDestination.trim()
+                          ? `No results found for "${searchDestination.trim()}"`
+                          : `No ${searchCategory}s found`}
+                      </p>
+                      <p className="text-slate-400 text-sm mt-1 max-w-sm">
+                        {searchDestination.trim()
+                          ? "No listings match your search. Try a different location, property name, or search term."
+                          : "Try adjusting your filters or searching a broader location."}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
+                      className="mt-2 px-6 py-2.5 bg-[#0c2614] text-white text-xs font-bold rounded-xl uppercase tracking-wider hover:bg-[#081b0d] transition"
+                    >
+                      Try a Different Search
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {/* First featured card */}
+                    {displayedListings[0] && (
                       <ListingCard
-                        key={l.id}
-                        listing={l}
+                        listing={displayedListings[0]}
                         onSelect={handleSelectListing}
                         hoveredId={mapHoveredId}
                         onHover={setMapHoveredId}
+                        variant="featured"
+                        promotionBadge={promotionBadge}
+                        activePromotion={activePromotion}
+                        isFavourited={isFavourited(displayedListings[0].id)}
+                        onToggleFavourite={handleToggleFavourite}
                       />
-                    ))}
-                  </div>
-                  {listings.length < totalCount && (
-                    <button
-                      onClick={loadMoreListings}
-                      disabled={loadingMore}
-                      className="w-full py-3 border-2 border-[#1D8D2B] text-[#1D8D2B] text-sm font-bold rounded-2xl hover:bg-[#0c2614] hover:text-white transition disabled:opacity-50"
-                    >
-                      {loadingMore ? "Loading..." : `Load More (${totalCount - listings.length} remaining)`}
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
+                    )}
 
-            {/* Real Leaflet map (4 Cols) — hidden on mobile */}
-            <div className="lg:col-span-4 hidden lg:block">
-              <div className="sticky top-28 rounded-3xl overflow-hidden aspect-[4/5] border border-slate-200 shadow-md">
-                <MapView
-                  listings={listings}
-                  hoveredId={mapHoveredId}
-                  onHover={setMapHoveredId}
-                  onSelect={handleSelectListing}
-                  searchDestination={searchDestination}
-                />
+                    {/* Activity promotion banner — non-dismissable, driven by backend (PRD §6.4) */}
+                    {activePromotion && activePromotion.activity === searchCategory && isPromotionValid(activePromotion) && (
+                      <ActivityPromoBanner
+                        activePromotion={activePromotion}
+                      />
+                    )}
+
+                    {/* Personal voucher banner — dismissable, shown only to authenticated users with wallet vouchers (PRD §6.2) */}
+                    {hasAuthToken && walletVouchers.length > 0 && (
+                      <PersonalVoucherBanner
+                        vouchers={walletVouchers.map((v) => ({
+                          id: v.id,
+                          code: v.code,
+                          description: v.description,
+                          discountAmount: v.discountValue,
+                          validUntil: v.validUntil,
+                        }))}
+                        voucherApplied={voucherApplied}
+                        voucherDiscount={voucherDiscount}
+                        currency={detailListing?.currency ?? "KES"}
+                        dismissed={voucherBannerDismissed}
+                        pendingCode={pendingVoucherCode}
+                        onDismiss={() => setVoucherBannerDismissed(true)}
+                        onApply={(code) => {
+                          setPendingVoucherCode(code);
+                          setVoucherCode(code);
+                        }}
+                      />
+                    )}
+
+                    {/* Cards 2 and 3 as featured */}
+                    {displayedListings[1] && (
+                      <ListingCard
+                        listing={displayedListings[1]}
+                        onSelect={handleSelectListing}
+                        hoveredId={mapHoveredId}
+                        onHover={setMapHoveredId}
+                        variant="featured"
+                        promotionBadge={promotionBadge}
+                        activePromotion={activePromotion}
+                        isFavourited={isFavourited(displayedListings[1].id)}
+                        onToggleFavourite={handleToggleFavourite}
+                      />
+                    )}
+                    {displayedListings[2] && (
+                      <ListingCard
+                        listing={displayedListings[2]}
+                        onSelect={handleSelectListing}
+                        hoveredId={mapHoveredId}
+                        onHover={setMapHoveredId}
+                        variant="featured"
+                        promotionBadge={promotionBadge}
+                        activePromotion={activePromotion}
+                        isFavourited={isFavourited(displayedListings[2].id)}
+                        onToggleFavourite={handleToggleFavourite}
+                      />
+                    )}
+
+                    {/* Remaining cards in 2-column compact grid */}
+                    {displayedListings.length > 3 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        {displayedListings.slice(3).map((l) => (
+                          <ListingCard
+                            key={l.id}
+                            listing={l}
+                            onSelect={handleSelectListing}
+                            hoveredId={mapHoveredId}
+                            onHover={setMapHoveredId}
+                            variant="compact"
+                            promotionBadge={promotionBadge}
+                            activePromotion={activePromotion}
+                            isFavourited={isFavourited(l.id)}
+                            onToggleFavourite={handleToggleFavourite}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Load More */}
+                    {listings.length < totalCount && (
+                      <button
+                        onClick={loadMoreListings}
+                        disabled={loadingMore}
+                        className="w-full py-3 border-2 border-[#1D8D2B] text-[#1D8D2B] text-sm font-bold rounded-2xl hover:bg-[#0c2614] hover:text-white transition disabled:opacity-50"
+                      >
+                        {loadingMore ? "Loading..." : `Load More (${totalCount - listings.length} remaining)`}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -3423,83 +3776,6 @@ export default function TravellerDashboard() {
                       cancellingId={cancellingId}
                     />
 
-                    {/* Leave Review — only for completed bookings not yet reviewed */}
-                    {b.status === "completed" && !reviewedBookingIds.includes(b.id) && (
-                      reviewingBookingId === b.id ? (
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-bold text-slate-800">Leave a Review</p>
-                            <button onClick={() => setReviewingBookingId(null)} className="text-slate-400 hover:text-slate-600">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                          </div>
-
-                          {/* Star rating */}
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <button
-                                key={star}
-                                type="button"
-                                onClick={() => setReviewRating(star)}
-                                className={`text-2xl transition-transform hover:scale-110 ${star <= reviewRating ? "text-amber-400" : "text-slate-200"}`}
-                              >
-                                ★
-                              </button>
-                            ))}
-                            <span className="ml-2 text-xs font-semibold text-slate-500">
-                              {["", "Poor", "Fair", "Good", "Very Good", "Excellent"][reviewRating]}
-                            </span>
-                          </div>
-
-                          <input
-                            type="text"
-                            placeholder="Review title (optional)"
-                            value={reviewTitle}
-                            onChange={(e) => setReviewTitle(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]"
-                          />
-                          <textarea
-                            placeholder="Share your experience…"
-                            value={reviewBody}
-                            onChange={(e) => setReviewBody(e.target.value)}
-                            rows={3}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B] resize-none"
-                          />
-
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setReviewingBookingId(null)}
-                              className="flex-1 py-2.5 border border-slate-200 text-sm font-semibold text-slate-600 rounded-xl hover:bg-slate-50 transition"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => handleSubmitReview(b.id)}
-                              disabled={submittingReview}
-                              className="flex-1 py-2.5 bg-[#0c2614] text-white text-sm font-bold rounded-xl hover:bg-[#081b0d] disabled:opacity-50 transition"
-                            >
-                              {submittingReview ? "Submitting…" : "Submit Review"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => { setReviewingBookingId(b.id); setReviewRating(5); setReviewTitle(""); setReviewBody(""); }}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 border border-amber-200 bg-amber-50 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-100 transition"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                          Leave a Review for {b.listingTitle}
-                        </button>
-                      )
-                    )}
-
-                    {/* Already reviewed badge */}
-                    {b.status === "completed" && reviewedBookingIds.includes(b.id) && (
-                      <div className="flex items-center justify-center gap-2 py-2 text-xs text-emerald-600 font-semibold">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        Review submitted — thank you!
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -3528,8 +3804,9 @@ export default function TravellerDashboard() {
               </button>
             </div>
             <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
+              <TravellerWorkspaceNav orientation="stack" showHome={false} showAvatar={false} className="mb-3" />
               <button
-                onClick={() => { setActiveTab("home"); setSelectedListingId(null); setMobileNavOpen(false); }}
+                onClick={() => { setSelectedListingId(null); setMobileNavOpen(false); router.push("/traveller"); }}
                 className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "home" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
               >
                 Destinations
@@ -3537,7 +3814,11 @@ export default function TravellerDashboard() {
               {(["hotel", "apartment", "car"] as const).map((cat) => (
                 <button
                   key={cat}
-                  onClick={() => { setSearchCategory(cat); setSelectedListingId(null); handleSearch(undefined, cat); setMobileNavOpen(false); }}
+                  onClick={() => {
+                    setSelectedListingId(null);
+                    setMobileNavOpen(false);
+                    router.push(cat === "hotel" ? "/traveller/hotels" : cat === "apartment" ? "/traveller/apartments" : "/traveller/cars");
+                  }}
                   className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "search" && searchCategory === cat ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   {cat === "hotel" ? "Stays" : cat === "apartment" ? "Apartments" : "Car Rentals"}
@@ -3545,7 +3826,7 @@ export default function TravellerDashboard() {
               ))}
               {user && (
                 <button
-                  onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); setMobileNavOpen(false); }}
+                  onClick={() => { setSelectedListingId(null); setMobileNavOpen(false); router.push("/traveller?tab=bookings"); }}
                   className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "bookings" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
                   My Reservations
@@ -3803,6 +4084,37 @@ export default function TravellerDashboard() {
 
 
       {/* footer lives inside the home tab only — no global footer here */}
+
+      {/* ── Auth required modal — shown when guest clicks heart without login ── */}
+      {showFavAuthPrompt && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center">
+            <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto">
+              <svg className="w-7 h-7 text-rose-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-slate-800">Sign in to save to wishlist</h2>
+            <p className="text-slate-500 text-sm leading-relaxed">
+              Create an account or sign in to save listings and access your wishlist from any device.
+            </p>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowFavAuthPrompt(false)}
+                className="flex-1 py-2.5 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition text-sm"
+              >
+                Cancel
+              </button>
+              <Link
+                href="/auth/login"
+                className="flex-1 py-2.5 bg-[#0c2614] text-white font-bold rounded-xl hover:bg-[#1D8D2B] transition text-sm text-center"
+              >
+                Sign In
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

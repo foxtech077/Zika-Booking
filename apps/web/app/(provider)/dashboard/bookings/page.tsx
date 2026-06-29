@@ -11,6 +11,7 @@ import {
     TrendingUp, TrendingDown, MoreVertical
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
+import { cn } from "@/lib/utils";
 import type { ProviderBooking } from "@/types/provider";
 
 // Types
@@ -96,6 +97,33 @@ const formatCurrency = (amount: number, currency: string = "USD") => {
         style: 'currency',
         currency: currency,
     }).format(amount);
+};
+
+const formatGuestName = (fullName?: string) => {
+    if (!fullName) return "Guest";
+    const name = fullName.trim();
+    const parts = name.split(/\s+/);
+    if (parts.length === 1) return parts[0];
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    return `${first} ${(last ?? "").charAt(0)}.`;
+};
+
+const NetCurrency = ({ amount, currency = "USD", className }: { amount: number; currency?: string; className?: string }) => {
+    const formatted = formatCurrency(amount, currency);
+    const tooltipText = "This is your earnings after ZikaBooking's 5% service fee. ZikaBooking retains the remainder.";
+    return (
+        <span
+            className={cn("inline-flex items-center gap-1 group relative cursor-help font-semibold", className)}
+            title={tooltipText}
+        >
+            <span>{formatted}</span>
+            <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 scale-0 rounded-lg bg-slate-950 px-2 py-1.5 text-center text-[11px] font-normal text-white shadow-xl transition-all group-hover:scale-100 origin-bottom">
+                {tooltipText}
+                <span className="absolute top-full left-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-0.5 rotate-45 bg-slate-950" />
+            </span>
+        </span>
+    );
 };
 
 const formatDate = (date?: string | null) => {
@@ -260,22 +288,16 @@ const MobileBookingCard = ({ booking, onViewDetails }: any) => (
             <div className="flex items-center gap-2 mb-1">
                 <User className="w-3 h-3 text-gray-400" />
                 <span className="text-sm font-medium text-gray-900">
-                    {booking.guestFirstName} {booking.guestLastName}
+                    {formatGuestName(`${booking.guestFirstName} ${booking.guestLastName}`)}
                 </span>
             </div>
-            {booking.guestPhone && (
-                <div className="flex items-center gap-2 text-xs text-gray-500">
-                    <Phone className="w-3 h-3" />
-                    <span>{booking.guestPhone}</span>
-                </div>
-            )}
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t border-gray-100">
             <div>
-                <span className="text-xs text-gray-500">Total</span>
+                <span className="text-xs text-gray-500">Net Payout</span>
                 <div className="text-sm font-semibold text-gray-900">
-                    {formatCurrency(booking.totalAmount, booking.currency)}
+                    <NetCurrency amount={booking.providerPayout || booking.totalAmount * 0.95} currency={booking.currency} />
                 </div>
             </div>
             <button
@@ -983,11 +1005,8 @@ export default function BookingsPage() {
                 "Customer",
                 <>
                     <div className="truncate text-sm font-semibold text-slate-950">
-                        {booking.guestFirstName} {booking.guestLastName}
+                        {formatGuestName(`${booking.guestFirstName} ${booking.guestLastName}`)}
                     </div>
-                    {booking.guestPhone && (
-                        <div className="mt-1 truncate text-xs text-slate-500">{booking.guestPhone}</div>
-                    )}
                 </>
             )}
             {renderBookingField(
@@ -1000,7 +1019,9 @@ export default function BookingsPage() {
             )}
             {renderBookingField(
                 "Amount",
-                <div className="text-sm font-semibold text-slate-950">{formatCurrency(booking.totalAmount, booking.currency)}</div>
+                <div className="text-sm font-semibold text-slate-950">
+                    <NetCurrency amount={booking.providerPayout || booking.totalAmount * 0.95} currency={booking.currency} />
+                </div>
             )}
             {renderBookingField(
                 "Payment",
@@ -1255,7 +1276,7 @@ export default function BookingsPage() {
                                                 </div>
                                             </div>
                                             <p className="mt-2 text-sm text-gray-600">
-                                                {selectedBooking.guestFirstName} {selectedBooking.guestLastName}
+                                                {formatGuestName(`${selectedBooking.guestFirstName} ${selectedBooking.guestLastName}`)}
                                             </p>
                                         </div>
                                         <button
@@ -1279,18 +1300,13 @@ export default function BookingsPage() {
                                         <div className="space-y-3">
                                             <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
                                                 <span className="text-sm font-medium text-gray-600">Name</span>
-                                                <span className="text-sm font-semibold text-gray-900">{selectedBooking.guestFirstName} {selectedBooking.guestLastName}</span>
+                                                <span className="text-sm font-semibold text-gray-900">
+                                                    {formatGuestName(`${selectedBooking.guestFirstName} ${selectedBooking.guestLastName}`)}
+                                                </span>
                                             </div>
-                                            <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
-                                                <span className="text-sm font-medium text-gray-600">Email</span>
-                                                <span className="text-sm font-semibold text-gray-900">{selectedBooking.guestEmail}</span>
+                                            <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-500 leading-relaxed border border-slate-100">
+                                                All communication goes through the in-app messaging tool. No guest contact details are shown to protect privacy.
                                             </div>
-                                            {selectedBooking.guestPhone && (
-                                                <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
-                                                    <span className="text-sm font-medium text-gray-600">Phone</span>
-                                                    <span className="text-sm font-semibold text-gray-900">{selectedBooking.guestPhone}</span>
-                                                </div>
-                                            )}
                                         </div>
                                     </div>
 
@@ -1375,9 +1391,9 @@ export default function BookingsPage() {
                                                 </div>
                                             )}
                                             <div className="border-t border-green-200 pt-3 flex items-center justify-between">
-                                                <span className="text-sm font-bold text-gray-900">Total Amount</span>
+                                                <span className="text-sm font-bold text-gray-900">Net Payout</span>
                                                 <span className="text-lg font-bold text-green-600">
-                                                    {formatCurrency(selectedBooking.totalAmount, selectedBooking.currency)}
+                                                    <NetCurrency amount={selectedBooking.providerPayout || selectedBooking.totalAmount * 0.95} currency={selectedBooking.currency} />
                                                 </span>
                                             </div>
                                             {selectedBooking.transactionId && (
