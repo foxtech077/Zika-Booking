@@ -82,8 +82,8 @@ export function TravellerWorkspaceNav({
       badge: unreadCount,
     },
     {
-      href: "/traveller/favourites",
-      label: "Favourites",
+      href: "/traveller/wishlist",
+      label: "Wishlist",
       icon: <Heart className="h-4 w-4" />,
     },
     {

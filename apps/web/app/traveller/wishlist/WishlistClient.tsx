@@ -8,6 +8,7 @@ import { useFavourites } from "@/hooks/useFavourites";
 import ListingCard from "../components/ListingCard";
 import type { PublicListingDetail } from "@/types";
 
+
 type Category = "hotel" | "apartment" | "car";
 const TABS: { key: Category | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -167,7 +168,7 @@ export default function WishlistClient() {
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased">
 
       {/* ── Header ── */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-6 lg:px-8 py-4 flex items-center justify-between">
+      {/* <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-6 lg:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link href="/traveller" className="text-xl font-bold text-[#0c2614] tracking-tight shrink-0">
             Kainook
@@ -186,9 +187,9 @@ export default function WishlistClient() {
               <span className="absolute bottom-0 left-4 right-4 h-0.5 bg-[#0c2614] rounded-full" />
             </Link>
           </nav>
-        </div>
+        </div> */}
 
-        {user && (
+        {/* {user && (
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full py-1.5 px-3 shadow-sm">
             <div className="w-7 h-7 rounded-full bg-[#0c2614] text-white flex items-center justify-center font-bold uppercase text-xs">
               {user.firstName[0]}
@@ -201,7 +202,8 @@ export default function WishlistClient() {
             </div>
           </div>
         )}
-      </header>
+      </header> */}
+      
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
 

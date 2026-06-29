@@ -1083,6 +1083,7 @@ export default function CategoryListingsClient({ category }: Props) {
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased">
 
       {/* ── HEADER ───────────────────────────────────────────── */}
+      {/*
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-6 lg:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-8 lg:gap-10">
           <Link href="/traveller" className="text-xl font-bold text-[#0c2614] tracking-tight shrink-0">
@@ -1158,6 +1159,7 @@ export default function CategoryListingsClient({ category }: Props) {
           )}
         </div>
       </header>
+      */}
 
       {/* ── SEARCH BAR ───────────────────────────────────────── */}
       <div className="bg-white border-b border-slate-100 shadow-sm">

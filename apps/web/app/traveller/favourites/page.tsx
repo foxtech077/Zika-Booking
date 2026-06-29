@@ -6,7 +6,6 @@ import { Heart, ArrowLeft, Search } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 import { fetchFavourites, removeFavourite } from "@/services/traveller";
 import type { FavouriteListing } from "@/services/traveller";
-import { TravellerHeader } from "../components/TravellerHeader";
 import ListingImage from "../components/ListingImage";
 
 const CAT_LABEL: Record<string, string> = {
@@ -72,21 +71,6 @@ export default function FavouritesPage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800">
-      <TravellerHeader
-        activeTab="home"
-        searchCategory="hotel"
-        isLocked={false}
-        lockSecondsLeft={null}
-        onExitLock={() => {}}
-        onDestinations={() => router.push("/traveller")}
-        onHotels={() => router.push("/traveller")}
-        onApartments={() => router.push("/traveller")}
-        onCarRentals={() => router.push("/traveller")}
-        onReservations={() => router.push("/traveller?tab=bookings")}
-        onMobileMenu={() => {}}
-        hasAuthToken={isAuthenticated}
-      />
-
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
         {/* Page header */}
         <div className="flex items-center gap-4 mb-8">
