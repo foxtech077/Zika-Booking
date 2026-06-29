@@ -14,6 +14,8 @@ import {
   RefreshCw,
   Search,
   Send,
+  Shield,
+  Zap,
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { Avatar } from "@/components/ui/Avatar";
@@ -23,8 +25,11 @@ import { Card, SectionHeader } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { cn, formatDateTime, formatRelativeTime } from "@/lib/utils";
 import type { ProviderBooking } from "@/types/provider";
+import { ug, uk, ca } from "date-fns/locale";
+import { s, a } from "framer-motion/client";
+import { email } from "zod/v4";
 
-type SenderType = "provider" | "guest" | "system";
+type SenderType = "provider" | "guest" | "system" | "support_agent";
 
 interface ApiEnvelope<T> {
   data?: T;
@@ -133,6 +138,40 @@ const EMPTY_CONVERSATION_RESULT: ConversationListResult = {
   page: 1,
   limit: CONVERSATION_LIMIT,
 };
+
+// §13.2 — Contact detail patterns to block client-side
+const CONTACT_FILTER_REGEX = new RegExp(
+  [
+    // any phone number (international or local)
+    "(?:\\+?\\d[\\d\\s\\-().]{6,}\\d)",
+    // email addresses
+    "[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}",
+    // http/https/www URLs
+    "(?:https?:\\/\\/|www\\.)[^\\s]+",
+    // bare domain names
+    "[a-zA-Z0-9\\-]+\\.(?:com|co|org|net|io|ke|ug|tz|rw|ng|gh|za|uk|us|ca|au)(?:[\\/?][^\\s]*)?",
+    // @handles
+    "@[a-zA-Z0-9_.]{2,}",
+    // social app names followed by a username
+    "(?:whatsapp|telegram|instagram|facebook|snapchat|tiktok|twitter|signal)\\s*(?:me|@|:)?\\s*[a-zA-Z0-9_.]{2,}",
+    // spelled-out digit sequences (e.g. "zero seven five ...")
+    "(?:zero|one|two|three|four|five|six|seven|eight|nine|oh)[\\s\\-](?:zero|one|two|three|four|five|six|seven|eight|nine|oh)[\\s\\-](?:zero|one|two|three|four|five|six|seven|eight|nine|oh)",
+  ].join("|"),
+  "i"
+);
+
+function containsContactInfo(text: string): boolean {
+  return CONTACT_FILTER_REGEX.test(text);
+}
+
+// §13.3 — Provider quick-reply chips
+const QUICK_REPLIES = [
+  "Check-in instructions",
+  "Parking details",
+  "WiFi password",
+  "We'll be ready for you",
+  "Unfortunately unavailable",
+];
 
 function unwrapData<T>(payload: ApiEnvelope<T> | T): T {
   if (payload && typeof payload === "object" && "data" in payload && payload.data) {
@@ -389,6 +428,17 @@ export default function MessagingPage() {
   const handleSend = () => {
     const body = messageText.trim();
     if (!activeConversationId || !body || sendMutation.isPending) return;
+
+    // §13.2 — Client-side contact info guard
+    if (containsContactInfo(body)) {
+      setNotice({
+        type: "error",
+        text: "Your message contains contact information. ZikaBooking requires all communication to stay in-app to protect both parties.",
+      });
+      // Preserve text in input — do NOT clear
+      return;
+    }
+
     sendMutation.mutate({ conversationId: activeConversationId, body });
   };
 
@@ -397,6 +447,11 @@ export default function MessagingPage() {
       event.preventDefault();
       handleSend();
     }
+  };
+
+  const handleQuickReply = (text: string) => {
+    setMessageText(text);
+    setNotice(null);
   };
 
   return (
@@ -522,9 +577,19 @@ export default function MessagingPage() {
                                 </span>
                               )}
                             </div>
-                            {conversation.bookingId && (
-                              <p className={cn("mt-1 text-[11px] font-medium", isActive ? "text-slate-300" : "text-slate-400")}>Booking #{conversation.bookingId}</p>
+                            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            {conversation.bookingId ? (
+                              <p className={cn("text-[11px] font-medium", isActive ? "text-slate-300" : "text-slate-400")}>Booking #{conversation.bookingId}</p>
+                            ) : (
+                              <span className={cn("text-[10px] font-semibold rounded px-1.5 py-0.5", isActive ? "bg-white/10 text-slate-200" : "bg-blue-50 text-blue-600")}>Pre-booking enquiry</span>
                             )}
+                            {conversation.status === "archived" && (
+                              <span className={cn("text-[10px] font-semibold rounded px-1.5 py-0.5", isActive ? "bg-white/10 text-slate-200" : "bg-slate-100 text-slate-500")}>Archived</span>
+                            )}
+                            {conversation.status === "flagged" && (
+                              <span className={cn("text-[10px] font-semibold rounded px-1.5 py-0.5", isActive ? "bg-red-900/40 text-red-200" : "bg-red-50 text-red-600")}>Flagged</span>
+                            )}
+                          </div>
                           </div>
                         </div>
                       </button>
@@ -603,8 +668,39 @@ export default function MessagingPage() {
                   <div className="space-y-4">
                     {messages.map((message, index) => {
                       const isProvider = message.senderType === "provider";
+                      const isSupport = message.senderType === "support_agent";
+                      const isSystem = message.senderType === "system";
                       const previous = messages[index - 1];
                       const grouped = previous?.senderType === message.senderType;
+
+                      // §13.5 — Support agent message
+                      if (isSupport) {
+                        return (
+                          <div key={message.id} className="flex justify-center">
+                            <div className="max-w-[82%] rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 shadow-sm">
+                              <div className="mb-1.5 flex items-center gap-1.5">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white">
+                                  <Shield className="h-3 w-3" />
+                                </span>
+                                <span className="text-[11px] font-bold uppercase tracking-wide text-indigo-700">ZikaBooking Support</span>
+                              </div>
+                              <p className="text-sm leading-6 text-indigo-900">{message.body}</p>
+                              <p className="mt-1 text-[11px] text-indigo-400">{formatDateTime(message.createdAt)}</p>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // §13.3 — System message (booking confirmation card etc.)
+                      if (isSystem) {
+                        return (
+                          <div key={message.id} className="flex justify-center">
+                            <div className="rounded-xl border border-slate-200 bg-slate-100 px-4 py-2 text-center text-xs text-slate-500 shadow-sm">
+                              {message.body}
+                            </div>
+                          </div>
+                        );
+                      }
 
                       return (
                         <div key={message.id} className={cn("flex gap-2", isProvider && "flex-row-reverse")}>
@@ -619,8 +715,7 @@ export default function MessagingPage() {
                                 "rounded-2xl px-4 py-2.5 text-sm leading-6 shadow-sm",
                                 isProvider
                                   ? "rounded-tr-md bg-slate-900 text-white"
-                                  : "rounded-tl-md border border-slate-200 bg-slate-50 text-slate-950",
-                                message.senderType === "system" && "bg-slate-200 text-slate-600"
+                                  : "rounded-tl-md border border-slate-200 bg-slate-50 text-slate-950"
                               )}
                             >
                               {message.body}
@@ -642,10 +737,30 @@ export default function MessagingPage() {
 
               {activeConversation.status !== "closed" && (
                 <div className="sticky bottom-0 border-t border-border bg-white p-3">
+                  {/* §13.3 — Quick-reply chips */}
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400 mr-0.5">
+                      <Zap className="h-3 w-3" /> Quick replies:
+                    </span>
+                    {QUICK_REPLIES.map((reply) => (
+                      <button
+                        key={reply}
+                        type="button"
+                        onClick={() => handleQuickReply(reply)}
+                        className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] font-medium text-slate-600 transition-colors hover:border-primary-400 hover:bg-primary-50 hover:text-primary active:scale-95"
+                      >
+                        {reply}
+                      </button>
+                    ))}
+                  </div>
                   <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
                     <textarea
                       value={messageText}
-                      onChange={(event) => setMessageText(event.target.value)}
+                      onChange={(event) => {
+                        setMessageText(event.target.value);
+                        // Clear contact-filter error when user edits the text
+                        if (notice?.type === "error") setNotice(null);
+                      }}
                       onKeyDown={handleKeyDown}
                       rows={2}
                       maxLength={MAX_MESSAGE_LENGTH}
