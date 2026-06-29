@@ -702,30 +702,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Greeting header ── */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Good morning, {firstName} 👋
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">Here is your provider performance overview.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !isLoading} onClick={() => refetch()}>
-            Refresh
-          </Button>
-          <Link href="/dashboard/listings/new">
-            <Button icon={<Plus />}>Add New Listing</Button>
-          </Link>
-        </div>
-      </div>
-
-      {data.hasError && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Some dashboard APIs did not respond, so available sections are shown with safe fallback data.
-        </div>
-      )}
-
       {/* ── Stat cards ── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => (
