@@ -1368,7 +1368,106 @@ export async function adminListingRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── POST /admin/listings/:id/suspend (UC-2.14) ────────────────────────────
+// PATCH /admin/listings/:id — Update listing fields (Admin)
+app.patch("/admin/listings/:id", {
+  preHandler: [requireAdmin],
+  schema: {
+    tags: ["Admin Listings"],
+    summary: "Update listing fields (admin)",
+    security: [{ bearerAuth: [] }],
+    params: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", description: "Listing ID" },
+      },
+    },
+    body: {
+      type: "object",
+      // Reuse provider patch schema for allowed fields
+      // (same validation as provider PATCH /listings/:id)
+      // The schema is defined inline here for brevity.
+      ...patchListingSchema,
+    },
+    response: {
+      200: ok({ type: "object", properties: { message: { type: "string" }, data: { type: "object" } } }),
+      400: ErrorResponse,
+      401: ErrorResponse,
+      403: ErrorResponse,
+      404: ErrorResponse,
+    },
+  },
+  handler: async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
+    const { id } = req.params as { id: string };
+
+    const parsed = patchListingSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const fields: Record<string, string> = {};
+      for (const e of parsed.error.issues) fields[e.path.join(".")] = e.message;
+      return sendError(reply, 422, "VALIDATION_ERROR", "Invalid listing data.", fields);
+    }
+
+    const {
+      amenities,
+      customAmenities,
+      listingTitle,
+      make,
+      model,
+      year,
+      category,
+      pricePerDay,
+      ...fields
+    } = parsed.data;
+
+    const dbFields: any = { ...fields };
+    if (listingTitle !== undefined) dbFields.name = listingTitle;
+    if (make !== undefined) dbFields.carMake = make;
+    if (model !== undefined) dbFields.carModel = model;
+    if (year !== undefined) dbFields.carYear = year;
+    if (pricePerDay !== undefined) dbFields.pricePerDay = pricePerDay;
+    if (category !== undefined) dbFields.carCategory = category;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.listing.update({ where: { id }, data: dbFields });
+
+      if (amenities !== undefined) {
+        await tx.listingAmenity.deleteMany({ where: { listingId: id } });
+        const flat: string[] = [];
+        for (const [cat, keys] of Object.entries(amenities)) {
+          if (Array.isArray(keys)) {
+            for (const k of keys) flat.push(`${cat}:${k}`);
+          }
+        }
+        if (flat.length > 0) {
+          await tx.listingAmenity.createMany({ data: flat.map((key) => ({ listingId: id, amenityKey: key })) });
+        }
+      }
+
+      if (customAmenities !== undefined) {
+        await tx.listingCustomAmenity.deleteMany({ where: { listingId: id } });
+        if (customAmenities.length > 0) {
+          await tx.listingCustomAmenity.createMany({ data: customAmenities.map((label) => ({ listingId: id, label })) });
+        }
+      }
+    });
+
+    const updated = await prisma.listing.findUnique({
+      where: { id },
+      include: {
+        photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
+        documents: { where: { replacedAt: null } },
+        amenities: true,
+        customAmenities: true,
+      },
+    });
+    if (!updated) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    const formatted = { ...updated, photos: await withSignedPhotos(updated.photos) };
+    return sendSuccess(reply, 200, { message: "Listing updated.", data: formatted });
+  },
+});
+// ── POST /admin/listings/:id/suspend (UC-2.14) ────────────────────────────
   app.post("/admin/listings/:id/suspend", {
     preHandler: [requireAdmin],
     schema: {
