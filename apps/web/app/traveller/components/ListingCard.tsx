@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import { useRouter } from "next/navigation";
 import type { PublicListingDetail } from "@/types";
 import ListingImage from "./ListingImage";
 

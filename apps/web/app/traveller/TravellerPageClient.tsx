@@ -1,11 +1,16 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
+import { fetchFavourites, fetchRecentlyViewed } from "@/services/traveller";
 import ListingImage from "./components/ListingImage";
+import { TravellerWorkspaceNav } from "./components/TravellerWorkspaceNav";
+import { TravellerHeader } from "./components/TravellerHeader";
+import { MessageProviderButton } from "./components/MessageProviderButton";
+import { PublicReviewsSection } from "./components/PublicReviewsSection";
+import { GiveReviewEntry } from "./components/GiveReviewEntry";
 import { useAuthStore } from "@/stores/auth";
 import { useFavourites } from "@/hooks/useFavourites";
 import ListingCard from "./components/ListingCard";
@@ -194,6 +199,7 @@ export default function TravellerDashboard() {
   const [showFavAuthPrompt, setShowFavAuthPrompt] = useState(false);
 
   const [recentlyViewed, setRecentlyViewed] = useState<PublicListingDetail[]>([]);
+  const [favouritedIds, setFavouritedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<"home" | "search" | "bookings">("home");
 
   // Search Context
@@ -365,14 +371,6 @@ export default function TravellerDashboard() {
   const [showQuickDrop, setShowQuickDrop] = useState(false);
   const [loadingQuickDrop, setLoadingQuickDrop] = useState(false);
 
-  // Review form state (My Bookings → Leave Review for completed bookings)
-  const [reviewingBookingId, setReviewingBookingId] = useState<string | null>(null);
-  const [reviewRating, setReviewRating] = useState(5);
-  const [reviewTitle, setReviewTitle] = useState("");
-  const [reviewBody, setReviewBody] = useState("");
-  const [submittingReview, setSubmittingReview] = useState(false);
-  const [reviewedBookingIds, setReviewedBookingIds] = useState<string[]>([]);
-
   // My Bookings history context
   const [bookingsList, setBookingsList] = useState<Booking[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
@@ -440,14 +438,46 @@ export default function TravellerDashboard() {
     }
   }, [_hasHydrated, user?.userType]);
 
-  // Load Recently Viewed from localStorage on mount
+  // Load recently-viewed and favourites from backend on mount (when authenticated)
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Clear legacy dummy data from local storage
       localStorage.removeItem("zika:recently_viewed");
-      setRecentlyViewed([]);
     }
-  }, []);
+    if (!isAuthenticated) return;
+    fetchRecentlyViewed().then((items) => {
+      setRecentlyViewed(
+        items.slice(0, 4).map((v) => ({
+          id: v.listing.id,
+          providerId: "",
+          category: v.listing.category as "hotel" | "apartment" | "car",
+          name: v.listing.title,
+          pricePerNight: v.listing.nightlyRate ?? 0,
+          currency: v.listing.currency ?? "KES",
+          primaryPhotoUrl: v.listing.primaryPhotoUrl ?? null,
+          photos: [],
+          amenities: [],
+          customAmenities: [],
+          description: "",
+          address: v.listing.city ?? "",
+          lat: 0,
+          lng: 0,
+          town: v.listing.city ?? "",
+          country: "",
+          minStayNights: 1,
+          checkinTime: "",
+          checkoutTime: "",
+          cancellationPolicy: "flexible" as const,
+          isFavourited: false,
+          isAccredited: false,
+          longStayDiscountEnabled: false,
+          instantBooking: false,
+        }))
+      );
+    }).catch(() => {});
+    fetchFavourites().then((res) => {
+      setFavouritedIds(new Set(res.favourites.map((f) => f.listingId)));
+    }).catch(() => {});
+  }, [isAuthenticated]);
 
 
   function mapSearchResult(l: any): PublicListingDetail {
@@ -562,11 +592,16 @@ export default function TravellerDashboard() {
   function addToRecentlyViewed(item: PublicListingDetail) {
     setRecentlyViewed((prev) => {
       const filtered = prev.filter((x) => x.id !== item.id);
-      const updated = [item, ...filtered].slice(0, 4);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("zika:recently_viewed", JSON.stringify(updated));
-      }
-      return updated;
+      return [item, ...filtered].slice(0, 4);
+    });
+  }
+
+  function handleFavToggle(listingId: string, isFavourited: boolean) {
+    setFavouritedIds((prev) => {
+      const next = new Set(prev);
+      if (isFavourited) next.add(listingId);
+      else next.delete(listingId);
+      return next;
     });
   }
 
@@ -1671,34 +1706,6 @@ export default function TravellerDashboard() {
     }
   }
 
-  // POST /reviews — guest submits a review for a completed booking
-  async function handleSubmitReview(bookingId: string) {
-    if (!reviewRating) return;
-    setSubmittingReview(true);
-    try {
-      const res = await listingApi.post<any>("/reviews", {
-        bookingId,
-        rating: reviewRating,
-        title: reviewTitle.trim() || undefined,
-        body: reviewBody.trim() || undefined,
-      });
-      if (res.data.success) {
-        setReviewedBookingIds((prev) => [...prev, bookingId]);
-        setReviewingBookingId(null);
-        setReviewRating(5);
-        setReviewTitle("");
-        setReviewBody("");
-      } else {
-        alert(res.data?.error?.message ?? "Review submission failed. Please try again.");
-      }
-    } catch (err: any) {
-      const msg = err?.response?.data?.error?.message ?? err?.message ?? "Review submission failed.";
-      alert(msg);
-    } finally {
-      setSubmittingReview(false);
-    }
-  }
-
   function handleLogout() {
     api.post("/auth/logout").catch(() => { });  // invalidate server-side refresh token
     clearSession();                            // clear Zustand store + sessionStorage
@@ -1723,120 +1730,20 @@ export default function TravellerDashboard() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans selection:bg-[#0c2614] selection:text-white antialiased">
       {/* Header */}
-      {lockToken ? (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-8 py-4 flex items-center justify-between">
-          <button
-            onClick={() => { setSelectedListingId(null); setDetailListing(null); abandonLock(); }}
-            className="text-xl font-serif font-bold text-[#0c2614] tracking-tight hover:opacity-80 transition"
-          >
-            Kainook
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="bg-slate-50 border border-slate-200 px-4 py-1.5 rounded-full text-xs font-mono tracking-wider flex items-center gap-2 text-[#0c2614]">
-              <svg className="w-3.5 h-3.5 animate-pulse" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {Math.floor((secondsLeft || 0) / 60).toString().padStart(2, "0")}:{((secondsLeft || 0) % 60).toString().padStart(2, "0")}
-            </div>
-            <button onClick={handleLogout} className="text-xs font-medium text-slate-400 hover:text-red-500 transition">
-              Logout
-            </button>
-          </div>
-        </header>
-      ) : (
-        <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 px-6 lg:px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-8 lg:gap-10">
-            <Link
-              href="/traveller"
-              onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
-              className="text-xl font-bold text-[#0c2614] tracking-tight shrink-0"
-            >
-              Kainook
-            </Link>
-            <nav className="hidden md:flex items-center gap-1">
-              {([
-                { label: "Hotels", cat: "hotel" as const, href: "/traveller/hotels" },
-                { label: "Apartments", cat: "apartment" as const, href: "/traveller/apartments" },
-                { label: "Cars", cat: "car" as const, href: "/traveller/cars" },
-              ] as const).map(({ label, href }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    className="relative px-4 py-2 text-sm font-medium tracking-wide transition-colors text-slate-500 hover:text-[#0c2614]"
-                  >
-                    {label}
-                  </Link>
-              ))}
-              {user && (
-                <button
-                  onClick={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); }}
-                  className={`relative px-4 py-2 text-sm font-medium tracking-wide transition-colors ${
-                    activeTab === "bookings" ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]"
-                  }`}
-                >
-                  My Reservations
-                  {activeTab === "bookings" && (
-                    <span className="absolute bottom-0 left-4 right-4 h-0.5 bg-[#0c2614] rounded-full" />
-                  )}
-                </button>
-              )}
-              {user && (
-                <Link
-                  href="/traveller/wishlist"
-                  className="relative px-4 py-2 text-sm font-medium tracking-wide transition-colors text-slate-500 hover:text-[#0c2614] flex items-center gap-1.5"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                  </svg>
-                  Wishlist
-                </Link>
-              )}
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-3 lg:gap-4">
-            {/* Mobile menu */}
-            <button onClick={() => setMobileNavOpen(true)} className="md:hidden flex items-center justify-center w-9 h-9 rounded-full border border-slate-200 hover:bg-slate-50 transition" aria-label="Open menu">
-              <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
-            </button>
-
-            {!hasAuthToken && (
-              <>
-                <button
-                  onClick={() => { setActiveTab("bookings"); fetchGuestBookings(); }}
-                  className="hidden sm:block text-sm font-medium text-slate-500 hover:text-[#0c2614] transition"
-                >
-                  Join Loyalty
-                </button>
-                <Link href="/auth/login" className="rounded-full bg-[#0c2614] hover:bg-[#1D8D2B] px-5 py-2 text-sm font-semibold text-white transition shadow-sm">
-                  Sign In
-                </Link>
-              </>
-            )}
-
-            {(user || hasAuthToken) && !user && (
-              <button onClick={handleLogout} className="text-sm font-medium text-slate-400 hover:text-red-500 transition">Logout</button>
-            )}
-
-            {user && (
-              <div className="flex items-center gap-3">
-                <button onClick={handleLogout} className="hidden sm:block text-sm font-medium text-slate-400 hover:text-red-500 transition">
-                  Logout
-                </button>
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full py-1.5 px-3 shadow-sm cursor-pointer hover:shadow-md transition">
-                  <div className="w-7 h-7 rounded-full bg-[#0c2614] text-white flex items-center justify-center font-bold uppercase text-xs">
-                    {user.firstName[0]}
-                  </div>
-                  <div className="hidden sm:block text-left">
-                    <p className="text-xs font-semibold text-slate-800">{user.firstName}</p>
-                    <p className="text-[10px] text-[#1D8D2B] font-bold uppercase tracking-widest">{user.currentTier || "Bronze"}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </header>
-      )}
+      <TravellerHeader
+        activeTab={activeTab}
+        searchCategory={searchCategory}
+        isLocked={!!lockToken}
+        lockSecondsLeft={secondsLeft}
+        onExitLock={() => { setSelectedListingId(null); setDetailListing(null); abandonLock(); }}
+        onDestinations={() => { setActiveTab("home"); setSelectedListingId(null); }}
+        onHotels={() => { setSearchCategory("hotel"); setSelectedListingId(null); handleSearch(undefined, "hotel"); }}
+        onApartments={() => { setSearchCategory("apartment"); setSelectedListingId(null); handleSearch(undefined, "apartment"); }}
+        onCarRentals={() => { setSearchCategory("car"); setSelectedListingId(null); handleSearch(undefined, "car"); }}
+        onReservations={() => { setActiveTab("bookings"); setSelectedListingId(null); fetchGuestBookings(); }}
+        onMobileMenu={() => setMobileNavOpen(true)}
+        hasAuthToken={hasAuthToken}
+      />
 
       {/* Main Layout Area */}
       <main className="min-h-[calc(100vh-76px)]">
@@ -2024,6 +1931,11 @@ export default function TravellerDashboard() {
                         </span>
                       </div>
                     )}
+
+                    <div className="mb-4 space-y-3">
+                      <MessageProviderButton listingId={detailListing.id} />
+                      <GiveReviewEntry listingId={detailListing.id} listingName={detailListing.name} />
+                    </div>
 
                     {!lockToken ? (() => {
                       const isCar = detailListing.category === "car";
@@ -2671,6 +2583,9 @@ export default function TravellerDashboard() {
                     </div>
                   </div>
                 </div>
+                <div className="lg:col-span-12">
+                  <PublicReviewsSection listingId={detailListing.id} />
+                </div>
               </>
             ) : (
               <div className="lg:col-span-12 py-24 text-center text-slate-500">
@@ -2933,15 +2848,15 @@ export default function TravellerDashboard() {
                 <div>
                   <p className="text-[10px] font-semibold text-[#1D8D2B] uppercase tracking-[0.3em] mb-2">Curated Worlds</p>
                   <h2 className="text-3xl md:text-4xl font-serif text-slate-900 leading-snug">
-                    Discover Destinations<br className="hidden sm:block" /> Selected for the<br className="hidden sm:block" /> Discerning Traveler.
+                    Discover Destinations Selected for the<br className="hidden sm:block" /> Discerning Traveler.
                   </h2>
                 </div>
-                <button
+                {/* <button
                   onClick={() => handleSearch(undefined, "hotel")}
                   className="text-sm font-semibold text-[#0c2614] hover:text-[#1D8D2B] transition underline underline-offset-4 shrink-0"
                 >
                   View All Destinations
-                </button>
+                </button> */}
               </div>
 
               {/* Asymmetric grid: 1 large left + 2 stacked right */}
@@ -3040,13 +2955,9 @@ export default function TravellerDashboard() {
                     {featuredListings.slice(0, 8).map((listing) => (
                       <ListingCard
                         key={listing.id}
-                        listing={listing}
+                        listing={{ ...listing, isFavourited: favouritedIds.has(listing.id) }}
                         onSelect={handleSelectListing}
-                        variant="compact"
-                        promotionBadge={promotionBadge}
-                        activePromotion={activePromotion}
-                        isFavourited={isFavourited(listing.id)}
-                        onToggleFavourite={handleToggleFavourite}
+                        onFavToggle={handleFavToggle}
                       />
                     ))}
                   </div>
@@ -3877,83 +3788,6 @@ export default function TravellerDashboard() {
                       cancellingId={cancellingId}
                     />
 
-                    {/* Leave Review — only for completed bookings not yet reviewed */}
-                    {b.status === "completed" && !reviewedBookingIds.includes(b.id) && (
-                      reviewingBookingId === b.id ? (
-                        <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-bold text-slate-800">Leave a Review</p>
-                            <button onClick={() => setReviewingBookingId(null)} className="text-slate-400 hover:text-slate-600">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                          </div>
-
-                          {/* Star rating */}
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <button
-                                key={star}
-                                type="button"
-                                onClick={() => setReviewRating(star)}
-                                className={`text-2xl transition-transform hover:scale-110 ${star <= reviewRating ? "text-amber-400" : "text-slate-200"}`}
-                              >
-                                ★
-                              </button>
-                            ))}
-                            <span className="ml-2 text-xs font-semibold text-slate-500">
-                              {["", "Poor", "Fair", "Good", "Very Good", "Excellent"][reviewRating]}
-                            </span>
-                          </div>
-
-                          <input
-                            type="text"
-                            placeholder="Review title (optional)"
-                            value={reviewTitle}
-                            onChange={(e) => setReviewTitle(e.target.value)}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]"
-                          />
-                          <textarea
-                            placeholder="Share your experience…"
-                            value={reviewBody}
-                            onChange={(e) => setReviewBody(e.target.value)}
-                            rows={3}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B] resize-none"
-                          />
-
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setReviewingBookingId(null)}
-                              className="flex-1 py-2.5 border border-slate-200 text-sm font-semibold text-slate-600 rounded-xl hover:bg-slate-50 transition"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => handleSubmitReview(b.id)}
-                              disabled={submittingReview}
-                              className="flex-1 py-2.5 bg-[#0c2614] text-white text-sm font-bold rounded-xl hover:bg-[#081b0d] disabled:opacity-50 transition"
-                            >
-                              {submittingReview ? "Submitting…" : "Submit Review"}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => { setReviewingBookingId(b.id); setReviewRating(5); setReviewTitle(""); setReviewBody(""); }}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 border border-amber-200 bg-amber-50 text-amber-700 text-xs font-bold rounded-xl hover:bg-amber-100 transition"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                          Leave a Review for {b.listingTitle}
-                        </button>
-                      )
-                    )}
-
-                    {/* Already reviewed badge */}
-                    {b.status === "completed" && reviewedBookingIds.includes(b.id) && (
-                      <div className="flex items-center justify-center gap-2 py-2 text-xs text-emerald-600 font-semibold">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                        Review submitted — thank you!
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -3982,6 +3816,7 @@ export default function TravellerDashboard() {
               </button>
             </div>
             <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
+              <TravellerWorkspaceNav orientation="stack" showHome={false} showAvatar={false} className="mb-3" />
               <button
                 onClick={() => { setActiveTab("home"); setSelectedListingId(null); setMobileNavOpen(false); }}
                 className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "home" ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}

@@ -4,7 +4,7 @@
  * /stripe/connect/refresh
  *
  * Stripe redirects here when the onboarding link has expired
- * (this is the `refresh_url` set in POST /merchant/me/stripe/connect).
+ * (this is the refresh_url set in POST /merchant/me/stripe/connect).
  *
  * What this page does:
  *  1. Calls GET /merchant/me/stripe/connect/refresh to get a fresh URL.
@@ -13,35 +13,86 @@
  */
 
 import { useEffect, useState } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { refreshStripeConnect } from "@/lib/payment-api";
+import {
+  extractApiErrorMessage,
+  getStripeOnboardingUrl,
+  refreshStripeConnect,
+} from "@/lib/payment-api";
 
 type State = "loading" | "error";
+
+let initialRefreshPromise: Promise<string> | null = null;
+
+async function fetchFreshStripeLink(): Promise<string> {
+  const res = await refreshStripeConnect();
+  const onboardingUrl = getStripeOnboardingUrl(res);
+
+  if (!onboardingUrl) {
+    throw new Error("Stripe onboarding URL was missing from the response.");
+  }
+
+  return onboardingUrl;
+}
+
+function fetchFreshStripeLinkOnce(): Promise<string> {
+  if (!initialRefreshPromise) {
+    initialRefreshPromise = fetchFreshStripeLink().finally(() => {
+      initialRefreshPromise = null;
+    });
+  }
+
+  return initialRefreshPromise;
+}
 
 export default function StripeConnectRefreshPage() {
   const [state, setState] = useState<State>("loading");
   const [errorMsg, setErrorMsg] = useState("");
 
-  const doRefresh = async () => {
+  const redirectToFreshLink = async () => {
     setState("loading");
     setErrorMsg("");
+
     try {
-      const res = await refreshStripeConnect();
-      // Redirect the browser to the fresh Stripe onboarding link
-      window.location.href = res.data.onboardingUrl;
-    } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        "Unable to generate a new onboarding link. Please return to Settings and try again.";
-      setErrorMsg(msg);
+      const onboardingUrl = await fetchFreshStripeLink();
+      window.location.replace(onboardingUrl);
+    } catch (error) {
+      setErrorMsg(
+        extractApiErrorMessage(
+          error,
+          "Unable to generate a new onboarding link. Please return to Settings and try again.",
+        ),
+      );
       setState("error");
     }
   };
 
   useEffect(() => {
-    doRefresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const onboardingUrl = await fetchFreshStripeLinkOnce();
+        if (!cancelled) {
+          window.location.replace(onboardingUrl);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMsg(
+            extractApiErrorMessage(
+              error,
+              "Unable to generate a new onboarding link. Please return to Settings and try again.",
+            ),
+          );
+          setState("error");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -50,7 +101,7 @@ export default function StripeConnectRefreshPage() {
         {state === "loading" && (
           <>
             <Loader2 className="mx-auto h-14 w-14 animate-spin text-amber-500" />
-            <p className="text-lg font-semibold text-slate-800">Generating a fresh onboarding link…</p>
+            <p className="text-lg font-semibold text-slate-800">Generating a fresh onboarding link...</p>
             <p className="text-sm text-slate-500">You will be redirected to Stripe in a moment.</p>
           </>
         )}
@@ -61,10 +112,15 @@ export default function StripeConnectRefreshPage() {
             <p className="text-lg font-bold text-slate-900">Link refresh failed</p>
             <p className="text-sm text-slate-500">{errorMsg}</p>
             <div className="flex flex-col gap-3 pt-2">
-              <Button variant="primary" onClick={doRefresh}>
+              <Button variant="primary" onClick={() => void redirectToFreshLink()}>
                 Try Again
               </Button>
-              <Button variant="outline" onClick={() => { window.location.href = "/dashboard/payments/settings"; }}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  window.location.assign("/dashboard/payments/settings");
+                }}
+              >
                 Back to Settings
               </Button>
             </div>
