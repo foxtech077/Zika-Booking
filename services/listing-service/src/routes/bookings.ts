@@ -592,6 +592,24 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         await redis.set(ctxKey, JSON.stringify(ctx), "PX", LOCK_TTL_MS);
 
+        // Schedule reservation timer warning alert (4 minutes after initiation, 1 minute before lock expiry)
+        setTimeout(async () => {
+          try {
+            const activeLock = await redis.get(ctxKey);
+            if (activeLock) {
+              const parsedCtx = JSON.parse(activeLock);
+              fireNotification(parsedCtx.guestId, {
+                type: "reservation_timer",
+                title: "Reservation Expiring Soon! ⏳",
+                body: "Your booking reservation lock will expire in 1 minute. Complete checkout now to secure your dates!",
+                data: { lockToken },
+              });
+            }
+          } catch (err: any) {
+            req.log.error({ err }, "Failed to send reservation timer alert");
+          }
+        }, 240_000);
+
         // ── 9. BILLING (FIXED TYPES) ─────────────────
         const commissionRate = await getCommissionRate(listing.country ?? null);
 

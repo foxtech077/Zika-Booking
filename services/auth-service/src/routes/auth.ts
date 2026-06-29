@@ -1243,7 +1243,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
-      const redirectUri = `${webBaseUrl}/auth/oauth/google/callback`;
+      const redirectUri = `${webBaseUrl}/api/auth/oauth/google/callback`;
       const client = new OAuth2Client({
         clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
         clientSecret: process.env["GOOGLE_CLIENT_SECRET"],

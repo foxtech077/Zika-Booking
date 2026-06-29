@@ -541,6 +541,7 @@ export function PhotosSection({
   uploadProgress,
   onAdd,
   onDelete,
+  onReorder,
   minPhotos = 1,
   maxPhotos = 30,
   error,
@@ -550,6 +551,7 @@ export function PhotosSection({
   uploadProgress?: { current: number; total: number };
   onAdd: () => void;
   onDelete: (id: string) => void;
+  onReorder?: (id: string, direction: "up" | "down") => void;
   minPhotos?: number;
   maxPhotos?: number;
   error?: string;
@@ -632,6 +634,28 @@ export function PhotosSection({
               >
                 <Feather name="trash-2" size={13} color="#fff" />
               </TouchableOpacity>
+              {onReorder && photos.length > 1 && (
+                <View style={fs.reorderBtns}>
+                  {i > 0 && (
+                    <TouchableOpacity
+                      style={fs.reorderBtn}
+                      onPress={() => onReorder(p.id, "up")}
+                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                    >
+                      <Feather name="chevron-left" size={12} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                  {i < photos.length - 1 && (
+                    <TouchableOpacity
+                      style={fs.reorderBtn}
+                      onPress={() => onReorder(p.id, "down")}
+                      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                    >
+                      <Feather name="chevron-right" size={12} color="#fff" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
             </View>
           ))}
         </View>
@@ -1145,6 +1169,23 @@ export const fs = StyleSheet.create({
     height: 26,
     borderRadius: 13,
     backgroundColor: "rgba(0,0,0,0.65)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reorderBtns: {
+    position: "absolute",
+    bottom: 6,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 6,
+  },
+  reorderBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.60)",
     alignItems: "center",
     justifyContent: "center",
   },

@@ -1,107 +1,141 @@
 export const K = {
   colors: {
     // Core brand
-    darkGreen: "#024622",
-    darkGreenDeep: "#012015",
-    darkGreenMid: "#015428",
-    accent: "#1D8D2B",
-    accentLight: "#58B430",
-    accentDim: "#1D8D2B26",
+    darkGreen:      "#024622",
+    darkGreenDeep:  "#011a0d",
+    darkGreenMid:   "#035730",
+    accent:         "#1d9e62",
+    accentLight:    "#3dbd82",
+    accentDim:      "rgba(29,158,98,0.14)",
 
-    // Content backgrounds
-    bgLight: "#F8FAF9",
-    bgCard: "#FFFFFF",
-    bgCardDark: "#015428",
+    // App backgrounds — warm cream, not cold white
+    bgApp:    "#F9F8F6",
+    bgLight:  "#F9F8F6",   // backward-compat alias
+    bgCard:   "#FFFFFF",
+    bgCardDark: "#1a1917",
+    bgSubtle: "#F2F0EC",
+    bgTint:   "#EEFBF4",
 
-    // Glassmorphism on dark
-    glassBg: "rgba(255,255,255,0.08)",
-    glassBorder: "rgba(255,255,255,0.14)",
-    glassInput: "rgba(255,255,255,0.12)",
-    glassInputBorder: "rgba(255,255,255,0.20)",
+    // Glassmorphism on dark surfaces
+    glassBg:          "rgba(255,255,255,0.08)",
+    glassBorder:      "rgba(255,255,255,0.16)",
+    glassInput:       "rgba(255,255,255,0.12)",
+    glassInputBorder: "rgba(255,255,255,0.22)",
 
-    // Text
-    textDark: "#111827",
-    textMid: "#374151",
-    textMuted: "#6B7280",
-    textLight: "#FFFFFF",
+    // Text — warm-tinted neutrals
+    textDark:      "#0c0b09",
+    textMid:       "#2e2c29",
+    textMuted:     "#6b6760",
+    textLight:     "#FFFFFF",
     textLightMuted: "rgba(255,255,255,0.75)",
-    textLightDim: "rgba(255,255,255,0.45)",
+    textLightDim:   "rgba(255,255,255,0.45)",
+    textBrand:     "#024622",
 
-    // Status
-    success: "#1D8D2B",
-    warning: "#F59E0B",
-    error: "#EF4444",
-    info: "#3B82F6",
+    // Semantic status colors
+    success: "#16a34a",
+    warning: "#d97706",
+    error:   "#dc2626",
+    info:    "#2563eb",
 
-    // Status badges
-    confirmed: { bg: "#DCFCE7", text: "#16A34A" },
-    pending: { bg: "#FEF3C7", text: "#92400E" },
-    completed: { bg: "#F3F4F6", text: "#6B7280" },
-    cancelled: { bg: "#FEE2E2", text: "#DC2626" },
-    active: { bg: "#D1FAE5", text: "#065F46" },
+    // Status badge pairs — used by BookingCard, StatusBadge, etc.
+    confirmed:  { bg: "#f0fdf4", text: "#16a34a", dot: "#16a34a",  stripe: "#16a34a"  },
+    pending:    { bg: "#fffbeb", text: "#d97706", dot: "#d97706",  stripe: "#d97706"  },
+    active:     { bg: "#eff6ff", text: "#2563eb", dot: "#2563eb",  stripe: "#2563eb"  },
+    completed:  { bg: "#F2F0EC", text: "#6b6760", dot: "#b3afa8",  stripe: "#b3afa8"  },
+    cancelled:  { bg: "#fef2f2", text: "#dc2626", dot: "#dc2626",  stripe: "#dc2626"  },
 
     // Tab bar
-    tabBarBg: "#FFFFFF",
-    tabBarBorder: "#E5E7EB",
-    tabActive: "#024622",
-    tabInactive: "#9CA3AF",
+    tabBarBg:     "#FFFFFF",
+    tabBarBorder: "#E5E2DC",
+    tabActive:    "#024622",
+    tabInactive:  "#8f8b84",
 
-    // Separator
-    border: "#E5E7EB",
-    borderDark: "rgba(255,255,255,0.12)",
+    // Borders — warm, not cold gray
+    border:       "#E5E2DC",
+    borderStrong: "#CCC9C3",
+    borderDark:   "rgba(255,255,255,0.12)",
+
+    // Gold accent — loyalty tier only
+    gold:     "#f5b31a",
+    goldDark: "#b07d0e",
+    goldTint: "#fef9e7",
   },
 
   radius: {
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 20,
-    xxl: 24,
+    sm:   8,
+    md:   12,
+    lg:   16,
+    xl:   20,
+    xxl:  24,
+    xxxl: 32,
     full: 999,
+    // Semantic aliases
+    card:   20,
+    button: 14,
+    input:  12,
+    modal:  28,
   },
 
   shadow: {
+    xs: {
+      shadowColor:   "#0c0b09",
+      shadowOffset:  { width: 0, height: 1 },
+      shadowOpacity: 0.04,
+      shadowRadius:  3,
+      elevation:     1,
+    },
     sm: {
-      shadowColor: "#024622",
-      shadowOffset: { width: 0, height: 2 },
+      shadowColor:   "#0c0b09",
+      shadowOffset:  { width: 0, height: 2 },
       shadowOpacity: 0.06,
-      shadowRadius: 8,
-      elevation: 2,
+      shadowRadius:  8,
+      elevation:     2,
     },
     md: {
-      shadowColor: "#024622",
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.10,
-      shadowRadius: 16,
-      elevation: 4,
+      shadowColor:   "#0c0b09",
+      shadowOffset:  { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius:  14,
+      elevation:     4,
     },
     lg: {
-      shadowColor: "#024622",
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.14,
-      shadowRadius: 24,
-      elevation: 8,
+      shadowColor:   "#0c0b09",
+      shadowOffset:  { width: 0, height: 8 },
+      shadowOpacity: 0.10,
+      shadowRadius:  24,
+      elevation:     8,
+    },
+    brand: {
+      shadowColor:   "#024622",
+      shadowOffset:  { width: 0, height: 6 },
+      shadowOpacity: 0.22,
+      shadowRadius:  16,
+      elevation:     6,
     },
   },
 
   spacing: {
-    xs: 4,
-    sm: 8,
-    md: 12,
-    lg: 16,
-    xl: 20,
-    xxl: 24,
-    xxxl: 32,
+    xs:     4,
+    sm:     8,
+    md:     12,
+    lg:     16,
+    xl:     20,
+    xxl:    24,
+    xxxl:   32,
+    screen: 16,
+    section: 28,
+    card:   16,
   },
 
   font: {
-    xs: 11,
-    sm: 13,
-    base: 15,
-    lg: 17,
-    xl: 20,
-    xxl: 24,
-    xxxl: 30,
+    xs:      11,
+    sm:      13,
+    base:    15,
+    lg:      17,
+    xl:      20,
+    xxl:     24,
+    xxxl:    30,
     display: 36,
+    hero:    48,
   },
 } as const;

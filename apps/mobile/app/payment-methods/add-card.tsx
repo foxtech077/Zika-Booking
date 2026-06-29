@@ -140,7 +140,7 @@ export default function AddCardScreen() {
       <View style={s.content}>
         {/* Illustration */}
         <View style={s.iconWrap}>
-          <Ionicons name="card" size={52} color="#1a73e8" />
+          <Ionicons name="card" size={52} color="#16a34a" />
         </View>
 
         <Text style={s.title}>Add a New Card</Text>
@@ -185,7 +185,7 @@ export default function AddCardScreen() {
         {/* Processing state feedback */}
         {isProcessing && (
           <View style={s.processingBox}>
-            <ActivityIndicator size="small" color="#1a73e8" />
+            <ActivityIndicator size="small" color="#16a34a" />
             <Text style={s.processingText}>
               {step === "loading"     && "Preparing secure form..."}
               {step === "sheet"      && "Complete the form in the sheet above..."}
@@ -311,11 +311,11 @@ const s = StyleSheet.create({
     marginBottom: 16,
     width: "100%",
   },
-  processingText: { fontSize: 13, color: "#1a73e8", flex: 1 },
+  processingText: { fontSize: 13, color: "#16a34a", flex: 1 },
 
   primaryBtn: {
     flexDirection: "row",
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",

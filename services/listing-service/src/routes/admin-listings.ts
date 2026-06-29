@@ -7,6 +7,7 @@ import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
 import { fireNotification } from "../lib/notifications.js";
+import { patchListingSchema } from "./listings.js";
 
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
@@ -1384,10 +1385,76 @@ app.patch("/admin/listings/:id", {
     },
     body: {
       type: "object",
-      // Reuse provider patch schema for allowed fields
-      // (same validation as provider PATCH /listings/:id)
-      // The schema is defined inline here for brevity.
-      ...patchListingSchema,
+      properties: {
+        listingTitle: { type: "string", maxLength: 200 },
+        roomType: {
+          type: "string",
+          enum: ["standard","superior","deluxe","suite","junior_suite","studio","family_room","presidential_suite"]
+        },
+        unitCount: { type: "integer", minimum: 1 },
+        claimedStarRating: { type: "integer", minimum: 1, maximum: 5 },
+        description: { type: "string", maxLength: 1000 },
+        pricePerNight: { type: "number", minimum: 0 },
+        pricePerDay: { type: "number", minimum: 0 },
+        currency: { type: "string", minLength: 3, maxLength: 3 },
+        minStayNights: { type: "integer", minimum: 1 },
+        checkinTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" },
+        checkoutTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" },
+        cancellationPolicy: { type: "string", enum: ["flexible","moderate","strict"] },
+        smokingAllowed: { type: "boolean" },
+        petsAllowed: { type: "boolean" },
+        address: { type: "string" },
+        town: { type: "string", maxLength: 100 },
+        country: { type: "string", minLength: 2, maxLength: 2 },
+        amenities: {
+          type: "object",
+          properties: {
+            Connectivity: { type: "array", items: { type: "string" } },
+            "Food & Drink": { type: "array", items: { type: "string" } },
+            Wellness: { type: "array", items: { type: "string" } },
+            Comfort: { type: "array", items: { type: "string" } },
+            Services: { type: "array", items: { type: "string" } }
+          },
+          additionalProperties: true
+        },
+        customAmenities: { type: "array", items: { type: "string", maxLength: 60 } },
+        instantBooking: { type: "boolean" },
+        selfCheckin: { type: "boolean" },
+        selfCheckinDetails: { type: "string", maxLength: 500 },
+        apartmentType: { type: "string", enum: ["entire_place","private_room","shared_room","studio","loft","villa","townhouse"] },
+        cleaningFee: { type: "number", minimum: 0 },
+        extraGuestFee: { type: "number", minimum: 0 },
+        extraGuestAfter: { type: "integer", minimum: 1 },
+        weeklyDiscount: { type: "number", minimum: 0 },
+        monthlyDiscount: { type: "number", minimum: 0 },
+        floorNumber: { type: "integer" },
+        propertySizeM2: { type: "number", minimum: 0 },
+        securityDepositDue: { type: "string", maxLength: 30 },
+        // car-specific fields
+        carMake: { type: "string", maxLength: 80 },
+        make: { type: "string", maxLength: 80 },
+        carModel: { type: "string", maxLength: 80 },
+        model: { type: "string", maxLength: 80 },
+        carYear: { type: "integer", minimum: 1990, maximum: new Date().getFullYear() },
+        year: { type: "integer", minimum: 1990, maximum: new Date().getFullYear() },
+        transmission: { type: "string", enum: ["manual","automatic","semi_auto"] },
+        fuelType: { type: "string", enum: ["petrol","diesel","electric","hybrid","lpg"] },
+        seats: { type: "integer", minimum: 1 },
+        doors: { type: "integer", minimum: 2 },
+        mileagePolicy: { type: "string", enum: ["unlimited","limited"] },
+        mileageLimitKm: { type: "integer", minimum: 1 },
+        carCategory: { type: "string", enum: ["Economy","Compact","SUV","Minivan","Pickup","Luxury","Electric","Convertible"] },
+        category: { type: "string", enum: ["Economy","Compact","SUV","Minivan","Pickup","Luxury","Electric","Convertible"] },
+        driveType: { type: "string", enum: ["2WD","4WD","AWD"] },
+        airConditioning: { type: "boolean" },
+        roadsideAssistance: { type: "boolean" },
+        crossBorderAllowed: { type: "boolean" },
+        airportPickup: { type: "boolean" },
+        deliveryEnabled: { type: "boolean" },
+        returnSameLocation: { type: "boolean" },
+        allowPreBooking: { type: "boolean" }
+      },
+      additionalProperties: true
     },
     response: {
       200: ok({ type: "object", properties: { message: { type: "string" }, data: { type: "object" } } }),
@@ -2153,6 +2220,32 @@ app.patch("/admin/listings/:id", {
         },
       });
 
+      // Log status transition to "draft"
+      await prisma.bookingStatusLog.create({
+        data: {
+          bookingId: booking.id,
+          fromStatus: null,
+          toStatus: "draft",
+          actorType: "admin",
+          changedBy: (req as AdminRequest).adminId,
+          reason: "Manual draft booking creation by admin",
+        },
+      });
+
+      // Log audit entry for manually created booking
+      await prisma.auditLog.create({
+        data: {
+          adminId: (req as AdminRequest).adminId,
+          role: (req as AdminRequest).adminRole,
+          action: "booking_created_manually",
+          targetType: "booking",
+          targetId: booking.id,
+          oldValue: null,
+          newValue: "draft",
+          ipAddress: req.ip,
+        },
+      });
+
       return sendSuccess(reply, 201, {
         bookingId: booking.id,
         bookingReference: booking.reference,
@@ -2237,7 +2330,8 @@ app.patch("/admin/listings/:id", {
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
 
-    const isCountryManager = admin.adminRole === "country_manager";
+    //const isCountryManager = admin.adminRole === "country_manager";
+    const isCountryManager = admin.adminRole === "country_manager" || admin.adminRole === "sales";
 
     // Country managers are scoped to their assigned countries
     const countryFilter: any = isCountryManager
@@ -3409,6 +3503,14 @@ app.patch("/admin/listings/:id", {
           adminId: admin.adminId, role: admin.adminRole, action: "booking_request_escalated",
           targetType: "booking", targetId: id, ipAddress: req.ip,
         },
+      });
+
+      // Dispatch sales_escalation push/in-app notification
+      fireNotification(booking.providerId, {
+        type:  "sales_escalation",
+        title: "Escalated Booking Request ",
+        body:  `A booking request (Ref: ${booking.reference}) for "${booking.listing.name ?? booking.listingId}" has been escalated to you by a Sales Agent. Please respond immediately.`,
+        data:  { bookingId: id, reference: booking.reference },
       });
 
       return sendSuccess(reply, 200, { message: "Request escalated to host." });
