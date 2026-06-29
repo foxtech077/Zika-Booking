@@ -189,6 +189,16 @@ export async function payoutRoutes(app: FastifyInstance) {
       },
     });
 
+    // Dispatch payout_sent push/in-app notification
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO auth."Notification" (id, "userId", type, title, body, data, "createdAt")
+       VALUES (gen_random_uuid()::text, $1, 'payout_sent', $2, $3, $4::jsonb, NOW())`,
+      updated.providerId,
+      "Payout Disbursed! 💰",
+      `Your payout of ${updated.amount} ${updated.currency} for booking ${updated.bookingId} has been successfully processed.`,
+      JSON.stringify({ bookingId: updated.bookingId, amount: Number(updated.amount), currency: updated.currency })
+    ).catch((err: any) => req.log.error({ err }, "Failed to send payout notification"));
+
     reply.send({ success: true, data: updated });
   });
 

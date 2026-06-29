@@ -13,6 +13,7 @@ import { calculateBilling } from "../services/billing.service.js";
 import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
 import { logLoyaltyTransaction } from "./loyalty.js";
+import { convertCurrency } from "../services/fx.services";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 
@@ -590,6 +591,24 @@ export async function bookingRoutes(app: FastifyInstance) {
         };
 
         await redis.set(ctxKey, JSON.stringify(ctx), "PX", LOCK_TTL_MS);
+
+        // Schedule reservation timer warning alert (4 minutes after initiation, 1 minute before lock expiry)
+        setTimeout(async () => {
+          try {
+            const activeLock = await redis.get(ctxKey);
+            if (activeLock) {
+              const parsedCtx = JSON.parse(activeLock);
+              fireNotification(parsedCtx.guestId, {
+                type: "reservation_timer",
+                title: "Reservation Expiring Soon! ⏳",
+                body: "Your booking reservation lock will expire in 1 minute. Complete checkout now to secure your dates!",
+                data: { lockToken },
+              });
+            }
+          } catch (err: any) {
+            req.log.error({ err }, "Failed to send reservation timer alert");
+          }
+        }, 240_000);
 
         // ── 9. BILLING (FIXED TYPES) ─────────────────
         const commissionRate = await getCommissionRate(listing.country ?? null);
@@ -1328,8 +1347,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         });
 
         // Award loyalty points — cross-schema update to auth."User"
-        // Earning rate: 1 point per $1 of totalAmount paid, multiplied by tier bonus
-        const basePoints = Math.floor(Number(booking.totalAmount));
+        // Earning rate: 1 point per $1 of totalAmount paid, multiplied by tier bonus (converted to USD)
+        const amountInUSD = await convertCurrency(Number(booking.totalAmount), booking.currency, "USD");
+        const basePoints = Math.floor(amountInUSD);
         if (basePoints > 0) {
           // Fetch current user tier and points AFTER points were already deducted at checkout
           const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number, currentTier: string, country: string }[]>(`

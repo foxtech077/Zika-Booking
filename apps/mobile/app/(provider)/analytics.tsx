@@ -1,7 +1,6 @@
 import {
   View,
   Text,
-  Image,
   ScrollView,
   TouchableOpacity,
   RefreshControl,
@@ -9,15 +8,21 @@ import {
   Dimensions,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { AppLayout } from "../../components/layout/AppLayout";
 import { useQuery } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { getCurrencyForCountry } from "../../lib/currency";
 import { K } from "../../constants/theme";
 
 const { width } = Dimensions.get("window");
+const CARD_W = (width - 48) / 2;
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface CommissionRate { rate: number; country: string }
 interface MonthlyRevenue { month: string; revenue: number; bookings: number }
 interface EarningsData {
   totalEarnings: number;
@@ -32,10 +37,18 @@ interface EarningsData {
   monthlyRevenue: MonthlyRevenue[];
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function fmt(n: number, currency = "USD") {
   if (n >= 1_000_000) return `${currency} ${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `${currency} ${(n / 1_000).toFixed(1)}K`;
+  if (n >= 1_000)     return `${currency} ${(n / 1_000).toFixed(1)}K`;
   return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function fmtCompact(n: number) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
+  return n.toFixed(0);
 }
 
 function monthLabel(m: string) {
@@ -50,105 +63,160 @@ function pct(current: number, prev: number) {
   return `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`;
 }
 
-function StatCard({
-  label, value, sub, positive,
-}: { label: string; value: string; sub?: string; positive?: boolean }) {
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function StatCard({ icon, label, value, sub, accent }: {
+  icon: string; label: string; value: string; sub?: string; accent: string;
+}) {
   return (
-    <View style={styles.statCard}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-      {sub ? (
-        <Text style={[styles.statSub, { color: positive === false ? K.colors.error : K.colors.success }]}>
-          {sub}
-        </Text>
-      ) : null}
+    <View style={[g.card, { width: CARD_W }]}>
+      <View style={[g.iconBox, { backgroundColor: accent + "14" }]}>
+        <Ionicons name={icon as any} size={18} color={accent} />
+      </View>
+      <Text style={g.value}>{value}</Text>
+      <Text style={g.label}>{label}</Text>
+      {sub ? <Text style={[g.sub, { color: accent }]}>{sub}</Text> : null}
     </View>
   );
 }
+
+const g = StyleSheet.create({
+  card:    { backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.sm },
+  iconBox: { width: 36, height: 36, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 10 },
+  label:   { fontSize: 11, color: K.colors.textMuted, fontWeight: "600", marginTop: 4 },
+  value:   { fontSize: 22, fontWeight: "900", color: K.colors.textDark, letterSpacing: -0.5 },
+  sub:     { fontSize: 12, fontWeight: "700", marginTop: 3 },
+});
 
 function RevenueChart({ data, currency }: { data: MonthlyRevenue[]; currency: string }) {
-  const slice = data.slice(-6);
+  const slice  = data.slice(-6);
   const maxRev = Math.max(...slice.map((d) => d.revenue), 1);
-  const BAR_H = 100;
+  const BAR_H  = 96;
 
   return (
-    <View style={styles.chartCard}>
-      <Text style={styles.chartTitle}>Monthly Revenue</Text>
-      <View style={styles.chartBars}>
-        {slice.map((item) => (
-          <View key={item.month} style={styles.chartCol}>
-            <Text style={styles.chartValue}>
-              {item.revenue >= 1000 ? `${currency} ${(item.revenue / 1000).toFixed(0)}K` : ""}
-            </Text>
-            <View style={styles.chartTrack}>
-              <View
-                style={[
-                  styles.chartBar,
-                  { height: Math.max(4, Math.round(BAR_H * (item.revenue / maxRev))) },
-                ]}
-              />
+    <View style={ch.card}>
+      <Text style={ch.title}>Monthly Revenue</Text>
+      <View style={ch.bars}>
+        {slice.map((item, i) => {
+          const barH    = Math.max(6, Math.round(BAR_H * (item.revenue / maxRev)));
+          const isLast  = i === slice.length - 1;
+          const barColor = isLast ? K.colors.accent : K.colors.darkGreen + "60";
+          return (
+            <View key={item.month} style={ch.col}>
+              {item.revenue > 0 && (
+                <Text style={ch.barLabel}>
+                  {fmtCompact(item.revenue)}
+                </Text>
+              )}
+              <View style={ch.track}>
+                <View
+                  style={[
+                    ch.bar,
+                    { height: barH, backgroundColor: barColor },
+                    isLast && ch.barActive,
+                  ]}
+                />
+              </View>
+              <Text style={[ch.xLabel, isLast && ch.xLabelActive]}>
+                {monthLabel(item.month)}
+              </Text>
             </View>
-            <Text style={styles.chartXLabel}>{monthLabel(item.month)}</Text>
-          </View>
-        ))}
+          );
+        })}
       </View>
     </View>
   );
 }
 
+const ch = StyleSheet.create({
+  card:      { backgroundColor: "#fff", borderRadius: 20, padding: 20, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.sm },
+  title:     { fontSize: 15, fontWeight: "800", color: K.colors.textDark, marginBottom: 20, letterSpacing: -0.3 },
+  bars:      { flexDirection: "row", alignItems: "flex-end", height: 130, gap: 4 },
+  col:       { flex: 1, alignItems: "center" },
+  barLabel:  { fontSize: 9, color: K.colors.textMuted, marginBottom: 4, textAlign: "center" },
+  track:     { height: 96, justifyContent: "flex-end", width: "100%", alignItems: "center" },
+  bar:       { width: "65%", borderRadius: 6 },
+  barActive: { backgroundColor: K.colors.accent },
+  xLabel:    { fontSize: 10, color: K.colors.textMuted, marginTop: 8, fontWeight: "500" },
+  xLabelActive: { color: K.colors.accent, fontWeight: "700" },
+});
+
 function MonthlyTable({ data, currency }: { data: MonthlyRevenue[]; currency: string }) {
+  const rows = data.slice(-6).reverse();
   return (
-    <View style={styles.tableCard}>
-      <Text style={styles.chartTitle}>Monthly Breakdown</Text>
-      <View style={styles.tableHeader}>
-        <Text style={[styles.tableCell, styles.tableCellWide]}>Month</Text>
-        <Text style={[styles.tableCell, styles.tableCellRight]}>Revenue</Text>
-        <Text style={[styles.tableCell, styles.tableCellRight]}>Bookings</Text>
+    <View style={tb.card}>
+      <Text style={tb.title}>Monthly Breakdown</Text>
+      <View style={tb.header}>
+        <Text style={[tb.cell, tb.wide]}>Month</Text>
+        <Text style={[tb.cell, tb.right]}>Revenue</Text>
+        <Text style={[tb.cell, tb.right]}>Bookings</Text>
       </View>
-      {data.slice(-6).reverse().map((item, i) => (
-        <View key={item.month} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
-          <Text style={[styles.tableCell, styles.tableCellWide]}>{monthLabel(item.month)}</Text>
-          <Text style={[styles.tableCell, styles.tableCellRight, styles.tableCellBold]}>
-            {fmt(item.revenue, currency)}
-          </Text>
-          <Text style={[styles.tableCell, styles.tableCellRight]}>{item.bookings}</Text>
+      {rows.map((item, i) => (
+        <View key={item.month} style={[tb.row, i % 2 === 0 && tb.rowAlt]}>
+          <Text style={[tb.cell, tb.wide]}>{monthLabel(item.month)}</Text>
+          <Text style={[tb.cell, tb.right, tb.bold]}>{fmt(item.revenue, currency)}</Text>
+          <Text style={[tb.cell, tb.right]}>{item.bookings}</Text>
         </View>
       ))}
     </View>
   );
 }
 
+const tb = StyleSheet.create({
+  card:    { backgroundColor: "#fff", borderRadius: 20, padding: 20, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.sm },
+  title:   { fontSize: 15, fontWeight: "800", color: K.colors.textDark, marginBottom: 16, letterSpacing: -0.3 },
+  header:  { flexDirection: "row", paddingBottom: 10, borderBottomWidth: 1.5, borderBottomColor: K.colors.border, marginBottom: 4 },
+  row:     { flexDirection: "row", paddingVertical: 11 },
+  rowAlt:  { backgroundColor: K.colors.bgSubtle, borderRadius: 8, paddingHorizontal: 6 },
+  cell:    { fontSize: 13, color: K.colors.textMuted },
+  wide:    { flex: 1.2 },
+  right:   { flex: 1, textAlign: "right" },
+  bold:    { fontWeight: "700", color: K.colors.textDark },
+});
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
 export default function AnalyticsScreen() {
-  const user = useAuthStore((s) => s.user);
+  const router   = useRouter();
+  const user     = useAuthStore((s) => s.user);
   const currency = getCurrencyForCountry(user?.country).code;
+
+  const commissionQ = useQuery<CommissionRate>({
+    queryKey: ["commissionRate", user?.country],
+    queryFn: async () => {
+      const country = user?.country ?? "ZA";
+      const res = await listingApi.get<{ data: CommissionRate }>(`/commission-rates/effective/${country}`);
+      return res.data.data;
+    },
+    staleTime: 300_000,
+    enabled: !!user?.country,
+  });
 
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<EarningsData>({
     queryKey: ["providerEarnings"],
     queryFn: async () => {
       const res = await listingApi.get<{ data: any }>("/provider/earnings");
       const raw = res.data?.data || {};
-      
-      const allTime = raw.allTime || { revenue: 0, commission: 0, payout: 0 };
-      const monthly = raw.monthly || [];
-      
+
+      const allTime       = raw.allTime || { revenue: 0, commission: 0, payout: 0 };
+      const monthly       = raw.monthly || [];
       const thisMonthData = monthly[monthly.length - 1] || { revenue: 0, payout: 0, commission: 0, bookings: 0 };
       const lastMonthData = monthly[monthly.length - 2] || { revenue: 0, payout: 0, commission: 0, bookings: 0 };
-      
       const totalBookings = monthly.reduce((sum: number, m: any) => sum + (m.bookings || 0), 0);
-      
+
       return {
-        totalEarnings: Number(allTime.revenue || 0),
-        thisMonthEarnings: Number(thisMonthData.revenue || 0),
-        lastMonthEarnings: Number(lastMonthData.revenue || 0),
-        totalCommission: Number(allTime.commission || 0),
-        netPayout: Number(allTime.payout || 0),
-        totalBookings: totalBookings,
-        completedBookings: totalBookings,
-        averageBookingValue: totalBookings > 0 ? (Number(allTime.revenue || 0) / totalBookings) : 0,
-        occupancyRate: 0,
-        monthlyRevenue: monthly.map((m: any) => ({
-          month: m.month,
-          revenue: Number(m.revenue || 0),
+        totalEarnings:       Number(allTime.revenue || 0),
+        thisMonthEarnings:   Number(thisMonthData.revenue || 0),
+        lastMonthEarnings:   Number(lastMonthData.revenue || 0),
+        totalCommission:     Number(allTime.commission || 0),
+        netPayout:           Number(allTime.payout || 0),
+        totalBookings,
+        completedBookings:   totalBookings,
+        averageBookingValue: totalBookings > 0 ? Number(allTime.revenue || 0) / totalBookings : 0,
+        occupancyRate:       0,
+        monthlyRevenue:      monthly.map((m: any) => ({
+          month:    m.month,
+          revenue:  Number(m.revenue || 0),
           bookings: Number(m.bookings || 0),
         })),
       };
@@ -156,86 +224,118 @@ export default function AnalyticsScreen() {
   });
 
   const momChange = data ? pct(data.thisMonthEarnings, data.lastMonthEarnings) : "—";
-  const momUp = data ? data.thisMonthEarnings >= data.lastMonthEarnings : undefined;
+  const momUp     = data ? data.thisMonthEarnings >= data.lastMonthEarnings : undefined;
 
   return (
-    <View style={styles.container}>
-      <SafeAreaView edges={["top"]} style={styles.header}>
-        <View style={styles.headerRow}>
-          <Image
-            source={require("../../assets/logo.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <View>
-            <Text style={styles.headerTitle}>Analytics</Text>
-            <Text style={styles.headerSub}>Earnings &amp; Performance</Text>
-          </View>
-        </View>
-      </SafeAreaView>
-
+    <AppLayout>
+      <View style={s.container}>
       {isLoading ? (
-        <View style={styles.center}>
+        <View style={s.center}>
           <ActivityIndicator color={K.colors.accent} size="large" />
         </View>
       ) : isError || !data ? (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>Could not load analytics</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
-            <Text style={styles.retryText}>Retry</Text>
+        <View style={s.center}>
+          <Ionicons name="cloud-offline-outline" size={52} color="#d1d5db" />
+          <Text style={s.errorText}>Could not load analytics</Text>
+          <TouchableOpacity style={s.retryBtn} onPress={() => refetch()}>
+            <Text style={s.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={s.scroll}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={K.colors.accent} />
           }
         >
-          {/* Hero */}
-          <View style={styles.heroCard}>
-            <Text style={styles.heroLabel}>Total Earnings</Text>
-            <Text style={styles.heroValue}>{fmt(data.totalEarnings, currency)}</Text>
-            <View style={styles.heroDivider} />
-            <View style={styles.heroSubRow}>
-              <View style={styles.heroSubItem}>
-                <Text style={styles.heroSubLabel}>This Month</Text>
-                <Text style={styles.heroSubValue}>{fmt(data.thisMonthEarnings, currency)}</Text>
-                <Text style={[styles.heroDelta, { color: momUp ? K.colors.accentLight : "#FCA5A5" }]}>
-                  {momChange} vs last month
-                </Text>
+          {/* Hero earnings card */}
+          <View style={s.hero}>
+            <Text style={s.heroSublabel}>TOTAL EARNINGS</Text>
+            <Text style={s.heroValue}>{fmt(data.totalEarnings, currency)}</Text>
+
+            <View style={s.heroDivider} />
+
+            <View style={s.heroRow}>
+              <View style={s.heroItem}>
+                <Text style={s.heroItemLabel}>This Month</Text>
+                <Text style={s.heroItemValue}>{fmt(data.thisMonthEarnings, currency)}</Text>
+                <View style={s.momChip}>
+                  <Ionicons
+                    name={momUp ? "trending-up" : "trending-down"}
+                    size={11}
+                    color={momUp ? "#34d399" : "#f87171"}
+                  />
+                  <Text style={[s.momText, { color: momUp ? "#34d399" : "#f87171" }]}>
+                    {momChange}
+                  </Text>
+                </View>
               </View>
-              <View style={styles.heroSubDivider} />
-              <View style={styles.heroSubItem}>
-                <Text style={styles.heroSubLabel}>Net Payout</Text>
-                <Text style={styles.heroSubValue}>{fmt(data.netPayout, currency)}</Text>
-                <Text style={styles.heroSubNote}>after {fmt(data.totalCommission, currency)} commission</Text>
+
+              <View style={s.heroDividerV} />
+
+              <View style={s.heroItem}>
+                <Text style={s.heroItemLabel}>Net Payout</Text>
+                <Text style={s.heroItemValue}>{fmt(data.netPayout, currency)}</Text>
+                <Text style={s.heroItemNote}>after {fmt(data.totalCommission, currency)} fee</Text>
               </View>
             </View>
+
+            <View style={s.heroDivider} />
+
+            <TouchableOpacity
+              style={s.withdrawBtn}
+              onPress={() => router.push("/(provider)/payouts")}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="wallet-outline" size={16} color={K.colors.darkGreen} />
+              <Text style={s.withdrawBtnText}>Withdraw Now</Text>
+              <Ionicons name="arrow-forward" size={14} color={K.colors.darkGreen} style={{ marginLeft: "auto" }} />
+            </TouchableOpacity>
           </View>
 
           {/* Stats grid */}
-          <View style={styles.statsGrid}>
+          <View style={s.statsRow}>
             <StatCard
-              label="Avg Booking Value"
+              icon="cash-outline"
+              label="Avg Booking"
               value={fmt(data.averageBookingValue, currency)}
+              accent="#7c3aed"
             />
             <StatCard
-              label="Occupancy Rate"
-              value={`${data.occupancyRate?.toFixed(1) ?? "—"}%`}
-            />
-            <StatCard
+              icon="calendar-outline"
               label="Total Bookings"
               value={String(data.totalBookings)}
+              accent="#0891b2"
             />
+          </View>
+          <View style={s.statsRow}>
             <StatCard
+              icon="checkmark-circle-outline"
               label="Completed"
               value={String(data.completedBookings)}
+              accent="#16a34a"
+            />
+            <StatCard
+              icon="home-outline"
+              label="Occupancy"
+              value={`${data.occupancyRate?.toFixed(1) ?? "0"}%`}
+              accent="#d97706"
             />
           </View>
 
-          {/* Revenue chart */}
+          {/* Commission rate banner */}
+          {commissionQ.data && (
+            <View style={s.commissionBanner}>
+              <Ionicons name="information-circle-outline" size={16} color={K.colors.accent} />
+              <Text style={s.commissionBannerText}>
+                Your effective commission rate for {commissionQ.data.country}:{" "}
+                <Text style={s.commissionBannerRate}>{(commissionQ.data.rate * 100).toFixed(1)}%</Text>
+              </Text>
+            </View>
+          )}
+
+          {/* Charts */}
           {data.monthlyRevenue?.length > 0 && (
             <>
               <RevenueChart data={data.monthlyRevenue} currency={currency} />
@@ -246,101 +346,66 @@ export default function AnalyticsScreen() {
           <View style={{ height: 32 }} />
         </ScrollView>
       )}
-    </View>
+      </View>
+    </AppLayout>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.colors.bgLight },
+// ── Styles ────────────────────────────────────────────────────────────────────
 
-  header: {
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: "#F5F4F1" },
+
+  scroll: { padding: 16, gap: 14 },
+
+  hero: {
     backgroundColor: K.colors.darkGreen,
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  headerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  logo: { width: 32, height: 32, borderRadius: 8 },
-  headerTitle: { fontSize: K.font.xl, fontWeight: "800", color: "#fff" },
-  headerSub: { fontSize: K.font.sm, color: K.colors.textLightMuted, marginTop: 2 },
-
-  scroll: { padding: 16, gap: 16 },
-
-  heroCard: {
-    backgroundColor: K.colors.darkGreen,
-    borderRadius: K.radius.xl,
+    borderRadius: 24,
     padding: 24,
-    ...K.shadow.md,
+    ...K.shadow.brand,
   },
-  heroLabel: { fontSize: K.font.sm, color: K.colors.textLightMuted, fontWeight: "600", letterSpacing: 0.5, marginBottom: 6 },
-  heroValue: { fontSize: 40, fontWeight: "900", color: "#fff", letterSpacing: -1 },
-  heroDivider: { height: 1, backgroundColor: K.colors.glassBorder, marginVertical: 18 },
-  heroSubRow: { flexDirection: "row", gap: 16 },
-  heroSubItem: { flex: 1 },
-  heroSubDivider: { width: 1, backgroundColor: K.colors.glassBorder },
-  heroSubLabel: { fontSize: 11, color: K.colors.textLightDim, marginBottom: 4, fontWeight: "600" },
-  heroSubValue: { fontSize: K.font.xl, fontWeight: "800", color: "#fff", marginBottom: 4 },
-  heroDelta: { fontSize: 11, fontWeight: "600" },
-  heroSubNote: { fontSize: 10, color: K.colors.textLightDim },
+  heroSublabel: { fontSize: 10, fontWeight: "800", color: "rgba(255,255,255,0.5)", letterSpacing: 1.2, marginBottom: 6 },
+  heroValue:    { fontSize: 38, fontWeight: "900", color: "#fff", letterSpacing: -1.5, lineHeight: 44 },
+  heroDivider:  { height: 1, backgroundColor: "rgba(255,255,255,0.12)", marginVertical: 18 },
+  heroRow:      { flexDirection: "row", gap: 16 },
+  heroItem:     { flex: 1 },
+  heroItemLabel:{ fontSize: 10, fontWeight: "600", color: "rgba(255,255,255,0.55)", letterSpacing: 0.4, marginBottom: 4 },
+  heroItemValue:{ fontSize: 18, fontWeight: "800", color: "#fff", marginBottom: 4 },
+  heroItemNote: { fontSize: 10, color: "rgba(255,255,255,0.4)" },
+  heroDividerV: { width: 1, backgroundColor: "rgba(255,255,255,0.12)" },
+  momChip:  { flexDirection: "row", alignItems: "center", gap: 4 },
+  momText:  { fontSize: 11, fontWeight: "700" },
 
-  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
-  statCard: {
-    width: (width - 44) / 2,
-    backgroundColor: K.colors.bgCard,
-    borderRadius: K.radius.xl,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: K.colors.border,
-    ...K.shadow.sm,
-  },
-  statLabel: { fontSize: 11, color: K.colors.textMuted, fontWeight: "600", marginBottom: 8, letterSpacing: 0.3 },
-  statValue: { fontSize: K.font.xl, fontWeight: "800", color: K.colors.textDark },
-  statSub: { fontSize: 12, fontWeight: "600", marginTop: 4 },
-
-  chartCard: {
-    backgroundColor: K.colors.bgCard,
-    borderRadius: K.radius.xl,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: K.colors.border,
-    ...K.shadow.sm,
-  },
-  chartTitle: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark, marginBottom: 16 },
-  chartBars: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", height: 130 },
-  chartCol: { flex: 1, alignItems: "center" },
-  chartValue: { fontSize: 9, color: K.colors.textMuted, marginBottom: 4, textAlign: "center" },
-  chartTrack: { height: 100, justifyContent: "flex-end", width: "100%", alignItems: "center" },
-  chartBar: { width: "55%", backgroundColor: K.colors.accent, borderRadius: 3 },
-  chartXLabel: { fontSize: 10, color: K.colors.textMuted, marginTop: 6, fontWeight: "500" },
-
-  tableCard: {
-    backgroundColor: K.colors.bgCard,
-    borderRadius: K.radius.xl,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: K.colors.border,
-    ...K.shadow.sm,
-  },
-  tableHeader: {
+  withdrawBtn: {
     flexDirection: "row",
-    paddingVertical: 10,
-    borderBottomWidth: 2,
-    borderBottomColor: K.colors.border,
-    marginBottom: 4,
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
   },
-  tableRow: { flexDirection: "row", paddingVertical: 11 },
-  tableRowAlt: { backgroundColor: K.colors.bgLight, borderRadius: K.radius.sm },
-  tableCell: { fontSize: K.font.sm, color: K.colors.textMid },
-  tableCellWide: { flex: 1.2 },
-  tableCellRight: { flex: 1, textAlign: "right" },
-  tableCellBold: { fontWeight: "700", color: K.colors.textDark },
+  withdrawBtnText: { fontSize: 14, fontWeight: "700", color: K.colors.darkGreen, flex: 1 },
 
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16 },
-  errorText: { fontSize: K.font.base, color: K.colors.textMuted },
-  retryBtn: {
-    backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
+  statsRow: { flexDirection: "row", gap: 12 },
+
+  commissionBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderWidth: 1,
+    borderColor: K.colors.border,
+    ...K.shadow.sm,
   },
+  commissionBannerText: { fontSize: 13, color: K.colors.textMuted, flex: 1 },
+  commissionBannerRate: { fontWeight: "800", color: K.colors.darkGreen },
+
+  center:    { flex: 1, alignItems: "center", justifyContent: "center", gap: 16, padding: 32 },
+  errorText: { fontSize: 16, fontWeight: "700", color: K.colors.textDark, textAlign: "center" },
+  retryBtn:  { backgroundColor: K.colors.darkGreen, borderRadius: 12, paddingHorizontal: 28, paddingVertical: 13 },
   retryText: { color: "#fff", fontWeight: "700" },
 });

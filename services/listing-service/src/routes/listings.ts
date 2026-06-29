@@ -334,6 +334,7 @@ export async function listingRoutes(app: FastifyInstance) {
             town: true,
             country: true,
             pricePerNight: true,
+            pricePerDay: true,
             currency: true,
             submissionCount: true,
             rejectionReasons: true,

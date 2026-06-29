@@ -21,6 +21,8 @@ import * as SecureStore from "expo-secure-store";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { useReleaseLock } from "../../hooks/booking";
+import { VoucherSelector } from "../../components/checkout/VoucherSelector";
+import type { ActivityScope } from "../../lib/types/voucher";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -212,11 +214,11 @@ export default function BookingFlowScreen() {
 
   // ── Voucher / promo code ──────────────────────────────────────────────────
   const [voucherCode, setVoucherCode] = useState("");
-  const [voucherInput, setVoucherInput] = useState("");
   const [voucherDiscount, setVoucherDiscount] = useState<number | null>(null);
-  const [voucherMessage, setVoucherMessage] = useState<string | null>(null);
-  const [voucherError, setVoucherError] = useState<string | null>(null);
-  const [voucherLoading, setVoucherLoading] = useState(false);
+
+  // ── AfriPoints redemption ─────────────────────────────────────────────────
+  const userPoints = user?.loyaltyPoints ?? 0;
+  const [usePoints, setUsePoints] = useState(false);
 
   // ── Countdown ─────────────────────────────────────────────────────────────
   const msLeft = useCountdown(lockState?.expiresAt ?? null);
@@ -554,6 +556,7 @@ export default function BookingFlowScreen() {
         guestEmail: email,
       };
       if (voucherCode) body.voucherCode = voucherCode;
+      if (usePoints && userPoints > 0) body.redeemPoints = userPoints;
       if (phone) body.guestPhone = phone;
       if (checkIn) body.checkIn = checkIn;
       if (checkOut) body.checkOut = checkOut;
@@ -635,40 +638,6 @@ export default function BookingFlowScreen() {
     setStep(1);
   }
 
-  // ── Voucher apply ─────────────────────────────────────────────────────────
-  async function handleApplyVoucher() {
-    const code = voucherInput.trim();
-    if (!code) return;
-    if (!pricing) return;
-    setVoucherLoading(true);
-    setVoucherError(null);
-    setVoucherMessage(null);
-    setVoucherDiscount(null);
-    setVoucherCode("");
-    try {
-      const res = await listingApi.post<{
-        data: { valid: boolean; discountAmount: number; message: string };
-      }>("/vouchers/validate", {
-        code,
-        totalAmount: pricing.total,
-        currency: pricing.currency,
-      });
-      const { valid, discountAmount, message } = res.data.data;
-      if (valid) {
-        setVoucherCode(code);
-        setVoucherDiscount(discountAmount);
-        setVoucherMessage(message);
-      } else {
-        setVoucherError(message ?? "Invalid promo code.");
-      }
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? "Could not validate promo code.";
-      setVoucherError(msg);
-    } finally {
-      setVoucherLoading(false);
-    }
-  }
-
   // ── Date formatting helpers ───────────────────────────────────────────────
   function formatDateRange(): string {
     if (isCar && pickupDatetime && returnDatetime) {
@@ -700,7 +669,7 @@ export default function BookingFlowScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#1a73e8" />
+          <ActivityIndicator size="large" color="#16a34a" />
           <Text style={styles.loadingText}>Securing your reservation...</Text>
         </View>
       </SafeAreaView>
@@ -731,7 +700,7 @@ export default function BookingFlowScreen() {
       <SafeAreaView style={styles.container}>
         <Stack.Screen options={{ title: listingTitle || "Book", headerBackTitle: "Back" }} />
         <View style={styles.centered}>
-          <Ionicons name="lock-closed" size={64} color="#1a73e8" />
+          <Ionicons name="lock-closed" size={64} color="#16a34a" />
           <Text style={styles.errorTitle}>Sign in to book</Text>
           <Text style={styles.errorBody}>
             You need to be signed in to make a reservation.
@@ -764,7 +733,7 @@ export default function BookingFlowScreen() {
 
           {/* Pending bookings list from backend */}
           {pendingLoading ? (
-            <ActivityIndicator color="#1a73e8" style={{ marginVertical: 24 }} />
+            <ActivityIndicator color="#16a34a" style={{ marginVertical: 24 }} />
           ) : pendingBookings.length > 0 ? (
             <View style={styles.pendingList}>
               {pendingBookings.map((b) => {
@@ -1074,7 +1043,7 @@ export default function BookingFlowScreen() {
                   <Switch
                     value={deliveryRequested}
                     onValueChange={setDeliveryRequested}
-                    trackColor={{ true: "#1a73e8" }}
+                    trackColor={{ true: "#16a34a" }}
                   />
                 </View>
 
@@ -1179,12 +1148,22 @@ export default function BookingFlowScreen() {
                   </View>
                 )}
 
-                <View style={[styles.priceRow, styles.totalRow]}>
-                  <Text style={styles.totalLabel}>Total</Text>
-                  <Text style={styles.totalValue}>
-                    {formatCurrency(pricing.total, pricing.currency)}
-                  </Text>
-                </View>
+                {(() => {
+                  const promoAmt   = pricing.discountAmount ?? 0;
+                  const voucherAmt = voucherDiscount ?? 0;
+                  const bestIsVoucher = voucherAmt > 0 && voucherAmt >= promoAmt;
+                  // pricing.total already has promoAmt baked in; subtract the extra voucher savings
+                  const extraOff   = bestIsVoucher ? voucherAmt - promoAmt : 0;
+                  const displayTotal = pricing.total - extraOff;
+                  return (
+                    <View style={[styles.priceRow, styles.totalRow]}>
+                      <Text style={styles.totalLabel}>Total</Text>
+                      <Text style={styles.totalValue}>
+                        {formatCurrency(displayTotal, pricing.currency)}
+                      </Text>
+                    </View>
+                  );
+                })()}
               </View>
 
               {/* Guest summary */}
@@ -1211,54 +1190,52 @@ export default function BookingFlowScreen() {
               )}
             </View>
 
-            {/* Promo Code */}
-            <View style={styles.promoSection}>
-              <Text style={styles.promoLabel}>Promo code (optional)</Text>
-              <View style={styles.promoRow}>
-                <TextInput
-                  style={[styles.input, styles.promoInput]}
-                  value={voucherInput}
-                  onChangeText={setVoucherInput}
-                  placeholder="Enter promo code"
-                  autoCapitalize="characters"
-                  editable={!voucherCode}
+            {/* Voucher selector */}
+            {pricing && (
+              <View style={styles.promoSection}>
+                <VoucherSelector
+                  totalAmount={pricing.total}
+                  currency={pricing.currency}
+                  activity={(isCar ? "cars" : "hotels") as ActivityScope}
+                  guestId={user?.id ?? ""}
+                  guestTier={user?.currentTier ?? null}
+                  guestCountry={user?.country ?? null}
+                  onApplied={(discountAmount, code) => {
+                    setVoucherDiscount(discountAmount);
+                    setVoucherCode(code);
+                  }}
+                  onCleared={() => {
+                    setVoucherDiscount(null);
+                    setVoucherCode("");
+                  }}
                 />
-                {voucherCode ? (
-                  <TouchableOpacity
-                    style={[styles.promoBtn, { backgroundColor: "#dc2626" }]}
-                    onPress={() => {
-                      setVoucherCode("");
-                      setVoucherInput("");
-                      setVoucherDiscount(null);
-                      setVoucherMessage(null);
-                      setVoucherError(null);
-                    }}
-                  >
-                    <Text style={styles.promoBtnText}>Remove</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[styles.promoBtn, voucherLoading && styles.promoBtnDisabled]}
-                    onPress={handleApplyVoucher}
-                    disabled={voucherLoading}
-                  >
-                    {voucherLoading ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text style={styles.promoBtnText}>Apply</Text>
-                    )}
-                  </TouchableOpacity>
+              </View>
+            )}
+
+            {/* AfriPoints redemption */}
+            {userPoints > 0 && (
+              <View style={styles.promoSection}>
+                <View style={styles.afriPointsRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.fieldLabel}>AfriPoints</Text>
+                    <Text style={styles.afriPointsBalance}>
+                      You have {userPoints.toLocaleString()} pts available
+                    </Text>
+                  </View>
+                  <Switch
+                    value={usePoints}
+                    onValueChange={setUsePoints}
+                    trackColor={{ false: "#e5e7eb", true: "#86efac" }}
+                    thumbColor={usePoints ? "#16a34a" : "#9ca3af"}
+                  />
+                </View>
+                {usePoints && (
+                  <Text style={styles.afriPointsNote}>
+                    {userPoints.toLocaleString()} points will be applied to this booking.
+                  </Text>
                 )}
               </View>
-              {voucherMessage && voucherDiscount != null && (
-                <Text style={styles.promoSuccess}>
-                  {voucherMessage}
-                </Text>
-              )}
-              {voucherError && (
-                <Text style={styles.promoError}>{voucherError}</Text>
-              )}
-            </View>
+            )}
 
             {/* Terms checkbox */}
             <TouchableOpacity
@@ -1387,15 +1364,15 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   stepDotActive: {
-    backgroundColor: "#1a73e8",
-    borderColor: "#1a73e8",
+    backgroundColor: "#16a34a",
+    borderColor: "#16a34a",
     width: 12,
     height: 12,
     borderRadius: 6,
   },
   stepDotDone: { backgroundColor: "#16a34a", borderColor: "#16a34a" },
   stepLabel: { fontSize: 10, color: "#9ca3af", textAlign: "center" },
-  stepLabelActive: { color: "#1a73e8", fontWeight: "600" },
+  stepLabelActive: { color: "#16a34a", fontWeight: "600" },
   stepLabelDone: { color: "#16a34a" },
 
   // ── Timer banners ───────────────────────────────────────────────────────────
@@ -1523,7 +1500,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1550,31 +1527,20 @@ const styles = StyleSheet.create({
   discountValue: { color: "#16a34a" },
   totalRow: { borderTopWidth: 1, borderTopColor: "#e5e7eb", marginTop: 4, paddingTop: 8 },
   totalLabel: { fontSize: 16, fontWeight: "700", color: "#111827", flex: 1 },
-  totalValue: { fontSize: 16, fontWeight: "700", color: "#1a73e8" },
+  totalValue: { fontSize: 16, fontWeight: "700", color: "#16a34a" },
   guestSummarySection: { borderTopWidth: 1, borderTopColor: "#f3f4f6", paddingTop: 14 },
   guestSummaryText: { fontSize: 14, color: "#374151" },
   policySection: { borderTopWidth: 1, borderTopColor: "#f3f4f6", paddingTop: 14 },
   policyText: { fontSize: 14, color: "#374151", textTransform: "capitalize" },
 
-  // Promo code
+  // Voucher selector wrapper
   promoSection: { marginBottom: 20 },
-  promoLabel: { fontSize: 14, fontWeight: "500", color: "#374151", marginBottom: 8 },
-  promoRow: { flexDirection: "row", gap: 10, alignItems: "center" },
-  promoInput: { flex: 1, letterSpacing: 1 },
-  promoBtn: {
-    backgroundColor: "#1a73e8",
-    borderRadius: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 72,
-  },
-  promoBtnDisabled: { backgroundColor: "#9ca3af" },
-  promoBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  promoSuccess: { fontSize: 13, color: "#16a34a", fontWeight: "600", marginTop: 8 },
-  promoError: { fontSize: 13, color: "#dc2626", marginTop: 8 },
   bestDealNote: { fontSize: 11, color: "#6b7280", marginTop: 2, marginBottom: 2, fontStyle: "italic" },
+
+  // AfriPoints
+  afriPointsRow: { flexDirection: "row", alignItems: "center" },
+  afriPointsBalance: { fontSize: 12, color: "#6b7280", marginTop: 2 },
+  afriPointsNote: { fontSize: 13, color: "#16a34a", fontWeight: "600", marginTop: 8 },
 
   // Terms
   termsRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 20 },
@@ -1589,12 +1555,12 @@ const styles = StyleSheet.create({
     marginTop: 1,
     flexShrink: 0,
   },
-  checkboxChecked: { backgroundColor: "#1a73e8", borderColor: "#1a73e8" },
+  checkboxChecked: { backgroundColor: "#16a34a", borderColor: "#16a34a" },
   termsText: { fontSize: 13, color: "#374151", lineHeight: 20, flex: 1 },
 
   // Buttons
   primaryBtn: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -1618,10 +1584,10 @@ const styles = StyleSheet.create({
   pendingCardTitle: { fontSize: 14, fontWeight: "700", color: "#111827", marginBottom: 2 },
   pendingCardRef: { fontSize: 11, color: "#6b7280", fontFamily: "monospace", marginBottom: 2 },
   pendingCardDate: { fontSize: 12, color: "#374151", marginBottom: 2 },
-  pendingCardAmount: { fontSize: 13, fontWeight: "700", color: "#1a73e8" },
+  pendingCardAmount: { fontSize: 13, fontWeight: "700", color: "#16a34a" },
   pendingCardBtns: { gap: 8 },
   pendingPayBtn: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
