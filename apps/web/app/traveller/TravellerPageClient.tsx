@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
+import { fetchFavourites, fetchRecentlyViewed } from "@/services/traveller";
 import ListingImage from "./components/ListingImage";
 import { TravellerWorkspaceNav } from "./components/TravellerWorkspaceNav";
 import { TravellerHeader } from "./components/TravellerHeader";
@@ -176,6 +177,7 @@ export default function TravellerDashboard() {
   const ready = _hasHydrated;
 
   const [recentlyViewed, setRecentlyViewed] = useState<PublicListingDetail[]>([]);
+  const [favouritedIds, setFavouritedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<"home" | "search" | "bookings">("home");
 
   // Search Context
@@ -360,14 +362,46 @@ export default function TravellerDashboard() {
     }
   }, [_hasHydrated, user?.userType]);
 
-  // Load Recently Viewed from localStorage on mount
+  // Load recently-viewed and favourites from backend on mount (when authenticated)
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Clear legacy dummy data from local storage
       localStorage.removeItem("zika:recently_viewed");
-      setRecentlyViewed([]);
     }
-  }, []);
+    if (!isAuthenticated) return;
+    fetchRecentlyViewed().then((items) => {
+      setRecentlyViewed(
+        items.slice(0, 4).map((v) => ({
+          id: v.listing.id,
+          providerId: "",
+          category: v.listing.category as "hotel" | "apartment" | "car",
+          name: v.listing.title,
+          pricePerNight: v.listing.nightlyRate ?? 0,
+          currency: v.listing.currency ?? "KES",
+          primaryPhotoUrl: v.listing.primaryPhotoUrl ?? null,
+          photos: [],
+          amenities: [],
+          customAmenities: [],
+          description: "",
+          address: v.listing.city ?? "",
+          lat: 0,
+          lng: 0,
+          town: v.listing.city ?? "",
+          country: "",
+          minStayNights: 1,
+          checkinTime: "",
+          checkoutTime: "",
+          cancellationPolicy: "flexible" as const,
+          isFavourited: false,
+          isAccredited: false,
+          longStayDiscountEnabled: false,
+          instantBooking: false,
+        }))
+      );
+    }).catch(() => {});
+    fetchFavourites().then((res) => {
+      setFavouritedIds(new Set(res.favourites.map((f) => f.listingId)));
+    }).catch(() => {});
+  }, [isAuthenticated]);
 
 
   function mapSearchResult(l: any): PublicListingDetail {
@@ -476,11 +510,16 @@ export default function TravellerDashboard() {
   function addToRecentlyViewed(item: PublicListingDetail) {
     setRecentlyViewed((prev) => {
       const filtered = prev.filter((x) => x.id !== item.id);
-      const updated = [item, ...filtered].slice(0, 4);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("zika:recently_viewed", JSON.stringify(updated));
-      }
-      return updated;
+      return [item, ...filtered].slice(0, 4);
+    });
+  }
+
+  function handleFavToggle(listingId: string, isFavourited: boolean) {
+    setFavouritedIds((prev) => {
+      const next = new Set(prev);
+      if (isFavourited) next.add(listingId);
+      else next.delete(listingId);
+      return next;
     });
   }
 
@@ -2503,15 +2542,15 @@ export default function TravellerDashboard() {
                 <div>
                   <p className="text-[10px] font-semibold text-[#1D8D2B] uppercase tracking-[0.3em] mb-2">Curated Worlds</p>
                   <h2 className="text-3xl md:text-4xl font-serif text-slate-900 leading-snug">
-                    Discover Destinations<br className="hidden sm:block" /> Selected for the<br className="hidden sm:block" /> Discerning Traveler.
+                    Discover Destinations Selected for the<br className="hidden sm:block" /> Discerning Traveler.
                   </h2>
                 </div>
-                <button
+                {/* <button
                   onClick={() => handleSearch(undefined, "hotel")}
                   className="text-sm font-semibold text-[#0c2614] hover:text-[#1D8D2B] transition underline underline-offset-4 shrink-0"
                 >
                   View All Destinations
-                </button>
+                </button> */}
               </div>
 
               {/* Asymmetric grid: 1 large left + 2 stacked right */}
@@ -2608,7 +2647,12 @@ export default function TravellerDashboard() {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {featuredListings.slice(0, 8).map((listing) => (
-                      <ListingCard key={listing.id} listing={listing} onSelect={handleSelectListing} />
+                      <ListingCard
+                        key={listing.id}
+                        listing={{ ...listing, isFavourited: favouritedIds.has(listing.id) }}
+                        onSelect={handleSelectListing}
+                        onFavToggle={handleFavToggle}
+                      />
                     ))}
                   </div>
                 )}
@@ -3147,10 +3191,11 @@ export default function TravellerDashboard() {
                     {listings.map((l) => (
                       <ListingCard
                         key={l.id}
-                        listing={l}
+                        listing={{ ...l, isFavourited: favouritedIds.has(l.id) }}
                         onSelect={handleSelectListing}
                         hoveredId={mapHoveredId}
                         onHover={setMapHoveredId}
+                        onFavToggle={handleFavToggle}
                       />
                     ))}
                   </div>

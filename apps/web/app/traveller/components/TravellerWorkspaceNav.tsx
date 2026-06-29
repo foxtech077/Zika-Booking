@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
-import { ChevronDown, Home, LogOut, MessageSquare, Star, User } from "lucide-react";
+import { ChevronDown, Clock, Heart, Home, LogOut, MessageSquare, Star, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthStore } from "@/stores/auth";
@@ -80,6 +80,16 @@ export function TravellerWorkspaceNav({
       label: "Messages",
       icon: <MessageSquare className="h-4 w-4" />,
       badge: unreadCount,
+    },
+    {
+      href: "/traveller/favourites",
+      label: "Favourites",
+      icon: <Heart className="h-4 w-4" />,
+    },
+    {
+      href: "/traveller/recently-viewed",
+      label: "Recently Viewed",
+      icon: <Clock className="h-4 w-4" />,
     },
     {
       href: "/traveller/reviews",

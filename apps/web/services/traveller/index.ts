@@ -251,3 +251,90 @@ export async function fetchMyReviews(): Promise<MyReview[]> {
   const response: AxiosResponse<ApiPayload<MyReviewsResponse>> = await listingApi.get("/reviews/me");
   return unwrapData(response.data).reviews ?? [];
 }
+
+// ── Favourites ────────────────────────────────────────────────────────────────
+
+export interface FavouriteListing {
+  listingId: string;
+  savedAt: string;
+  listing: {
+    id: string;
+    title: string;
+    category: string;
+    status: string;
+    city: string | null;
+    countryCode: string | null;
+    nightlyRate: number | null;
+    currency: string | null;
+    primaryPhotoUrl: string | null;
+  };
+}
+
+export interface FavouritesResponse {
+  favourites: FavouriteListing[];
+  nextCursor: string | null;
+}
+
+export async function addFavourite(listingId: string): Promise<void> {
+  await listingApi.post("/guests/me/favourites", { listingId });
+}
+
+export async function removeFavourite(listingId: string): Promise<void> {
+  await listingApi.delete(`/guests/me/favourites/${listingId}`);
+}
+
+export async function fetchFavourites(cursor = 0): Promise<FavouritesResponse> {
+  const response: AxiosResponse<ApiPayload<FavouritesResponse>> = await listingApi.get("/guests/me/favourites", {
+    params: { cursor },
+  });
+  return unwrapData(response.data);
+}
+
+// ── Recently Viewed ───────────────────────────────────────────────────────────
+
+export interface RecentlyViewedItem {
+  listingId: string;
+  viewedAt: string;
+  listing: {
+    id: string;
+    title: string;
+    category: string;
+    status: string;
+    city: string | null;
+    nightlyRate: number | null;
+    currency: string | null;
+    primaryPhotoUrl: string | null;
+  };
+}
+
+export async function fetchRecentlyViewed(): Promise<RecentlyViewedItem[]> {
+  const response: AxiosResponse<ApiPayload<{ recentlyViewed: RecentlyViewedItem[] }>> =
+    await listingApi.get("/guests/me/recently-viewed");
+  return unwrapData(response.data).recentlyViewed ?? [];
+}
+
+export async function importRecentlyViewedItems(
+  items: { listingId: string; viewedAt: string }[],
+): Promise<void> {
+  await listingApi.post("/guests/me/recently-viewed/import", { items });
+}
+
+// ── Batch Summary ─────────────────────────────────────────────────────────────
+
+export interface BatchListingSummary {
+  id: string;
+  title: string;
+  category: string;
+  city: string | null;
+  countryCode: string | null;
+  nightlyRate: number | null;
+  currency: string | null;
+  primaryPhotoUrl: string | null;
+}
+
+export async function fetchBatchListingSummary(ids: string[]): Promise<BatchListingSummary[]> {
+  if (!ids.length) return [];
+  const response: AxiosResponse<ApiPayload<{ listings: BatchListingSummary[] }>> =
+    await listingApi.post("/listings/batch-summary", { ids });
+  return unwrapData(response.data).listings ?? [];
+}
