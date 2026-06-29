@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { listingApi } from "../lib/listing-api";
 import { K } from "../constants/theme";
 import { useAuthStore } from "../store/auth";
 
@@ -74,18 +74,36 @@ export default function NotificationsScreen() {
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<Notification[]>({
     queryKey: ["notifications"],
     queryFn: async () => {
-      const res = await api.get<{ data: Notification[] }>("/notifications");
+      const res = await listingApi.get<{ data: Notification[] }>("/notifications");
       return res.data.data;
     },
   });
 
   const markAllRead = useMutation({
-    mutationFn: () => api.post("/notifications/mark-all-read", {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+    mutationFn: async () => {
+      const notifications = qc.getQueryData<Notification[]>(["notifications"]) ?? [];
+      const unreadIds = notifications.filter((n) => !n.isRead).map((n) => n.id);
+      if (unreadIds.length === 0) return;
+      await Promise.all(
+        unreadIds.map((id) => listingApi.patch(`/notifications/${id}/read`, {}))
+      );
+    },
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["notifications"] });
+      const prev = qc.getQueryData<Notification[]>(["notifications"]);
+      qc.setQueryData<Notification[]>(["notifications"], (old) =>
+        (old ?? []).map((n) => ({ ...n, isRead: true }))
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.prev) qc.setQueryData(["notifications"], context.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   const markRead = useMutation({
-    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`, {}),
+    mutationFn: (id: string) => listingApi.patch(`/notifications/${id}/read`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
@@ -95,8 +113,9 @@ export default function NotificationsScreen() {
       const isProvider = useAuthStore.getState().user?.userType === "provider";
       const route = isProvider ? `/provider/booking/${item.data.bookingId}` : `/booking/${item.data.bookingId}`;
       router.push(route as any);
+    } else if (item.data?.listingId) {
+      router.push(`/listings/${item.data.listingId}` as any);
     }
-    if (item.data?.listingId) router.push(`/listings/${item.data.listingId}` as any);
   }
 
   const unreadCount = (data ?? []).filter((n) => !n.isRead).length;

@@ -33,6 +33,11 @@ const BG = "#FAFAFA";
 interface Photo { id: string; cdnUrl: string; position: number; }
 interface Amenity { amenityKey: string; category: string; }
 interface CustomAmenity { label: string; }
+interface Promotion {
+  title: string; description: string;
+  bannerUrl?: string | null; ctaRoute?: string;
+  discountPercent?: number; expiresAt?: string;
+}
 interface Review {
   id: string; rating: number; title?: string | null;
   body?: string | null; createdAt: string; providerReply?: string | null;
@@ -577,6 +582,22 @@ export default function ListingDetailScreen() {
     enabled: !!id,
   });
 
+  // Active promotions filtered by this listing's category (hotel / apartment / car)
+  const { data: activePromotions } = useQuery<Promotion[]>({
+    queryKey: ["promotions-listing", listing?.category],
+    queryFn: async () => {
+      try {
+        const res = await listingApi.get<{ data: { promotions: Promotion[] } }>(
+          `/promotions/active?activity=${listing!.category}`
+        );
+        return res.data.data.promotions ?? [];
+      } catch { return []; }
+    },
+    enabled: !!listing,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
   useEffect(() => {
     if (!listing) return;
     if (user) {
@@ -895,6 +916,32 @@ export default function ListingDetailScreen() {
               <Text style={s.promoTitle}>Long-Stay Discount 🎉</Text>
               <Text style={s.promoSub}>Book {listing.longStayMinNights ?? 7}+ nights and save {listing.longStayDiscountValue ?? 0}{listing.longStayDiscountType === "percentage" ? "%" : ` ${curr}`} automatically.</Text>
             </View>
+          </View>
+        )}
+
+        {/* ── Active Promotions ── */}
+        {activePromotions && activePromotions.length > 0 && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>Available Promotions</Text>
+            {activePromotions.map((promo, idx) => (
+              <View key={idx} style={pr.card}>
+                <View style={pr.iconWrap}>
+                  <Ionicons name="pricetag" size={18} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={pr.title}>{promo.title}</Text>
+                  <Text style={pr.desc} numberOfLines={2}>{promo.description}</Text>
+                  {promo.expiresAt ? (
+                    <Text style={pr.expiry}>Expires {fmt(promo.expiresAt)}</Text>
+                  ) : null}
+                </View>
+                {promo.discountPercent ? (
+                  <View style={pr.discBadge}>
+                    <Text style={pr.discText}>{promo.discountPercent}%{"\n"}OFF</Text>
+                  </View>
+                ) : null}
+              </View>
+            ))}
           </View>
         )}
 
@@ -1231,4 +1278,15 @@ const s = StyleSheet.create({
   selectDatesBtnText: { color: GREEN, fontWeight: "700", fontSize: 14 },
   providerBtn: { backgroundColor: BG, borderRadius: 16, paddingHorizontal: 18, paddingVertical: 13, borderWidth: 1, borderColor: BORDER },
   providerBtnText: { color: MUTED, fontWeight: "600", fontSize: 13 },
+});
+
+// ── Promotion card styles ─────────────────────────────────────────────────────
+const pr = StyleSheet.create({
+  card:      { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F0FDF4", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#BBF7D0", marginBottom: 10 },
+  iconWrap:  { width: 38, height: 38, borderRadius: 10, backgroundColor: GREEN, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  title:     { fontSize: 14, fontWeight: "800", color: "#065F46", marginBottom: 3 },
+  desc:      { fontSize: 12, color: "#047857", lineHeight: 17, marginBottom: 4 },
+  expiry:    { fontSize: 11, color: MUTED },
+  discBadge: { width: 48, height: 48, borderRadius: 10, backgroundColor: GREEN, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  discText:  { fontSize: 10, fontWeight: "800", color: "#fff", textAlign: "center", lineHeight: 14 },
 });

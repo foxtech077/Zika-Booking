@@ -161,7 +161,7 @@ async function shareVoucher(booking: BookingDetail) {
 
   const lines = [
     "═══════════════════════════",
-    "   ZIKABOOKING VOUCHER",
+    "   KAINOOK VOUCHER",
     "═══════════════════════════",
     `Booking: ${booking.reference}`,
     `Status:  ${statusInfo(booking.status).label}`,
@@ -300,6 +300,22 @@ export default function BookingDetailScreen() {
     refetchIntervalInBackground: false,
   });
 
+  // Fetch signed cover photo via /listings/:id/public (listing.primaryPhotoUrl may be an unsigned S3 URL)
+  const { data: signedCoverPhoto } = useQuery<string | null>({
+    queryKey: ["public-photo", booking?.listing?.id],
+    queryFn: async () => {
+      try {
+        const res = await listingApi.get<{
+          data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
+        }>(`/listings/${booking!.listing.id}/public`);
+        return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
+      } catch { return null; }
+    },
+    enabled: !!booking?.listing?.id,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
   // Stop auto-refresh once the status moves away from pending_payment
   useEffect(() => {
     if (autoRefresh && booking?.status && booking.status !== "pending_payment") {
@@ -409,9 +425,9 @@ export default function BookingDetailScreen() {
       <ScrollView contentContainerStyle={styles.scroll} stickyHeaderIndices={[0]}>
         {/* Cover photo + back button */}
         <View style={styles.photoContainer}>
-          {!imgError && booking.listing.primaryPhotoUrl ? (
+          {!imgError && signedCoverPhoto ? (
             <ListingImage
-              uri={booking.listing.primaryPhotoUrl}
+              uri={signedCoverPhoto}
               style={styles.coverPhoto}
               resizeMode="cover"
               onError={() => setImgError(true)}

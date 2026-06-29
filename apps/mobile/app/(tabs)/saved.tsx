@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
@@ -81,10 +81,11 @@ function SkeletonCard() {
 
 // ── Saved Listing Card ────────────────────────────────────────────────────────
 
-function SavedCard({ item, onRemove, removePending }: {
+function SavedCard({ item, onRemove, removePending, signedPhotoUrl }: {
   item: Favourite;
   onRemove: (listingId: string, title: string) => void;
   removePending: boolean;
+  signedPhotoUrl: string | null;
 }) {
   const router = useRouter();
   const [imgErr, setImgErr] = useState(false);
@@ -98,9 +99,9 @@ function SavedCard({ item, onRemove, removePending }: {
       onPress={() => router.push(`/listing/${listingId}` as any)}
     >
       {/* Cover photo */}
-      {!imgErr && listing.primaryPhotoUrl ? (
+      {!imgErr && signedPhotoUrl ? (
         <ListingImage
-          uri={listing.primaryPhotoUrl}
+          uri={signedPhotoUrl}
           style={styles.cardPhoto}
           resizeMode="cover"
           onError={() => setImgErr(true)}
@@ -156,6 +157,29 @@ export default function SavedScreen() {
   const [cursor,       setCursor]       = useState<string | null>(null);
   const [allFavourites, setAllFavourites] = useState<Favourite[]>([]);
   const [loadingMore,  setLoadingMore]  = useState(false);
+
+  // Fetch signed photo URLs for each favourite listing — must be before early returns
+  const favouriteIds = useMemo(() => allFavourites.map((f) => f.listing.id), [allFavourites]);
+  const signedPhotoQueries = useQueries({
+    queries: favouriteIds.map((id) => ({
+      queryKey: ["public-photo", id],
+      queryFn: async (): Promise<string | null> => {
+        try {
+          const res = await listingApi.get<{
+            data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
+          }>(`/listings/${id}/public`);
+          return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
+        } catch { return null; }
+      },
+      staleTime: 5 * 60_000,
+      gcTime: 10 * 60_000,
+      retry: false,
+    })),
+  });
+  const signedPhotoMap = useMemo<Record<string, string | null>>(
+    () => Object.fromEntries(favouriteIds.map((id, i) => [id, signedPhotoQueries[i]?.data ?? null])),
+    [favouriteIds, signedPhotoQueries],
+  );
 
   // Provider guard
   if (user?.userType === "provider") {
@@ -247,7 +271,12 @@ export default function SavedScreen() {
         data={allFavourites}
         keyExtractor={(item) => item.listingId}
         renderItem={({ item }) => (
-          <SavedCard item={item} onRemove={handleRemove} removePending={removeMutation.isPending} />
+          <SavedCard
+            item={item}
+            onRemove={handleRemove}
+            removePending={removeMutation.isPending}
+            signedPhotoUrl={signedPhotoMap[item.listing.id] ?? null}
+          />
         )}
         contentContainerStyle={isEmpty ? styles.emptyListContent : styles.listContent}
         refreshControl={

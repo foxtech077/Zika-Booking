@@ -59,7 +59,7 @@ async function verifySession(): Promise<"ok" | "revoked" | "network_error"> {
   const { accessToken, user } = useAuthStore.getState();
   if (!accessToken || !user) return "ok"; // not logged in — nothing to check
 
-  const apiUrl = process.env["EXPO_PUBLIC_API_URL"] ?? "http://localhost:3001";
+  const apiUrl = process.env["EXPO_PUBLIC_API_URL"] ?? "https://api.kainook.com/auth";
   try {
     await axios.post(
       `${apiUrl}/auth/refresh`,

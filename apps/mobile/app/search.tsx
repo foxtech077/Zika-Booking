@@ -1,23 +1,20 @@
-﻿import { useState, useCallback, useEffect } from "react";
+﻿import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Image,
   ActivityIndicator,
   ScrollView,
   TextInput,
   Modal,
-  Platform,
-  Linking,
   Alert,
   Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 
 // Safely load MapView and Marker to prevent crashes in environments without the native module
@@ -136,6 +133,17 @@ interface SearchResponse {
   };
 }
 
+interface Promotion {
+  id: string;
+  title: string;
+  description?: string;
+  discountPercent?: number | null;
+  discountAmount?: number | null;
+  activity?: string | null;
+  expiresAt?: string | null;
+  ctaRoute?: string | null;
+}
+
 // ─── Sort options ─────────────────────────────────────────────────────────────
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
@@ -219,6 +227,7 @@ interface ResultCardProps {
   returnDatetime?: string;
   onFavouriteToggle: (id: string, current: boolean) => void;
   favouriteLoading: string | null;
+  signedPhotoUrl: string | null;
 }
 
 function ResultCard({
@@ -231,6 +240,7 @@ function ResultCard({
   returnDatetime,
   onFavouriteToggle,
   favouriteLoading,
+  signedPhotoUrl,
 }: ResultCardProps) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -259,8 +269,8 @@ function ResultCard({
     <TouchableOpacity style={cardStyles.card} onPress={handlePress} activeOpacity={0.88}>
       {/* Photo */}
       <View style={cardStyles.photoWrapper}>
-        {!imgError && item.primaryPhotoUrl ? (
-          <ListingImage uri={item.primaryPhotoUrl} style={cardStyles.photo} onError={() => setImgError(true)} />
+        {!imgError && signedPhotoUrl ? (
+          <ListingImage uri={signedPhotoUrl} style={cardStyles.photo} onError={() => setImgError(true)} />
         ) : (
           <View style={[cardStyles.photo, cardStyles.photoPlaceholder, { alignItems: "center", justifyContent: "center" }]}>
             <Text style={{ fontSize: 36 }}>{isCar ? "🚗" : "🏨"}</Text>
@@ -802,6 +812,41 @@ export default function SearchScreen() {
   const hasNextPage = !!searchData?.nextCursor;
   const totalCount = searchData?.totalCount ?? 0;
 
+  // Active promotion for the current search category
+  const { data: categoryPromotions } = useQuery<Promotion[]>({
+    queryKey: ["promotions-active", category],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: Promotion[] }>(`/promotions/active?activity=${category}`);
+      return res.data.data ?? [];
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const activePromotion = categoryPromotions?.[0] ?? null;
+
+  // Fetch signed photo URLs for all search results via /listings/:id/public
+  const searchResultIds = useMemo(() => allResults.map((r) => r.id), [allResults]);
+  const signedPhotoQueries = useQueries({
+    queries: searchResultIds.map((id) => ({
+      queryKey: ["public-photo", id],
+      queryFn: async (): Promise<string | null> => {
+        try {
+          const res = await listingApi.get<{
+            data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
+          }>(`/listings/${id}/public`);
+          return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
+        } catch { return null; }
+      },
+      staleTime: 5 * 60_000,
+      gcTime: 10 * 60_000,
+      retry: false,
+    })),
+  });
+  const signedPhotoMap = useMemo<Record<string, string | null>>(
+    () => Object.fromEntries(searchResultIds.map((id, i) => [id, signedPhotoQueries[i]?.data ?? null])),
+    [searchResultIds, signedPhotoQueries],
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       {/* ── Search header refiner bar ── */}
@@ -863,6 +908,28 @@ export default function SearchScreen() {
               ? `${allResults.length.toLocaleString()} listing${allResults.length !== 1 ? "s" : ""} ${geo ? `near ${geo.town}` : placeName ? `matching "${placeName}"` : "found"}`
               : `No listings found${geo ? ` near ${geo.town}` : placeName ? ` for "${placeName}"` : ""}`}
           </Text>
+        </View>
+      )}
+
+      {/* ── Active promotion banner ── */}
+      {activePromotion && !isFirstLoad && !searchError && (
+        <View style={promoBannerStyles.wrap}>
+          <Text style={promoBannerStyles.fire}>🔥</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={promoBannerStyles.text} numberOfLines={1}>{activePromotion.title}</Text>
+            {activePromotion.description ? (
+              <Text style={promoBannerStyles.sub} numberOfLines={1}>{activePromotion.description}</Text>
+            ) : null}
+          </View>
+          {(activePromotion.discountPercent != null || activePromotion.discountAmount != null) && (
+            <View style={promoBannerStyles.discBadge}>
+              <Text style={promoBannerStyles.discText}>
+                {activePromotion.discountPercent != null
+                  ? `-${activePromotion.discountPercent}%`
+                  : `-${activePromotion.discountAmount}`}
+              </Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -968,6 +1035,7 @@ export default function SearchScreen() {
                   returnDatetime={returnDatetime}
                   onFavouriteToggle={handleFavouriteToggle}
                   favouriteLoading={favouriteLoading}
+                  signedPhotoUrl={signedPhotoMap[selectedListing.id] ?? null}
                 />
                 <TouchableOpacity
                   style={styles.closePreviewBtn}
@@ -996,6 +1064,7 @@ export default function SearchScreen() {
                 returnDatetime={returnDatetime}
                 onFavouriteToggle={handleFavouriteToggle}
                 favouriteLoading={favouriteLoading}
+                signedPhotoUrl={signedPhotoMap[item.id] ?? null}
               />
             )}
             ListEmptyComponent={
@@ -1322,6 +1391,34 @@ export default function SearchScreen() {
     </SafeAreaView>
   );
 }
+
+// ─── Promotion banner styles ──────────────────────────────────────────────────
+
+const promoBannerStyles = StyleSheet.create({
+  wrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF7ED",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  fire:      { fontSize: 18 },
+  text:      { fontSize: 13, fontWeight: "700", color: "#92400e" },
+  sub:       { fontSize: 11, color: "#b45309", marginTop: 2 },
+  discBadge: { backgroundColor: "#dc2626", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  discText:  { color: "#fff", fontSize: 11, fontWeight: "800" },
+});
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
