@@ -30,13 +30,13 @@ const Header: React.FC<HeaderProps> = ({ user, activeTab, setActiveTab, onLogout
       }`}
     >
       <Link href="/traveller" className="flex items-center">
-        <span
-          className={`text-xl font-serif font-bold tracking-tight transition-colors duration-300 ${
-            transparent ? "text-white" : "text-[#0c2614]"
+        <img
+          src="/images/kainook-logo.jpeg"
+          alt="Kainook"
+          className={`h-10 w-auto object-contain transition-all duration-300 ${
+            transparent ? "brightness-0 invert" : ""
           }`}
-        >
-          Kainook
-        </span>
+        />
       </Link>
 
       <nav className="hidden md:flex items-center gap-8">
