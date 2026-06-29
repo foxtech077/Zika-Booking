@@ -702,6 +702,30 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ── Greeting header ── */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+            Good morning, {firstName} 👋
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">Here is your provider performance overview.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !isLoading} onClick={() => refetch()}>
+            Refresh
+          </Button>
+          <Link href="/dashboard/listings/new">
+            <Button icon={<Plus />}>Add New Listing</Button>
+          </Link>
+        </div>
+      </div>
+
+      {data.hasError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Some dashboard APIs did not respond, so available sections are shown with safe fallback data.
+        </div>
+      )}
+
       {/* ── Stat cards ── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {statCards.map((card) => (
@@ -709,62 +733,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.5fr_0.8fr]">
-        <Card>
-          <SectionHeader
-            title="Earnings Overview"
-            subtitle="Revenue trends and payout performance"
-            action={<Link href="/dashboard/earnings"><Button variant="ghost" size="sm">View earnings</Button></Link>}
-          />
-          <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
-            <div>
-              {isLoading ? (
-                <div className="h-64 rounded-xl bg-slate-100 animate-pulse" />
-              ) : chartData.length === 0 ? (
-                <EmptyState title="No earnings data" message="Revenue trends will appear after completed bookings." icon={<Banknote />} />
-              ) : (
-                <RevenueAreaChart data={chartData} height={260} />
-              )}
-            </div>
-            <div className="space-y-3">
-              <PayoutMetric label="Total earnings" value={<NetCurrency amount={data.earnings.total} />} />
-              <PayoutMetric label="Monthly earnings" value={<NetCurrency amount={data.earnings.monthly} />} />
-              <PayoutMetric label="Pending payouts" value={<NetCurrency amount={data.earnings.pendingPayouts} />} />
-              <PayoutMetric label="Completed payouts" value={<NetCurrency amount={data.earnings.completedPayouts} />} />
-              <div className="rounded-xl bg-slate-50 p-3">
-                <div className="mb-2 flex justify-between text-xs text-slate-500">
-                  <span>Payout progress</span>
-                  <span>{payoutProgress.toFixed(0)}%</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${payoutProgress}%` }} />
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <SectionHeader title="Quick Actions" subtitle="Common provider workflows" />
-          <div className="grid gap-2">
-            {[
-              { label: "Add New Listing", href: "/dashboard/listings/new", icon: <Building2 /> },
-              { label: "View All Bookings", href: "/dashboard/bookings", icon: <BookOpen /> },
-              { label: "Manage Availability", href: "/dashboard/calendar", icon: <CalendarDays /> },
-              { label: "View Earnings", href: "/dashboard/earnings", icon: <DollarSign /> },
-              { label: "Messages", href: "/dashboard/messaging", icon: <MessageSquare /> },
-              { label: "Calendar Sync", href: "/dashboard/channel", icon: <RefreshCw /> },
-            ].map((action) => (
-              <Link key={action.href} href={action.href} className="flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-slate-50">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-primary [&>svg]:h-4 [&>svg]:w-4">{action.icon}</span>
-                <span className="text-sm font-semibold text-slate-700">{action.label}</span>
-                <ArrowRight className="ml-auto h-4 w-4 text-slate-400" />
-              </Link>
-            ))}
-          </div>
-        </Card>
-      </div>
-
+      
       {/* ── Upcoming Bookings (Section 12.2) ── */}
       <div className="grid gap-5">
         <Card>
@@ -962,56 +931,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1fr_1fr]">
-        {/* ── Recent Reviews ── */}
-        <Card>
-          <SectionHeader title="Recent Reviews" subtitle="Latest guest feedback" action={<Link href="/dashboard/reviews"><Button variant="ghost" size="sm">View all</Button></Link>} />
-          {isLoading ? (
-            <RowsSkeleton rows={4} />
-          ) : data.reviews.length === 0 ? (
-            <EmptyState title="No reviews yet" message="Guest reviews will appear after completed stays." icon={<Star />} />
-          ) : (
-            <div className="max-h-[300px] space-y-3 overflow-y-auto pr-1">
-              {data.reviews.map((review) => (
-                <div key={review.id} className="rounded-xl border border-border p-4">
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900">{formatGuestName(review.guestName)}</p>
-                      <p className="text-xs text-slate-500">{review.listingName}</p>
-                    </div>
-                    <RatingStars rating={review.rating} />
-                  </div>
-                  <p className="line-clamp-3 text-sm leading-6 text-slate-600">{review.comment}</p>
-                  <p className="mt-2 text-xs text-slate-400">{formatDate(review.createdAt)}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        {/* ── Recent Activity ── */}
-        <Card>
-          <SectionHeader title="Recent Activity" subtitle="Latest account events" />
-          {data.activity.length === 0 ? (
-            <EmptyState title="No recent activity" message="Booking, review, and listing updates will appear here." icon={<Clock3 />} />
-          ) : (
-            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
-              {data.activity.map((item) => (
-                <div key={item.id} className="flex gap-3">
-                  <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary">
-                    {item.type === "review" ? <Star className="h-4 w-4" /> : item.type === "listing" ? <Building2 className="h-4 w-4" /> : <BookOpen className="h-4 w-4" />}
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                    <p className="text-xs text-slate-500">{item.detail}</p>
-                    <p className="mt-1 text-[11px] text-slate-400">{formatRelativeTime(item.createdAt)}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
+      
     </div>
   );
 }
