@@ -61,6 +61,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 export default function VouchersPage() {
   const { user, _hasHydrated } = useAuthStore();
+  const canCreateVoucher = canAccess(user?.role as any, "manage_vouchers");
 
   if (_hasHydrated && !canAccess(user?.role as any, "view_vouchers")) {
     return <AccessDenied />;
@@ -378,7 +379,7 @@ export default function VouchersPage() {
       align: "right",
       render: (v) => (
         <div className="flex justify-end items-center gap-1" onClick={(e) => e.stopPropagation()}>
-          {hasManagePermission && (
+                    {canCreateVoucher && (
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); toggleMut.mutate({ id: v.id, isActive: !v.isActive }); }}

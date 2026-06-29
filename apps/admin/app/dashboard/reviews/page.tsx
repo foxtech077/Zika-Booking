@@ -6,6 +6,7 @@ import { Star, EyeOff, Eye } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
+import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
@@ -35,6 +36,9 @@ function StarDisplay({ rating }: { rating: number }) {
 
 export default function ReviewsPage() {
   const { user, _hasHydrated } = useAuthStore();
+  // State for selected review and drawer visibility
+  const [selectedReview, setSelectedReview] = useState<ListingReview | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   
   if (_hasHydrated && !canAccess(user?.role as any, "view_reviews")) {
     return <AccessDenied />;
@@ -211,12 +215,52 @@ export default function ReviewsPage() {
           onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
+          onRowClick={(row) => {
+            setSelectedReview(row);
+            setDrawerOpen(true);
+          }}
+
           columns={columns}
           data={reviews}
           loading={isLoading}
           emptyTitle="No reviews found"
           emptyIcon={<Star className="h-10 w-10" />}
         />
+{selectedReview && (
+  <SlideDrawer
+    open={drawerOpen}
+    onClose={() => { setDrawerOpen(false); setSelectedReview(null); }}
+    title="Review Details"
+    width="md"
+  >
+    <div className="p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-medium text-slate-700">Review ID</h3>
+        <p className="text-sm text-slate-900">{selectedReview.id ?? "—"}</p>
+      </div>
+      <div>
+        <h3 className="text-sm font-medium text-slate-700">Listing</h3>
+        <p className="text-sm text-slate-900">{selectedReview.listing?.name ?? selectedReview.listingId ?? "—"}</p>
+      </div>
+      <div>
+        <h3 className="text-sm font-medium text-slate-700">Rating</h3>
+        <p className="text-sm text-slate-900">{selectedReview.rating ?? "—"}</p>
+      </div>
+      {selectedReview.title && (
+        <div>
+          <h3 className="text-sm font-medium text-slate-700">Title</h3>
+          <p className="text-sm text-slate-900">{selectedReview.title}</p>
+        </div>
+      )}
+      {selectedReview.body && (
+        <div>
+          <h3 className="text-sm font-medium text-slate-700">Body</h3>
+          <p className="text-sm text-slate-900">{selectedReview.body}</p>
+        </div>
+      )}
+    </div>
+  </SlideDrawer>
+)}
         <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 

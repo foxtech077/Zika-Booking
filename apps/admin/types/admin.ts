@@ -379,3 +379,33 @@ export interface Promotion {
   createdAt: string;
   createdBy: string;
 }
+
+// ── Dashboard Summaries ──────────────────────────────────────────────────────────
+
+export interface SalesDashboardSummary {
+  totalBookings: number;
+}
+
+export interface SupportDashboardSummary {
+  totalBookings: number;
+  totalPayments: number;
+}
+
+export interface FinanceDashboardSummary {
+  totalRevenue: number;
+  totalPayments: number;
+  totalReports: number;
+}
+
+export interface FinanceRecentActivityItem {
+  id: string;
+  type: string;
+  action: string;
+  actor: string;
+  timestamp: string;
+  metadata?: {
+    paymentId?: string;
+    amount?: number;
+  };
+}
+

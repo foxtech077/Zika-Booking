@@ -195,13 +195,28 @@ export default function PromotionsPage() {
   const updateMut = useMutation({
     mutationFn: ({ id, body }: { id: string; body: any }) =>
       listingApi.patch(`/admin/promotions/${id}`, body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-promotions"] });
-      setEditModal(false);
-      // Close detail drawer if updated
-      setSelected(null);
-      showAlert({ type: "success", title: "Promotion Updated", message: "The promotion campaign has been updated." });
-    },
+    onSuccess: (_, variables) => {
+        qc.invalidateQueries({ queryKey: ["admin-promotions"] });
+        setEditModal(false);
+        // Close detail drawer if updated
+        setSelected(null);
+        // Determine if payload is status‑only
+        const body = variables?.body ?? {};
+        const isStatusOnly = Object.keys(body).length === 1 && body.status !== undefined;
+        if (isStatusOnly) {
+          if (body.status === "active") {
+            showAlert({ type: "success", title: "Promotion Activated", message: "The promotion is now active." });
+          } else if (body.status === "paused") {
+            showAlert({ type: "success", title: "Promotion Paused", message: "The promotion has been paused successfully." });
+          } else {
+            // Fallback for other status changes
+            showAlert({ type: "success", title: "Promotion Updated", message: "The promotion campaign has been updated." });
+          }
+        } else {
+          // Full edit case – keep existing toast
+          showAlert({ type: "success", title: "Promotion Updated", message: "The promotion campaign has been updated." });
+        }
+      },
     onError: (err: any) => {
       setFormError(err?.response?.data?.error?.message ?? err?.message ?? "Failed to update campaign");
       showAlert({ type: "error", title: "Error", message: err?.response?.data?.error?.message ?? "Failed to update promotion." });

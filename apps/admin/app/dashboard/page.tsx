@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { canAccess } from "@/permissions/rbac";
 import { formatDate, formatCurrency, formatRelativeTime, slugToLabel } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
+import type { SalesDashboardSummary, SupportDashboardSummary, FinanceDashboardSummary, FinanceRecentActivityItem } from "@/types/admin";
 
 const fetchUsers = (params: Record<string, string>) =>
   api.get("/admin/users", { params }).then((r) => r.data?.data ?? r.data);
@@ -87,6 +88,7 @@ export default function DashboardPage() {
   const defaultCountry = isCountryManager && userCountryScope.length > 0 ? userCountryScope[0] : "";
   const canViewUsers = canAccess(user?.role as any, "view_users");
   const canViewAudit = canAccess(user?.role as any, "view_audit");
+  const role = user?.role;
 
   const scopedCountryParam: Record<string, string> = defaultCountry ? { country: defaultCountry } : {};
   const queueParams = { limit: "100", ...scopedCountryParam };
@@ -155,11 +157,77 @@ export default function DashboardPage() {
     retry: 1,
   });
 
-  const hasAnyError = summaryError || pendingError || activityError;
+  // ── 4. Sales Summary Query ──────────────────────────────────────────────────
+  const {
+    data: salesSummary,
+    isLoading: loadingSalesSummary,
+    error: salesError,
+    refetch: refetchSales,
+  } = useQuery<SalesDashboardSummary>({
+    queryKey: ["sales-dashboard-summary"],
+    queryFn: () => api.get("/admin/dashboard/sales/summary").then((r) => r.data?.data ?? r.data),
+    enabled: _hasHydrated && role === "sales",
+    retry: 1,
+  });
+
+  // ── 5. Support Summary Query ────────────────────────────────────────────────
+  const {
+    data: supportSummary,
+    isLoading: loadingSupportSummary,
+    error: supportError,
+    refetch: refetchSupport,
+  } = useQuery<SupportDashboardSummary>({
+    queryKey: ["support-dashboard-summary"],
+    queryFn: () => api.get("/admin/dashboard/support/summary").then((r) => r.data?.data ?? r.data),
+    enabled: _hasHydrated && role === "support",
+    retry: 1,
+  });
+
+  // ── 6. Finance Summary Query ────────────────────────────────────────────────
+  const {
+    data: financeSummary,
+    isLoading: loadingFinanceSummary,
+    error: financeError,
+    refetch: refetchFinance,
+  } = useQuery<FinanceDashboardSummary>({
+    queryKey: ["finance-dashboard-summary"],
+    queryFn: () => api.get("/admin/dashboard/finance/summary").then((r) => r.data?.data ?? r.data),
+    enabled: _hasHydrated && role === "finance",
+    retry: 1,
+  });
+
+  // ── 7. Finance Recent Activity Query ────────────────────────────────────────
+  const {
+    data: financeRecent,
+    isLoading: loadingFinanceRecent,
+    error: financeRecentError,
+    refetch: refetchFinanceRecent,
+  } = useQuery<FinanceRecentActivityItem[]>({
+    queryKey: ["finance-dashboard-recent-activity"],
+    queryFn: () => api.get("/admin/dashboard/finance/recent-activity?limit=15").then((r) => r.data?.data ?? r.data),
+    enabled: _hasHydrated && role === "finance",
+    retry: 1,
+  });
+
+  const hasAnyError =
+    (role === "sales" && salesError) ||
+    (role === "support" && supportError) ||
+    (role === "finance" && (financeError || financeRecentError)) ||
+    (!["sales", "support", "finance"].includes(role ?? "") && (summaryError || pendingError || activityError));
+
   const handleRetryAll = () => {
-    refetchSummary();
-    refetchPending();
-    refetchActivity();
+    if (role === "sales") {
+      refetchSales();
+    } else if (role === "support") {
+      refetchSupport();
+    } else if (role === "finance") {
+      refetchFinance();
+      refetchFinanceRecent();
+    } else {
+      refetchSummary();
+      refetchPending();
+      refetchActivity();
+    }
   };
 
   const { data: usersData, isLoading: loadingUsers } = useQuery({
@@ -178,7 +246,6 @@ export default function DashboardPage() {
     queryFn: () => fetchListings(listingsParams),
     enabled: scopedQueriesEnabled,
   });
-  const role = user?.role;
   const { data: queueData, isLoading: loadingQueue } = useQuery({
     queryKey: ["admin-queue-dash", queueParams],
     queryFn: () => fetchReviewQueue(queueParams),
@@ -207,6 +274,12 @@ export default function DashboardPage() {
             ? "Super Admin Dashboard"
             : isAdmin
             ? "Admin Dashboard"
+            : role === "sales"
+            ? "Sales Agent Dashboard"
+            : role === "support"
+            ? "Support Agent Dashboard"
+            : role === "finance"
+            ? "Finance Dashboard"
             : "Country Manager Dashboard"
         }
         description={`Overview · ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`}
@@ -224,14 +297,14 @@ export default function DashboardPage() {
       />
 
       {/* Global Error Banner if Statistics fails */}
-      {summaryError && (
+      {(summaryError || salesError || supportError || financeError || financeRecentError) && (
         <div className="bg-rose-50 border border-rose-200 text-rose-800 px-4 py-3 rounded-xl flex items-center gap-3">
           <AlertCircle className="h-5 w-5 text-rose-600 flex-shrink-0" />
           <div className="flex-1 text-sm font-medium">
             Failed to load dashboard summary statistics. The server might be experiencing temporary downtime.
           </div>
           <button
-            onClick={() => refetchSummary()}
+            onClick={handleRetryAll}
             className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 bg-white border border-rose-200 rounded-lg shadow-sm hover:bg-rose-50 text-rose-700 transition-all"
           >
             <RefreshCw className="h-3 w-3" />
@@ -242,26 +315,24 @@ export default function DashboardPage() {
 
       {/* KPI Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {role !== "finance" && (
-          <StatCard
-            title="Total Bookings"
-            value={bookingsData?.total ?? 0}
-            change={3.4}
-            icon={<CalendarDays className="h-4 w-4 text-primary" />}
-            iconBg="bg-primary/10"
-            loading={loadingBookings}
-          />
-        )}
-        <StatCard
-          title="Pending Payments"
-          value={bookings.filter((b) => b.status === "pending_payment").length}
-          change={0}
-          icon={<Clock className="h-4 w-4 text-warning" />}
-          iconBg="bg-warning/10"
-          loading={loadingBookings}
-        />
-        {role !== "finance" && (
+        {/* Sales Dashboard KPI Cards */}
+        {role === "sales" && (
           <>
+            <StatCard
+              title="Total Bookings"
+              value={salesSummary?.totalBookings ?? 0}
+              icon={<CalendarDays className="h-4 w-4 text-primary" />}
+              iconBg="bg-primary/10"
+              loading={loadingSalesSummary}
+            />
+            <StatCard
+              title="Pending Payments"
+              value={bookings.filter((b) => b.status === "pending_payment").length}
+              change={0}
+              icon={<Clock className="h-4 w-4 text-warning" />}
+              iconBg="bg-warning/10"
+              loading={loadingBookings}
+            />
             <StatCard
               title="Confirmed Bookings"
               value={bookings.filter((b) => ["confirmed", "completed"].includes(b.status)).length}
@@ -280,34 +351,90 @@ export default function DashboardPage() {
             />
           </>
         )}
-        
+
+        {/* Support Dashboard KPI Cards */}
+        {role === "support" && (
+          <>
+            <StatCard
+              title="Total Bookings"
+              value={supportSummary?.totalBookings ?? 0}
+              icon={<CalendarDays className="h-4 w-4 text-primary" />}
+              iconBg="bg-primary/10"
+              loading={loadingSupportSummary}
+            />
+            <StatCard
+              title="Captured Payments"
+              value={supportSummary?.totalPayments ?? 0}
+              icon={<CheckCircle2 className="h-4 w-4 text-success" />}
+              iconBg="bg-success/10"
+              loading={loadingSupportSummary}
+            />
+          </>
+        )}
+
+        {/* Finance Dashboard KPI Cards */}
         {role === "finance" && (
           <>
             <StatCard
-              title="Successful Payments"
-              value={bookings.filter((b) => ["confirmed", "completed"].includes(b.status) || b.paymentStatus === "paid").length}
+              title="Total Revenue"
+              value={financeSummary?.totalRevenue ?? 0}
+              currency="USD"
+              icon={<DollarSign className="h-4 w-4 text-success" />}
+              iconBg="bg-success/10"
+              loading={loadingFinanceSummary}
+            />
+            <StatCard
+              title="Payment Count"
+              value={financeSummary?.totalPayments ?? 0}
+              icon={<CheckCircle2 className="h-4 w-4 text-primary" />}
+              iconBg="bg-primary/10"
+              loading={loadingFinanceSummary}
+            />
+            <StatCard
+              title="Report Count"
+              value={financeSummary?.totalReports ?? 0}
+              icon={<AlertCircle className="h-4 w-4 text-warning" />}
+              iconBg="bg-warning/10"
+              loading={loadingFinanceSummary}
+            />
+          </>
+        )}
+
+        {/* Standard / Admin / Country Manager KPI Cards */}
+        {role !== "sales" && role !== "support" && role !== "finance" && (
+          <>
+            <StatCard
+              title="Total Bookings"
+              value={bookingsData?.total ?? 0}
+              change={3.4}
+              icon={<CalendarDays className="h-4 w-4 text-primary" />}
+              iconBg="bg-primary/10"
+              loading={loadingBookings}
+            />
+            <StatCard
+              title="Pending Payments"
+              value={bookings.filter((b) => b.status === "pending_payment").length}
+              change={0}
+              icon={<Clock className="h-4 w-4 text-warning" />}
+              iconBg="bg-warning/10"
+              loading={loadingBookings}
+            />
+            <StatCard
+              title="Confirmed Bookings"
+              value={bookings.filter((b) => ["confirmed", "completed"].includes(b.status)).length}
+              change={0}
               icon={<CheckCircle2 className="h-4 w-4 text-success" />}
               iconBg="bg-success/10"
               loading={loadingBookings}
             />
             <StatCard
-              title="Failed Payments"
-              value={bookings.filter((b) => b.paymentStatus === "failed" || b.status === "failed").length}
+              title="Cancelled Bookings"
+              value={bookings.filter((b) => b.status.startsWith("cancelled")).length}
+              change={0}
               icon={<XCircle className="h-4 w-4 text-danger" />}
               iconBg="bg-danger/10"
               loading={loadingBookings}
             />
-            <StatCard
-              title="Refunded Payments"
-              value={bookings.filter((b) => b.paymentStatus === "refunded" || b.status === "refunded").length}
-              icon={<RotateCcw className="h-4 w-4 text-purple-600" />}
-              iconBg="bg-purple-100"
-              loading={loadingBookings}
-            />
-          </>
-        )}
-        {role !== "sales" && role !== "support" && (
-          <>
             <StatCard
               title="Total Revenue"
               value={totalRevenue}
@@ -326,35 +453,21 @@ export default function DashboardPage() {
               iconBg="bg-info/10"
               loading={loadingBookings}
             />
-            {role === "finance" && (
-              <StatCard
-                title="Provider Payouts"
-                value={totalPayout}
-                currency="USD"
-                icon={<DollarSign className="h-4 w-4 text-warning" />}
-                iconBg="bg-warning/10"
-                loading={loadingBookings}
-              />
-            )}
-            {role !== "finance" && (
-              <>
-                <StatCard
-                  title="Total Listings"
-                  value={listingsData?.total ?? 0}
-                  change={2.1}
-                  icon={<Building2 className="h-4 w-4 text-teal-600" />}
-                  iconBg="bg-teal-100"
-                  loading={loadingListings}
-                />
-                <StatCard
-                  title="Pending Accreditation"
-                  value={queueData?.total ?? 0}
-                  icon={<BadgeCheck className="h-4 w-4 text-warning" />}
-                  iconBg="bg-warning/10"
-                  loading={loadingQueue}
-                />
-              </>
-            )}
+            <StatCard
+              title="Total Listings"
+              value={listingsData?.total ?? 0}
+              change={2.1}
+              icon={<Building2 className="h-4 w-4 text-teal-600" />}
+              iconBg="bg-teal-100"
+              loading={loadingListings}
+            />
+            <StatCard
+              title="Pending Accreditation"
+              value={queueData?.total ?? 0}
+              icon={<BadgeCheck className="h-4 w-4 text-warning" />}
+              iconBg="bg-warning/10"
+              loading={loadingQueue}
+            />
           </>
         )}
       </div>
@@ -446,8 +559,8 @@ export default function DashboardPage() {
         )}
 
         {/* Audit activity feed */}
-        {role !== "sales" && role !== "support" && (
-          <Card padding="none" className={role === "finance" ? "lg:col-span-2" : ""}>
+        {role !== "sales" && role !== "support" && role !== "finance" && (
+          <Card padding="none" className="lg:col-span-2">
             <div className="p-5 border-b border-border">
               <CardHeader title="Audit Activity" description="Recent admin actions" />
             </div>
@@ -481,6 +594,54 @@ export default function DashboardPage() {
                           {formatRelativeTime(log.timestamp)}
                         </span>
                       </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Finance Recent Activity Feed */}
+        {role === "finance" && (
+          <Card padding="none" className="lg:col-span-2">
+            <div className="p-5 border-b border-border">
+              <CardHeader title="Finance Recent Activity" description="Recent refund activity" />
+            </div>
+            <div className="divide-y divide-border">
+              {loadingFinanceRecent ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 p-4">
+                    <div className="h-8 w-8 bg-slate-200 rounded-full animate-shimmer" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 bg-slate-200 rounded w-3/4 animate-shimmer" />
+                      <div className="h-3 bg-slate-200 rounded w-1/2 animate-shimmer" />
+                    </div>
+                  </div>
+                ))
+              ) : !financeRecent || financeRecent.length === 0 ? (
+                <div className="p-8 text-center text-sm text-slate-400">No recent refund activities</div>
+              ) : (
+                financeRecent.map((act: any) => (
+                  <div key={act.id} className="flex items-center gap-3 px-5 py-3">
+                    <div className="p-2 bg-purple-50 rounded-lg flex-shrink-0 text-purple-600">
+                      <RotateCcw className="h-4 w-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-900">
+                        Refund Issued <span className="text-xs text-slate-400 font-normal">by {act.actor ?? "system"}</span>
+                      </p>
+                      <p className="text-xs text-slate-500 truncate">
+                        Payment ID: {act.metadata?.paymentId || "—"}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-semibold text-rose-600 tabular">
+                        -{formatCurrency(Number(act.metadata?.amount || 0), "USD")}
+                      </p>
+                      <span className="text-xs text-slate-400">
+                        {formatRelativeTime(act.timestamp)}
+                      </span>
                     </div>
                   </div>
                 ))

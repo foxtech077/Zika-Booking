@@ -835,62 +835,50 @@ export default function ManualBookingPage() {
           // ignore — calendar already has data from the initial fetch
         }
       }
-// Duplicate saveDraftMut block removed to fix syntax errors
-      const saveDraftMut = useMutation({
-    mutationFn: () => {
-      const rate = computedPricing && nights > 0
-        ? computedPricing.subtotal / nights
-        : (price?.baseAmount ?? 0);
-      return listingApi
-        .post("/admin/bookings/draft", {
-          listingId,
-          listingType,
-          listingName,
-          guestFirstName: firstName,
-
-        .then((r) => r.data);
-    },
-    onSuccess: () => {
-      setErrors({});
-      showAlert({ type: "success", title: "Draft Saved", message: "Booking draft saved successfully." });
-    },
-    onError: (err) => {
-      setErrors((p) => ({ ...p, _api: err?.response?.data?.error?.message ?? "Draft save failed." }));
-      showAlert({ type: "warning", title: "Draft Not Saved", message: "Backend not yet active — data stored locally." });
-    },
-  });
-    </button>
-  );
-
-
-
-
+    } catch (err: any) {
+      setAvailStatus("unavailable");
+      setErrors((p) => ({
+        ...p,
+        _api: err?.response?.data?.error?.message ?? "Availability check failed",
+      }));
+    }
+  }
   const saveDraftMut = useMutation({
-    mutationFn: () => {
-      const rate = computedPricing && nights > 0
-        ? computedPricing.subtotal / nights
-        : (price?.baseAmount ?? 0);
-
-      return listingApi.post("/admin/bookings/draft", {
-        listingId, listingType, listingName,
-        guestFirstName: firstName, guestLastName: lastName,
-        guestEmail: email, guestPhone: phone, nationality,
-        country, guests, notes,
-        checkIn: isAccommodation ? (checkIn ? new Date(checkIn).toISOString() : undefined) : (pickup ? new Date(pickup).toISOString() : undefined),
-        checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : undefined) : (returnDt ? new Date(returnDt).toISOString() : undefined),
-        nightsOrDays: nights,
-        nightlyRate: rate,
-        guestId: "",
-      }).then((r) => r.data),
-    onSuccess: () => {
-      setErrors({});
-      showAlert({ type: "success", title: "Draft Saved", message: "Booking draft saved successfully." });
-    },
-    onError: () => {
-      setErrors((p) => ({ ...p, _api: "Draft saved (backend not yet active — data stored locally)." }));
-      showAlert({ type: "warning", title: "Draft Not Saved", message: "Backend not yet active — data stored locally." });
-    },
-  });
+  // Create a draft booking on the backend
+  mutationFn: async () => {
+    // Calculate nightly rate if pricing info is available
+    const rate = computedPricing && nights > 0 ? computedPricing.subtotal / nights : (price?.baseAmount ?? 0);
+    const payload = {
+      listingId,
+      listingType,
+      listingName,
+      guestFirstName: firstName,
+      guestLastName: lastName,
+      guestEmail: email,
+      guestPhone: phone,
+      nationality,
+      country,
+      guests,
+      notes,
+      checkIn: isAccommodation ? (checkIn ? new Date(checkIn).toISOString() : undefined) : (pickup ? new Date(pickup).toISOString() : undefined),
+      checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : undefined) : (returnDt ? new Date(returnDt).toISOString() : undefined),
+      nightsOrDays: nights,
+      nightlyRate: rate,
+      guestId: "",
+    };
+    const res = await listingApi.post("/admin/bookings/draft", payload);
+    return res.data;
+  },
+  onSuccess: () => {
+    setErrors({});
+    showAlert({ type: "success", title: "Draft Saved", message: "Booking draft saved successfully." });
+  },
+  onError: (err: any) => {
+    // Preserve backend error message when available
+    setErrors((p) => ({ ...p, _api: err?.response?.data?.error?.message ?? "Draft save failed." }));
+    showAlert({ type: "warning", title: "Draft Not Saved", message: "Backend not yet active — data stored locally." });
+  },
+});
 
   const paymentLinkMut = useMutation({
     mutationFn: async (bookingId: string) => {
