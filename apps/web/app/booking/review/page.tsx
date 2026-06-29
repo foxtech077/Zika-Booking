@@ -1146,12 +1146,12 @@ function ConfirmedView({
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row gap-3 pb-8">
-        <button
+        {/* <button
           onClick={onDownload}
           className="flex-1 py-3.5 border-2 border-[#166534] text-[#166534] font-bold rounded-xl hover:bg-[#166534]/5 transition text-sm flex items-center justify-center gap-2"
         >
           <span>⬇</span> Download Voucher PDF
-        </button>
+        </button> */}
         <button
           onClick={onViewBookings}
           className="flex-1 py-3.5 bg-[#166534] text-white font-bold rounded-xl hover:bg-[#14532d] transition text-sm"

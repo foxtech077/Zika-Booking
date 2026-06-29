@@ -3,6 +3,8 @@ import React from "react";
 import type { PublicListingDetail } from "@/types";
 import ListingImage from "./ListingImage";
 
+import { isPromotionValid, type ActivePromotion } from "../utils/promo-utils";
+
 interface ListingCardProps {
   listing: PublicListingDetail;
   onSelect: (id: string) => void;
@@ -10,6 +12,11 @@ interface ListingCardProps {
   onHover?: (id: string | null) => void;
   promotionBadge?: { label: string; colour: string };
   variant?: "featured" | "compact";
+  activePromotion?: ActivePromotion | null;
+  /** Controlled favourite state — when provided, overrides local state */
+  isFavourited?: boolean;
+  /** Called when user clicks the heart. If omitted, falls back to local-only toggle. */
+  onToggleFavourite?: (listingId: string) => void;
 }
 
 function NoImage({ category }: { category: string }) {
@@ -40,16 +47,60 @@ export const ListingCard: React.FC<ListingCardProps> = ({
   onHover,
   promotionBadge,
   variant = "featured",
+  activePromotion,
+  isFavourited: controlledFav,
+  onToggleFavourite,
 }) => {
-  const [isFav, setIsFav] = React.useState(listing.isFavourited ?? false);
+  const [localFav, setLocalFav] = React.useState(listing.isFavourited ?? false);
+  // Use controlled value when the parent manages favourite state; fall back to local
+  const isFav = controlledFav !== undefined ? controlledFav : localFav;
   const isHovered = hoveredId === listing.id;
+
+  function handleFavClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (onToggleFavourite) {
+      onToggleFavourite(listing.id);
+    } else {
+      setLocalFav((v) => !v);
+    }
+  }
 
   const basePrice = listing.pricePerNight || 0;
   const isCar = listing.category === "car";
   const unit = isCar ? "day" : "night";
-  const hasPromo = listing.longStayDiscountEnabled;
-  const discountPct = hasPromo ? 15 : 0;
-  const displayPrice = hasPromo ? Math.round(basePrice * (1 - discountPct / 100)) : basePrice;
+
+  // Calculate discount based on active promotion first, fallback to long stay discount
+  const hasLongStay = listing.longStayDiscountEnabled;
+  const longStayPct = hasLongStay ? 15 : 0;
+
+  let displayPrice = basePrice;
+  let promoBadge = promotionBadge;
+
+  const isValidPromo = activePromotion && activePromotion.activity === listing.category && isPromotionValid(activePromotion);
+
+  if (isValidPromo) {
+    console.log("[Promotion] ListingCard received promotion:", activePromotion, "| listing:", listing.id);
+    const promoDiscount = activePromotion.discountType === "percentage"
+      ? Math.round(basePrice * (Number(activePromotion.discountValue) / 100))
+      : Math.round(Number(activePromotion.discountValue));
+    displayPrice = Math.max(0, basePrice - promoDiscount);
+    console.log("[Promotion] Discounted price calculated:", { basePrice, promoDiscount, displayPrice });
+
+    promoBadge = {
+      label: activePromotion.labelText || (
+        activePromotion.discountType === "percentage"
+          ? `${activePromotion.discountValue}% OFF`
+          : `KES ${activePromotion.discountValue} OFF`
+      ),
+      colour: activePromotion.labelColour || "#E31C5F"
+    };
+  } else if (hasLongStay) {
+    displayPrice = Math.round(basePrice * (1 - longStayPct / 100));
+    promoBadge = {
+      label: `${longStayPct}% OFF`,
+      colour: "#E31C5F"
+    };
+  }
 
   /* ── COMPACT card (2-col grid) ── */
   if (variant === "compact") {
@@ -62,15 +113,15 @@ export const ListingCard: React.FC<ListingCardProps> = ({
           isHovered ? "border-[#1D8D2B] shadow-xl" : "border-slate-200 shadow-md hover:shadow-xl"
         }`}
       >
-        {/* Image */}
-        <div className="aspect-[4/3] w-full overflow-hidden relative">
+        {/* Image — fixed height so cards stay consistent regardless of column width */}
+        <div className="h-44 w-full overflow-hidden relative">
           <ListingImage
             listingId={listing.id}
             alt={listing.name}
             className="w-full h-full object-cover group-hover:scale-105 transition duration-700"
             fallbackNode={<NoImage category={listing.category} />}
           />
-          {(listing.isAccredited || listing.instantBooking || hasPromo || promotionBadge) && (
+          {(listing.isAccredited || listing.instantBooking || promoBadge) && (
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
               {listing.isAccredited && (
                 <span className="bg-[#1D8D2B]/90 backdrop-blur-sm text-white text-[9px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1">
@@ -80,21 +131,17 @@ export const ListingCard: React.FC<ListingCardProps> = ({
                   Verified
                 </span>
               )}
-              {hasPromo && !promotionBadge && (
-                <span className="bg-[#E31C5F]/90 backdrop-blur-sm text-white text-[9px] font-semibold px-2.5 py-1 rounded-full">
-                  {discountPct}% OFF
-                </span>
-              )}
-              {promotionBadge && (
-                <span className="backdrop-blur-sm text-white text-[9px] font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: promotionBadge.colour }}>
-                  {promotionBadge.label}
+              {promoBadge && (
+                <span className="backdrop-blur-sm text-white text-[9px] font-bold px-2.5 py-1 rounded-full" style={{ backgroundColor: promoBadge.colour }}>
+                  {promoBadge.label}
                 </span>
               )}
             </div>
           )}
           <button
-            onClick={(e) => { e.stopPropagation(); setIsFav((v) => !v); }}
+            onClick={handleFavClick}
             className="absolute top-3 right-3 z-10 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
+            aria-label={isFav ? "Remove from wishlist" : "Save to wishlist"}
           >
             <svg className={`w-3.5 h-3.5 ${isFav ? "text-red-500 fill-current" : "text-slate-500"}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
@@ -108,10 +155,15 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider truncate">
               {listing.town}{listing.country ? `, ${listing.country}` : ""}
             </p>
-            <p className="text-sm font-bold text-slate-800 shrink-0 ml-2">
-              {listing.currency} {displayPrice.toLocaleString()}
-              <span className="text-[10px] font-medium text-slate-400">/{unit}</span>
-            </p>
+            <div className="text-right shrink-0 ml-2">
+              <p className="text-sm font-bold text-slate-800">
+                {listing.currency} {displayPrice.toLocaleString()}
+                <span className="text-[10px] font-medium text-slate-400">/{unit}</span>
+              </p>
+              {displayPrice < basePrice && (
+                <p className="text-[9px] text-slate-400 line-through leading-none">{listing.currency} {basePrice.toLocaleString()}</p>
+              )}
+            </div>
           </div>
           <h3 className="font-bold text-sm text-slate-900 leading-snug mb-2 line-clamp-1 group-hover:text-[#024622] transition">
             {listing.name}
@@ -172,21 +224,17 @@ export const ListingCard: React.FC<ListingCardProps> = ({
               ⚡ Instant Book
             </span>
           )}
-          {promotionBadge && (
-            <span className="backdrop-blur-sm text-white text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: promotionBadge.colour }}>
-              {promotionBadge.label}
-            </span>
-          )}
-          {hasPromo && !promotionBadge && (
-            <span className="bg-[#E31C5F]/90 backdrop-blur-sm text-white text-[9px] font-semibold px-2 py-0.5 rounded-full">
-              {discountPct}% OFF
+          {promoBadge && (
+            <span className="backdrop-blur-sm text-white text-[9px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: promoBadge.colour }}>
+              {promoBadge.label}
             </span>
           )}
         </div>
         {/* Heart */}
         <button
-          onClick={(e) => { e.stopPropagation(); setIsFav((v) => !v); }}
+          onClick={handleFavClick}
           className="absolute top-2.5 right-2.5 z-10 w-7 h-7 rounded-full bg-white/80 backdrop-blur-sm flex items-center justify-center hover:bg-white transition shadow-sm"
+          aria-label={isFav ? "Remove from wishlist" : "Save to wishlist"}
         >
           <svg className={`w-3.5 h-3.5 transition ${isFav ? "text-red-500 fill-current" : "text-slate-500"}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
@@ -271,7 +319,7 @@ export const ListingCard: React.FC<ListingCardProps> = ({
             <p className="text-xl font-bold text-slate-900 leading-tight">
               {listing.currency} {displayPrice > 0 ? displayPrice.toLocaleString() : "—"}
             </p>
-            {hasPromo && basePrice > displayPrice && (
+            {basePrice > displayPrice && (
               <p className="text-[10px] text-slate-400 line-through leading-none">{listing.currency} {basePrice.toLocaleString()}</p>
             )}
             <p className="text-[9px] uppercase font-bold text-slate-400 tracking-widest">Per {unit}</p>

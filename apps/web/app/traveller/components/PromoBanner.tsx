@@ -15,65 +15,64 @@ function formatCountdown(validUntil: string): string {
   return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
 }
 
-// ── Activity Promotion Banner (non-dismissable, PRD §6.4) ──
+import { isPromotionValid, type ActivePromotion } from "../utils/promo-utils";
+
 interface ActivityPromoBannerProps {
-  bannerTitle: string;
-  bannerSubtitle?: string;
-  labelText?: string;
-  validUntil?: string;
+  activePromotion: ActivePromotion | null | undefined;
 }
 
-export function ActivityPromoBanner({ bannerTitle, bannerSubtitle, labelText, validUntil }: ActivityPromoBannerProps) {
-  const expiring = isExpiringSoon(validUntil);
+export function ActivityPromoBanner({ activePromotion }: ActivityPromoBannerProps) {
+  if (!activePromotion || !isPromotionValid(activePromotion)) {
+    return null;
+  }
+
+  const {
+    bannerTitle,
+    bannerSubtitle,
+    labelText,
+    labelColour,
+    discountType,
+    discountValue,
+  } = activePromotion;
 
   return (
-    <>
-      <style>{`
-        @keyframes promo-shimmer {
-          0% { transform: translateX(-200%); }
-          100% { transform: translateX(200%); }
-        }
-        .promo-shimmer-bar {
-          position: absolute;
-          top: 0; bottom: 0;
-          width: 40%;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
-          animation: promo-shimmer 2.8s linear infinite;
-        }
-      `}</style>
-      <div
-        className={`relative w-full rounded-2xl overflow-hidden shadow-lg text-white ${expiring ? "animate-pulse" : ""}`}
-        style={{ background: expiring ? "#A63A22" : "#C84B2F" }}
-      >
-        {!expiring && <div className="promo-shimmer-bar" />}
-        <div className="relative px-5 py-4 flex items-center gap-4">
-          <div className="shrink-0 w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-xl select-none">
-            🔥
-          </div>
-          <div className="flex-1 min-w-0">
-            {labelText && (
-              <span className="inline-block bg-white/25 text-white text-[9px] font-bold uppercase tracking-widest px-2.5 py-0.5 rounded-full mb-1.5">
-                {labelText}
-              </span>
-            )}
-            <p className="font-bold text-sm leading-snug">{bannerTitle}</p>
-            {bannerSubtitle && (
-              <p className="text-white/75 text-[11px] mt-0.5 line-clamp-1">{bannerSubtitle}</p>
-            )}
-            {expiring && validUntil && (
-              <p className="text-amber-200 text-[10px] font-semibold mt-1">
-                ⏰ Offer ends in {formatCountdown(validUntil)}
-              </p>
-            )}
-          </div>
-          {expiring && (
-            <span className="shrink-0 bg-amber-400 text-amber-900 text-[9px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide">
-              Ending soon
-            </span>
-          )}
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 p-6 sm:p-8 rounded-2xl bg-[#0c2614] text-white shadow-md border border-[#1d8d2b]/20 relative overflow-hidden">
+      <div className="flex-1 min-w-0">
+        {labelText && (
+          <span
+            style={{
+              backgroundColor: labelColour ? `${labelColour}22` : "rgba(29, 141, 43, 0.2)",
+              borderColor: labelColour ? `${labelColour}44` : "rgba(29, 141, 43, 0.3)",
+              color: labelColour || "#4ade80",
+            }}
+            className="inline-block text-[10px] font-bold tracking-wider uppercase px-2.5 py-0.5 rounded-full border mb-2.5"
+          >
+            {labelText}
+          </span>
+        )}
+        {bannerTitle && (
+          <h3 className="text-xl font-bold sm:text-2xl text-white tracking-tight leading-tight">
+            {bannerTitle}
+          </h3>
+        )}
+        {bannerSubtitle && (
+          <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-xl font-normal leading-relaxed">
+            {bannerSubtitle}
+          </p>
+        )}
+      </div>
+
+      <div className="shrink-0 flex items-center justify-center sm:ml-4">
+        <div className="w-24 h-24 rounded-full border border-emerald-700/50 flex flex-col justify-center items-center gap-0.5 relative">
+          <span className="text-2xl font-bold text-emerald-400">
+            {discountType === "percentage" ? `${discountValue}%` : `${discountValue}`}
+          </span>
+          <span className="text-[8px] font-bold tracking-widest text-emerald-500/80 uppercase">
+            AUTO-APPLIED
+          </span>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
