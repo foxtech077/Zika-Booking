@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
@@ -135,9 +136,16 @@ export function TravellerHeader({
           <button
             type="button"
             onClick={onExitLock}
-            className="text-xl font-serif font-bold text-[#0c2614] tracking-tight hover:opacity-80 transition"
+            className="flex items-center gap-2.5 hover:opacity-80 transition"
           >
-            Kainook
+            <Image
+              src="/images/kainook-logo.jpeg"
+              alt="Kainook"
+              width={32}
+              height={32}
+              className="rounded-xl object-cover"
+            />
+            <span className="text-xl font-serif font-bold text-[#0c2614] tracking-tight">Kainook</span>
           </button>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 font-mono text-xs tracking-wider text-[#0c2614]">
@@ -163,9 +171,16 @@ export function TravellerHeader({
           <div className="flex items-center gap-10">
             <Link
               href={TRAVELLER_ROUTES.destinations}
-              className="shrink-0 text-xl font-serif font-bold tracking-tight text-[#0c2614]"
+              className="shrink-0 flex items-center gap-2.5"
             >
-              Kainook
+              <Image
+                src="/images/kainook-logo.jpeg"
+                alt="Kainook"
+                width={36}
+                height={36}
+                className="rounded-xl object-cover"
+              />
+              <span className="text-xl font-serif font-bold tracking-tight text-[#0c2614]">Kainook</span>
             </Link>
 
             <nav className="hidden items-center gap-8 md:flex">

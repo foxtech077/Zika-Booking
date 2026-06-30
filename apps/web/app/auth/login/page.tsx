@@ -81,7 +81,7 @@ export default function LoginPage() {
   const handleGoogleCredentialResponse = async (response: any) => {
     setError(null);
     try {
-      const res = await api.post<ApiResponse<AuthResponse>>("auth/oauth/google", {
+      const res = await api.post<ApiResponse<AuthResponse>>("/auth/auth/oauth/google", {
         idToken: response.credential,
       });
       if (!res.data.success) throw res.data;
@@ -108,7 +108,7 @@ export default function LoginPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post<ApiResponse<AuthResponse>>("auth/login", form);
+      const res = await api.post<ApiResponse<AuthResponse>>("auth/auth/login", form);
       if (!res.data.success) throw res.data;
       return res.data.data;
     },
@@ -335,7 +335,7 @@ export default function LoginPage() {
           {/* Sign up link */}
           <p className="text-center text-sm text-gray-500 mt-4">
             Don&apos;t have an account?{" "}
-            <Link href="/auth/register" className="text-primary font-semibold hover:underline">
+            <Link href="/auth/auth/register" className="text-primary font-semibold hover:underline">
               Create one
             </Link>
           </p>
