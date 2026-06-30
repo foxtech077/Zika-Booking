@@ -307,6 +307,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           success: true,
           data: {
             ...pricing,
+
             country,
             paymentProvider,
           },
@@ -344,7 +345,21 @@ export async function bookingRoutes(app: FastifyInstance) {
           reference: true,
           guestEmail: true,
           guestFirstName: true,
+          guestLastName: true,
           guestPhone: true,
+          providerId: true,
+          providerPayout: true,
+          listingType: true,
+          checkIn: true,
+          checkOut: true,
+          pickupDatetime: true,
+          returnDatetime: true,
+          paymentId: true,
+          listing: {
+            select: {
+              name: true,
+            },
+          },
         },
       });
 
@@ -352,7 +367,31 @@ export async function bookingRoutes(app: FastifyInstance) {
         return sendError(reply, 404, "NOT_FOUND", "Booking not found");
       }
 
-      return sendSuccess(reply, 200, booking);
+      let hostEmail = "";
+      try {
+        const result = await prisma.$queryRawUnsafe<{ email: string }[]>(
+          `SELECT email FROM auth."User" WHERE id = $1`,
+          booking.providerId
+        );
+        if (result && result.length > 0) {
+          hostEmail = result[0]?.email ?? "";
+        }
+      } catch (err) {
+        app.log.error(
+          err,
+          `Failed to fetch host email for provider ${booking.providerId}`
+        );
+      }
+
+      const bookingWithHostEmail = {
+        ...booking,
+        listing: booking.listing ? {
+          ...booking.listing,
+          hostEmail,
+        } : null,
+      };
+
+      return sendSuccess(reply, 200, bookingWithHostEmail);
     } catch (err) {
       req.log.error({ err }, "Failed to fetch internal booking details");
       return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching booking details.");
@@ -912,46 +951,46 @@ export async function bookingRoutes(app: FastifyInstance) {
         });
         if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
-      const validStatuses = listing.category === "hotel" ? ["approved"] : ["active"];
-      if (!validStatuses.includes(listing.status)) {
-        return reply.status(410).send({
-          success: false,
-          error: { code: "LISTING_INACTIVE", message: "This listing is no longer available." },
+        const validStatuses = listing.category === "hotel" ? ["approved"] : ["active"];
+        if (!validStatuses.includes(listing.status)) {
+          return reply.status(410).send({
+            success: false,
+            error: { code: "LISTING_INACTIVE", message: "This listing is no longer available." },
+          });
+        }
+
+        // Car: require driver details & enforce minimum age
+        if (listing.category === "car") {
+          if (!body.driverFirstName || !body.driverLastName)
+            return sendError(reply, 400, "VALIDATION_ERROR", "Driver first and last name are required for car rentals.");
+          if (listing.minimumDriverAge && body.driverAge && body.driverAge < listing.minimumDriverAge)
+            return sendError(
+              reply, 400, "DRIVER_AGE_RESTRICTION",
+              `Driver must be at least ${listing.minimumDriverAge} years old.`,
+            );
+        }
+        const commissionRate = await getCommissionRate(listing.country ?? null);
+
+        const rate =
+          listing.category === "car"
+            ? Number(listing.pricePerDay ?? 0)
+            : Number(listing.pricePerNight ?? 0);
+
+        // 1. BASE BILLING (NO VOUCHER)
+
+        const baseBilling = calculateBilling({
+          listingCategory: listing.category,
+          checkIn: body.checkIn,
+          checkOut: body.checkOut,
+          pickupDatetime: body.pickupDatetime,
+          returnDatetime: body.returnDatetime,
+          rate,
+          deliveryFee: Number(listing.deliveryFee ?? 0),
+          promotionDiscount: 0,
+          voucherAmount: 0,
+          taxRate: getTaxRate(listing.country),
+          commissionRate,
         });
-      }
-
-      // Car: require driver details & enforce minimum age
-      if (listing.category === "car") {
-        if (!body.driverFirstName || !body.driverLastName)
-          return sendError(reply, 400, "VALIDATION_ERROR", "Driver first and last name are required for car rentals.");
-        if (listing.minimumDriverAge && body.driverAge && body.driverAge < listing.minimumDriverAge)
-          return sendError(
-            reply, 400, "DRIVER_AGE_RESTRICTION",
-            `Driver must be at least ${listing.minimumDriverAge} years old.`,
-          );
-      }
-      const commissionRate = await getCommissionRate(listing.country ?? null);
-
-      const rate =
-        listing.category === "car"
-          ? Number(listing.pricePerDay ?? 0)
-          : Number(listing.pricePerNight ?? 0);
-
-      // 1. BASE BILLING (NO VOUCHER)
-
-      const baseBilling = calculateBilling({
-        listingCategory: listing.category,
-        checkIn: body.checkIn,
-        checkOut: body.checkOut,
-        pickupDatetime: body.pickupDatetime,
-        returnDatetime: body.returnDatetime,
-        rate,
-        deliveryFee: Number(listing.deliveryFee ?? 0),
-        promotionDiscount: 0,
-        voucherAmount: 0,
-        taxRate: getTaxRate(listing.country),
-        commissionRate,
-      });
 
         let voucherDiscount = 0;
         let appliedVoucher: { id: string; code: string } | null = null;
@@ -1002,16 +1041,16 @@ export async function bookingRoutes(app: FastifyInstance) {
         if (redeemPoints > 0) {
           const settings = await prisma.platformSettings.findUnique({ where: { id: "global" } });
           const minRedemption = (settings as any)?.minPointsRedemption ?? 500;
-          
+
           if (redeemPoints < minRedemption) {
             return sendError(reply, 400, "MINIMUM_REDEMPTION_NOT_MET", `You must redeem at least ${minRedemption} points.`);
           }
-          
+
           const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number }[]>(
             `SELECT "loyaltyPoints" FROM auth."User" WHERE id = $1`,
             guestId
           );
-          
+
           if (!userRes[0] || userRes[0].loyaltyPoints < redeemPoints) {
             return sendError(reply, 400, "INSUFFICIENT_POINTS", "You do not have enough loyalty points to redeem.");
           }
@@ -1150,13 +1189,13 @@ export async function bookingRoutes(app: FastifyInstance) {
           `, redeemPoints, guestId);
           const balanceAfter = Math.max(0, prevBalance - redeemPoints);
           await logLoyaltyTransaction({
-            userId:      guestId,
-            type:        "redeemed",
-            points:      -redeemPoints,
+            userId: guestId,
+            type: "redeemed",
+            points: -redeemPoints,
             balanceAfter,
-            bookingId:   booking.id,
+            bookingId: booking.id,
             description: `Redeemed ${redeemPoints} pts at checkout for booking ${booking.reference}`,
-          }).catch(() => {});
+          }).catch(() => { });
         }
 
         return sendSuccess(reply, 201, {
@@ -1227,59 +1266,65 @@ export async function bookingRoutes(app: FastifyInstance) {
         // payment webhooks cannot both confirm overlapping bookings simultaneously.
         const confirmedAt = new Date();
         try {
-          await prisma.$transaction(async (tx) => {
-            // Lock the listing row — serialises all confirmations for this listing.
-            await tx.$queryRawUnsafe(
-              `SELECT id FROM listing.listings WHERE id = $1 FOR UPDATE`,
-              booking.listingId,
-            );
+          await prisma.$transaction(
+            async (tx) => {
+              // Lock the listing row — serialises all confirmations for this listing.
+              await tx.$queryRawUnsafe(
+                `SELECT id FROM listing.listings WHERE id = $1 FOR UPDATE`,
+                booking.listingId,
+              );
 
-            // Re-read booking status inside the TX to catch any concurrent confirm.
-            const fresh = await tx.$queryRawUnsafe<{ status: string }[]>(
-              `SELECT status FROM listing.bookings WHERE id = $1 FOR UPDATE`,
-              id,
-            );
-            if (!fresh[0] || fresh[0].status !== "pending_payment") {
-              throw Object.assign(new Error("Already processed"), { code: "ALREADY_PROCESSED" });
-            }
-
-            // Re-validate that no other confirmed booking occupies these dates.
-            const startDate = booking.checkIn ?? booking.pickupDatetime;
-            const endDate   = booking.checkOut ?? booking.returnDatetime;
-            if (startDate && endDate) {
-              const listing  = await tx.listing.findUnique({ where: { id: booking.listingId } });
-              const unitCount = listing?.unitCount ?? 1;
-
-              const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
-                SELECT id FROM listing.bookings
-                WHERE listing_id = $1
-                  AND status = 'confirmed'
-                  AND id != $2
-                  AND (
-                    (check_in IS NOT NULL AND check_in < $4 AND check_out > $3)
-                    OR (pickup_datetime IS NOT NULL AND pickup_datetime < $4 AND return_datetime > $3)
-                  )
-              `, booking.listingId, id, startDate, endDate);
-
-              if (conflicts.length >= unitCount) {
-                throw Object.assign(new Error("Dates taken"), { code: "DATES_TAKEN" });
+              // Re-read booking status inside the TX to catch any concurrent confirm.
+              const fresh = await tx.$queryRawUnsafe<{ status: string }[]>(
+                `SELECT status FROM listing.bookings WHERE id = $1 FOR UPDATE`,
+                id,
+              );
+              if (!fresh[0] || fresh[0].status !== "pending_payment") {
+                throw Object.assign(new Error("Already processed"), { code: "ALREADY_PROCESSED" });
               }
+
+              // Re-validate that no other confirmed booking occupies these dates.
+              const startDate = booking.checkIn ?? booking.pickupDatetime;
+              const endDate = booking.checkOut ?? booking.returnDatetime;
+              if (startDate && endDate) {
+                const listing = await tx.listing.findUnique({ where: { id: booking.listingId } });
+                const unitCount = listing?.unitCount ?? 1;
+
+                const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
+                  SELECT id FROM listing.bookings
+                  WHERE listing_id = $1
+                    AND status = 'confirmed'
+                    AND id != $2
+                    AND (
+                      (check_in IS NOT NULL AND check_in < $4 AND check_out > $3)
+                      OR (pickup_datetime IS NOT NULL AND pickup_datetime < $4 AND return_datetime > $3)
+                    )
+                `, booking.listingId, id, startDate, endDate);
+
+                if (conflicts.length >= unitCount) {
+                  throw Object.assign(new Error("Dates taken"), { code: "DATES_TAKEN" });
+                }
+              }
+
+              await tx.booking.update({
+                where: { id },
+                data: { status: "confirmed", confirmedAt, paymentId },
+              });
+
+              await tx.bookingStatusLog.create({
+                data: {
+                  bookingId: id,
+                  fromStatus: "pending_payment",
+                  toStatus: "confirmed",
+                  actorType: "system",
+                },
+              });
+            },
+            {
+              maxWait: 20000, // Allow up to 20s to acquire the connection and lock
+              timeout: 30000, // Allow up to 30s for the interactive transaction to finish
             }
-
-            await tx.booking.update({
-              where: { id },
-              data: { status: "confirmed", confirmedAt, paymentId },
-            });
-
-            await tx.bookingStatusLog.create({
-              data: {
-                bookingId: id,
-                fromStatus: "pending_payment",
-                toStatus: "confirmed",
-                actorType: "system",
-              },
-            });
-          });
+          );
         } catch (txErr: any) {
           if (txErr.code === "ALREADY_PROCESSED") {
             return reply.status(409).send({
@@ -1298,7 +1343,7 @@ export async function bookingRoutes(app: FastifyInstance) {
                 cancelledAt: new Date(),
                 cancelledBy: "system",
               },
-            }).catch(() => {});
+            }).catch(() => { });
             await prisma.bookingStatusLog.create({
               data: {
                 bookingId: id,
@@ -1307,14 +1352,14 @@ export async function bookingRoutes(app: FastifyInstance) {
                 actorType: "system",
                 reason: "Dates taken by a concurrent booking.",
               },
-            }).catch(() => {});
+            }).catch(() => { });
             const redeemedPoints = Number((booking as any).redeemPoints ?? 0);
             if (redeemedPoints > 0) {
               await prisma.$executeRawUnsafe(`
                 UPDATE auth."User"
                 SET "loyaltyPoints" = "loyaltyPoints" + $1, "updatedAt" = NOW()
                 WHERE id = $2
-              `, redeemedPoints, booking.guestId).catch(() => {});
+              `, redeemedPoints, booking.guestId).catch(() => { });
             }
             return reply.status(409).send({
               success: false,
@@ -1350,10 +1395,10 @@ export async function bookingRoutes(app: FastifyInstance) {
         ).catch(() => { });
 
         fireNotification(booking.guestId, {
-          type:  "booking_confirmed",
+          type: "booking_confirmed",
           title: "Booking Confirmed!",
-          body:  `Your booking at ${confirmedListing?.name ?? "your listing"} (Ref: ${booking.reference}) is confirmed.`,
-          data:  { bookingId: id, reference: booking.reference },
+          body: `Your booking at ${confirmedListing?.name ?? "your listing"} (Ref: ${booking.reference}) is confirmed.`,
+          data: { bookingId: id, reference: booking.reference },
         });
 
         // Award loyalty points — cross-schema update to auth."User"
@@ -1409,13 +1454,13 @@ export async function bookingRoutes(app: FastifyInstance) {
 
             // Log earned points transaction
             await logLoyaltyTransaction({
-              userId:      booking.guestId,
-              type:        "earned",
-              points:      earnedPoints,
+              userId: booking.guestId,
+              type: "earned",
+              points: earnedPoints,
               balanceAfter: newPoints,
-              bookingId:   id,
+              bookingId: id,
               description: `Earned from booking ${booking.reference} (${finalTier} tier × ${multiplier})`,
-            }).catch(() => {});
+            }).catch(() => { });
 
             // Tier upgrade: send push notification + auto-assign vouchers
             if (finalTier !== user.currentTier.toLowerCase()) {
@@ -1433,7 +1478,7 @@ export async function bookingRoutes(app: FastifyInstance) {
               const tierVouchers = autoVouchers.filter((v) => {
                 const tiers: string[] = ((v as any).applicableTiers || []).map((t: string) => t.toLowerCase());
                 const tierMatches = tiers.length === 0 || tiers.includes(finalTier);
-                
+
                 const vCountry = (v as any).countryScope;
                 const countryMatches = !vCountry || vCountry === user.country;
 
@@ -1448,11 +1493,11 @@ export async function bookingRoutes(app: FastifyInstance) {
                   create: {
                     voucherId: v.id,
                     bookingId: `wallet-${booking.guestId}-${v.id}`,
-                    guestId:   booking.guestId,
-                    discount:  0,
+                    guestId: booking.guestId,
+                    discount: 0,
                   },
                   update: {},
-                }).catch(() => {});
+                }).catch(() => { });
               }
 
               const vouchersAssigned = tierVouchers.length > 0;
@@ -1461,18 +1506,18 @@ export async function bookingRoutes(app: FastifyInstance) {
                 : `Congratulations! You've reached ${tierName} status and unlocked new benefits.`;
 
               fireNotification(booking.guestId, {
-                type:  "tier_upgrade",
+                type: "tier_upgrade",
                 title: `You've reached ${tierName}! 🎉`,
-                body:  notificationBody,
-                data:  { tier: finalTier, voucherCodes: tierVouchers.map((v) => v.code) },
+                body: notificationBody,
+                data: { tier: finalTier, voucherCodes: tierVouchers.map((v) => v.code) },
               });
 
               if (vouchersAssigned) {
                 fireNotification(booking.guestId, {
-                  type:  "voucher_assigned",
+                  type: "voucher_assigned",
                   title: "New Voucher Added!",
-                  body:  `A ${tierName} exclusive voucher has been added to your wallet.`,
-                  data:  { voucherCodes: tierVouchers.map((v) => v.code) },
+                  body: `A ${tierName} exclusive voucher has been added to your wallet.`,
+                  data: { voucherCodes: tierVouchers.map((v) => v.code) },
                 });
               }
             }
@@ -1556,7 +1601,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             UPDATE auth."User"
             SET "loyaltyPoints" = "loyaltyPoints" + $1, "updatedAt" = NOW()
             WHERE id = $2
-          `, redeemedPoints, booking.guestId).catch(() => {});
+          `, redeemedPoints, booking.guestId).catch(() => { });
         }
 
         return sendSuccess(reply, 200, { message: "Booking marked as failed." });
@@ -1672,21 +1717,21 @@ export async function bookingRoutes(app: FastifyInstance) {
             UPDATE auth."User"
             SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
             WHERE id = $2
-          `, pointsDelta, guestId).catch(() => {});
+          `, pointsDelta, guestId).catch(() => { });
           const newBal = Math.max(0, prevBal + pointsDelta);
           if (redeemedPoints > 0) {
             await logLoyaltyTransaction({
               userId: guestId, type: "refunded_redeemed",
               points: redeemedPoints, balanceAfter: newBal,
               bookingId: id, description: `Redeemed points refunded — booking ${booking.reference} cancelled by guest`,
-            }).catch(() => {});
+            }).catch(() => { });
           }
           if (earnedPointsToReverse > 0) {
             await logLoyaltyTransaction({
               userId: guestId, type: "reversed_earned",
               points: -earnedPointsToReverse, balanceAfter: newBal,
               bookingId: id, description: `Earned points reversed — booking ${booking.reference} cancelled by guest`,
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
 
@@ -1828,21 +1873,21 @@ export async function bookingRoutes(app: FastifyInstance) {
             UPDATE auth."User"
             SET "loyaltyPoints" = GREATEST(0, "loyaltyPoints" + $1), "updatedAt" = NOW()
             WHERE id = $2
-          `, pointsDelta, booking.guestId).catch(() => {});
+          `, pointsDelta, booking.guestId).catch(() => { });
           const newBal = Math.max(0, prevBal + pointsDelta);
           if (redeemedPoints > 0) {
             await logLoyaltyTransaction({
               userId: booking.guestId, type: "refunded_redeemed",
               points: redeemedPoints, balanceAfter: newBal,
               bookingId: id, description: `Redeemed points refunded — booking ${booking.reference} cancelled by provider`,
-            }).catch(() => {});
+            }).catch(() => { });
           }
           if (earnedPointsToReverse > 0) {
             await logLoyaltyTransaction({
               userId: booking.guestId, type: "reversed_earned",
               points: -earnedPointsToReverse, balanceAfter: newBal,
               bookingId: id, description: `Earned points reversed — booking ${booking.reference} cancelled by provider`,
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
 
@@ -1858,6 +1903,150 @@ export async function bookingRoutes(app: FastifyInstance) {
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while cancelling the booking.");
       }
     },
+  );
+
+  // ── POST /provider/bookings/:id/check-in — provider check-in ─────────────────
+  app.post(
+    "/provider/bookings/:id/check-in",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "Provider checks in a guest (idempotent)",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        body: {
+          type: "object",
+          properties: {
+            checkedInAt: { type: "string", format: "date-time" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  message: { type: "string" },
+                },
+                required: ["message"],
+              },
+            },
+          },
+          403: errSchema,
+          404: errSchema,
+          409: errSchema,
+        },
+      },
+      preHandler: [requireProviderRole],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const providerId = (req as ProviderRequest).providerId;
+      const { id } = req.params as { id: string };
+      const body = req.body as { checkedInAt?: string } | undefined;
+      const checkedInAt = body?.checkedInAt ?? new Date().toISOString();
+
+      try {
+        const booking = await prisma.booking.findUnique({
+          where: { id },
+          include: { listing: true },
+        });
+
+        if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+        if (booking.listing.providerId !== providerId)
+          return sendError(reply, 403, "FORBIDDEN", "This booking is not for your listing.");
+
+        if (booking.status === "checked_in") {
+          // Idempotent: already checked in, trigger internal schedule just in case it wasn't triggered
+          const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
+          const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
+
+          const scheduleRes = await fetch(`${PAYMENT_SERVICE_URL}/internal/payouts/schedule`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-service-key": INTERNAL_SERVICE_KEY,
+            },
+            body: JSON.stringify({
+              bookingId: id,
+              checkedInAt,
+            }),
+          });
+
+          if (!scheduleRes.ok) {
+            const errText = await scheduleRes.text().catch(() => "");
+            req.log.error(`[check-in] Failed to trigger internal schedule (already checked_in): status ${scheduleRes.status}, response: ${errText}`);
+            return sendError(reply, 502, "PAYOUT_SCHEDULING_FAILED", `Failed to schedule payout internally. Detail: ${errText}`);
+          }
+
+          return sendSuccess(reply, 200, {
+            message: "Booking is already checked in. Payout scheduling verified.",
+          });
+        }
+
+        if (booking.status !== "confirmed") {
+          return reply.status(409).send({
+            success: false,
+            error: {
+              code: "INVALID_STATUS",
+              message: `Only confirmed bookings can transition to checked_in. Current status: ${booking.status}`,
+            },
+          });
+        }
+
+        // Update status to checked_in
+        await prisma.$transaction(async (tx) => {
+          await tx.booking.update({
+            where: { id },
+            data: { status: "checked_in" },
+          });
+
+          await tx.bookingStatusLog.create({
+            data: {
+              bookingId: id,
+              fromStatus: "confirmed",
+              toStatus: "checked_in",
+              actorType: "provider",
+              changedBy: providerId,
+            },
+          });
+        });
+
+        // Call payment-service POST /internal/payouts/schedule
+        const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
+        const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
+
+        const scheduleRes = await fetch(`${PAYMENT_SERVICE_URL}/internal/payouts/schedule`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-service-key": INTERNAL_SERVICE_KEY,
+          },
+          body: JSON.stringify({
+            bookingId: id,
+            checkedInAt,
+          }),
+        });
+
+        if (!scheduleRes.ok) {
+          const errText = await scheduleRes.text().catch(() => "");
+          req.log.error(`[check-in] Failed to schedule payout internally: status ${scheduleRes.status}, response: ${errText}`);
+          return sendError(reply, 502, "PAYOUT_SCHEDULING_FAILED", `Failed to schedule payout internally. Detail: ${errText}`);
+        }
+
+        return sendSuccess(reply, 200, {
+          message: "Booking status updated to checked_in and payout scheduled.",
+        });
+      } catch (err) {
+        req.log.error({ err }, "Failed to check in booking");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while checking in the booking.");
+      }
+    }
   );
 
   // ── GET /guests/me/bookings — guest booking history ────────────────────────

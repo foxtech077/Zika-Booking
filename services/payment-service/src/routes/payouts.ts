@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
-import { requireUser, requireAdmin, type GuestRequest } from "../middleware/auth.js";
+import { requireUser, requireAdmin, requireInternalService, type GuestRequest } from "../middleware/auth.js";
 import { sendError } from "../lib/errors.js";
 import { processEligiblePayouts } from "../services/payout.service.js";
 
@@ -282,5 +282,59 @@ export async function payoutRoutes(app: FastifyInstance) {
     });
 
     reply.send({ success: true, data: updated });
+  });
+
+  // ── POST /internal/payouts/schedule ──────────────────────────────────────────
+  app.post("/internal/payouts/schedule", {
+    preHandler: [requireInternalService],
+    schema: {
+      tags: ["Payouts"],
+      summary: "Internal: schedule a pending payout after provider check-in",
+      body: {
+        type: "object",
+        required: ["bookingId", "checkedInAt"],
+        properties: {
+          bookingId: { type: "string" },
+          checkedInAt: { type: "string" },
+        },
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { bookingId, checkedInAt } = req.body as { bookingId: string; checkedInAt: string };
+
+    try {
+      const payout = await prisma.payout.findUnique({
+        where: { bookingId },
+      });
+
+      if (!payout) {
+        return sendError(reply, 404, "NOT_FOUND", "Payout not found.");
+      }
+
+      if (payout.status !== "pending") {
+        // Idempotent: return success without modifying anything for scheduled, processing, paid, failed, cancelled
+        return reply.send({ success: true, message: "Payout already scheduled or processed.", data: payout });
+      }
+
+      const checkInDate = new Date(checkedInAt);
+      if (isNaN(checkInDate.getTime())) {
+        return sendError(reply, 400, "BAD_REQUEST", "Invalid checkedInAt date string.");
+      }
+
+      const scheduledAt = new Date(checkInDate.getTime() + 24 * 60 * 60 * 1000);
+
+      const updated = await prisma.payout.update({
+        where: { bookingId },
+        data: {
+          status: "scheduled",
+          scheduledAt,
+          updatedAt: new Date(),
+        },
+      });
+
+      return reply.send({ success: true, data: updated });
+    } catch (err: any) {
+      return sendError(reply, 500, "DATABASE_ERROR", err.message);
+    }
   });
 }
