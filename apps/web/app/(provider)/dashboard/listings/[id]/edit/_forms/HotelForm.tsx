@@ -71,6 +71,7 @@ type HotelState = {
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
+  instantBooking: boolean;
 };
 
 function initState(l: Listing): HotelState {
@@ -97,6 +98,7 @@ function initState(l: Listing): HotelState {
     customAmenities:    ((l as any).customAmenities ?? []).map((a: any) =>
                           typeof a === "string" ? a : (a?.label ?? "")),
     customInput:        "",
+    instantBooking:     (l as any).instantBooking ?? false,
   };
 }
 
@@ -157,6 +159,7 @@ function buildPayload(s: HotelState): Record<string, unknown> {
 
   p.amenities = groupAmenities(s.selectedAmenities);
   p.customAmenities = s.customAmenities.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean);
+  p.instantBooking = s.instantBooking;
   return p;
 }
 
@@ -578,6 +581,15 @@ export function HotelForm({ listingId, listing }: Props) {
                   />
                 </div>
                 <div className="flex items-center gap-6 pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={s.instantBooking}
+                      onChange={(e) => set("instantBooking", e.target.checked)}
+                      className="rounded border-slate-300 text-primary focus:ring-primary"
+                    />
+                    <span className="text-sm text-slate-700 font-medium">Instant Booking (Auto-confirm)</span>
+                  </label>
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"

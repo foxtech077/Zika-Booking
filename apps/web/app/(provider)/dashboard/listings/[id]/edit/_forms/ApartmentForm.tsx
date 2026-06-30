@@ -61,6 +61,7 @@ type ApartmentState = {
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
+  instantBooking: boolean;
 };
 
 function toNullableNumber(v: unknown): number | null {
@@ -111,6 +112,7 @@ function initState(l: Listing): ApartmentState {
     selectedAmenities:   flattenGroupedAmenities(a.amenities),
     customAmenities:     (a.customAmenities ?? []).map((x: any) => typeof x === "string" ? x : (x?.label ?? "")),
     customInput:         "",
+    instantBooking:      a.instantBooking ?? false,
   };
 }
 
@@ -167,6 +169,7 @@ function buildPayload(s: ApartmentState): Record<string, unknown> {
 
   p.amenities       = groupAmenities(s.selectedAmenities);
   p.customAmenities = s.customAmenities.map((x) => x.trim()).filter(Boolean);
+  p.instantBooking  = s.instantBooking;
 
   return p;
 }
@@ -519,6 +522,10 @@ export function ApartmentForm({ listingId, listing }: Props) {
                   <Input label="Check-out Time" type="time" value={s.checkoutTime} onChange={(e) => set("checkoutTime", e.target.value)} />
                 </div>
                 <div className="flex items-center gap-6 pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" checked={s.instantBooking} onChange={(e) => set("instantBooking", e.target.checked)} className="rounded border-slate-300 text-primary focus:ring-primary" />
+                    <span className="text-sm text-slate-700 font-medium">Instant Booking (Auto-confirm)</span>
+                  </label>
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input type="checkbox" checked={s.smokingAllowed} onChange={(e) => set("smokingAllowed", e.target.checked)} className="rounded border-slate-300 text-primary focus:ring-primary" />
                     <span className="text-sm text-slate-700">Smoking Allowed</span>

@@ -138,6 +138,7 @@ type CarState = {
   crossBorderAllowed: boolean;
   airportPickup: boolean;
   returnSameLocation: boolean;
+  instantBooking: boolean;
 };
 
 function toNullableNumber(v: unknown): number | null {
@@ -235,6 +236,7 @@ function initState(l: Listing): CarState {
     crossBorderAllowed: a.crossBorderAllowed ?? false,
     airportPickup: a.airportPickup ?? false,
     returnSameLocation: a.returnSameLocation ?? true,
+    instantBooking: a.instantBooking ?? false,
   };
 }
 
@@ -321,6 +323,7 @@ function buildPayload(s: CarState): Record<string, unknown> {
   p.returnSameLocation = s.returnSameLocation;
   p.pickupHoursFrom = s.pickupHoursFrom || null;
   p.pickupHoursTo = s.pickupHoursTo || null;
+  p.instantBooking = s.instantBooking;
 
   return p;
 }

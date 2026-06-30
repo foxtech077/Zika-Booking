@@ -64,6 +64,7 @@ export interface Listing {
   doors?: number | null;
   mileagePolicy?: string | null;
   mileageLimitKm?: number | null;
+  instantBooking?: boolean;
 }
 
 // ── Booking types ─────────────────────────────────────────────────────────────
