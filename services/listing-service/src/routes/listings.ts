@@ -91,7 +91,7 @@ const amenitiesGroupedSchema = z.object({
   Services: z.array(z.string().max(100)).optional(),
 });
 
-const patchListingSchema = z.object({
+export const patchListingSchema = z.object({
   name: z.string().max(200).optional(),
   listingTitle: z.string().max(200).optional(),
   roomType: z.preprocess((val) => {

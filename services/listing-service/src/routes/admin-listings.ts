@@ -7,6 +7,7 @@ import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
 import { fireNotification } from "../lib/notifications.js";
+import { patchListingSchema } from "./listings.js";
 
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
@@ -1368,7 +1369,172 @@ export async function adminListingRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── POST /admin/listings/:id/suspend (UC-2.14) ────────────────────────────
+// PATCH /admin/listings/:id — Update listing fields (Admin)
+app.patch("/admin/listings/:id", {
+  preHandler: [requireAdmin],
+  schema: {
+    tags: ["Admin Listings"],
+    summary: "Update listing fields (admin)",
+    security: [{ bearerAuth: [] }],
+    params: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", description: "Listing ID" },
+      },
+    },
+    body: {
+      type: "object",
+      properties: {
+        listingTitle: { type: "string", maxLength: 200 },
+        roomType: {
+          type: "string",
+          enum: ["standard","superior","deluxe","suite","junior_suite","studio","family_room","presidential_suite"]
+        },
+        unitCount: { type: "integer", minimum: 1 },
+        claimedStarRating: { type: "integer", minimum: 1, maximum: 5 },
+        description: { type: "string", maxLength: 1000 },
+        pricePerNight: { type: "number", minimum: 0 },
+        pricePerDay: { type: "number", minimum: 0 },
+        currency: { type: "string", minLength: 3, maxLength: 3 },
+        minStayNights: { type: "integer", minimum: 1 },
+        checkinTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" },
+        checkoutTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" },
+        cancellationPolicy: { type: "string", enum: ["flexible","moderate","strict"] },
+        smokingAllowed: { type: "boolean" },
+        petsAllowed: { type: "boolean" },
+        address: { type: "string" },
+        town: { type: "string", maxLength: 100 },
+        country: { type: "string", minLength: 2, maxLength: 2 },
+        amenities: {
+          type: "object",
+          properties: {
+            Connectivity: { type: "array", items: { type: "string" } },
+            "Food & Drink": { type: "array", items: { type: "string" } },
+            Wellness: { type: "array", items: { type: "string" } },
+            Comfort: { type: "array", items: { type: "string" } },
+            Services: { type: "array", items: { type: "string" } }
+          },
+          additionalProperties: true
+        },
+        customAmenities: { type: "array", items: { type: "string", maxLength: 60 } },
+        instantBooking: { type: "boolean" },
+        selfCheckin: { type: "boolean" },
+        selfCheckinDetails: { type: "string", maxLength: 500 },
+        apartmentType: { type: "string", enum: ["entire_place","private_room","shared_room","studio","loft","villa","townhouse"] },
+        cleaningFee: { type: "number", minimum: 0 },
+        extraGuestFee: { type: "number", minimum: 0 },
+        extraGuestAfter: { type: "integer", minimum: 1 },
+        weeklyDiscount: { type: "number", minimum: 0 },
+        monthlyDiscount: { type: "number", minimum: 0 },
+        floorNumber: { type: "integer" },
+        propertySizeM2: { type: "number", minimum: 0 },
+        securityDepositDue: { type: "string", maxLength: 30 },
+        // car-specific fields
+        carMake: { type: "string", maxLength: 80 },
+        make: { type: "string", maxLength: 80 },
+        carModel: { type: "string", maxLength: 80 },
+        model: { type: "string", maxLength: 80 },
+        carYear: { type: "integer", minimum: 1990, maximum: new Date().getFullYear() },
+        year: { type: "integer", minimum: 1990, maximum: new Date().getFullYear() },
+        transmission: { type: "string", enum: ["manual","automatic","semi_auto"] },
+        fuelType: { type: "string", enum: ["petrol","diesel","electric","hybrid","lpg"] },
+        seats: { type: "integer", minimum: 1 },
+        doors: { type: "integer", minimum: 2 },
+        mileagePolicy: { type: "string", enum: ["unlimited","limited"] },
+        mileageLimitKm: { type: "integer", minimum: 1 },
+        carCategory: { type: "string", enum: ["Economy","Compact","SUV","Minivan","Pickup","Luxury","Electric","Convertible"] },
+        category: { type: "string", enum: ["Economy","Compact","SUV","Minivan","Pickup","Luxury","Electric","Convertible"] },
+        driveType: { type: "string", enum: ["2WD","4WD","AWD"] },
+        airConditioning: { type: "boolean" },
+        roadsideAssistance: { type: "boolean" },
+        crossBorderAllowed: { type: "boolean" },
+        airportPickup: { type: "boolean" },
+        deliveryEnabled: { type: "boolean" },
+        returnSameLocation: { type: "boolean" },
+        allowPreBooking: { type: "boolean" }
+      },
+      additionalProperties: true
+    },
+    response: {
+      200: ok({ type: "object", properties: { message: { type: "string" }, data: { type: "object" } } }),
+      400: ErrorResponse,
+      401: ErrorResponse,
+      403: ErrorResponse,
+      404: ErrorResponse,
+    },
+  },
+  handler: async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
+    const { id } = req.params as { id: string };
+
+    const parsed = patchListingSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const fields: Record<string, string> = {};
+      for (const e of parsed.error.issues) fields[e.path.join(".")] = e.message;
+      return sendError(reply, 422, "VALIDATION_ERROR", "Invalid listing data.", fields);
+    }
+
+    const {
+      amenities,
+      customAmenities,
+      listingTitle,
+      make,
+      model,
+      year,
+      category,
+      pricePerDay,
+      ...fields
+    } = parsed.data;
+
+    const dbFields: any = { ...fields };
+    if (listingTitle !== undefined) dbFields.name = listingTitle;
+    if (make !== undefined) dbFields.carMake = make;
+    if (model !== undefined) dbFields.carModel = model;
+    if (year !== undefined) dbFields.carYear = year;
+    if (pricePerDay !== undefined) dbFields.pricePerDay = pricePerDay;
+    if (category !== undefined) dbFields.carCategory = category;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.listing.update({ where: { id }, data: dbFields });
+
+      if (amenities !== undefined) {
+        await tx.listingAmenity.deleteMany({ where: { listingId: id } });
+        const flat: string[] = [];
+        for (const [cat, keys] of Object.entries(amenities)) {
+          if (Array.isArray(keys)) {
+            for (const k of keys) flat.push(`${cat}:${k}`);
+          }
+        }
+        if (flat.length > 0) {
+          await tx.listingAmenity.createMany({ data: flat.map((key) => ({ listingId: id, amenityKey: key })) });
+        }
+      }
+
+      if (customAmenities !== undefined) {
+        await tx.listingCustomAmenity.deleteMany({ where: { listingId: id } });
+        if (customAmenities.length > 0) {
+          await tx.listingCustomAmenity.createMany({ data: customAmenities.map((label) => ({ listingId: id, label })) });
+        }
+      }
+    });
+
+    const updated = await prisma.listing.findUnique({
+      where: { id },
+      include: {
+        photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
+        documents: { where: { replacedAt: null } },
+        amenities: true,
+        customAmenities: true,
+      },
+    });
+    if (!updated) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+    const formatted = { ...updated, photos: await withSignedPhotos(updated.photos) };
+    return sendSuccess(reply, 200, { message: "Listing updated.", data: formatted });
+  },
+});
+// ── POST /admin/listings/:id/suspend (UC-2.14) ────────────────────────────
   app.post("/admin/listings/:id/suspend", {
     preHandler: [requireAdmin],
     schema: {
@@ -2291,21 +2457,34 @@ export async function adminListingRoutes(app: FastifyInstance) {
         WHERE listing_id = $1
           AND (
             status = 'confirmed'
+            OR status = 'checked_in'
             OR (status = 'pending_payment' AND created_at > $2)
           )
           AND check_in < $4
           AND check_out > $3
       `, listingId, pendingExpiry, startDate, endDate);
 
-      const count = Number(result[0]?.count ?? 0);
+            const bookingCount = Number(result[0]?.count ?? 0);
+
+      // Check manual and iCal blocked dates
+      const icalBlockedCount = await prisma.icalBlockedDate.count({
+        where: {
+          listingId,
+          startDate: { lt: endDate },
+          endDate: { gt: startDate },
+        },
+      });
+
+      const count = bookingCount + icalBlockedCount;
       const unitCount = listing.unitCount ?? 1;
 
       if (count >= unitCount) {
         return sendSuccess(reply, 200, {
           available: false,
-          reason: "No units available for the selected dates.",
+          reason: "Some of the selected dates within your stay are already booked or unavailable.",
         });
       }
+
 
       // Build pricing preview for the admin
       const nights = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000);
