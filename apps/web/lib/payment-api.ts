@@ -134,6 +134,59 @@ export function getStripeOnboardingUrl(response: { data?: { onboardingUrl?: unkn
   }
 }
 
+// ─── Guest Payment Methods ────────────────────────────────────────────────────
+
+export interface GuestPaymentMethod {
+  id: string;
+  type: "card" | "mobile_money";
+  paymentProvider: "stripe" | "tara";
+  cardBrand: string | null;
+  cardLast4: string | null;
+  cardExpMonth: number | null;
+  cardExpYear: number | null;
+  mobileNumberMasked: string | null;
+  isDefault: boolean;
+}
+
+export interface GuestPaymentMethodsResponse {
+  success: boolean;
+  data: { paymentMethods: GuestPaymentMethod[] };
+}
+
+export interface StripeSetupIntentResponse {
+  success: boolean;
+  data: { setupIntentId: string; clientSecret: string };
+}
+
+export async function getGuestPaymentMethods(): Promise<GuestPaymentMethodsResponse> {
+  const res = await paymentApi.get<GuestPaymentMethodsResponse>("/guests/me/payment-methods");
+  return res.data;
+}
+
+export async function createStripeSetupIntent(): Promise<StripeSetupIntentResponse> {
+  const res = await paymentApi.post<StripeSetupIntentResponse>("/guests/me/payment-methods/stripe/setup");
+  return res.data;
+}
+
+export async function confirmStripePaymentMethod(paymentMethodId: string): Promise<{ success: boolean; data: GuestPaymentMethod }> {
+  const res = await paymentApi.post<{ success: boolean; data: GuestPaymentMethod }>("/guests/me/payment-methods/stripe/confirm", { paymentMethodId });
+  return res.data;
+}
+
+export async function addTaraPaymentMethod(mobileNumber: string): Promise<{ success: boolean; data: GuestPaymentMethod }> {
+  const res = await paymentApi.post<{ success: boolean; data: GuestPaymentMethod }>("/guests/me/payment-methods/tara", { mobileNumber });
+  return res.data;
+}
+
+export async function setDefaultPaymentMethod(id: string): Promise<{ success: boolean; data: GuestPaymentMethod }> {
+  const res = await paymentApi.patch<{ success: boolean; data: GuestPaymentMethod }>(`/guests/me/payment-methods/${id}`, { isDefault: true });
+  return res.data;
+}
+
+export async function deletePaymentMethod(id: string): Promise<void> {
+  await paymentApi.delete(`/guests/me/payment-methods/${id}`);
+}
+
 export interface PayoutListResponse {
   success: boolean;
   data: Payout[];

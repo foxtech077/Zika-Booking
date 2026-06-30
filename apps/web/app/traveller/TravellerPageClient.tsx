@@ -60,6 +60,7 @@ interface ActivePromotion {
   discountValue: number;
   description?: string;
   category?: string;
+  activity?: string;
   labelText?: string;
   labelColour?: string;
   bannerTitle?: string;
@@ -1403,7 +1404,11 @@ export default function TravellerDashboard() {
         } else if (status === "failed" || status === "timed_out") {
           clearInterval(paymentPollRef.current!);
           paymentPollRef.current = null;
-          setBookingError("Payment failed. Please try again.");
+          setBookingError(
+            status === "timed_out"
+              ? "Payment request timed out. Please try again."
+              : "Payment failed. Please try again.",
+          );
           setCheckoutStep("details");
         }
       } catch { /* ignore transient errors */ }

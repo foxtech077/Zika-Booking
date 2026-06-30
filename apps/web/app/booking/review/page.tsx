@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { paymentApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
 import { storeLatestReviewContext } from "@/services/traveller";
@@ -293,7 +292,11 @@ export default function BookingReviewPage() {
         } else if (status === "failed" || status === "timed_out") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
-          setPayError("Payment failed. Please try again.");
+          setPayError(
+            status === "timed_out"
+              ? "Payment request timed out. Please try again."
+              : "Payment failed. Please try again.",
+          );
           setStep("payment");
         }
       } catch { }

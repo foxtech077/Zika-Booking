@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User } from "lucide-react";
+import { ChevronDown, CreditCard, Heart, LogOut, Menu, MessageSquare, Star, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthStore } from "@/stores/auth";
@@ -20,6 +20,7 @@ const TRAVELLER_ROUTES = {
   messages: "/traveller/messages",
   reviews: "/traveller/reviews",
   profile: "/traveller/profile",
+  paymentMethods: "/traveller/payment-methods",
 } as const;
 
 interface TravellerHeaderProps {
@@ -88,6 +89,7 @@ export function TravellerHeader({
   const isReviewsActive = pathname?.startsWith(TRAVELLER_ROUTES.reviews);
   const isWishlistActive = pathname?.startsWith(TRAVELLER_ROUTES.wishlist);
   const isProfileActive = pathname?.startsWith(TRAVELLER_ROUTES.profile);
+  const isPaymentMethodsActive = pathname?.startsWith(TRAVELLER_ROUTES.paymentMethods);
 
   const lockTimer =
     lockSecondsLeft != null
@@ -348,6 +350,20 @@ export function TravellerHeader({
                         <User className="h-4 w-4 text-green-600" />
                         Profile
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          router.push(TRAVELLER_ROUTES.paymentMethods);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                          isPaymentMethodsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                        )}
+                      >
+                        <CreditCard className="h-4 w-4 text-green-600" />
+                        Payment Methods
+                      </button>
                       <div className="my-1 border-t border-slate-100" />
                       <button
                         type="button"
@@ -382,6 +398,7 @@ export function TravellerHeader({
                     {mobileNavBtn("Wishlist", TRAVELLER_ROUTES.wishlist, isWishlistActive)}
                     {mobileNavBtn("My Reviews", TRAVELLER_ROUTES.reviews, isReviewsActive)}
                     {mobileNavBtn("Profile", TRAVELLER_ROUTES.profile, isProfileActive)}
+                    {mobileNavBtn("Payment Methods", TRAVELLER_ROUTES.paymentMethods, isPaymentMethodsActive)}
                     <button
                       type="button"
                       onClick={handleLogout}
