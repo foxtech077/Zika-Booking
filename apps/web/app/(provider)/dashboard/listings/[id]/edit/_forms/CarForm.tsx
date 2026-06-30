@@ -524,7 +524,7 @@ export function CarForm({ listingId, listing }: Props) {
                   <button
                     type="button"
                     disabled={saveMut.isPending}
-                    onClick={(e) => { e.preventDefault(); setTried(false); setErr(""); saveMut.mutate(); }}
+                    onClick={(e) => { e.preventDefault(); saveMut.mutate(); router.push("/dashboard/listings"); }}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-[#556B2F]/40 text-sm font-semibold text-[#556B2F] bg-white hover:bg-[#e6ebe4] disabled:opacity-50 transition-all"
                   >
                     <Save className="w-3.5 h-3.5" /> Save Draft

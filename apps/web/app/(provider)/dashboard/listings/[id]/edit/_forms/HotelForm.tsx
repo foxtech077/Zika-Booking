@@ -295,8 +295,9 @@ export function HotelForm({ listingId, listing }: Props) {
 
   const handleSaveDraft = (e: React.MouseEvent) => {
     e.preventDefault();
-    setTried(false); setErr("");
+    // Fire save in background — navigate immediately regardless of API outcome
     saveMut.mutate();
+    router.push("/dashboard/listings");
   };
 
   const addCustom = () => {
