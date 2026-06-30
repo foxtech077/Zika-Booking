@@ -18,7 +18,7 @@ import {
   Calendar,
   AlertTriangle,
 } from "lucide-react";
-import { paymentApi } from "@/lib/payment-api";
+import { paymentPayoutApi } from "@/lib/payment-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -108,7 +108,7 @@ function MerchantDetailDrawer({
   const { data, isLoading } = useQuery({
     queryKey: ["admin-merchant-detail", merchantId],
     queryFn: () =>
-      paymentApi.get(`/admin/merchants/${merchantId}`).then((r) => r.data?.data ?? r.data),
+      paymentPayoutApi.get(`/admin/merchants/${merchantId}`).then((r) => r.data?.data ?? r.data),
     enabled: !!merchantId && open,
   });
 
@@ -320,7 +320,7 @@ export default function MerchantManagementPage() {
     queryFn: () => {
       const params: Record<string, string> = { limit: "200" };
       if (verifiedFilter !== "") params.verified = verifiedFilter;
-      return paymentApi.get("/admin/merchants", { params }).then((r) => r.data?.data ?? r.data ?? []);
+      return paymentPayoutApi.get("/admin/merchants", { params }).then((r) => r.data?.data ?? r.data ?? []);
     },
   });
 
@@ -348,7 +348,7 @@ export default function MerchantManagementPage() {
 
   const verifyMut = useMutation({
     mutationFn: ({ id, isVerified }: { id: string; isVerified: boolean }) =>
-      paymentApi.patch(`/admin/merchants/${id}/verify`, { isVerified }),
+      paymentPayoutApi.patch(`/admin/merchants/${id}/verify`, { isVerified }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-merchants"] });
       qc.invalidateQueries({ queryKey: ["admin-merchant-detail", verifyTarget?.id] });

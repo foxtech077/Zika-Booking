@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight, UserCheck, UserX, ArrowUpRight } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { api } from "@/lib/api";
@@ -186,6 +186,8 @@ export default function AccreditationPage() {
   const [adminNote, setAdminNote] = useState("");
   const [reasons, setReasons] = useState<string[]>([]);
   const [providerNote, setProviderNote] = useState("");
+  const [escalationModal, setEscalationModal] = useState(false);
+  const [escalationReason, setEscalationReason] = useState("");
   const [docViewer, setDocViewer] = useState<{ url: string; fileType: string; label: string } | null>(null);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
   const [photoLightbox, setPhotoLightbox] = useState<{ photos: any[]; index: number } | null>(null);
@@ -303,7 +305,7 @@ export default function AccreditationPage() {
   });
 
   const rejectMut = useMutation({
-    mutationFn: ({ id, reasons, providerNote, adminNote }: any) =>
+    mutationFn: ({ id, reasons, providerNote, adminNote }: { id: string; reasons: string[]; providerNote: string; adminNote: string }) =>
       listingApi.post(`/admin/listings/${id}/reject`, { reasons, providerNote, adminNote }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["accreditation-queue"] });
@@ -312,6 +314,37 @@ export default function AccreditationPage() {
       setReasons([]);
       setProviderNote("");
       setAdminNote("");
+    },
+  });
+
+  const assignMut = useMutation({
+    mutationFn: (taskId: string) => listingApi.patch(`/admin/listings/review-tasks/${taskId}/assign`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accreditation-queue"] });
+      if (selectedTask) {
+        setSelectedTask((t) => t ? { ...t, assignedTo: user?.id ?? "" } : null);
+      }
+    },
+  });
+
+  const unassignMut = useMutation({
+    mutationFn: (taskId: string) => listingApi.patch(`/admin/listings/review-tasks/${taskId}/unassign`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accreditation-queue"] });
+      if (selectedTask) {
+        setSelectedTask((t) => t ? { ...t, assignedTo: null } : null);
+      }
+    },
+  });
+
+  const escalateMut = useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason?: string }) =>
+      listingApi.patch(`/admin/listings/review-tasks/${taskId}/escalate`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accreditation-queue"] });
+      setEscalationModal(false);
+      setEscalationReason("");
+      setSelectedTask(null);
     },
   });
 
@@ -375,6 +408,38 @@ export default function AccreditationPage() {
         <div>
           <p className="text-xs text-slate-600">#{t.listing.submissionCount}</p>
           <p className="text-xs text-slate-400">{t.listing.submittedAt ? formatRelativeTime(t.listing.submittedAt) : "—"}</p>
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      render: (t) => (
+        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+          {t.assignedTo ? (
+            t.assignedTo === user?.id ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<UserX className="h-3.5 w-3.5" />}
+                onClick={() => unassignMut.mutate(t.id)}
+                loading={unassignMut.isPending}
+              >
+                Unassign
+              </Button>
+            ) : null
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<UserCheck className="h-3.5 w-3.5" />}
+              onClick={() => assignMut.mutate(t.id)}
+              loading={assignMut.isPending}
+            >
+              Assign Me
+            </Button>
+          )}
         </div>
       ),
     },
@@ -447,14 +512,51 @@ export default function AccreditationPage() {
         description={`${selectedTask?.listing.town}, ${selectedTask?.listing.country} · Submission #${selectedTask?.listing?.submissionCount ?? "?"}`}
         width="lg"
         footer={
-          <div className="flex gap-2">
-            <Button variant="danger" size="sm" onClick={() => setShowRejectModal(true)} leftIcon={<XCircle className="h-4 w-4" />}>
-              Reject
-            </Button>
-            <Button variant="primary" size="sm" onClick={() => setShowApproveModal(true)} leftIcon={<CheckCircle className="h-4 w-4" />}>
-              Approve & Publish
-            </Button>
-          </div>
+          selectedTask && (
+            <div className="flex gap-2 w-full justify-between items-center">
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<ArrowUpRight className="h-4 w-4" />}
+                  onClick={() => setEscalationModal(true)}
+                >
+                  Escalate Task
+                </Button>
+              </div>
+              <div className="flex gap-2">
+                {selectedTask.assignedTo ? (
+                  selectedTask.assignedTo === user?.id ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<UserX className="h-3.5 w-3.5" />}
+                      onClick={() => unassignMut.mutate(selectedTask.id)}
+                      loading={unassignMut.isPending}
+                    >
+                      Unassign
+                    </Button>
+                  ) : null
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<UserCheck className="h-3.5 w-3.5" />}
+                    onClick={() => assignMut.mutate(selectedTask.id)}
+                    loading={assignMut.isPending}
+                  >
+                    Assign Me
+                  </Button>
+                )}
+                <Button variant="danger" size="sm" onClick={() => setShowRejectModal(true)} leftIcon={<XCircle className="h-4 w-4" />}>
+                  Reject
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => setShowApproveModal(true)} leftIcon={<CheckCircle className="h-4 w-4" />}>
+                  Approve & Publish
+                </Button>
+              </div>
+            </div>
+          )
         }
       >
         {loadingDetail ? (
@@ -704,6 +806,37 @@ export default function AccreditationPage() {
             required={reasons.includes("Other")}
           />
         </div>
+      </ActionModal>
+
+      {/* ── Escalation modal ────────────────────────────────────────────── */}
+      <ActionModal
+        open={escalationModal}
+        onClose={() => setEscalationModal(false)}
+        title="Escalate Review Task"
+        description="Flag this moderation task to senior admins for priority intervention."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setEscalationModal(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={escalateMut.isPending}
+              onClick={() => selectedTask && escalateMut.mutate({ taskId: selectedTask.id, reason: escalationReason })}
+            >
+              Escalate
+            </Button>
+          </>
+        }
+      >
+        <Textarea
+          id="esc-reason"
+          label="Escalation Reason"
+          placeholder="Explain why this task requires senior escalation..."
+          value={escalationReason}
+          onChange={(e) => setEscalationReason(e.target.value)}
+          rows={3}
+        />
       </ActionModal>
     </div>
   );

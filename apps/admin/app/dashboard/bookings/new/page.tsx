@@ -9,7 +9,8 @@ import {
   ArrowLeft, User, Building2, CalendarDays, Phone, Mail,
   Globe, FileText, AlertCircle, CheckCircle2, Search,
   CreditCard, Hash, UserCircle, MapPin, Loader2,
-  Send, Save, X, ChevronLeft, ChevronRight, Info, ChevronDown, XCircle
+  Send, Save, X, ChevronLeft, ChevronRight, Info, ChevronDown, XCircle,
+  Tag, Ticket
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
@@ -397,6 +398,12 @@ export default function ManualBookingPage() {
       if (!target.closest(".booking-listing-dropdown")) {
         setIsListingSelectOpen(false);
       }
+      if (!target.closest(".promo-dropdown")) {
+        setPromoDropdownOpen(false);
+      }
+      if (!target.closest(".voucher-dropdown")) {
+        setVoucherDropdownOpen(false);
+      }
     };
     document.addEventListener("click", handleOutsideClick);
     return () => document.removeEventListener("click", handleOutsideClick);
@@ -445,6 +452,8 @@ export default function ManualBookingPage() {
   const [price, _setPrice] = useState<PriceSummary | null>(null);
   const [selectedPromoId, setSelectedPromoId] = useState<string>("");
   const [selectedVoucherId, setSelectedVoucherId] = useState<string>("");
+  const [promoDropdownOpen, setPromoDropdownOpen] = useState(false);
+  const [voucherDropdownOpen, setVoucherDropdownOpen] = useState(false);
 
   const setPrice = (val: PriceSummary | null) => {
     _setPrice(val);
@@ -1620,65 +1629,256 @@ export default function ManualBookingPage() {
                   {/* Apply Promotion or Voucher */}
                   <div className="rounded-lg border border-border bg-white p-5 space-y-4">
                     <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Apply Promotion or Voucher</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Promotion Selector */}
-                      <div className="space-y-1">
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Promotion</label>
-                        <select
-                          value={selectedPromoId}
-                          onChange={(e) => setSelectedPromoId(e.target.value)}
-                          className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
-                        >
-                          <option value="">No promotion applied</option>
-                          {activePromotionsList
-                            .filter((p: any) => p.activity === listingType && (p.countryScope === country || p.countryScope === "*" || p.countryScope === "all" || !p.countryScope))
-                            .map((p: any) => (
-                              <option key={p.id} value={p.id}>
-                                {p.labelText || p.bannerTitle} ({p.discountType === "percentage" ? `${p.discountValue}% off` : `${formatCurrency(p.discountValue, price.currency)} off`})
-                              </option>
-                            ))}
-                        </select>
-                      </div>
+                    {(() => {
+                      const selectedPromo = activePromotionsList.find((p: any) => p.id === selectedPromoId);
+                      const selectedVoucher = activeVouchersList.find((v: any) => v.id === selectedVoucherId);
+                      const currency = price?.currency ?? "USD";
+                      
+                      const filteredPromos = activePromotionsList.filter(
+                        (p: any) => p.activity === listingType && 
+                        (p.countryScope === country || p.countryScope === "*" || p.countryScope === "all" || !p.countryScope)
+                      );
+                      
+                      const filteredVouchers = activeVouchersList.filter((v: any) => {
+                        if (!v.isActive) return false;
+                        const isCountryMatch = !v.countryScope || v.countryScope === "*" || v.countryScope === "all" || v.countryScope === country;
+                        if (!isCountryMatch) return false;
+                        const scope = v.activityScope ?? "universal";
+                        if (scope === "universal") return true;
+                        if (listingType === "hotel") return scope === "hotels" || scope === "hotels_apartments";
+                        if (listingType === "apartment") return scope === "apartments";
+                        if (listingType === "car") return scope === "cars";
+                        return false;
+                      });
 
-                      {/* Voucher Selector */}
-                      <div className="space-y-1">
-                        <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Voucher Discount</label>
-                        <select
-                          value={selectedVoucherId}
-                          onChange={(e) => setSelectedVoucherId(e.target.value)}
-                          className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
-                        >
-                          <option value="">No voucher applied</option>
-                          {activeVouchersList
-                            .filter((v: any) => {
-                              if (!v.isActive) return false;
-                              
-                              // Country filter
-                              const isCountryMatch = !v.countryScope || v.countryScope === "*" || v.countryScope === "all" || v.countryScope === country;
-                              if (!isCountryMatch) return false;
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Promotion Dropdown */}
+                          <div className="space-y-1.5 relative promo-dropdown">
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                              Active Promotion
+                            </label>
+                            
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPromoDropdownOpen(!promoDropdownOpen);
+                                setVoucherDropdownOpen(false);
+                              }}
+                              className="flex items-center gap-3 w-full px-3 py-2 text-left bg-white border border-border rounded-lg shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all select-none"
+                            >
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-500 flex-shrink-0">
+                                <Tag className="h-4 w-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                {selectedPromo ? (
+                                  <>
+                                    <div className="text-sm font-semibold text-slate-900 truncate">
+                                      {selectedPromo.labelText || selectedPromo.bannerTitle}
+                                    </div>
+                                    <div className="text-xs text-slate-500 truncate">
+                                      {selectedPromo.discountType === "percentage" 
+                                        ? `${selectedPromo.discountValue}% Off` 
+                                        : `${formatCurrency(selectedPromo.discountValue, currency)} Off`}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="text-sm text-slate-400 font-medium">
+                                    No promotion applied
+                                  </div>
+                                )}
+                              </div>
+                              <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                            </button>
 
-                              // Activity category filter
-                              const scope = v.activityScope ?? "universal";
-                              if (scope === "universal") return true;
-                              if (listingType === "hotel") {
-                                return scope === "hotels" || scope === "hotels_apartments";
-                              }
-                              if (listingType === "apartment") {
-                                return scope === "apartments";
-                              }
-                              if (listingType === "car") {
-                                return scope === "cars";
-                              }
-                              return false;
-                            })
-                            .map((v: any) => (
-                              <option key={v.id} value={v.id}>
-                                {v.code} ({v.discountType === "percentage" ? `${v.discountValue}% off` : `${formatCurrency(v.discountValue, price.currency)} off`})
-                              </option>
-                            ))}
-                        </select>
-                      </div>
-                    </div>
+                            {promoDropdownOpen && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-border rounded-xl shadow-xl max-h-72 overflow-y-auto p-1.5 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPromoId("");
+                                    setPromoDropdownOpen(false);
+                                  }}
+                                  className={`flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+                                    !selectedPromoId 
+                                      ? "bg-rose-50/50 text-rose-600 font-medium" 
+                                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <span>No promotion applied</span>
+                                  {!selectedPromoId && (
+                                    <span className="h-1.5 w-1.5 rounded-full bg-rose-600" />
+                                  )}
+                                </button>
+
+                                {filteredPromos.map((p: any) => {
+                                  const isSelected = p.id === selectedPromoId;
+                                  const promoLabel = p.labelText || p.bannerTitle;
+                                  const displayDiscount = p.discountType === "percentage"
+                                    ? `${p.discountValue}%`
+                                    : formatCurrency(p.discountValue, currency);
+                                  
+                                  const pillColor = p.labelColour || "#C84B2F";
+
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedPromoId(p.id);
+                                        setPromoDropdownOpen(false);
+                                      }}
+                                      className={`flex items-start gap-3 w-full p-2 rounded-lg border text-left transition-all ${
+                                        isSelected
+                                          ? "bg-rose-50/40 border-rose-200/80 ring-1 ring-rose-100"
+                                          : "bg-white border-transparent hover:bg-slate-50 hover:border-slate-100"
+                                      }`}
+                                    >
+                                      <div 
+                                        className="flex h-8 w-8 items-center justify-center rounded-lg text-white font-bold text-xs flex-shrink-0 shadow-sm"
+                                        style={{ backgroundColor: pillColor }}
+                                      >
+                                        %
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="font-semibold text-slate-800 text-sm truncate">
+                                            {promoLabel}
+                                          </span>
+                                          <span className="bg-rose-50 text-rose-600 text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0">
+                                            {displayDiscount} OFF
+                                          </span>
+                                        </div>
+                                        {p.bannerSubtitle && (
+                                          <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                                            {p.bannerSubtitle}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                                
+                                {filteredPromos.length === 0 && (
+                                  <div className="p-4 text-center text-xs text-slate-400 font-medium">
+                                    No promotions available for this listing type.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Voucher Dropdown */}
+                          <div className="space-y-1.5 relative voucher-dropdown">
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                              Voucher Discount
+                            </label>
+                            
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setVoucherDropdownOpen(!voucherDropdownOpen);
+                                setPromoDropdownOpen(false);
+                              }}
+                              className="flex items-center gap-3 w-full px-3 py-2 text-left bg-white border border-border rounded-lg shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all select-none"
+                            >
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 flex-shrink-0">
+                                <Ticket className="h-4 w-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                {selectedVoucher ? (
+                                  <>
+                                    <div className="text-sm font-semibold text-slate-900 truncate tracking-wide">
+                                      {selectedVoucher.code}
+                                    </div>
+                                    <div className="text-xs text-slate-500 truncate">
+                                      {selectedVoucher.title || (selectedVoucher.discountType === "percentage" 
+                                        ? `${selectedVoucher.discountValue}% Off` 
+                                        : `${formatCurrency(selectedVoucher.discountValue, currency)} Off`)}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="text-sm text-slate-400 font-medium">
+                                    No voucher applied
+                                  </div>
+                                )}
+                              </div>
+                              <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                            </button>
+
+                            {voucherDropdownOpen && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-border rounded-xl shadow-xl max-h-72 overflow-y-auto p-1.5 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedVoucherId("");
+                                    setVoucherDropdownOpen(false);
+                                  }}
+                                  className={`flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+                                    !selectedVoucherId 
+                                      ? "bg-emerald-50/50 text-emerald-600 font-medium" 
+                                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <span>No voucher applied</span>
+                                  {!selectedVoucherId && (
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                                  )}
+                                </button>
+
+                                {filteredVouchers.map((v: any) => {
+                                  const isSelected = v.id === selectedVoucherId;
+                                  const displayDiscount = v.discountType === "percentage"
+                                    ? `${v.discountValue}%`
+                                    : formatCurrency(v.discountValue, currency);
+                                  
+                                  return (
+                                    <button
+                                      key={v.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedVoucherId(v.id);
+                                        setVoucherDropdownOpen(false);
+                                      }}
+                                      className={`flex items-start gap-3 w-full p-2 rounded-lg border text-left transition-all ${
+                                        isSelected
+                                          ? "bg-emerald-50/40 border-emerald-200/80 ring-1 ring-emerald-100"
+                                          : "bg-white border-transparent hover:bg-slate-50 hover:border-slate-100"
+                                      }`}
+                                    >
+                                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 flex-shrink-0 shadow-sm border border-emerald-200 border-dashed">
+                                        <Ticket className="h-3.5 w-3.5" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="font-semibold text-slate-800 text-sm tracking-wide truncate">
+                                            {v.code}
+                                          </span>
+                                          <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0">
+                                            {displayDiscount} OFF
+                                          </span>
+                                        </div>
+                                        {(v.title || v.description) && (
+                                          <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                                            {v.title || v.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                                
+                                {filteredVouchers.length === 0 && (
+                                  <div className="p-4 text-center text-xs text-slate-400 font-medium">
+                                    No active vouchers available for this country/listing type.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Pricing Breakdown */}

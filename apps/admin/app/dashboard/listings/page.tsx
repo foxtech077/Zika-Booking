@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, ChevronDown, Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
+import { Search, ChevronDown, Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home, Edit } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -27,6 +28,7 @@ const fetchListings = (params: Record<string, string>) =>
 
 export default function ListingsPage() {
   const { token, user, _hasHydrated } = useAuthStore();
+  const router = useRouter();
   const isCountryManager = user?.role === "country_manager";
   const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
   const qc = useQueryClient();
@@ -176,9 +178,16 @@ export default function ListingsPage() {
       key: "actions",
       label: "",
       align: "right",
-      width: "100px",
+      width: "120px",
       render: (l) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => router.push(`/dashboard/listings/${l.id}`)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
+            title="Edit / Review"
+          >
+            <Edit className="h-3.5 w-3.5" />
+          </button>
           {l.category === "hotel" && l.status === "approved" && (
             <button
               onClick={() => setStarModal(l)}
@@ -277,7 +286,25 @@ export default function ListingsPage() {
       </Card>
 
       {/* Detail drawer */}
-      <SlideDrawer open={!!selected} onClose={() => setSelected(null)} title={selected?.name ?? "Listing"} width="sm">
+      <SlideDrawer
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected?.name ?? "Listing"}
+        width="sm"
+        footer={
+          selected && (
+            <div className="flex justify-end w-full">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => router.push(`/dashboard/listings/${selected.id}`)}
+              >
+                Edit / Review Details
+              </Button>
+            </div>
+          )
+        }
+      >
         {selected && (
           <div className="space-y-4">
             {selected.photos?.[0]?.cdnUrl && (

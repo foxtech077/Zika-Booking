@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/stores/auth";
 import { formatRelativeTime } from "@/lib/utils";
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
 
 const checkHealth = (client: any, label: string) =>
   client.get("/health").then(() => ({ service: label, status: "healthy" })).catch(() => ({ service: label, status: "degraded" }));
@@ -21,6 +22,8 @@ export default function SettingsPage() {
   // Global platform sections are super_admin only
   const isGlobalAdmin = canAccess(user?.role, "manage_settings");
   const [registeringKey, setRegisteringKey] = useState(false);
+  const isCountryScoped = user?.role === "country_manager" || user?.role === "sales";
+  const userCountries = user?.countryScope ?? [];
 
   const handleRegisterPasskey = async () => {
     try {
@@ -140,6 +143,32 @@ export default function SettingsPage() {
           ))}
         </div>
       </Card>
+
+      {/* Assigned Countries */}
+      {isCountryScoped && (
+        <Card padding="none">
+          <div className="p-5 border-b border-border">
+            <CardHeader title="Assigned Countries" description="Countries mapped to your manager account for moderation and approval scopes" />
+          </div>
+          <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {userCountries.map((code) => {
+              const found = SYSTEM_COUNTRIES.find((sc) => sc.code === code);
+              return (
+                <div key={code} className="flex items-center gap-3 p-3 bg-slate-50 border border-border rounded-xl">
+                  <span className="text-2xl">{found?.flag ?? "🌍"}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{found?.name ?? code}</p>
+                    <p className="text-xs text-slate-500 font-mono">{code.toUpperCase()}</p>
+                  </div>
+                </div>
+              );
+            })}
+            {userCountries.length === 0 && (
+              <p className="text-sm text-slate-500 col-span-2">No countries assigned to your account.</p>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Security */}
       <Card padding="none">
