@@ -8,38 +8,30 @@ interface PhotoGalleryProps {
   name?: string;
   imageUrl?: string | null;
   photos?: ListingPhoto[];
+  onPhotoClick?: (index: number) => void;
+  onShowAll?: () => void;
 }
 
-const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", imageUrl, photos = [] }) => {
-  // Build ordered photo list: primary first, then remaining sorted by position
+const PhotoGallery: React.FC<PhotoGalleryProps> = ({
+  listingId, name = "", imageUrl, photos = [], onPhotoClick, onShowAll,
+}) => {
   const sorted = [...photos].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const primary = imageUrl || sorted[0]?.cdnUrl;
-  // Side slots: positions 1-4 from photos array (skip index 0 which is primary)
   const side = sorted.slice(1, 5);
+  const slots = [0, 1, 2, 3].map((i) => side[i] ?? null);
 
-  function SlotImage({ photo, index }: { photo?: ListingPhoto; index: number }) {
+  function SidePhoto({ photo, globalIndex }: { photo?: ListingPhoto | null; globalIndex: number }) {
     if (photo?.cdnUrl) {
       return (
         <img
           src={photo.cdnUrl}
-          alt={`${name} photo ${index + 2}`}
-          className="w-full h-full object-cover hover:scale-105 transition duration-500 cursor-pointer"
-          onError={(e) => {
-            const target = e.currentTarget;
-            target.style.display = "none";
-            const parent = target.parentElement;
-            if (parent) {
-              const fb = parent.querySelector(".photo-fallback") as HTMLElement | null;
-              if (fb) fb.style.display = "flex";
-            }
-          }}
+          alt={`${name} photo ${globalIndex + 1}`}
+          className="w-full h-full object-cover transition duration-300 hover:brightness-90 cursor-pointer"
+          onClick={() => onPhotoClick?.(globalIndex)}
+          onError={(e) => { e.currentTarget.style.display = "none"; }}
         />
       );
     }
-    return null;
-  }
-
-  function PlaceholderSlot() {
     return (
       <div className="w-full h-full bg-slate-100 flex items-center justify-center">
         <svg className="w-6 h-6 text-slate-300" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
@@ -49,17 +41,18 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
     );
   }
 
-  const slots = [0, 1, 2, 3].map((i) => side[i] ?? null);
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-[400px] md:h-[480px] rounded-2xl overflow-hidden relative group">
-      {/* Primary photo — full height left half */}
-      <div className="md:col-span-2 h-full overflow-hidden bg-slate-100">
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-[420px] md:h-[520px] rounded-2xl overflow-hidden relative group">
+      {/* Primary photo — left half, full height */}
+      <div
+        className="md:col-span-2 h-full overflow-hidden bg-slate-100 cursor-pointer"
+        onClick={() => onPhotoClick?.(0)}
+      >
         <ListingImage
           listingId={!primary ? listingId : undefined}
           src={primary ?? undefined}
           alt={name}
-          className="w-full h-full object-cover cursor-pointer hover:scale-105 transition duration-500"
+          className="w-full h-full object-cover transition duration-300 hover:brightness-90"
           fallbackNode={
             <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300">
               <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
@@ -74,10 +67,7 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
       <div className="hidden md:grid md:col-span-1 grid-rows-2 gap-2 h-full">
         {[slots[0], slots[1]].map((photo, i) => (
           <div key={i} className="overflow-hidden bg-slate-100 relative">
-            {photo ? <SlotImage photo={photo} index={i} /> : <PlaceholderSlot />}
-            <div className="photo-fallback hidden absolute inset-0 items-center justify-center bg-slate-100">
-              <PlaceholderSlot />
-            </div>
+            <SidePhoto photo={photo} globalIndex={i + 1} />
           </div>
         ))}
       </div>
@@ -86,20 +76,21 @@ const PhotoGallery: React.FC<PhotoGalleryProps> = ({ listingId, name = "", image
       <div className="hidden md:grid md:col-span-1 grid-rows-2 gap-2 h-full">
         {[slots[2], slots[3]].map((photo, i) => (
           <div key={i} className="overflow-hidden bg-slate-100 relative">
-            {photo ? <SlotImage photo={photo} index={i + 2} /> : <PlaceholderSlot />}
-            <div className="photo-fallback hidden absolute inset-0 items-center justify-center bg-slate-100">
-              <PlaceholderSlot />
-            </div>
+            <SidePhoto photo={photo} globalIndex={i + 3} />
           </div>
         ))}
       </div>
 
-      {/* Photo count badge */}
-      {photos.length > 1 && (
-        <div className="absolute bottom-3 right-3 bg-black/60 text-white text-xs font-semibold px-2.5 py-1 rounded-full backdrop-blur-sm">
-          {photos.length} photos
-        </div>
-      )}
+      {/* "Show all photos" button */}
+      <button
+        onClick={onShowAll ?? (() => onPhotoClick?.(0))}
+        className="absolute bottom-4 right-4 flex items-center gap-2 bg-white/95 backdrop-blur-sm text-slate-800 text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg hover:bg-white transition border border-slate-100"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+        </svg>
+        Show all photos
+      </button>
     </div>
   );
 };
