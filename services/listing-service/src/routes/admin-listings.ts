@@ -2457,21 +2457,34 @@ app.patch("/admin/listings/:id", {
         WHERE listing_id = $1
           AND (
             status = 'confirmed'
+            OR status = 'checked_in'
             OR (status = 'pending_payment' AND created_at > $2)
           )
           AND check_in < $4
           AND check_out > $3
       `, listingId, pendingExpiry, startDate, endDate);
 
-      const count = Number(result[0]?.count ?? 0);
+            const bookingCount = Number(result[0]?.count ?? 0);
+
+      // Check manual and iCal blocked dates
+      const icalBlockedCount = await prisma.icalBlockedDate.count({
+        where: {
+          listingId,
+          startDate: { lt: endDate },
+          endDate: { gt: startDate },
+        },
+      });
+
+      const count = bookingCount + icalBlockedCount;
       const unitCount = listing.unitCount ?? 1;
 
       if (count >= unitCount) {
         return sendSuccess(reply, 200, {
           available: false,
-          reason: "No units available for the selected dates.",
+          reason: "Some of the selected dates within your stay are already booked or unavailable.",
         });
       }
+
 
       // Build pricing preview for the admin
       const nights = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000);

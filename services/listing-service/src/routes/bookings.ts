@@ -63,13 +63,6 @@ export async function getCommissionRate(country: string | null): Promise<number>
 }
 
 // ── Availability checker ──────────────────────────────────────────────────────
-// Counts active overlapping bookings for a listing.
-// - Confirmed bookings always count.
-// - pending_payment bookings only count if they were created within the lock
-//   TTL window (i.e. the lock has not yet expired). Expired pending bookings
-//   are ghost-slots that should no longer block availability.
-// - Supports unit_count > 1 (e.g. hotel with multiple rooms of same type).
-
 async function checkAvailability(
   listingId: string,
   unitCount: number,
@@ -78,12 +71,14 @@ async function checkAvailability(
 ): Promise<{ available: boolean; reason?: string }> {
   const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
 
+  // 1. Check active database bookings (confirmed or active pending locks)
   const result = await prisma.$queryRawUnsafe<{ count: bigint }[]>(`
     SELECT COUNT(*) AS count
     FROM bookings
     WHERE listing_id = $1
       AND (
         status = 'confirmed'
+        OR status = 'checked_in'
         OR (status = 'pending_payment' AND created_at > $2)
       )
       AND (
@@ -92,12 +87,27 @@ async function checkAvailability(
       )
   `, listingId, pendingExpiry, startDate, endDate);
 
-  const count = Number(result[0]?.count ?? 0);
-  if (count >= unitCount) {
-    return { available: false, reason: "No units available for the selected dates." };
+  const bookingCount = Number(result[0]?.count ?? 0);
+
+  // 2. Check manually-blocked and iCal-synced dates
+  const icalBlockedCount = await prisma.icalBlockedDate.count({
+    where: {
+      listingId,
+      startDate: { lt: endDate },
+      endDate: { gt: startDate },
+    },
+  });
+
+  // 3. Reject if total matches exceed the available unit counts
+  if (bookingCount + icalBlockedCount >= unitCount) {
+    return { 
+      available: false, 
+      reason: "Some of the selected dates within your stay are already booked or unavailable." 
+    };
   }
   return { available: true };
 }
+
 
 // ── Pricing calculators ───────────────────────────────────────────────────────
 
