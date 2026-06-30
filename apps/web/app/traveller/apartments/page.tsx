@@ -12,7 +12,7 @@ export default function ApartmentsPage() {
         </div>
       }
     >
-      <CategoryListingsClient category="apartment" />
+      <CategoryListingsClient key="apartment" category="apartment" />
     </Suspense>
   );
 }

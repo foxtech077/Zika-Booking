@@ -358,21 +358,20 @@ export default function TravellerDashboard() {
     }
   }, [user?.id]);
 
-  // Handle ?tab=bookings and ?listing=<id> URL params on first mount
-  const urlTabHandled = useRef(false);
+  // Handle ?tab=bookings and ?listing=<id> URL params — reactive to navigation
+  const tabParam = searchParams.get("tab");
+  const listingParam = searchParams.get("listing");
   useEffect(() => {
-    if (!ready || urlTabHandled.current) return;
-    const tab = searchParams.get("tab");
-    const listingId = searchParams.get("listing");
-    if (tab === "bookings") {
-      urlTabHandled.current = true;
+    if (!ready) return;
+    if (tabParam === "bookings") {
       setActiveTab("bookings");
       if (user) fetchGuestBookings();
-    } else if (listingId) {
-      urlTabHandled.current = true;
-      handleSelectListing(listingId);
+    } else if (listingParam) {
+      handleSelectListing(listingParam);
+    } else {
+      setActiveTab((prev) => (prev === "bookings" ? "home" : prev));
     }
-  }, [ready, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, tabParam, listingParam, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Success state
   const [bookingSuccessModal, setBookingSuccessModal] = useState<{
