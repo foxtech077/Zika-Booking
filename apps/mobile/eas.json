@@ -7,13 +7,15 @@
       "developmentClient": true,
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "googleServicesFile": "$GOOGLE_SERVICES_JSON"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "googleServicesFile": "$GOOGLE_SERVICES_JSON"
       },
       "ios": {
         "simulator": true
@@ -21,7 +23,8 @@
     },
     "production": {
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "googleServicesFile": "$GOOGLE_SERVICES_JSON"
       }
     }
   },

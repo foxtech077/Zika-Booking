@@ -16,12 +16,13 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { useAuthStore } from "../store/auth";
+import { handleRoleAndStatusRedirect } from "./(auth)/login";
 import { K } from "../constants/theme";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 
 function openDeepLink(token: string) {
   if (typeof window !== "undefined") {
-    (window as any).location.href = `Kainook://reset-password?token=${encodeURIComponent(token)}`;
+    (window as any).location.href = `kainook://reset-password?token=${encodeURIComponent(token)}`;
   }
 }
 
@@ -42,7 +43,7 @@ export default function ResetPasswordScreen() {
         <View style={styles.center}>
           {token ? (
             <>
-              <ActivityIndicator size="large" color="#1a73e8" style={{ marginBottom: 24 }} />
+              <ActivityIndicator size="large" color="#16a34a" style={{ marginBottom: 24 }} />
               <Text style={styles.title}>Opening Kainook…</Text>
               <Text style={styles.sub}>
                 The app should open automatically.{"\n"}
@@ -88,7 +89,7 @@ export default function ResetPasswordScreen() {
     onSuccess: async (data) => {
       await setAuth(data.user, data.tokens.accessToken);
       Alert.alert("Success", "Your password has been updated. You're now signed in.", [
-        { text: "OK", onPress: () => router.replace("/(tabs)") },
+        { text: "OK", onPress: () => handleRoleAndStatusRedirect(data.user) },
       ]);
     },
     onError: (err: unknown) => {

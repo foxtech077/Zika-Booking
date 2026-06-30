@@ -1,209 +1,78 @@
-import { useState } from "react";
 import {
   View,
   Text,
-  Image,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
   Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import { AppLayout } from "../../components/layout/AppLayout";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
 import { K } from "../../constants/theme";
-import type { ApiResponse } from "@zika/types";
 
-interface ProfileData {
-  firstName: string;
-  lastName: string;
-  email: string;
-  businessName?: string;
-  country?: string;
-  phone?: string;
-  bio?: string;
-}
+// ── Menu Row ──────────────────────────────────────────────────────────────────
 
-type Tab = "profile" | "security" | "account";
-
-function MenuItem({
-  icon, label, sublabel, onPress, danger,
-}: { icon: string; label: string; sublabel?: string; onPress: () => void; danger?: boolean }) {
+function MenuRow({ iconName, iconBg, label, sub, onPress, danger }: {
+  iconName: string; iconBg: string; label: string; sub?: string;
+  onPress: () => void; danger?: boolean;
+}) {
   return (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress} activeOpacity={0.7}>
-      <View style={[styles.menuIcon, danger && styles.menuIconDanger]}>
-        <Text style={styles.menuEmoji}>{icon}</Text>
+    <TouchableOpacity style={mr.row} onPress={onPress} activeOpacity={0.7}>
+      <View style={[mr.icon, { backgroundColor: iconBg }]}>
+        <Ionicons name={iconName as any} size={18} color={danger ? "#dc2626" : K.colors.darkGreen} />
       </View>
-      <View style={styles.menuText}>
-        <Text style={[styles.menuLabel, danger && styles.menuLabelDanger]}>{label}</Text>
-        {sublabel ? <Text style={styles.menuSublabel}>{sublabel}</Text> : null}
+      <View style={mr.body}>
+        <Text style={[mr.label, danger && mr.labelDanger]}>{label}</Text>
+        {sub ? <Text style={mr.sub}>{sub}</Text> : null}
       </View>
-      <Text style={styles.menuArrow}>›</Text>
+      <Ionicons name="chevron-forward" size={16} color="#C8CCC9" />
     </TouchableOpacity>
   );
 }
 
-function ProfileTab({ user }: { user: any }) {
-  const qc = useQueryClient();
-  const updateUser = useAuthStore((s) => s.setAuth);
-  const storedUser = useAuthStore((s) => s.user);
-  const storedToken = useAuthStore((s) => s.accessToken);
+const mr = StyleSheet.create({
+  row:        { flexDirection: "row", alignItems: "center", paddingVertical: 14, paddingHorizontal: 16, gap: 14 },
+  icon:       { width: 38, height: 38, borderRadius: 11, alignItems: "center", justifyContent: "center" },
+  body:       { flex: 1 },
+  label:      { fontSize: 15, fontWeight: "600", color: K.colors.textDark },
+  labelDanger: { color: "#dc2626" },
+  sub:        { fontSize: 12, color: K.colors.textMuted, marginTop: 2 },
+});
 
-  const [form, setForm] = useState<ProfileData>({
-    firstName: user?.firstName ?? "",
-    lastName: user?.lastName ?? "",
-    email: user?.email ?? "",
-    businessName: user?.businessName ?? "",
-    country: user?.country ?? "",
-    phone: user?.phone ?? "",
-    bio: user?.bio ?? "",
-  });
+// ── Menu Card + Divider ───────────────────────────────────────────────────────
 
-  const set = (k: keyof ProfileData) => (v: string) =>
-    setForm((p) => ({ ...p, [k]: v }));
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.patch<ApiResponse<{ user: any }>>("/auth/profile", {
-        firstName: form.firstName,
-        lastName: form.lastName,
-        businessName: form.businessName,
-        country: form.country,
-        phone: form.phone,
-        bio: form.bio,
-      });
-      if (!res.data.success) throw res.data;
-      return res.data.data.user;
-    },
-    onSuccess: async (updated) => {
-      if (storedUser && storedToken) {
-        await updateUser({ ...storedUser, ...updated }, storedToken);
-      }
-      qc.invalidateQueries({ queryKey: ["providerDashboard"] });
-      Alert.alert("Saved", "Profile updated successfully.");
-    },
-    onError: () => Alert.alert("Error", "Could not save profile. Please try again."),
-  });
-
-  return (
-    <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.avatarBlock}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {(form.firstName[0] ?? "?").toUpperCase()}
-          </Text>
-        </View>
-        <Text style={styles.avatarName}>{form.firstName} {form.lastName}</Text>
-        <Text style={styles.avatarEmail}>{form.email}</Text>
-      </View>
-
-      <View style={styles.formCard}>
-        {[
-          { label: "First Name", key: "firstName" as const, placeholder: "Ada" },
-          { label: "Last Name", key: "lastName" as const, placeholder: "Okafor" },
-          { label: "Business Name", key: "businessName" as const, placeholder: "Serena Hotels Ltd." },
-          { label: "Country Code", key: "country" as const, placeholder: "KE", upper: true, maxLength: 2 },
-          { label: "Phone", key: "phone" as const, placeholder: "+254 700 000 000", keyboard: "phone-pad" as const },
-          { label: "Bio", key: "bio" as const, placeholder: "Tell guests about yourself…", multiline: true },
-        ].map((f) => (
-          <View key={f.key} style={styles.formField}>
-            <Text style={styles.fieldLabel}>{f.label}</Text>
-            <TextInput
-              style={[styles.fieldInput, f.multiline && styles.fieldTextarea]}
-              value={form[f.key]}
-              onChangeText={set(f.key)}
-              placeholder={f.placeholder}
-              placeholderTextColor={K.colors.textMuted}
-              autoCapitalize={f.upper ? "characters" : "none"}
-              maxLength={f.maxLength}
-              keyboardType={f.keyboard ?? "default"}
-              multiline={f.multiline}
-              numberOfLines={f.multiline ? 3 : 1}
-            />
-          </View>
-        ))}
-
-        <TouchableOpacity
-          style={[styles.saveBtn, mutation.isPending && styles.btnDisabled]}
-          onPress={() => mutation.mutate()}
-          disabled={mutation.isPending}
-          activeOpacity={0.85}
-        >
-          {mutation.isPending ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.saveBtnText}>Save Changes</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
-  );
+function MenuCard({ children }: { children: React.ReactNode }) {
+  return <View style={mc.card}>{children}</View>;
 }
 
-function SecurityTab() {
-  const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
-  const set = (k: keyof typeof form) => (v: string) => setForm((p) => ({ ...p, [k]: v }));
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (form.newPassword !== form.confirmPassword) throw new Error("Passwords don't match");
-      const res = await api.post<ApiResponse<unknown>>("/auth/change-password", {
-        currentPassword: form.currentPassword,
-        newPassword: form.newPassword,
-      });
-      if (!res.data.success) throw res.data;
-    },
-    onSuccess: () => {
-      Alert.alert("Done", "Password updated successfully.");
-      setForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
-    },
-    onError: (e: any) => Alert.alert("Error", e.message ?? "Could not update password."),
-  });
-
-  return (
-    <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.formCard}>
-        {[
-          { label: "Current Password", key: "currentPassword" as const },
-          { label: "New Password", key: "newPassword" as const },
-          { label: "Confirm New Password", key: "confirmPassword" as const },
-        ].map((f) => (
-          <View key={f.key} style={styles.formField}>
-            <Text style={styles.fieldLabel}>{f.label}</Text>
-            <TextInput
-              style={styles.fieldInput}
-              value={form[f.key]}
-              onChangeText={set(f.key)}
-              placeholder="••••••••"
-              placeholderTextColor={K.colors.textMuted}
-              secureTextEntry
-            />
-          </View>
-        ))}
-
-        <TouchableOpacity
-          style={[styles.saveBtn, mutation.isPending && styles.btnDisabled]}
-          onPress={() => mutation.mutate()}
-          disabled={mutation.isPending}
-          activeOpacity={0.85}
-        >
-          {mutation.isPending ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.saveBtnText}>Update Password</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
-  );
+function MenuDivider() {
+  return <View style={{ height: 1, backgroundColor: K.colors.border, marginHorizontal: 16 }} />;
 }
 
-function AccountTab() {
+const mc = StyleSheet.create({
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: K.colors.border,
+    overflow: "hidden",
+    ...K.shadow.sm,
+  },
+});
+
+function comingSoon(feature: string) {
+  Alert.alert(feature, "This feature is coming soon. We're working on it!", [{ text: "Got it" }]);
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+export default function ProfileScreen() {
+  const user      = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
+
+  const initials = ((user?.firstName?.[0] ?? "") + (user?.lastName?.[0] ?? "")).toUpperCase() || "P";
 
   function handleLogout() {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -220,177 +89,109 @@ function AccountTab() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
-      <View style={styles.menuCard}>
-        <MenuItem icon="📋" label="Verification Documents" sublabel="Upload required docs" onPress={() => {}} />
-        <MenuItem icon="🏦" label="Bank Details" sublabel="Payout bank account" onPress={() => {}} />
-        <MenuItem icon="💳" label="Tax Information" sublabel="Tax ID & certificates" onPress={() => {}} />
-        <MenuItem icon="🔔" label="Notifications" sublabel="Push, email preferences" onPress={() => router.push("/notifications" as any)} />
-        <MenuItem icon="🌐" label="Channel Manager" sublabel="iCal sync & integrations" onPress={() => {}} />
-        <MenuItem icon="❓" label="Help & Support" sublabel="FAQs, contact us" onPress={() => {}} />
-      </View>
+    <AppLayout>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: "#F5F4F1" }}
+        contentContainerStyle={s.content}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Profile hero */}
+        <View style={s.hero}>
+          <View style={s.avatar}>
+            <Text style={s.avatarInitials}>{initials}</Text>
+          </View>
+          <Text style={s.userName}>{user?.firstName} {user?.lastName}</Text>
+          {user?.businessName ? (
+            <Text style={s.businessName}>{user.businessName}</Text>
+          ) : null}
+          <View style={s.providerBadge}>
+            <Ionicons name="shield-checkmark" size={11} color="#34d399" />
+            <Text style={s.providerBadgeText}>Verified Provider</Text>
+          </View>
+        </View>
 
-      <View style={[styles.menuCard, { marginTop: 16 }]}>
-        <MenuItem icon="🚪" label="Sign Out" onPress={handleLogout} danger />
-      </View>
+        <Text style={s.sectionLabel}>LISTINGS</Text>
+        <MenuCard>
+          <MenuRow iconName="star-outline"     iconBg="#fffbeb" label="My Reviews"    sub="Guest ratings & your replies"    onPress={() => router.push("/(provider)/reviews" as any)} />
+          <MenuDivider />
+          <MenuRow iconName="calendar-outline" iconBg="#eff6ff" label="Calendar Sync" sub="iCal feeds & integrations"       onPress={() => router.push("/(provider)/channels" as any)} />
+        </MenuCard>
 
-      <Text style={styles.versionText}>KAINOOK v2.4.0 · Provider Network</Text>
-    </ScrollView>
+        <Text style={s.sectionLabel}>FINANCIAL</Text>
+        <MenuCard>
+          <MenuRow iconName="card-outline"    iconBg="#f0fdf4" label="Payout Setup"    sub="Connect Stripe for payouts"    onPress={() => router.push("/(provider)/stripe-connect" as any)} />
+          <MenuDivider />
+          <MenuRow iconName="wallet-outline"  iconBg="#f0fdf4" label="Payout History"  sub="Scheduled & processed payouts" onPress={() => router.push("/(provider)/payouts" as any)} />
+          <MenuDivider />
+          <MenuRow iconName="receipt-outline" iconBg="#fffbeb" label="Tax Information" sub="Tax ID & certificates"         onPress={() => comingSoon("Tax Information")} />
+        </MenuCard>
+
+        <Text style={s.sectionLabel}>ACCOUNT</Text>
+        <MenuCard>
+          <MenuRow iconName="document-text-outline" iconBg="#eff6ff" label="Verification Docs" sub="Upload required documents" onPress={() => comingSoon("Verification Documents")} />
+          <MenuDivider />
+          <MenuRow iconName="notifications-outline" iconBg="#f5f3ff" label="Notifications"      sub="Push & email preferences"  onPress={() => router.push("/notifications" as any)} />
+          <MenuDivider />
+          <MenuRow iconName="help-circle-outline"   iconBg="#f0fdf4" label="Help & Support"     sub="FAQs, contact us"          onPress={() => router.push("/help" as any)} />
+        </MenuCard>
+
+        <Text style={s.sectionLabel}>LEGAL</Text>
+        <MenuCard>
+          <MenuRow iconName="document-text-outline"    iconBg="#eff6ff" label="Terms & Conditions" sub="Our terms of use"         onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)} />
+          <MenuDivider />
+          <MenuRow iconName="shield-checkmark-outline" iconBg="#f0fdf4" label="Privacy Policy"     sub="How we handle your data"  onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)} />
+        </MenuCard>
+
+        <MenuCard>
+          <MenuRow iconName="log-out-outline" iconBg="#fef2f2" label="Sign Out" onPress={handleLogout} danger />
+        </MenuCard>
+
+        <Text style={s.versionText}>KAINOOK v2.4.0 · Provider</Text>
+      </ScrollView>
+    </AppLayout>
   );
 }
 
-export default function ProfileScreen() {
-  const user = useAuthStore((s) => s.user);
-  const [tab, setTab] = useState<Tab>("profile");
+// ── Styles ────────────────────────────────────────────────────────────────────
 
-  const TABS: { key: Tab; label: string }[] = [
-    { key: "profile", label: "Profile" },
-    { key: "security", label: "Security" },
-    { key: "account", label: "Account" },
-  ];
-
-  return (
-    <View style={styles.container}>
-      <SafeAreaView edges={["top"]} style={styles.header}>
-        <View style={styles.headerTop}>
-          <Image
-            source={require("../../assets/logo.png")}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={styles.headerTitle}>Settings</Text>
-        </View>
-
-        <View style={styles.tabRow}>
-          {TABS.map((t) => (
-            <TouchableOpacity
-              key={t.key}
-              style={[styles.tabBtn, tab === t.key && styles.tabBtnActive]}
-              onPress={() => setTab(t.key)}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.tabBtnText, tab === t.key && styles.tabBtnTextActive]}>
-                {t.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </SafeAreaView>
-
-      {tab === "profile" && <ProfileTab user={user} />}
-      {tab === "security" && <SecurityTab />}
-      {tab === "account" && <AccountTab />}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.colors.bgLight },
-
-  header: {
+const s = StyleSheet.create({
+  hero: {
     backgroundColor: K.colors.darkGreen,
     paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingTop: 24,
+    paddingBottom: 28,
+    alignItems: "center",
+    marginBottom: 4,
   },
-  headerTop: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
-  logo: { width: 32, height: 32, borderRadius: 8 },
-  headerTitle: { fontSize: K.font.xl, fontWeight: "800", color: "#fff" },
-
-  tabRow: { flexDirection: "row", gap: 8 },
-  tabBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 7,
-    borderRadius: K.radius.full,
-    backgroundColor: K.colors.glassBg,
-    borderWidth: 1,
-    borderColor: K.colors.glassBorder,
-  },
-  tabBtnActive: { backgroundColor: K.colors.accent, borderColor: K.colors.accent },
-  tabBtnText: { fontSize: K.font.sm, color: K.colors.textLightMuted, fontWeight: "600" },
-  tabBtnTextActive: { color: "#fff" },
-
-  tabContent: { padding: 16, paddingBottom: 40 },
-
-  avatarBlock: { alignItems: "center", marginBottom: 24 },
   avatar: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: K.colors.darkGreen,
+    backgroundColor: K.colors.accent,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 12,
+    borderWidth: 3,
+    borderColor: "rgba(255,255,255,0.25)",
     ...K.shadow.md,
   },
-  avatarText: { fontSize: 36, fontWeight: "900", color: "#fff" },
-  avatarName: { fontSize: K.font.xl, fontWeight: "800", color: K.colors.textDark },
-  avatarEmail: { fontSize: K.font.sm, color: K.colors.textMuted, marginTop: 4 },
-
-  formCard: {
-    backgroundColor: K.colors.bgCard,
-    borderRadius: K.radius.xl,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: K.colors.border,
-    ...K.shadow.sm,
-  },
-  formField: { marginBottom: 16 },
-  fieldLabel: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textMid, marginBottom: 8 },
-  fieldInput: {
-    backgroundColor: K.colors.bgLight,
-    borderWidth: 1,
-    borderColor: K.colors.border,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: K.font.base,
-    color: K.colors.textDark,
-  },
-  fieldTextarea: { height: 80, textAlignVertical: "top" },
-
-  saveBtn: {
-    backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    height: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 4,
-  },
-  btnDisabled: { opacity: 0.55 },
-  saveBtnText: { color: "#fff", fontSize: K.font.base, fontWeight: "700" },
-
-  menuCard: {
-    backgroundColor: K.colors.bgCard,
-    borderRadius: K.radius.xl,
-    borderWidth: 1,
-    borderColor: K.colors.border,
-    overflow: "hidden",
-    ...K.shadow.sm,
-  },
-  menuItem: {
+  avatarInitials:    { fontSize: 32, fontWeight: "900", color: "#fff" },
+  userName:          { fontSize: 20, fontWeight: "800", color: "#fff", marginBottom: 3, letterSpacing: -0.3 },
+  businessName:      { fontSize: 13, color: "rgba(255,255,255,0.7)", marginBottom: 8 },
+  providerBadge: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: K.colors.border,
-    gap: 14,
+    gap: 5,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
   },
-  menuIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: K.radius.sm,
-    backgroundColor: K.colors.bgLight,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuIconDanger: { backgroundColor: "#FEE2E2" },
-  menuEmoji: { fontSize: 18 },
-  menuText: { flex: 1 },
-  menuLabel: { fontSize: K.font.base, fontWeight: "600", color: K.colors.textDark },
-  menuLabelDanger: { color: K.colors.error },
-  menuSublabel: { fontSize: K.font.sm, color: K.colors.textMuted, marginTop: 2 },
-  menuArrow: { fontSize: 22, color: K.colors.textMuted, fontWeight: "300" },
+  providerBadgeText: { fontSize: 11, color: "#34d399", fontWeight: "700" },
 
-  versionText: { textAlign: "center", fontSize: 11, color: K.colors.textMuted, marginTop: 24 },
+  content:      { padding: 16, paddingBottom: 48, gap: 12 },
+  sectionLabel: { fontSize: 10, fontWeight: "800", color: K.colors.textMuted, letterSpacing: 1.0, marginTop: 4, marginBottom: 8 },
+  versionText:  { textAlign: "center", fontSize: 11, color: K.colors.textMuted, marginTop: 8 },
 });

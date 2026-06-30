@@ -77,7 +77,7 @@ function MethodCard({
           <Ionicons
             name={cardIcon(method.paymentProvider)}
             size={22}
-            color={method.paymentProvider === "tara" ? "#0D7377" : "#1a73e8"}
+            color={method.paymentProvider === "tara" ? "#0D7377" : "#16a34a"}
           />
         </View>
 
@@ -108,7 +108,7 @@ function MethodCard({
             disabled={settingDefault || deleting}
           >
             {settingDefault ? (
-              <ActivityIndicator size="small" color="#1a73e8" />
+              <ActivityIndicator size="small" color="#16a34a" />
             ) : (
               <Text style={s.actionBtnText}>Set default</Text>
             )}
@@ -189,7 +189,7 @@ export default function PaymentMethodsScreen() {
     return (
       <SafeAreaView style={s.container}>
         <View style={s.centered}>
-          <ActivityIndicator size="large" color="#1a73e8" />
+          <ActivityIndicator size="large" color="#16a34a" />
           <Text style={s.loadingText}>Loading payment methods...</Text>
         </View>
       </SafeAreaView>
@@ -226,7 +226,7 @@ export default function PaymentMethodsScreen() {
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={() => void refetch()}
-            tintColor="#1a73e8"
+            tintColor="#16a34a"
           />
         }
       >
@@ -298,7 +298,7 @@ export default function PaymentMethodsScreen() {
             activeOpacity={0.8}
           >
             <View style={s.addBtnIcon}>
-              <Ionicons name="card-outline" size={22} color="#1a73e8" />
+              <Ionicons name="card-outline" size={22} color="#16a34a" />
             </View>
             <View style={s.addBtnText}>
               <Text style={s.addBtnTitle}>Add New Card</Text>
@@ -372,7 +372,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
     flexShrink: 0,
   },
-  methodIconStripe: { backgroundColor: "#eff6ff" },
+  methodIconStripe: { backgroundColor: "#f0fdf4" },
   methodIconTara:   { backgroundColor: "#f0fdf4" },
   methodInfo:       { flex: 1 },
   methodLabel:      { fontSize: 14, fontWeight: "600", color: "#111827" },
@@ -397,7 +397,7 @@ const s = StyleSheet.create({
     minWidth: 32,
     alignItems: "center",
   },
-  actionBtnText:   { fontSize: 12, fontWeight: "600", color: "#1a73e8" },
+  actionBtnText:   { fontSize: 12, fontWeight: "600", color: "#16a34a" },
   actionBtnDelete: { borderColor: "#fee2e2", backgroundColor: "#fff5f5" },
 
   addSection: { marginTop: 8 },
@@ -425,7 +425,7 @@ const s = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: "#eff6ff",
+    backgroundColor: "#f0fdf4",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -434,7 +434,7 @@ const s = StyleSheet.create({
   addBtnSub:   { fontSize: 12, color: "#6b7280", marginTop: 2 },
 
   primaryBtn: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
