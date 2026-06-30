@@ -3,12 +3,17 @@ import fs from "fs";
 import path from "path";
 import QRCode from "qrcode";
 import { uploadBuffer, cdnUrl } from "../lib/s3.js";
+import os from "os";
 
 const BOOKING_BASE_URL = process.env["BOOKING_PUBLIC_URL"] ?? "https://kainook.com/bookings";
 
 export async function generateVoucherPDF(booking: any, invoice: any) {
   const fileName = `KAINOOK-${booking.code}.pdf`;
-  const filePath = `/tmp/${fileName}`;
+  const filePath = path.join(os.tmpdir(), fileName);
+
+  // Generate QR code first so PDF writing can be fully synchronous
+  const bookingUrl = `${BOOKING_BASE_URL}/${booking.code}`;
+  const qrBuffer = await QRCode.toBuffer(bookingUrl, { width: 120, margin: 1 });
 
   const doc = new PDFDocument({ size: "A4", margin: 40 });
   const stream = fs.createWriteStream(filePath);
@@ -85,9 +90,6 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   doc.moveDown(2);
 
   // ── QR CODE ───────────────────────────────────────────────────────────
-  const bookingUrl = `${BOOKING_BASE_URL}/${booking.code}`;
-  const qrBuffer = await QRCode.toBuffer(bookingUrl, { width: 120, margin: 1 });
-
   const qrY = doc.y;
   doc.image(qrBuffer, 40, qrY, { width: 100 });
   doc.fontSize(10).text("Scan to view booking", 40, qrY + 105, { width: 100, align: "center" });
@@ -115,7 +117,11 @@ export async function generateVoucherPDF(booking: any, invoice: any) {
   const pdfUrl = cdnUrl(s3Key);
 
   // ── CLEAN TEMP FILE ───────────────────────────────────────────────────
-  fs.unlinkSync(filePath);
+  try {
+    fs.unlinkSync(filePath);
+  } catch (err) {
+    console.error("Failed to delete temp file:", err);
+  }
 
   return { fileName, pdfUrl, pdfBuffer };
 }

@@ -356,7 +356,31 @@ export async function bookingRoutes(app: FastifyInstance) {
         return sendError(reply, 404, "NOT_FOUND", "Booking not found");
       }
 
-      return sendSuccess(reply, 200, booking);
+      let hostEmail = "";
+      try {
+        const result = await prisma.$queryRawUnsafe<{ email: string }[]>(
+          `SELECT email FROM auth."User" WHERE id = $1`,
+          booking.providerId
+        );
+        if (result && result.length > 0) {
+          hostEmail = result[0]?.email ?? "";
+        }
+      } catch (err) {
+        app.log.error(
+          err,
+          `Failed to fetch host email for provider ${booking.providerId}`
+        );
+      }
+
+      const bookingWithHostEmail = {
+        ...booking,
+        listing: booking.listing ? {
+          ...booking.listing,
+          hostEmail,
+        } : null,
+      };
+
+      return sendSuccess(reply, 200, bookingWithHostEmail);
     } catch (err) {
       req.log.error({ err }, "Failed to fetch internal booking details");
       return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching booking details.");
@@ -1213,59 +1237,65 @@ export async function bookingRoutes(app: FastifyInstance) {
         // payment webhooks cannot both confirm overlapping bookings simultaneously.
         const confirmedAt = new Date();
         try {
-          await prisma.$transaction(async (tx) => {
-            // Lock the listing row — serialises all confirmations for this listing.
-            await tx.$queryRawUnsafe(
-              `SELECT id FROM listing.listings WHERE id = $1 FOR UPDATE`,
-              booking.listingId,
-            );
+          await prisma.$transaction(
+            async (tx) => {
+              // Lock the listing row — serialises all confirmations for this listing.
+              await tx.$queryRawUnsafe(
+                `SELECT id FROM listing.listings WHERE id = $1 FOR UPDATE`,
+                booking.listingId,
+              );
 
-            // Re-read booking status inside the TX to catch any concurrent confirm.
-            const fresh = await tx.$queryRawUnsafe<{ status: string }[]>(
-              `SELECT status FROM listing.bookings WHERE id = $1 FOR UPDATE`,
-              id,
-            );
-            if (!fresh[0] || fresh[0].status !== "pending_payment") {
-              throw Object.assign(new Error("Already processed"), { code: "ALREADY_PROCESSED" });
-            }
-
-            // Re-validate that no other confirmed booking occupies these dates.
-            const startDate = booking.checkIn ?? booking.pickupDatetime;
-            const endDate = booking.checkOut ?? booking.returnDatetime;
-            if (startDate && endDate) {
-              const listing = await tx.listing.findUnique({ where: { id: booking.listingId } });
-              const unitCount = listing?.unitCount ?? 1;
-
-              const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
-                SELECT id FROM listing.bookings
-                WHERE listing_id = $1
-                  AND status = 'confirmed'
-                  AND id != $2
-                  AND (
-                    (check_in IS NOT NULL AND check_in < $4 AND check_out > $3)
-                    OR (pickup_datetime IS NOT NULL AND pickup_datetime < $4 AND return_datetime > $3)
-                  )
-              `, booking.listingId, id, startDate, endDate);
-
-              if (conflicts.length >= unitCount) {
-                throw Object.assign(new Error("Dates taken"), { code: "DATES_TAKEN" });
+              // Re-read booking status inside the TX to catch any concurrent confirm.
+              const fresh = await tx.$queryRawUnsafe<{ status: string }[]>(
+                `SELECT status FROM listing.bookings WHERE id = $1 FOR UPDATE`,
+                id,
+              );
+              if (!fresh[0] || fresh[0].status !== "pending_payment") {
+                throw Object.assign(new Error("Already processed"), { code: "ALREADY_PROCESSED" });
               }
+
+              // Re-validate that no other confirmed booking occupies these dates.
+              const startDate = booking.checkIn ?? booking.pickupDatetime;
+              const endDate = booking.checkOut ?? booking.returnDatetime;
+              if (startDate && endDate) {
+                const listing = await tx.listing.findUnique({ where: { id: booking.listingId } });
+                const unitCount = listing?.unitCount ?? 1;
+
+                const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
+                  SELECT id FROM listing.bookings
+                  WHERE listing_id = $1
+                    AND status = 'confirmed'
+                    AND id != $2
+                    AND (
+                      (check_in IS NOT NULL AND check_in < $4 AND check_out > $3)
+                      OR (pickup_datetime IS NOT NULL AND pickup_datetime < $4 AND return_datetime > $3)
+                    )
+                `, booking.listingId, id, startDate, endDate);
+
+                if (conflicts.length >= unitCount) {
+                  throw Object.assign(new Error("Dates taken"), { code: "DATES_TAKEN" });
+                }
+              }
+
+              await tx.booking.update({
+                where: { id },
+                data: { status: "confirmed", confirmedAt, paymentId },
+              });
+
+              await tx.bookingStatusLog.create({
+                data: {
+                  bookingId: id,
+                  fromStatus: "pending_payment",
+                  toStatus: "confirmed",
+                  actorType: "system",
+                },
+              });
+            },
+            {
+              maxWait: 20000, // Allow up to 20s to acquire the connection and lock
+              timeout: 30000, // Allow up to 30s for the interactive transaction to finish
             }
-
-            await tx.booking.update({
-              where: { id },
-              data: { status: "confirmed", confirmedAt, paymentId },
-            });
-
-            await tx.bookingStatusLog.create({
-              data: {
-                bookingId: id,
-                fromStatus: "pending_payment",
-                toStatus: "confirmed",
-                actorType: "system",
-              },
-            });
-          });
+          );
         } catch (txErr: any) {
           if (txErr.code === "ALREADY_PROCESSED") {
             return reply.status(409).send({
