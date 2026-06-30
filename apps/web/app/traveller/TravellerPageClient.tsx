@@ -61,6 +61,7 @@ interface ActivePromotion {
   discountValue: number;
   description?: string;
   category?: string;
+  activity?: string;
   labelText?: string;
   labelColour?: string;
   bannerTitle?: string;

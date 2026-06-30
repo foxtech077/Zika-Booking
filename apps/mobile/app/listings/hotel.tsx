@@ -416,6 +416,24 @@ export default function HotelListingScreen() {
     }
   }
 
+  async function reorderPhoto(photoId: string, direction: "up" | "down") {
+    const idx = photos.findIndex((p) => p.id === photoId);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= photos.length) return;
+    const reordered = [...photos];
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx]!, reordered[idx]!];
+    setPhotos(reordered);
+    try {
+      await listingApi.patch(`/listings/${id}/photos/reorder`, {
+        orderedIds: reordered.map((p) => p.id),
+      });
+    } catch {
+      setPhotos(photos);
+      Alert.alert("Error", "Could not reorder photos. Please try again.");
+    }
+  }
+
   async function pickAndUploadDocument(docType: string, docLabel: string) {
     setUploadingDoc(docType);
     try {
@@ -715,6 +733,7 @@ export default function HotelListingScreen() {
             uploadProgress={uploadProgress ?? undefined}
             onAdd={pickAndUploadPhoto}
             onDelete={deletePhoto}
+            onReorder={reorderPhoto}
             minPhotos={1}
             maxPhotos={30}
             error={errors.photos}

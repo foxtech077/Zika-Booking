@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import {
   View,
   Text,
@@ -7,12 +7,11 @@ import {
   RefreshControl,
   StyleSheet,
   ActivityIndicator,
-  Image,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { AppLayout } from "../../components/layout/AppLayout";
 import { useQuery } from "@tanstack/react-query";
-import { Feather } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { K } from "../../constants/theme";
 
@@ -42,14 +41,14 @@ interface BookingListResponse {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const STATUS_CFG: Record<string, { label: string; bg: string; text: string; dot: string }> = {
-  confirmed:            { label: "Confirmed",  bg: "#D1FAE5", text: "#065F46", dot: "#059669" },
-  active:               { label: "Active",     bg: "#DBEAFE", text: "#1D4ED8", dot: "#3B82F6" },
-  pending_payment:      { label: "Pending",    bg: "#FEF3C7", text: "#92400E", dot: "#F59E0B" },
-  completed:            { label: "Completed",  bg: "#F3F4F6", text: "#6B7280", dot: "#9CA3AF" },
-  cancelled_by_guest:   { label: "Cancelled",  bg: "#FEE2E2", text: "#DC2626", dot: "#EF4444" },
-  cancelled_by_provider:{ label: "Cancelled",  bg: "#FEE2E2", text: "#DC2626", dot: "#EF4444" },
-  cancelled_by_system:  { label: "Cancelled",  bg: "#FEE2E2", text: "#DC2626", dot: "#EF4444" },
+const STATUS_CFG: Record<string, { label: string; bg: string; text: string; accent: string }> = {
+  confirmed:             { label: "Confirmed",  bg: "#f0fdf4", text: "#15803d", accent: "#16a34a" },
+  active:                { label: "Active",     bg: "#eff6ff", text: "#1d4ed8", accent: "#3b82f6" },
+  pending_payment:       { label: "Pending",    bg: "#fffbeb", text: "#92400e", accent: "#f59e0b" },
+  completed:             { label: "Completed",  bg: "#f8f8f8", text: "#6b7280", accent: "#9ca3af" },
+  cancelled_by_guest:    { label: "Cancelled",  bg: "#fef2f2", text: "#b91c1c", accent: "#ef4444" },
+  cancelled_by_provider: { label: "Cancelled",  bg: "#fef2f2", text: "#b91c1c", accent: "#ef4444" },
+  cancelled_by_system:   { label: "Cancelled",  bg: "#fef2f2", text: "#b91c1c", accent: "#ef4444" },
 };
 
 const FILTER_TABS = [
@@ -65,83 +64,119 @@ const COMMISSION_RATE = 0.05;
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en", { day: "numeric", month: "short", year: "2-digit" });
+  return new Date(iso).toLocaleDateString("en", { day: "numeric", month: "short" });
 }
 
-function guestDisplay(first: string, last: string) {
-  const initial = last?.[0]?.toUpperCase();
-  return initial ? `${first} ${initial}.` : first;
+function netPayout(b: ProviderBooking): number {
+  if (b.netPayout != null) return b.netPayout;
+  return Math.round(b.totalAmount * (1 - COMMISSION_RATE) * 100) / 100;
 }
 
-function netPayout(booking: ProviderBooking): number {
-  if (booking.netPayout != null) return booking.netPayout;
-  return Math.round(booking.totalAmount * (1 - COMMISSION_RATE) * 100) / 100;
+function avatarColor(name: string): string {
+  const COLORS = ["#0891b2", "#7c3aed", "#be185d", "#0f766e", "#b45309", "#1d4ed8", "#15803d"];
+  const idx = (name.charCodeAt(0) ?? 0) % COLORS.length;
+  return COLORS[idx]!;
 }
 
-// ── Booking card ──────────────────────────────────────────────────────────────
+// ── Booking Card ──────────────────────────────────────────────────────────────
 
 function BookingCard({ item }: { item: ProviderBooking }) {
-  const st = STATUS_CFG[item.status] ?? STATUS_CFG.completed!;
-  const isCar = item.listingCategory === "car";
-  const duration = item.nightsOrDays;
-  const durationLabel = duration
-    ? `${duration} ${isCar ? (duration === 1 ? "day" : "days") : (duration === 1 ? "night" : "nights")}`
-    : null;
-  const net = netPayout(item);
+  const st      = STATUS_CFG[item.status] ?? STATUS_CFG.completed!;
+  const isCar   = item.listingCategory === "car";
+  const dur     = item.nightsOrDays;
+  const durStr  = dur ? `${dur} ${isCar ? "day" : "night"}${dur !== 1 ? "s" : ""}` : null;
+  const net     = netPayout(item);
+  const initial = item.guestFirstName[0]?.toUpperCase() ?? "?";
+  const acBg    = avatarColor(item.guestFirstName);
 
   return (
     <TouchableOpacity
-      style={s.card}
+      style={[c.card, { borderLeftColor: st.accent }]}
       onPress={() => router.push(`/provider/booking/${item.id}` as any)}
-      activeOpacity={0.85}
+      activeOpacity={0.82}
     >
-      {/* Header row */}
-      <View style={s.cardHeader}>
-        <View style={s.guestRow}>
-          <View style={s.avatar}>
-            <Text style={s.avatarText}>{item.guestFirstName[0]?.toUpperCase() ?? "?"}</Text>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.guestName}>{guestDisplay(item.guestFirstName, item.guestLastName)}</Text>
-            <Text style={s.listingName} numberOfLines={1}>{item.listingTitle}</Text>
-          </View>
+      {/* Top row */}
+      <View style={c.topRow}>
+        <View style={[c.avatar, { backgroundColor: acBg }]}>
+          <Text style={c.avatarText}>{initial}</Text>
         </View>
-        <View style={[s.badge, { backgroundColor: st.bg }]}>
-          <View style={[s.badgeDot, { backgroundColor: st.dot }]} />
-          <Text style={[s.badgeText, { color: st.text }]}>{st.label}</Text>
+        <View style={c.guestInfo}>
+          <Text style={c.guestName}>{item.guestFirstName} {item.guestLastName[0]}.</Text>
+          <Text style={c.listingName} numberOfLines={1}>{item.listingTitle}</Text>
+        </View>
+        <View style={[c.statusBadge, { backgroundColor: st.bg }]}>
+          <View style={[c.statusDot, { backgroundColor: st.accent }]} />
+          <Text style={[c.statusText, { color: st.text }]}>{st.label}</Text>
         </View>
       </View>
-
-      <View style={s.divider} />
 
       {/* Dates row */}
-      <View style={s.datesRow}>
-        <View style={s.dateBlock}>
-          <Text style={s.dateLabel}>{isCar ? "Pickup" : "Check-in"}</Text>
-          <Text style={s.dateValue}>{fmtDate(item.checkIn)}</Text>
+      <View style={c.datesRow}>
+        <View style={c.dateBlock}>
+          <Text style={c.dateLabel}>{isCar ? "PICKUP" : "CHECK-IN"}</Text>
+          <Text style={c.dateValue}>{fmtDate(item.checkIn)}</Text>
         </View>
-        <View style={s.dateMid}>
-          <View style={s.dateLine} />
-          {durationLabel && <Text style={s.durLabel}>{durationLabel}</Text>}
-          <View style={s.dateLine} />
+        <View style={c.dateMid}>
+          <View style={c.dateLine} />
+          <View style={c.durationChip}>
+            <Ionicons name={isCar ? "car-outline" : "bed-outline"} size={11} color={K.colors.textMuted} />
+            {durStr ? <Text style={c.durationText}>{durStr}</Text> : null}
+          </View>
+          <View style={c.dateLine} />
         </View>
-        <View style={[s.dateBlock, { alignItems: "flex-end" }]}>
-          <Text style={s.dateLabel}>{isCar ? "Return" : "Check-out"}</Text>
-          <Text style={s.dateValue}>{fmtDate(item.checkOut)}</Text>
+        <View style={[c.dateBlock, { alignItems: "flex-end" }]}>
+          <Text style={c.dateLabel}>{isCar ? "RETURN" : "CHECK-OUT"}</Text>
+          <Text style={c.dateValue}>{fmtDate(item.checkOut)}</Text>
         </View>
       </View>
 
-      {/* Footer row */}
-      <View style={s.cardFooter}>
-        <Text style={s.refText}>{item.reference}</Text>
-        <View style={s.payoutBadge}>
-          <Feather name="trending-up" size={11} color={K.colors.accent} />
-          <Text style={s.payoutText}>{item.currency} {net.toLocaleString()}</Text>
+      {/* Footer */}
+      <View style={c.footer}>
+        <Text style={c.refText}>#{item.reference}</Text>
+        <View style={c.payoutRow}>
+          <Ionicons name="cash-outline" size={13} color={K.colors.accent} />
+          <Text style={c.payoutText}>{item.currency} {net.toLocaleString()}</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
 }
+
+const c = StyleSheet.create({
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: K.colors.border,
+    borderLeftWidth: 4,
+    ...K.shadow.sm,
+  },
+  topRow:    { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
+  avatar:    { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  avatarText:{ fontSize: 15, fontWeight: "800", color: "#fff" },
+  guestInfo: { flex: 1 },
+  guestName: { fontSize: 14, fontWeight: "700", color: K.colors.textDark, marginBottom: 2 },
+  listingName:{ fontSize: 12, color: K.colors.textMuted },
+
+  statusBadge: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 20, paddingHorizontal: 9, paddingVertical: 4 },
+  statusDot:   { width: 6, height: 6, borderRadius: 3 },
+  statusText:  { fontSize: 11, fontWeight: "700" },
+
+  datesRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  dateBlock: { flex: 1 },
+  dateLabel: { fontSize: 9, fontWeight: "700", color: K.colors.textMuted, letterSpacing: 0.8, marginBottom: 4 },
+  dateValue: { fontSize: 14, fontWeight: "700", color: K.colors.textDark },
+  dateMid:   { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 },
+  dateLine:  { flex: 1, height: 1, backgroundColor: K.colors.border },
+  durationChip: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: K.colors.bgSubtle, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 3 },
+  durationText: { fontSize: 10, color: K.colors.textMuted, fontWeight: "600" },
+
+  footer:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 10, borderTopWidth: 1, borderTopColor: K.colors.border },
+  refText:    { fontSize: 11, color: K.colors.textMuted, fontFamily: "monospace" },
+  payoutRow:  { flexDirection: "row", alignItems: "center", gap: 5 },
+  payoutText: { fontSize: 14, fontWeight: "800", color: K.colors.darkGreen },
+});
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -162,42 +197,49 @@ export default function ProviderBookingsScreen() {
   const bookings = data?.bookings ?? [];
 
   return (
-    <View style={s.container}>
-      <SafeAreaView edges={["top"]} style={s.header}>
-        <View style={s.headerTop}>
-          <Image source={require("../../assets/logo.png")} style={s.logo} resizeMode="contain" />
-          <View>
-            <Text style={s.headerTitle}>Reservations</Text>
-            <Text style={s.headerSub}>{data ? `${data.total} total` : "Loading…"}</Text>
+    <AppLayout>
+      <View style={s.container}>
+        <View style={s.header}>
+          <View style={s.headerRow}>
+            <View>
+              <Text style={s.headerTitle}>Reservations</Text>
+              {data && (
+                <Text style={s.headerSub}>
+                  {data.total} booking{data.total !== 1 ? "s" : ""}
+                </Text>
+              )}
+            </View>
+            <View style={[s.countBadge, data?.total ? {} : { opacity: 0 }]}>
+              <Text style={s.countBadgeText}>{data?.total ?? 0}</Text>
+            </View>
           </View>
-        </View>
 
-        {/* Commission info banner */}
-        <View style={s.commissionBanner}>
-          <Feather name="info" size={12} color={K.colors.accent} />
-          <Text style={s.commissionBannerText}>
-            Amounts shown are your net earnings after Kainook's 5% service fee.
-          </Text>
-        </View>
+          {/* Commission notice */}
+          <View style={s.commissionBar}>
+            <Ionicons name="information-circle-outline" size={13} color={K.colors.accentLight} />
+            <Text style={s.commissionText}>Net amounts shown after Kainook's 5% service fee</Text>
+          </View>
 
-        {/* Filter tabs */}
-        <FlatList
-          data={FILTER_TABS}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(t) => t.key}
-          contentContainerStyle={s.tabsScroll}
-          renderItem={({ item: tab }) => (
-            <TouchableOpacity
-              style={[s.tab, activeTab === tab.key && s.tabActive]}
-              onPress={() => setActiveTab(tab.key)}
-              activeOpacity={0.75}
-            >
-              <Text style={[s.tabText, activeTab === tab.key && s.tabTextActive]}>{tab.label}</Text>
-            </TouchableOpacity>
-          )}
-        />
-      </SafeAreaView>
+          {/* Filter tabs */}
+          <FlatList
+            data={FILTER_TABS}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(t) => t.key}
+            contentContainerStyle={s.tabsRow}
+            renderItem={({ item: tab }) => (
+              <TouchableOpacity
+                style={[s.tab, activeTab === tab.key && s.tabActive]}
+                onPress={() => setActiveTab(tab.key)}
+                activeOpacity={0.75}
+              >
+                <Text style={[s.tabText, activeTab === tab.key && s.tabTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
 
       {isLoading ? (
         <View style={s.center}>
@@ -205,10 +247,10 @@ export default function ProviderBookingsScreen() {
         </View>
       ) : isError ? (
         <View style={s.center}>
-          <Feather name="alert-circle" size={40} color={K.colors.error} />
-          <Text style={s.errorText}>Could not load bookings</Text>
+          <Ionicons name="alert-circle-outline" size={48} color="#fca5a5" />
+          <Text style={s.errorTitle}>Could not load bookings</Text>
           <TouchableOpacity style={s.retryBtn} onPress={() => refetch()}>
-            <Text style={s.retryText}>Retry</Text>
+            <Text style={s.retryText}>Try Again</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -221,113 +263,94 @@ export default function ProviderBookingsScreen() {
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={K.colors.accent} />
           }
           ListEmptyComponent={
-            <View style={s.emptyBox}>
-              <Feather name="calendar" size={52} color={K.colors.border} />
+            <View style={s.empty}>
+              <View style={s.emptyIcon}>
+                <Ionicons name="calendar-outline" size={36} color={K.colors.textMuted} />
+              </View>
               <Text style={s.emptyTitle}>No bookings found</Text>
               <Text style={s.emptySub}>Reservations in this category will appear here.</Text>
             </View>
           }
           renderItem={({ item }) => <BookingCard item={item} />}
-          ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+          ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
           ListFooterComponent={() => <View style={{ height: 32 }} />}
         />
       )}
-    </View>
+      </View>
+    </AppLayout>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.colors.bgLight },
+  container: { flex: 1, backgroundColor: "#F5F4F1" },
 
-  header: { backgroundColor: K.colors.darkGreen, paddingHorizontal: 20, paddingBottom: 14 },
-  headerTop: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 10 },
-  logo: { width: 32, height: 32, borderRadius: 8 },
-  headerTitle: { fontSize: K.font.xl, fontWeight: "800", color: "#fff" },
-  headerSub: { fontSize: K.font.sm, color: K.colors.textLightMuted, marginTop: 1 },
+  header: {
+    backgroundColor: K.colors.darkGreen,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+  },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  headerTitle: { fontSize: 22, fontWeight: "800", color: "#fff", letterSpacing: -0.5 },
+  headerSub:   { fontSize: 12, color: "rgba(255,255,255,0.6)", marginTop: 2 },
+  countBadge: {
+    backgroundColor: K.colors.accent,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  countBadgeText: { fontSize: 13, fontWeight: "800", color: "#fff" },
 
-  commissionBanner: {
+  commissionBar: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: K.colors.accentDim,
-    borderRadius: K.radius.sm,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 7,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: K.colors.accent + "40",
+    marginBottom: 14,
   },
-  commissionBannerText: { fontSize: 11, color: K.colors.accent, fontWeight: "600", flex: 1, lineHeight: 15 },
+  commissionText: { fontSize: 11, color: "rgba(255,255,255,0.65)", fontWeight: "500", flex: 1, lineHeight: 15 },
 
-  tabsScroll: { gap: 8, paddingBottom: 2 },
+  tabsRow: { gap: 8 },
   tab: {
     paddingHorizontal: 16,
     paddingVertical: 7,
-    borderRadius: K.radius.full,
-    backgroundColor: K.colors.glassBg,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.10)",
     borderWidth: 1,
-    borderColor: K.colors.glassBorder,
+    borderColor: "rgba(255,255,255,0.15)",
   },
-  tabActive: { backgroundColor: K.colors.accent, borderColor: K.colors.accent },
-  tabText: { fontSize: K.font.sm, color: K.colors.textLightMuted, fontWeight: "600" },
-  tabTextActive: { color: "#fff" },
+  tabActive:     { backgroundColor: "#fff" },
+  tabText:       { fontSize: 12, color: "rgba(255,255,255,0.75)", fontWeight: "600" },
+  tabTextActive: { color: K.colors.darkGreen },
 
   list: { padding: 16 },
 
-  card: {
-    backgroundColor: K.colors.bgCard,
-    borderRadius: K.radius.xl,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: K.colors.border,
-    ...K.shadow.sm,
-  },
-  cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" },
-  guestRow: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
-  avatar: {
-    width: 42, height: 42, borderRadius: 21,
+  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14, padding: 32 },
+  errorTitle: { fontSize: 16, fontWeight: "700", color: K.colors.textDark, textAlign: "center" },
+  retryBtn: {
     backgroundColor: K.colors.darkGreen,
-    alignItems: "center", justifyContent: "center",
+    borderRadius: 12,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
   },
-  avatarText: { fontSize: K.font.lg, fontWeight: "800", color: "#fff" },
-  guestName: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark },
-  listingName: { fontSize: K.font.sm, color: K.colors.textMuted, marginTop: 2, maxWidth: 160 },
-
-  badge: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: K.radius.full, paddingHorizontal: 10, paddingVertical: 5 },
-  badgeDot: { width: 6, height: 6, borderRadius: 3 },
-  badgeText: { fontSize: 11, fontWeight: "700" },
-
-  divider: { height: 1, backgroundColor: K.colors.border, marginVertical: 14 },
-
-  datesRow: { flexDirection: "row", alignItems: "center" },
-  dateBlock: { flex: 1 },
-  dateLabel: { fontSize: 11, color: K.colors.textMuted, fontWeight: "600", marginBottom: 4 },
-  dateValue: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark },
-  dateMid: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6 },
-  dateLine: { flex: 1, height: 1, backgroundColor: K.colors.border },
-  durLabel: { fontSize: 11, color: K.colors.textMuted, fontWeight: "600" },
-
-  cardFooter: {
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: K.colors.border,
-  },
-  refText: { fontSize: 11, color: K.colors.textMuted },
-  payoutBadge: {
-    flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: K.colors.accentDim, borderRadius: K.radius.full,
-    paddingHorizontal: 10, paddingVertical: 4,
-    borderWidth: 1, borderColor: K.colors.accent + "40",
-  },
-  payoutText: { fontSize: K.font.sm, fontWeight: "800", color: K.colors.darkGreen },
-
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 14 },
-  errorText: { fontSize: K.font.base, color: K.colors.textMuted },
-  retryBtn: { backgroundColor: K.colors.accent, borderRadius: K.radius.md, paddingHorizontal: 24, paddingVertical: 10 },
   retryText: { color: "#fff", fontWeight: "700" },
 
-  emptyBox: { alignItems: "center", paddingTop: 60, gap: 12 },
-  emptyTitle: { fontSize: K.font.xl, fontWeight: "800", color: K.colors.textDark },
-  emptySub: { fontSize: K.font.sm, color: K.colors.textMuted, textAlign: "center" },
+  empty: { alignItems: "center", paddingTop: 64, gap: 10 },
+  emptyIcon: {
+    width: 72, height: 72, borderRadius: 36,
+    backgroundColor: "#fff", alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: K.colors.border,
+    marginBottom: 4,
+  },
+  emptyTitle: { fontSize: 17, fontWeight: "700", color: K.colors.textDark },
+  emptySub:   { fontSize: 13, color: K.colors.textMuted, textAlign: "center", lineHeight: 18 },
 });

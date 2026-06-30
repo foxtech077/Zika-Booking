@@ -91,7 +91,7 @@ const amenitiesGroupedSchema = z.object({
   Services: z.array(z.string().max(100)).optional(),
 });
 
-const patchListingSchema = z.object({
+export const patchListingSchema = z.object({
   name: z.string().max(200).optional(),
   listingTitle: z.string().max(200).optional(),
   roomType: z.preprocess((val) => {
@@ -334,6 +334,7 @@ export async function listingRoutes(app: FastifyInstance) {
             town: true,
             country: true,
             pricePerNight: true,
+            pricePerDay: true,
             currency: true,
             submissionCount: true,
             rejectionReasons: true,
