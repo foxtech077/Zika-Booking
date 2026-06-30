@@ -1,25 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, LogOut, Menu, MessageSquare, Star, User } from "lucide-react";
+import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthStore } from "@/stores/auth";
 import { fetchUnreadConversationCount } from "@/services/traveller";
 
+const TRAVELLER_ROUTES = {
+  destinations: "/traveller",
+  hotels: "/traveller/hotels",
+  apartments: "/traveller/apartments",
+  cars: "/traveller/cars",
+  bookings: "/traveller?tab=bookings",
+  wishlist: "/traveller/wishlist",
+  messages: "/traveller/messages",
+  reviews: "/traveller/reviews",
+  profile: "/traveller/profile",
+} as const;
+
 interface TravellerHeaderProps {
-  // Content nav callbacks — provided only when used inside TravellerPageClient
-  activeTab?: string;
-  searchCategory?: string;
-  onDestinations?: () => void;
-  onHotels?: () => void;
-  onApartments?: () => void;
-  onCarRentals?: () => void;
-  onReservations?: () => void;
-  onMobileMenu?: () => void;
   // Whether an auth token exists (even without a loaded user)
   hasAuthToken?: boolean;
   // Checkout lock mode
@@ -29,14 +32,6 @@ interface TravellerHeaderProps {
 }
 
 export function TravellerHeader({
-  activeTab,
-  searchCategory,
-  onDestinations,
-  onHotels,
-  onApartments,
-  onCarRentals,
-  onReservations,
-  onMobileMenu,
   hasAuthToken = false,
   isLocked = false,
   lockSecondsLeft = null,
@@ -44,9 +39,12 @@ export function TravellerHeader({
 }: TravellerHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, clearSession } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchSignature = searchParams.toString();
 
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["traveller-unread-count"],
@@ -67,6 +65,10 @@ export function TravellerHeader({
     return () => document.removeEventListener("mousedown", onOutside);
   }, [menuOpen]);
 
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname, searchSignature]);
+
   const handleLogout = () => {
     setMenuOpen(false);
     clearSession();
@@ -77,33 +79,49 @@ export function TravellerHeader({
     ? [user.firstName, user.lastName].filter(Boolean).join(" ")
     : "Traveller";
 
-  const isMessagesActive = pathname?.startsWith("/traveller/messages");
-  const isReviewsActive = pathname?.startsWith("/traveller/reviews");
+  const isDestinationsActive = pathname === TRAVELLER_ROUTES.destinations && searchParams.get("tab") !== "bookings";
+  const isHotelsActive = pathname === TRAVELLER_ROUTES.hotels;
+  const isApartmentsActive = pathname === TRAVELLER_ROUTES.apartments;
+  const isCarsActive = pathname === TRAVELLER_ROUTES.cars;
+  const isBookingsActive = pathname === TRAVELLER_ROUTES.destinations && searchParams.get("tab") === "bookings";
+  const isMessagesActive = pathname?.startsWith(TRAVELLER_ROUTES.messages);
+  const isReviewsActive = pathname?.startsWith(TRAVELLER_ROUTES.reviews);
+  const isWishlistActive = pathname?.startsWith(TRAVELLER_ROUTES.wishlist);
+  const isProfileActive = pathname?.startsWith(TRAVELLER_ROUTES.profile);
 
   const lockTimer =
     lockSecondsLeft != null
       ? `${Math.floor(lockSecondsLeft / 60).toString().padStart(2, "0")}:${(lockSecondsLeft % 60).toString().padStart(2, "0")}`
       : "05:00";
 
-  function navBtn(
-    label: string,
-    callback: (() => void) | undefined,
-    fallbackHref: string,
-    isActive: boolean,
-  ) {
+  function navBtn(label: string, href: string, isActive: boolean) {
     const cls = cn(
       "text-sm font-medium tracking-wide transition-colors",
       isActive ? "text-[#0c2614] font-semibold" : "text-slate-500 hover:text-[#0c2614]",
     );
     return (
-      <button
+      <Link key={label} href={href} aria-current={isActive ? "page" : undefined} className={cls}>
+        {label}
+      </Link>
+    );
+  }
+
+  function mobileNavBtn(label: string, href: string, isActive: boolean) {
+    return (
+      <Link
         key={label}
-        type="button"
-        onClick={callback ?? (() => router.push(fallbackHref))}
-        className={cls}
+        href={href}
+        aria-current={isActive ? "page" : undefined}
+        className={cn(
+          "flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-semibold transition-all",
+          isActive
+            ? "border-[#0c2614] bg-[#0c2614] text-white"
+            : "border-slate-200 bg-white text-slate-700 hover:border-[#1D8D2B] hover:text-[#0c2614]",
+        )}
+        onClick={() => setMobileMenuOpen(false)}
       >
         {label}
-      </button>
+      </Link>
     );
   }
 
@@ -137,12 +155,12 @@ export function TravellerHeader({
         </div>
       ) : (
         /* Normal header */
-        <div className="flex items-center justify-between px-8 py-4">
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
           {/* ── Left: Logo + content nav ── */}
           <div className="flex items-center gap-10">
             <Link
-              href="/traveller"
-              onClick={onDestinations}
+              href={TRAVELLER_ROUTES.destinations}
               className="shrink-0 text-xl font-serif font-bold tracking-tight text-[#0c2614]"
             >
               Kainook
@@ -151,51 +169,44 @@ export function TravellerHeader({
             <nav className="hidden items-center gap-8 md:flex">
               {navBtn(
                 "Destinations",
-                onDestinations,
-                "/traveller",
-                activeTab === "home" || pathname === "/traveller",
+                TRAVELLER_ROUTES.destinations,
+                isDestinationsActive,
               )}
               {navBtn(
                 "Hotels",
-                onHotels,
-                "/traveller",
-                activeTab === "search" && searchCategory === "hotel",
+                TRAVELLER_ROUTES.hotels,
+                isHotelsActive,
               )}
               {navBtn(
                 "Apartments",
-                onApartments,
-                "/traveller",
-                activeTab === "search" && searchCategory === "apartment",
+                TRAVELLER_ROUTES.apartments,
+                isApartmentsActive,
               )}
               {navBtn(
                 "Car Rentals",
-                onCarRentals,
-                "/traveller",
-                activeTab === "search" && searchCategory === "car",
+                TRAVELLER_ROUTES.cars,
+                isCarsActive,
               )}
               {user &&
                 navBtn(
                   "My Reservations",
-                  onReservations,
-                  "/traveller",
-                  activeTab === "bookings",
-                )}
+                  TRAVELLER_ROUTES.bookings,
+                  isBookingsActive,
+              )}
             </nav>
           </div>
 
           {/* ── Right: workspace links + avatar dropdown ── */}
           <div className="flex items-center gap-3">
-            {/* Mobile hamburger (only injected by TravellerPageClient) */}
-            {onMobileMenu && (
-              <button
-                type="button"
-                onClick={onMobileMenu}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 transition hover:bg-slate-50 md:hidden"
-                aria-label="Open menu"
-              >
-                <Menu className="h-5 w-5 text-slate-700" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((open) => !open)}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 transition hover:bg-slate-50 md:hidden"
+              aria-label="Open menu"
+              aria-expanded={mobileMenuOpen}
+            >
+              <Menu className="h-5 w-5 text-slate-700" />
+            </button>
 
             {/* Unauthenticated */}
             {!user && !hasAuthToken && (
@@ -220,7 +231,7 @@ export function TravellerHeader({
               <>
                 {/* Messages */}
                 <Link
-                  href="/traveller/messages"
+                  href={TRAVELLER_ROUTES.messages}
                   className={cn(
                     "hidden items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-all md:flex",
                     isMessagesActive
@@ -244,9 +255,25 @@ export function TravellerHeader({
                   )}
                 </Link>
 
+                {/* Wishlist */}
+                <Link
+                  href={TRAVELLER_ROUTES.wishlist}
+                  className={cn(
+                    "hidden items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-all md:flex",
+                    isWishlistActive
+                      ? "border-[#0c2614] bg-[#0c2614] text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-[#1D8D2B] hover:text-[#0c2614]",
+                  )}
+                >
+                  <Heart
+                    className={cn("h-3.5 w-3.5", !isWishlistActive && "text-[#1D8D2B]")}
+                  />
+                  Wishlist
+                </Link>
+
                 {/* My Reviews */}
                 <Link
-                  href="/traveller/reviews"
+                  href={TRAVELLER_ROUTES.reviews}
                   className={cn(
                     "hidden items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-all md:flex",
                     isReviewsActive
@@ -269,7 +296,9 @@ export function TravellerHeader({
                       "flex items-center gap-2 rounded-2xl border px-2 py-1.5 font-semibold transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-green-500/30",
                       menuOpen
                         ? "border-[#0c2614] bg-[#0c2614] text-white shadow-sm"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-[#1D8D2B] hover:text-[#0c2614]",
+                        : isProfileActive
+                          ? "border-[#0c2614] bg-[#0c2614] text-white shadow-sm"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-[#1D8D2B] hover:text-[#0c2614]",
                     )}
                   >
                     <Avatar name={fullName} size="sm" />
@@ -309,9 +338,12 @@ export function TravellerHeader({
                         type="button"
                         onClick={() => {
                           setMenuOpen(false);
-                          router.push("/traveller/profile");
+                          router.push(TRAVELLER_ROUTES.profile);
                         }}
-                        className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 transition-all hover:bg-slate-50 hover:text-slate-900"
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                          isProfileActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                        )}
                       >
                         <User className="h-4 w-4 text-green-600" />
                         Profile
@@ -331,6 +363,54 @@ export function TravellerHeader({
               </>
             )}
           </div>
+          </div>
+
+          {mobileMenuOpen && (
+            <div className="border-t border-slate-100 bg-white px-4 py-4 sm:px-6 lg:px-8 md:hidden">
+              <div className="space-y-4">
+                <div className="grid gap-2">
+                  {mobileNavBtn("Destinations", TRAVELLER_ROUTES.destinations, isDestinationsActive)}
+                  {mobileNavBtn("Hotels", TRAVELLER_ROUTES.hotels, isHotelsActive)}
+                  {mobileNavBtn("Apartments", TRAVELLER_ROUTES.apartments, isApartmentsActive)}
+                  {mobileNavBtn("Car Rentals", TRAVELLER_ROUTES.cars, isCarsActive)}
+                  {user && mobileNavBtn("My Reservations", TRAVELLER_ROUTES.bookings, isBookingsActive)}
+                </div>
+
+                {user ? (
+                  <div className="grid gap-2">
+                    {mobileNavBtn("Messages", TRAVELLER_ROUTES.messages, isMessagesActive)}
+                    {mobileNavBtn("Wishlist", TRAVELLER_ROUTES.wishlist, isWishlistActive)}
+                    {mobileNavBtn("My Reviews", TRAVELLER_ROUTES.reviews, isReviewsActive)}
+                    {mobileNavBtn("Profile", TRAVELLER_ROUTES.profile, isProfileActive)}
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600 transition-all hover:bg-red-100"
+                    >
+                      Sign Out
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      href="/auth/login"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:border-[#1D8D2B] hover:text-[#0c2614]"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/auth/login"
+                      className="rounded-xl bg-[#0c2614] px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#081b0d]"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      Sign Up
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </header>

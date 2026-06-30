@@ -374,7 +374,11 @@ app.post(
 );
 
   // ── GET /conversations/unread-count — unread message count ────────────
-  app.get("/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  // ── OPTIONS handler for CORS preflight on alias route
+
+  // ── Alias GET /listings/conversations/unread-count — same as above for compatibility
+  app.get("/listings/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    // Reuse the same logic as the original route
     try {
       const userId = (req as ProviderRequest).providerId;
 
@@ -390,8 +394,9 @@ app.post(
 
       return sendSuccess(reply, 200, { unreadCount: count });
     } catch (err) {
-      req.log.error({ err }, "Failed to fetch unread conversations count");
+      req.log.error({ err }, "Failed to fetch unread conversations count (alias)");
       return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching unread message count.");
     }
   });
+
 }

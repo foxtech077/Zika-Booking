@@ -117,6 +117,7 @@ model User {
   oauthRevoked    Boolean       @default(false)
   currentTier     LoyaltyTier   @default(bronze)
   loyaltyPoints   Int           @default(0)
+  photoUrl        String?       @db.Text
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
