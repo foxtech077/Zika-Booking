@@ -108,7 +108,7 @@ export default function LoginPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await api.post<ApiResponse<AuthResponse>>("auth/login", form);
+      const res = await api.post<ApiResponse<AuthResponse>>("auth/auth/login", form);
       if (!res.data.success) throw res.data;
       return res.data.data;
     },
@@ -272,7 +272,7 @@ export default function LoginPage() {
 
             {/* Forgot password */}
             <div className="text-right -mt-1">
-              <Link href="/auth/auth/forgot-password" className="text-sm text-primary hover:underline font-medium">
+              <Link href="/auth/forgot-password" className="text-sm text-primary hover:underline font-medium">
                 Forgot password?
               </Link>
             </div>
