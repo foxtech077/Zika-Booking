@@ -31,12 +31,12 @@ export default function SubmitListingScreen() {
     },
     onSuccess: () => {
       if (isAutoActivate) {
-        router.replace("/(provider)" as any);
+        router.replace("/(provider)/listings" as any);
       } else {
         Alert.alert(
           "Submitted!",
           "Your listing has been submitted for review. We'll notify you within 48 hours.",
-          [{ text: "OK", onPress: () => router.replace("/listings" as any) }]
+          [{ text: "OK", onPress: () => router.replace("/(provider)/listings" as any) }]
         );
       }
     },
@@ -99,6 +99,10 @@ export default function SubmitListingScreen() {
     { label: "Address & town", ok: !!listing.address && !!listing.town },
     { label: "Country", ok: !!listing.country },
     { label: "Cancellation policy", ok: !!listing.cancellationPolicy },
+    {
+      label: "Extra km rate (required for limited mileage)",
+      ok: listing.mileagePolicy !== "limited" || !!listing.extraKmRate,
+    },
     { label: "Vehicle registration doc", ok: docTypes.includes("vehicle_registration") },
     { label: "Insurance certificate", ok: docTypes.includes("insurance_certificate") },
     { label: "At least 1 photo", ok: photoCount > 0 },

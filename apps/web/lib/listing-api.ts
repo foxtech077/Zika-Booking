@@ -1,4 +1,5 @@
 import axios from "axios";
+import { refreshAccessToken, clearAuthSession } from "@/lib/token-refresh";
 
 const TOKEN_KEY = "zika:access_token";
 
@@ -20,8 +21,8 @@ listingApi.interceptors.request.use((config) => {
   return config;
 });
 
-// Silent token refresh on 401 — retry the original request once with the new token.
-// The refresh token is stored as an HTTP-only cookie (sent automatically via withCredentials).
+// Silent token refresh on 401.  Uses the shared singleton so concurrent 401s
+// across all three axios instances trigger only one refresh request.
 listingApi.interceptors.response.use(
   (r) => r,
   async (err) => {
@@ -30,49 +31,13 @@ listingApi.interceptors.response.use(
     if (err.response?.status === 401 && !original._retry && typeof window !== "undefined") {
       original._retry = true;
 
-      try {
-        // POST /auth/refresh — refresh cookie is sent automatically (withCredentials)
-        const refresh = await axios.post(
-          `/api/auth/refresh`,
-          {},
-          { withCredentials: true },
-        );
-
-        const newToken: string | undefined =
-          refresh.data?.data?.tokens?.accessToken ??
-          refresh.data?.data?.accessToken;
-
-        if (newToken) {
-          sessionStorage.setItem(TOKEN_KEY, newToken);
-          localStorage.setItem(TOKEN_KEY, newToken);
-          // Update Zustand store so the UI reflects the new session
-          const { useAuthStore } = await import("@/stores/auth");
-          const user = useAuthStore.getState().user;
-          if (user) useAuthStore.getState().setSession(newToken, user);
-
-          // Retry the original request with the fresh token
-          original.headers = {
-            ...original.headers,
-            Authorization: `Bearer ${newToken}`,
-          };
-          return listingApi(original);
-        }
-      } catch {
-        // Refresh failed — clear session and let the caller handle the 401
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        original.headers = { ...original.headers, Authorization: `Bearer ${newToken}` };
+        return listingApi(original);
       }
 
-      // Both access token and refresh token expired — full session gone.
-      // Clear local session and redirect to login so the user re-authenticates.
-      sessionStorage.removeItem(TOKEN_KEY);
-      try {
-        const { useAuthStore } = await import("@/stores/auth");
-        useAuthStore.getState().clearSession();
-      } catch { /* store import failed — session storage already cleared */ }
-
-      if (typeof window !== "undefined") {
-        // Small delay so any in-flight state updates can complete
-        setTimeout(() => { window.location.href = "/auth/login"; }, 100);
-      }
+      clearAuthSession();
     }
 
     return Promise.reject(err);

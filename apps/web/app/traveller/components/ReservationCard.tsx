@@ -1,5 +1,6 @@
 "use client";
 import React from "react";
+import Link from "next/link";
 import ListingImage from "./ListingImage";
 
 interface Booking {
@@ -128,18 +129,28 @@ export default function ReservationCard({ booking, onCancel, cancellingId }: Pro
             <p className="text-sm font-bold text-[#0B1E3F]">
               {booking.currency} {booking.totalAmount.toLocaleString()}
             </p>
-            {booking.canCancel && (
-              <button
-                onClick={() => onCancel(booking.id)}
-                disabled={isCancelling}
-                className="text-[11px] font-semibold px-3 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition"
-              >
-                {isCancelling ? "Cancelling…" : "Cancel"}
-              </button>
-            )}
-            {booking.status === "pending_payment" && (
-              <span className="text-[10px] text-amber-600 font-medium">Payment required</span>
-            )}
+            <div className="flex items-center gap-2">
+              {(booking.status === "completed") && (
+                <Link
+                  href={`/traveller/reviews?bookingId=${encodeURIComponent(booking.id)}&listingId=${encodeURIComponent(booking.listingId)}&listingName=${encodeURIComponent(booking.listingTitle ?? "")}`}
+                  className="text-[11px] font-semibold px-3 py-1 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 transition"
+                >
+                  Leave Review
+                </Link>
+              )}
+              {booking.canCancel && (
+                <button
+                  onClick={() => onCancel(booking.id)}
+                  disabled={isCancelling}
+                  className="text-[11px] font-semibold px-3 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition"
+                >
+                  {isCancelling ? "Cancelling…" : "Cancel"}
+                </button>
+              )}
+              {booking.status === "pending_payment" && (
+                <span className="text-[10px] text-amber-600 font-medium">Payment required</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

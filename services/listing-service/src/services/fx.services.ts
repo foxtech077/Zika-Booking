@@ -1,4 +1,4 @@
-// services/fx.service.ts
+// services/fx.services.ts (renamed without leading space)
 const cache = new Map<string, { rate: number; time: number }>();
 const inflight = new Map<string, Promise<number>>();
 const TTL = 1000 * 60 * 60;
@@ -8,7 +8,7 @@ export async function convertCurrency(
   from: string,
   to: string
 ): Promise<number> {
-  const key = `${from.toUpperCase()}_${to.toUpperCase()}`;;
+  const key = `${from.toUpperCase()}_${to.toUpperCase()}`;
   const now = Date.now();
 
   const cached = cache.get(key);
@@ -54,6 +54,5 @@ async function getRate(from: string, to: string): Promise<number> {
   } catch (error) {
     console.error(`FX API error for ${from} to ${to}:`, error);
     throw new Error("FX rate unavailable");
-
   }
 }

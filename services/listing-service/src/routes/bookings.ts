@@ -13,6 +13,7 @@ import { calculateBilling } from "../services/billing.service.js";
 import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
 import { logLoyaltyTransaction } from "./loyalty.js";
+import { convertCurrency } from "../services/fx.services";
 
 const LOCK_TTL_MS = 300_000; // 5 minutes
 
@@ -62,13 +63,6 @@ export async function getCommissionRate(country: string | null): Promise<number>
 }
 
 // ── Availability checker ──────────────────────────────────────────────────────
-// Counts active overlapping bookings for a listing.
-// - Confirmed bookings always count.
-// - pending_payment bookings only count if they were created within the lock
-//   TTL window (i.e. the lock has not yet expired). Expired pending bookings
-//   are ghost-slots that should no longer block availability.
-// - Supports unit_count > 1 (e.g. hotel with multiple rooms of same type).
-
 async function checkAvailability(
   listingId: string,
   unitCount: number,
@@ -77,12 +71,14 @@ async function checkAvailability(
 ): Promise<{ available: boolean; reason?: string }> {
   const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
 
+  // 1. Check active database bookings (confirmed or active pending locks)
   const result = await prisma.$queryRawUnsafe<{ count: bigint }[]>(`
     SELECT COUNT(*) AS count
     FROM bookings
     WHERE listing_id = $1
       AND (
         status = 'confirmed'
+        OR status = 'checked_in'
         OR (status = 'pending_payment' AND created_at > $2)
       )
       AND (
@@ -91,12 +87,27 @@ async function checkAvailability(
       )
   `, listingId, pendingExpiry, startDate, endDate);
 
-  const count = Number(result[0]?.count ?? 0);
-  if (count >= unitCount) {
-    return { available: false, reason: "No units available for the selected dates." };
+  const bookingCount = Number(result[0]?.count ?? 0);
+
+  // 2. Check manually-blocked and iCal-synced dates
+  const icalBlockedCount = await prisma.icalBlockedDate.count({
+    where: {
+      listingId,
+      startDate: { lt: endDate },
+      endDate: { gt: startDate },
+    },
+  });
+
+  // 3. Reject if total matches exceed the available unit counts
+  if (bookingCount + icalBlockedCount >= unitCount) {
+    return { 
+      available: false, 
+      reason: "Some of the selected dates within your stay are already booked or unavailable." 
+    };
   }
   return { available: true };
 }
+
 
 // ── Pricing calculators ───────────────────────────────────────────────────────
 
@@ -629,6 +640,24 @@ export async function bookingRoutes(app: FastifyInstance) {
         };
 
         await redis.set(ctxKey, JSON.stringify(ctx), "PX", LOCK_TTL_MS);
+
+        // Schedule reservation timer warning alert (4 minutes after initiation, 1 minute before lock expiry)
+        setTimeout(async () => {
+          try {
+            const activeLock = await redis.get(ctxKey);
+            if (activeLock) {
+              const parsedCtx = JSON.parse(activeLock);
+              fireNotification(parsedCtx.guestId, {
+                type: "reservation_timer",
+                title: "Reservation Expiring Soon! ⏳",
+                body: "Your booking reservation lock will expire in 1 minute. Complete checkout now to secure your dates!",
+                data: { lockToken },
+              });
+            }
+          } catch (err: any) {
+            req.log.error({ err }, "Failed to send reservation timer alert");
+          }
+        }, 240_000);
 
         // ── 9. BILLING (FIXED TYPES) ─────────────────
         const commissionRate = await getCommissionRate(listing.country ?? null);
@@ -1373,8 +1402,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         });
 
         // Award loyalty points — cross-schema update to auth."User"
-        // Earning rate: 1 point per $1 of totalAmount paid, multiplied by tier bonus
-        const basePoints = Math.floor(Number(booking.totalAmount));
+        // Earning rate: 1 point per $1 of totalAmount paid, multiplied by tier bonus (converted to USD)
+        const amountInUSD = await convertCurrency(Number(booking.totalAmount), booking.currency, "USD");
+        const basePoints = Math.floor(amountInUSD);
         if (basePoints > 0) {
           // Fetch current user tier and points AFTER points were already deducted at checkout
           const userRes = await prisma.$queryRawUnsafe<{ loyaltyPoints: number, currentTier: string, country: string }[]>(`

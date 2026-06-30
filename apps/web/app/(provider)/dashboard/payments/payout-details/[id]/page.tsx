@@ -1,6 +1,7 @@
 "use client";
 
 import { use, type ReactNode } from "react";
+import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
@@ -112,9 +113,13 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
   );
 }
 
-export default function PayoutDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const payoutId = id?.trim() ?? "";
+export default function PayoutDetailPage() {
+  const params = useParams<{ id: string }>();
+
+  const payoutId =
+    typeof params?.id === "string"
+      ? params.id.trim()
+      : "";
 
   const {
     data,
@@ -132,6 +137,7 @@ export default function PayoutDetailPage({ params }: { params: Promise<{ id: str
     refetchOnWindowFocus: false,
   });
 
+  // keep the rest of your existing code unchanged
   if (!payoutId) return <NotFoundState />;
   if (isLoading) return <SkeletonPage />;
 
@@ -151,7 +157,7 @@ export default function PayoutDetailPage({ params }: { params: Promise<{ id: str
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
-          <Link href="/dashboard/payments/payout-history">
+          <Link href="/dashboard/payments/">
             <Button variant="ghost" size="sm" icon={<ArrowLeft />}>
               Back
             </Button>
