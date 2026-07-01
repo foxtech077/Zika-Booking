@@ -163,11 +163,15 @@ export default function ListingsPage() {
       key: "price",
       label: "Price",
       align: "right",
-      render: (l) => (
-        <span className="text-sm tabular">
-          {l.pricePerNight ? formatCurrency(Number(l.pricePerNight), l.currency ?? "USD") : "—"}
-        </span>
-      ),
+      render: (l) => {
+        const price = l.pricePerNight ?? l.pricePerDay;
+        const suffix = l.category === "car" ? "/day" : "/night";
+        return (
+          <span className="text-sm tabular">
+            {price ? `${formatCurrency(Number(price), l.currency ?? "USD")}${suffix}` : "—"}
+          </span>
+        );
+      },
     },
     {
       key: "approved",

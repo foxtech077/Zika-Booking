@@ -1,16 +1,9 @@
 import { Suspense } from "react";
 import TravellerDashboard from "./TravellerPageClient";
-import LoadingSpinner from "./components/LoadingSpinner";
 
-export default function TravellerPage() {
+export default function Page() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-screen">
-          <LoadingSpinner size="lg" />
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
       <TravellerDashboard />
     </Suspense>
   );

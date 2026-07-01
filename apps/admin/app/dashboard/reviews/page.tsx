@@ -80,7 +80,7 @@ export default function ReviewsPage() {
       width: "180px",
       render: (r) => (
         <div>
-          <p className="font-medium text-sm text-slate-900 truncate">{r.listing?.name ?? r.listingId}</p>
+          <p className="font-medium text-sm text-slate-900 truncate">{r.listingName ?? r.listing?.name ?? r.listingId}</p>
           <p className="text-xs text-slate-500">Guest: {r.guestId.slice(0, 8)}…</p>
         </div>
       ),

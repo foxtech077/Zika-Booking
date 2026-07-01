@@ -124,6 +124,11 @@ export async function webhookRoutes(app: FastifyInstance) {
           console.log("Payment not found");
           return reply.send({ received: true });
         }
+
+        console.log("[WEBHOOK TRACE] payment.id =", payment.id);
+        console.log("[WEBHOOK TRACE] metadata =", (payment as any).metadata);
+        console.log("[WEBHOOK TRACE] bookingId =", (payment as any).metadata?.bookingId);
+        console.log("[WEBHOOK TRACE] intent.metadata =", intent.metadata);
     
         //  IDEMPOTENCY CHECK — must be FIRST, before any side effects
         if (payment.status === "captured") {

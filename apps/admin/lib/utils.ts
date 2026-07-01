@@ -140,7 +140,7 @@ export const STATUS_COLORS: Record<string, string> = {
   // Promotion statuses
   scheduled:          "bg-blue-100 text-blue-700",
   paused:             "bg-amber-100 text-amber-700",
-  expired:            "bg-slate-100 text-slate-600",
+  expired:            "bg-danger-light text-danger-dark",
   superseded:         "bg-purple-100 text-purple-700",
 };
 

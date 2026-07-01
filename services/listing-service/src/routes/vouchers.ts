@@ -962,19 +962,35 @@ export async function voucherRoutes(app: FastifyInstance) {
     },
   );
 
-  // ── PATCH /admin/vouchers/:id — toggle active status ─────────────────
+  // ── PATCH /admin/vouchers/:id — update a voucher ─────────────────────
   app.patch(
     "/admin/vouchers/:id",
     {
       schema: {
         tags: ["Admin Vouchers"],
-        summary: "Toggle voucher active status",
+        summary: "Update a voucher (admin)",
         security: [{ bearerAuth: [] }],
         params: { type: "object", required: ["id"], properties: { id: { type: "string" } } },
         body: {
           type: "object",
-          required: ["isActive"],
-          properties: { isActive: { type: "boolean" } },
+          properties: {
+            code:               { type: "string", minLength: 6, maxLength: 12 },
+            title:              { type: "string" },
+            description:        { type: "string", maxLength: 120, nullable: true },
+            activityScope:      { type: "string", enum: ["hotels", "apartments", "cars", "hotels_apartments", "universal"] },
+            discountType:       { type: "string", enum: ["percentage", "fixed"] },
+            discountValue:      { type: "number", minimum: 0.01 },
+            minOrderValue:      { type: "number", minimum: 0, nullable: true },
+            maxDiscount:        { type: "number", minimum: 0, nullable: true },
+            usageLimit:         { type: "integer", minimum: 1, nullable: true },
+            usageLimitPerGuest: { type: "integer", minimum: 1 },
+            isActive:           { type: "boolean" },
+            applicableTiers:    { type: "array", items: { type: "string" } },
+            countryScope:       { type: "string", nullable: true },
+            autoAssign:         { type: "boolean" },
+            validFrom:          { type: "string" },
+            validUntil:         { type: "string" },
+          },
         },
         response: {
           200: {
@@ -982,7 +998,9 @@ export async function voucherRoutes(app: FastifyInstance) {
             properties: { success: { type: "boolean" }, data: voucherItemSchema },
             required: ["success", "data"],
           },
+          400: errSchema,
           404: errSchema,
+          409: errSchema,
         },
       },
       preHandler: [requireAdmin],
@@ -990,40 +1008,110 @@ export async function voucherRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const { id } = req.params as { id: string };
-        const { isActive } = req.body as { isActive: boolean };
+        const body = req.body as {
+          code?: string;
+          title?: string;
+          description?: string;
+          activityScope?: string;
+          discountType?: "percentage" | "fixed";
+          discountValue?: number;
+          minOrderValue?: number | null;
+          maxDiscount?: number | null;
+          usageLimit?: number | null;
+          usageLimitPerGuest?: number;
+          isActive?: boolean;
+          applicableTiers?: string[];
+          countryScope?: string | null;
+          autoAssign?: boolean;
+          validFrom?: string;
+          validUntil?: string;
+        };
 
-      const existing = await prisma.voucher.findUnique({ where: { id } });
-      if (!existing) return sendError(reply, 404, "NOT_FOUND", "Voucher not found.");
+        const existing = await prisma.voucher.findUnique({ where: { id } });
+        if (!existing) return sendError(reply, 404, "NOT_FOUND", "Voucher not found.");
 
-      const voucher = await (prisma.voucher.update as any)({
-        where: { id },
-        data: {
-          isActive,
-          status: isActive ? "active" : "paused",
-        },
-      });
+        if (body.discountType && !["percentage", "fixed"].includes(body.discountType))
+          return sendError(reply, 400, "VALIDATION_ERROR", "discountType must be 'percentage' or 'fixed'.");
+        if (body.discountValue !== undefined && body.discountValue <= 0)
+          return sendError(reply, 400, "VALIDATION_ERROR", "discountValue must be greater than 0.");
+        const effectiveDiscountType = body.discountType ?? (existing as any).discountType;
+        const effectiveDiscountValue = body.discountValue ?? Number((existing as any).discountValue);
+        if (effectiveDiscountType === "percentage" && effectiveDiscountValue > 100)
+          return sendError(reply, 400, "VALIDATION_ERROR", "Percentage discount cannot exceed 100.");
 
-      return sendSuccess(reply, 200, {
-        id:            voucher.id,
-        code:          voucher.code,
-        title:         voucher.title,
-        activityScope: voucher.activityScope,
-        discountType:  voucher.discountType,
-        discountValue: Number(voucher.discountValue),
-        minOrderValue: voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
-        maxDiscount:   voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
-        usageLimit:    voucher.usageLimit,
-        usageCount:    voucher.usageCount,
-        status:        voucher.status,
-        isActive:      voucher.isActive,
-        validFrom:     voucher.validFrom.toISOString(),
-        validUntil:    voucher.validUntil.toISOString(),
-        createdBy:     voucher.createdBy,
-        createdAt:     voucher.createdAt.toISOString(),
-      });
+        let validFrom: Date | undefined;
+        let validUntil: Date | undefined;
+        if (body.validFrom) {
+          validFrom = new Date(body.validFrom);
+          if (isNaN(validFrom.getTime()))
+            return sendError(reply, 400, "VALIDATION_ERROR", "validFrom must be a valid ISO date.");
+        }
+        if (body.validUntil) {
+          validUntil = new Date(body.validUntil);
+          if (isNaN(validUntil.getTime()))
+            return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be a valid ISO date.");
+        }
+        const effectiveFrom  = validFrom  ?? (existing as any).validFrom;
+        const effectiveUntil = validUntil ?? (existing as any).validUntil;
+        if (effectiveUntil <= effectiveFrom)
+          return sendError(reply, 400, "VALIDATION_ERROR", "validUntil must be after validFrom.");
+
+        if (body.code) {
+          const upper = body.code.toUpperCase();
+          const dup = await prisma.voucher.findUnique({ where: { code: upper } });
+          if (dup && dup.id !== id)
+            return sendError(reply, 409, "DUPLICATE_CODE", "A voucher with this code already exists.");
+          body.code = upper;
+        }
+
+        const updateData: Record<string, unknown> = {};
+        if (body.code               !== undefined) updateData.code               = body.code;
+        if (body.title              !== undefined) updateData.title              = body.title;
+        if (body.description        !== undefined) updateData.description        = body.description;
+        if (body.activityScope      !== undefined) updateData.activityScope      = body.activityScope;
+        if (body.discountType       !== undefined) updateData.discountType       = body.discountType;
+        if (body.discountValue      !== undefined) updateData.discountValue      = body.discountValue;
+        if (body.minOrderValue      !== undefined) updateData.minOrderValue      = body.minOrderValue;
+        if (body.maxDiscount        !== undefined) updateData.maxDiscount        = body.maxDiscount;
+        if (body.usageLimit         !== undefined) updateData.usageLimit         = body.usageLimit;
+        if (body.usageLimitPerGuest !== undefined) updateData.usageLimitPerGuest = body.usageLimitPerGuest;
+        if (body.applicableTiers    !== undefined) updateData.applicableTiers    = body.applicableTiers;
+        if (body.countryScope       !== undefined) updateData.countryScope       = body.countryScope;
+        if (body.autoAssign         !== undefined) updateData.autoAssign         = body.autoAssign;
+        if (validFrom               !== undefined) updateData.validFrom          = validFrom;
+        if (validUntil              !== undefined) updateData.validUntil         = validUntil;
+        if (body.isActive           !== undefined) {
+          updateData.isActive = body.isActive;
+          updateData.status   = body.isActive ? "active" : "paused";
+        }
+
+        const voucher = await (prisma.voucher.update as any)({
+          where: { id },
+          data: updateData,
+        });
+
+        return sendSuccess(reply, 200, {
+          id:                 voucher.id,
+          code:               voucher.code,
+          title:              voucher.title,
+          activityScope:      voucher.activityScope,
+          discountType:       voucher.discountType,
+          discountValue:      Number(voucher.discountValue),
+          minOrderValue:      voucher.minOrderValue ? Number(voucher.minOrderValue) : null,
+          maxDiscount:        voucher.maxDiscount ? Number(voucher.maxDiscount) : null,
+          usageLimit:         voucher.usageLimit,
+          usageLimitPerGuest: voucher.usageLimitPerGuest,
+          usageCount:         voucher.usageCount,
+          status:             voucher.status,
+          isActive:           voucher.isActive,
+          validFrom:          voucher.validFrom.toISOString(),
+          validUntil:         voucher.validUntil.toISOString(),
+          createdBy:          voucher.createdBy,
+          createdAt:          voucher.createdAt.toISOString(),
+        });
       } catch (err) {
-        req.log.error({ err }, "Failed to toggle voucher status");
-        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating voucher status.");
+        req.log.error({ err }, "Failed to update voucher");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating voucher.");
       }
     },
   );

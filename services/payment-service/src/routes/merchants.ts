@@ -219,8 +219,11 @@ export async function merchantRoutes(app: FastifyInstance) {
     const accountLink = await stripe.accountLinks.create({
       account: stripeAccountId,
       refresh_url: `${PROVIDER_BASE_URL}/stripe/connect/refresh`,
-      return_url:  `${PROVIDER_BASE_URL}/stripe/connect/complete`,
+      return_url: `${PROVIDER_BASE_URL}/stripe/connect/complete`,
       type: "account_onboarding",
+      collection_options: {
+        fields: "eventually_due",
+      },
     });
 
     reply.send({ success: true, data: { onboardingUrl: accountLink.url } });
@@ -250,6 +253,9 @@ export async function merchantRoutes(app: FastifyInstance) {
       refresh_url: `${PROVIDER_BASE_URL}/stripe/connect/refresh`,
       return_url:  `${PROVIDER_BASE_URL}/stripe/connect/complete`,
       type: "account_onboarding",
+      collection_options: {
+        fields: "eventually_due",
+      },
     });
 
     reply.send({ success: true, data: { onboardingUrl: accountLink.url } });

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity, FlatList, TextInput,
   ActivityIndicator, Alert, StyleSheet, Dimensions,
@@ -576,6 +576,26 @@ export default function ListingDetailScreen() {
     },
     enabled: !!id,
   });
+
+  useEffect(() => {
+    if (!listing) return;
+    if (user) {
+      void listingApi.post("/guests/me/recently-viewed", { listingId: listing.id }).catch(() => {});
+    } else {
+      void (async () => {
+        try {
+          const SecureStore = await import("expo-secure-store");
+          const raw = await SecureStore.getItemAsync("zika:anon_views");
+          const ids: string[] = raw ? JSON.parse(raw) : [];
+          if (!ids.includes(listing.id)) {
+            const updated = [listing.id, ...ids].slice(0, 20);
+            await SecureStore.setItemAsync("zika:anon_views", JSON.stringify(updated));
+          }
+        } catch {}
+      })();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listing?.id]);
 
   const favMut = useMutation({
     mutationFn: async ({ isFav }: { isFav: boolean }) => {

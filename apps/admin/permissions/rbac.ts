@@ -171,7 +171,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Bookings", href: "/dashboard/bookings", icon: "CalendarDays", permission: "view_bookings" },
       { label: "Reviews", href: "/dashboard/reviews", icon: "Star", permission: "view_reviews" },
       { label: "Messaging", href: "/dashboard/messaging", icon: "MessageSquare", permission: "view_messaging" },
-      { label: "Channel Sync", href: "/dashboard/channel", icon: "Cable", permission: "view_channel" },
     ],
   },
   {

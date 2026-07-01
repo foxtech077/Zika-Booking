@@ -101,6 +101,7 @@ export interface Listing {
   country: string | null;
   town: string | null;
   pricePerNight: string | null;
+  pricePerDay?: string | null;
   currency: string | null;
   starRating: number | null;
   claimedStarRating: number | null;
@@ -300,6 +301,7 @@ export interface ListingReview {
   createdAt: string;
   updatedAt: string;
   listing?: { name: string | null };
+  listingName?: string | null;
 }
 
 // ── Messaging ─────────────────────────────────────────────────────────────────

@@ -12,9 +12,12 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Charts";
 import { DataTable, type Column } from "@/components/tables/DataTable";
-import { useMockFinanceStore } from "@/lib/mock-finance-store";
+import { useMockFinanceStore, type Transaction, type Refund, type CommissionRule } from "@/lib/mock-finance-store";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency, slugToLabel } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { paymentPayoutApi } from "@/lib/payment-api";
+import { listingApi } from "@/lib/listing-api";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "Malta (MT)" },
@@ -32,7 +35,103 @@ type ReportTab = "revenue" | "payment" | "payout" | "refund" | "commission";
 
 export default function FinancialReportsPage() {
   const { user } = useAuthStore();
-  const { transactions, payouts, refunds, commissionRules } = useMockFinanceStore();
+  const { payouts } = useMockFinanceStore();
+
+  const { data: commissionData } = useQuery({
+    queryKey: ["admin-commission-rates-reports"],
+    queryFn: async () => {
+      const res = await listingApi.get(`/admin/commission-rates`);
+      return res.data.data ?? res.data;
+    },
+  });
+
+  const dbCommissionRules = commissionData?.rates ?? [];
+
+  const commissionRules: CommissionRule[] = useMemo(() => {
+    const rules: CommissionRule[] = dbCommissionRules.map((r: any) => ({
+      id: r.id,
+      country: r.country,
+      rate: Number(r.rate) * 100, // convert decimal to percentage
+      setBy: r.setBy,
+      updatedAt: r.updatedAt,
+      effectiveDate: r.pendingEffectiveFrom ?? undefined,
+      isScheduled: r.pendingRate !== null,
+    }));
+    const globalRate = commissionData?.globalRate !== undefined ? Number(commissionData.globalRate) * 100 : 10;
+    rules.push({
+      id: "global",
+      country: "Global",
+      rate: globalRate,
+      setBy: "System",
+      updatedAt: new Date().toISOString(),
+    });
+    return rules;
+  }, [dbCommissionRules, commissionData]);
+
+  const { data: paymentsData, isLoading: isPaymentsLoading } = useQuery({
+    queryKey: ["admin-payments-reports"],
+    queryFn: async () => {
+      const res = await paymentPayoutApi.get(`/admin/payments`, {
+        params: { page: "1", limit: "100" },
+      });
+      return res.data;
+    },
+  });
+
+  const payments = paymentsData?.data ?? [];
+
+  const transactions: Transaction[] = useMemo(() => {
+    return payments.map((p: any) => ({
+      id: p.id,
+      reference: p.bookingId,
+      date: p.capturedAt ?? p.createdAt,
+      amount: Number(p.amount),
+      currency: p.currency,
+      status: (p.status === "captured" ? "successful" : p.status) as any,
+      commissionAmount: Number(p.amount) * 0.1,
+      commissionRate: 10,
+      country: "Global",
+      gateway: (p.paymentProvider === "stripe" ? "Stripe" : p.paymentProvider === "tara" ? "Tara" : "Stripe") as any,
+      transactionId: p.providerPaymentId ?? p.id,
+      travellerName: "Guest",
+      travellerEmail: "guest@test.com",
+      listingId: "listing-id",
+      listingName: "Listing",
+      listingType: "hotel" as const,
+      providerId: "provider-id",
+      providerName: "Provider",
+      providerPayout: Number(p.amount) * 0.9,
+      logs: [],
+    }));
+  }, [payments]);
+
+  const { data: refundsData } = useQuery({
+    queryKey: ["admin-refunds-pending-reports"],
+    queryFn: async () => {
+      const res = await paymentPayoutApi.get(`/admin/refunds/pending`);
+      return res.data;
+    },
+  });
+
+  const refundsList = refundsData?.data ?? [];
+
+  const refunds: Refund[] = useMemo(() => {
+    return refundsList.map((r: any) => ({
+      id: r.id,
+      bookingId: r.bookingId,
+      bookingReference: r.bookingId,
+      travellerName: "Guest",
+      travellerEmail: "guest@test.com",
+      originalAmount: Number(r.payment?.amount ?? 0),
+      refundAmount: Number(r.amount),
+      currency: r.currency,
+      reason: r.reason ?? "No reason provided",
+      status: (r.status === "pending" ? "pending_approval" : r.status) as any,
+      requestedDate: r.createdAt,
+      country: "Global",
+      type: "full" as const,
+    }));
+  }, [refundsList]);
 
   const canExportFinancialData = user?.role === "super_admin" || user?.role === "finance";
 
@@ -399,22 +498,6 @@ export default function FinancialReportsPage() {
       <Card className="p-4 bg-white border border-border print:hidden" padding="none">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-col">
-              <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Country</label>
-              <select
-                value={countryFilter}
-                onChange={(e) => setCountryFilter(e.target.value)}
-                className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px] min-w-[150px]"
-                aria-label="Filter Country Scope"
-              >
-                <option value="">All Countries</option>
-                {CM_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
 
             <div className="flex flex-col">
               <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Date Range</label>

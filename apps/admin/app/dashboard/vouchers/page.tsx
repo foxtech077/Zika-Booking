@@ -71,6 +71,19 @@ export default function VouchersPage() {
   const canCreateVoucher = role === "super_admin";
   const hasManagePermission = canAccess(role, "manage_vouchers");
   const [page, setPage] = useState(1);
+  const getVoucherStatus = (v: Voucher) => {
+    const now = new Date();
+    const nowYMD = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+    const expiry = new Date(v.validUntil);
+    const expiryYMD = `${expiry.getUTCFullYear()}-${String(expiry.getUTCMonth() + 1).padStart(2, "0")}-${String(expiry.getUTCDate()).padStart(2, "0")}`;
+    const isExpired = v.validUntil && expiryYMD < nowYMD;
+    const isExhausted = v.usageLimit && (v.redemptionCount ?? v.usageCount ?? 0) >= v.usageLimit;
+
+    if (isExpired) return { label: "Expired", status: "expired" };
+    if (isExhausted) return { label: "Exhausted", status: "banned" };
+    if (v.isActive) return { label: "Active", status: "active" };
+    return { label: "Paused", status: "deactivated" };
+  };
   const [limit, setLimit] = useState(10);
   const [statusFilter, setStatusFilter] = useState("");
   const [addModal, setAddModal] = useState(false);
@@ -108,7 +121,15 @@ export default function VouchersPage() {
     },
   });
 
-  const vouchersList: Voucher[] = data?.vouchers ?? [];
+  const vouchersList: Voucher[] = (data?.vouchers ?? []).filter((v) => {
+    if (!statusFilter) return true;
+    const { status } = getVoucherStatus(v);
+    if (statusFilter === "active") return status === "active";
+    if (statusFilter === "paused") return status === "deactivated";
+    if (statusFilter === "expired") return status === "expired";
+    if (statusFilter === "exhausted") return status === "banned";
+    return true;
+  });
   const total = data?.total ?? 0;
 
   const [editModal, setEditModal] = useState(false);
@@ -360,9 +381,10 @@ export default function VouchersPage() {
     {
       key: "status",
       label: "Status",
-      render: (v) => (
-        <Badge label={v.isActive ? "Active" : "Inactive"} status={v.isActive ? "active" : "deactivated"} />
-      ),
+      render: (v) => {
+        const { label, status } = getVoucherStatus(v);
+        return <Badge label={label} status={status} />;
+      },
     },
     {
       key: "actions",
@@ -531,7 +553,15 @@ export default function VouchersPage() {
                 }
               />
               <InfoRow label="Auto Assign" value={selected.autoAssign ? "Enabled" : "Disabled"} />
-              <InfoRow label="Status" value={<Badge label={selected.isActive ? "Active" : "Inactive"} status={selected.isActive ? "active" : "deactivated"} />} />
+              <InfoRow
+                label="Status"
+                value={
+                  (() => {
+                    const { label, status } = getVoucherStatus(selected);
+                    return <Badge label={label} status={status} />;
+                  })()
+                }
+              />
             </div>
 
             {/* Limits & Validity */}

@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["APPLE_TEAM_ID.com.kainook.app"],
+        "components": [
+          { "/": "/verify*" },
+          { "/": "/reset-password*" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["APPLE_TEAM_ID.com.kainook.app"]
+  }
+}

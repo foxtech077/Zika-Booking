@@ -38,7 +38,7 @@ export async function registerGuest(payload: {
   businessName?: string;
   country: string;
 }) {
-  return authApi.post("auth/auth/register", payload);
+  return authApi.post("auth/register", payload);
 }
 
 /** Verify email token */
@@ -53,7 +53,7 @@ export async function resendVerification(email: string) {
 
 /** Login */
 export async function loginGuest(payload: { email: string; password: string }) {
-  return authApi.post("auth/auth/login", payload);
+  return authApi.post("auth/login", payload);
 }
 
 /** Logout current session */

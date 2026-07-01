@@ -78,6 +78,9 @@ interface BookingDetail {
   canCancel: boolean;
   hasReview?: boolean;
   reviewId?: string;
+  earnedPoints?: number;
+  redeemPoints?: number;
+  pointsDiscount?: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -319,7 +322,7 @@ export default function BookingDetailScreen() {
       if (booking?.status === "pending_payment") {
         await listingApi.patch(`/bookings/${id}/fail`, { failureReason: "Cancelled by guest" });
       } else {
-        await listingApi.post(`/bookings/${id}/cancel`);
+        await listingApi.post(`/bookings/${id}/cancel`, {});
       }
     },
     onSuccess: () => {
@@ -524,6 +527,30 @@ export default function BookingDetailScreen() {
                   <Text style={styles.priceValue}>+ {formatCurrency(booking.deliveryFee, booking.currency)}</Text>
                 </View>
               )}
+              {booking.pointsDiscount != null && booking.pointsDiscount > 0 && (
+                <View style={styles.priceRow}>
+                  <Text style={styles.priceLabel}>AfriPoints discount</Text>
+                  <Text style={[styles.priceValue, styles.discountValue]}>
+                    – {formatCurrency(booking.pointsDiscount, booking.currency)}
+                  </Text>
+                </View>
+              )}
+              {booking.redeemPoints != null && booking.redeemPoints > 0 && (
+                <View style={styles.priceRow}>
+                  <Text style={styles.priceLabel}>Points redeemed</Text>
+                  <Text style={[styles.priceValue, { color: "#7c3aed" }]}>
+                    {booking.redeemPoints.toLocaleString()} pts
+                  </Text>
+                </View>
+              )}
+              {booking.earnedPoints != null && booking.earnedPoints > 0 && (
+                <View style={styles.priceRow}>
+                  <Text style={styles.priceLabel}>AfriPoints earned</Text>
+                  <Text style={[styles.priceValue, { color: "#16a34a" }]}>
+                    +{booking.earnedPoints.toLocaleString()} pts
+                  </Text>
+                </View>
+              )}
               <View style={[styles.priceRow, styles.totalRow]}>
                 <Text style={styles.totalLabel}>Total</Text>
                 <Text style={styles.totalValue}>{formatCurrency(booking.totalAmount, booking.currency)}</Text>
@@ -637,7 +664,7 @@ export default function BookingDetailScreen() {
                   style={styles.reviewBtn}
                   onPress={() => router.push(`/review/${booking.id}` as any)}
                 >
-                  <Ionicons name="star-outline" size={16} color="#1a73e8" style={{ marginRight: 6 }} />
+                  <Ionicons name="star-outline" size={16} color="#16a34a" style={{ marginRight: 6 }} />
                   <Text style={styles.reviewBtnText}>Leave a Review</Text>
                 </TouchableOpacity>
               )
@@ -669,7 +696,7 @@ export default function BookingDetailScreen() {
                     } as any)
                   }
                 >
-                  <Ionicons name="receipt-outline" size={18} color="#1a73e8" style={{ marginRight: 10 }} />
+                  <Ionicons name="receipt-outline" size={18} color="#16a34a" style={{ marginRight: 10 }} />
                   <Text style={styles.docActionBtnText}>View Receipt</Text>
                   <Ionicons name="chevron-forward" size={16} color="#9ca3af" style={{ marginLeft: "auto" }} />
                 </TouchableOpacity>
@@ -685,7 +712,7 @@ export default function BookingDetailScreen() {
                       } as any)
                     }
                   >
-                    <Ionicons name="qr-code-outline" size={18} color="#1a73e8" style={{ marginRight: 10 }} />
+                    <Ionicons name="qr-code-outline" size={18} color="#16a34a" style={{ marginRight: 10 }} />
                     <Text style={styles.docActionBtnText}>View QR Code</Text>
                     <Ionicons name="chevron-forward" size={16} color="#9ca3af" style={{ marginLeft: "auto" }} />
                   </TouchableOpacity>
@@ -701,7 +728,7 @@ export default function BookingDetailScreen() {
                     } as any)
                   }
                 >
-                  <Ionicons name="document-text-outline" size={18} color="#1a73e8" style={{ marginRight: 10 }} />
+                  <Ionicons name="document-text-outline" size={18} color="#16a34a" style={{ marginRight: 10 }} />
                   <Text style={styles.docActionBtnText}>Download Voucher PDF</Text>
                   <Ionicons name="chevron-forward" size={16} color="#9ca3af" style={{ marginLeft: "auto" }} />
                 </TouchableOpacity>
@@ -823,7 +850,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#bfdbfe",
   },
-  referenceValue: { fontSize: 15, fontWeight: "800", color: "#1a73e8", letterSpacing: 0.5 },
+  referenceValue: { fontSize: 15, fontWeight: "800", color: "#16a34a", letterSpacing: 0.5 },
   statusBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
   statusBadgeText: { fontSize: 12, fontWeight: "700" },
 
@@ -925,7 +952,7 @@ const styles = StyleSheet.create({
   actionsSection: { gap: 12, marginTop: 4, marginBottom: 20 },
 
   payBtn: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -947,7 +974,7 @@ const styles = StyleSheet.create({
 
   reviewBtn: {
     borderWidth: 2,
-    borderColor: "#1a73e8",
+    borderColor: "#16a34a",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
@@ -955,7 +982,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#eff6ff",
   },
-  reviewBtnText: { fontSize: 15, fontWeight: "700", color: "#1a73e8" },
+  reviewBtnText: { fontSize: 15, fontWeight: "700", color: "#16a34a" },
 
   reviewSubmittedBox: {
     borderWidth: 1,
@@ -984,7 +1011,7 @@ const styles = StyleSheet.create({
   // Error / skeleton
   errorTitle: { fontSize: 18, fontWeight: "700", color: "#111827", marginTop: 16, marginBottom: 20, textAlign: "center" },
   backButton: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 24,

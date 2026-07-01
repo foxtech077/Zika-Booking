@@ -27,6 +27,7 @@ interface ListingDetail {
   unitCount: number | null;
   description: string | null;
   pricePerNight: number | null;
+  pricePerDay?: number | null;
   currency: string | null;
   address: string | null;
   town: string | null;
@@ -349,7 +350,7 @@ export default function ListingReviewPage() {
         <div className="space-y-5">
           {/* Basic info */}
           <Section title="Basic Information">
-            <Row label="Price" value={listing.pricePerNight ? `${listing.currency} ${listing.pricePerNight}/${listing.category === "car" ? "day" : "night"}` : "—"} />
+            <Row label="Price" value={(listing.pricePerNight ?? listing.pricePerDay) ? `${listing.currency} ${listing.pricePerNight ?? listing.pricePerDay}/${listing.category === "car" ? "day" : "night"}` : "—"} />
             <Row label="Cancellation policy" value={listing.cancellationPolicy ?? "—"} />
 
             {listing.category === "hotel" && (

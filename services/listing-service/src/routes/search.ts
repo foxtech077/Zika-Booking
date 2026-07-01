@@ -441,24 +441,41 @@ export async function searchRoutes(app: FastifyInstance) {
       }
       const rangeEnd = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + 3, 1);
 
-      const bookings = await prisma.booking.findMany({
-        where: {
-          listingId: id,
-          status: { in: ["pending_payment", "confirmed"] as any },
-          OR: [
-            { checkIn: { gte: rangeStart, lt: rangeEnd }, checkOut: { not: null } },
-            { pickupDatetime: { gte: rangeStart, lt: rangeEnd }, returnDatetime: { not: null } },
-          ],
-        },
-        select: { checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true },
-      });
+            const [bookings, blockedDates] = await Promise.all([
+        prisma.booking.findMany({
+          where: {
+            listingId: id,
+            status: { in: ["pending_payment", "confirmed", "checked_in"] as any },
+            OR: [
+              { checkIn: { gte: rangeStart, lt: rangeEnd }, checkOut: { not: null } },
+              { pickupDatetime: { gte: rangeStart, lt: rangeEnd }, returnDatetime: { not: null } },
+            ],
+          },
+          select: { checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true },
+        }),
+        prisma.icalBlockedDate.findMany({
+          where: {
+            listingId: id,
+            startDate: { gte: rangeStart },
+            endDate: { lt: rangeEnd },
+          },
+          select: { startDate: true, endDate: true },
+        }),
+      ]);
 
-      const unavailableRanges = bookings.map((b) => ({
-        start: (b.checkIn ?? b.pickupDatetime)?.toISOString().slice(0, 10) ?? null,
-        end: (b.checkOut ?? b.returnDatetime)?.toISOString().slice(0, 10) ?? null,
-      })).filter((r) => r.start && r.end);
+      const unavailableRanges = [
+        ...bookings.map((b) => ({
+          start: (b.checkIn ?? b.pickupDatetime)?.toISOString().slice(0, 10) ?? null,
+          end: (b.checkOut ?? b.returnDatetime)?.toISOString().slice(0, 10) ?? null,
+        })),
+        ...blockedDates.map((bd) => ({
+          start: bd.startDate.toISOString().slice(0, 10),
+          end: bd.endDate.toISOString().slice(0, 10),
+        })),
+      ].filter((r) => r.start && r.end);
 
       return sendSuccess(reply, 200, { unavailableRanges });
+
       } catch (err) {
         req.log.error({ err }, "Failed to fetch listing availability");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching availability.");
