@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
@@ -25,7 +25,7 @@ import {
   Settings,
   XCircle,
 } from "lucide-react";
-import { getAllPayouts, type Payout, type PayoutStatus } from "@/lib/payment-api";
+import { getAllPayouts, startStripeConnect, getMerchantProfile, getStripeConnectStatus, refreshStripeConnect, type Payout, type PayoutStatus, type StripeConnectStatusResponse } from "@/lib/payment-api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -73,6 +73,8 @@ function bucketFor(status: PayoutStatus): keyof Omit<DashboardSummary, "currency
       return "failed";
     case "cancelled":
       return "cancelled";
+    default:
+      return "total";
   }
 }
 
@@ -192,6 +194,9 @@ function SummaryCard({
 }
 
 export default function PaymentDashboardPage() {
+  const [stripeConnectLoading, setStripeConnectLoading] = useState(false);
+  const [stripeConnectError, setStripeConnectError] = useState<string | null>(null);
+
   const {
     data: payouts = [],
     isLoading,
@@ -224,6 +229,25 @@ export default function PaymentDashboardPage() {
   const currency = summary.currency;
   const errorMessage = error instanceof Error ? error.message : "The payout API returned an unexpected error.";
   const showLoading = isLoading || (isFetching && payouts.length === 0);
+
+  const handleStartStripeConnect = async () => {
+    setStripeConnectLoading(true);
+    setStripeConnectError(null);
+    try {
+      const response = await startStripeConnect();
+      const onboardingUrl = response.data?.onboardingUrl;
+      if (onboardingUrl) {
+        window.open(onboardingUrl, "_blank", "noopener,noreferrer");
+      } else {
+        setStripeConnectError("Failed to get onboarding URL");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to start Stripe Connect onboarding";
+      setStripeConnectError(message);
+    } finally {
+      setStripeConnectLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -374,7 +398,29 @@ export default function PaymentDashboardPage() {
                     <ArrowRight className="ml-auto h-4 w-4 text-slate-400 transition-colors group-hover:text-green-600" />
                   </Link>
                 ))}
+                <button
+                  onClick={handleStartStripeConnect}
+                  disabled={stripeConnectLoading}
+                  className="group flex items-center gap-3 rounded-xl border border-transparent p-3 transition-colors hover:border-emerald-100 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-green-700 transition-colors group-hover:bg-green-100 [&>svg]:h-4 [&>svg]:w-4">
+                    <CreditCard />
+                  </span>
+                  <span className="text-sm font-semibold text-slate-700 transition-colors group-hover:text-green-800">
+                    Connect Stripe
+                  </span>
+                  {stripeConnectLoading ? (
+                    <RefreshCw className="ml-auto h-4 w-4 text-slate-400 animate-spin" />
+                  ) : (
+                    <ArrowRight className="ml-auto h-4 w-4 text-slate-400 transition-colors group-hover:text-green-600" />
+                  )}
+                </button>
               </div>
+              {stripeConnectError && (
+                <div className="mt-4 rounded-lg bg-red-50 p-3 border border-red-200">
+                  <p className="text-xs font-medium text-red-700">{stripeConnectError}</p>
+                </div>
+              )}
 
               <div className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
                 <div className="flex items-start gap-3">
