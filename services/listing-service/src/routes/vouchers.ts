@@ -732,6 +732,39 @@ export async function voucherRoutes(app: FastifyInstance) {
       }
     },
   );
+// Add this helper function here:
+async function updatePromotionStatuses(prisma: any): Promise<void> {
+  const now = new Date();
+
+  // 1. Transition 'scheduled' promotions to 'active' if they have started
+  await prisma.activityPromotion.updateMany({
+    where: {
+      status: "scheduled",
+      validFrom: { lte: now },
+      validUntil: { gte: now },
+    },
+    data: { status: "active" },
+  });
+
+  // 2. Transition 'active' or 'scheduled' promotions to 'expired' if their end date has passed
+  await prisma.activityPromotion.updateMany({
+    where: {
+      status: { in: ["active", "scheduled"] },
+      validUntil: { lt: now },
+    },
+    data: { status: "expired" },
+  });
+
+  // 3. Transition 'active' promotions to 'scheduled' if their start date is in the future
+  await prisma.activityPromotion.updateMany({
+    where: {
+      status: "active",
+      validFrom: { gt: now },
+    },
+    data: { status: "scheduled" },
+  });
+}
+
 
   // ── GET /admin/promotions — list all promotion campaigns ─────────────────
   app.get(
@@ -770,6 +803,7 @@ export async function voucherRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
+        await updatePromotionStatuses(prisma);
         const q = req.query as { status?: string; activity?: string; page?: number; limit?: number };
         const page  = Number(q.page  ?? 1);
         const limit = Number(q.limit ?? 20);
@@ -939,6 +973,7 @@ export async function voucherRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
+        await updatePromotionStatuses(prisma);
         const q = req.query as { activity?: string };
         const now = new Date();
 
