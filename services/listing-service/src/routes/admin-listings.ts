@@ -2539,15 +2539,25 @@ export async function adminListingRoutes(app: FastifyInstance) {
           properties: {
             id: { type: "string" },
             status: { type: "string" },
-            checkIn: { type: "string" },
-            checkOut: { type: "string" },
+            checkIn: { type: "string", nullable: true },
+            checkOut: { type: "string", nullable: true },
             totalAmount: { type: "number" },
+            reference: { type: "string" },
+            listingType: { type: "string" },
+            nightsOrDays: { type: "integer" },
+            adults: { type: "integer", nullable: true },
+            children: { type: "integer", nullable: true },
+            subtotal: { type: "number" },
+            voucherDiscount: { type: "number" },
+            deliveryFee: { type: "number" },
+            commissionAmount: { type: "number" },
+            providerPayout: { type: "number" },
 
             listing: {
               type: "object",
               properties: {
-                name: { type: "string" },
-                country: { type: "string" },
+                name: { type: "string", nullable: true },
+                country: { type: "string", nullable: true },
                 category: { type: "string" }
               }
             },
@@ -2555,7 +2565,16 @@ export async function adminListingRoutes(app: FastifyInstance) {
             statusLog: {
               type: "array",
               items: {
-                type: "object"
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  fromStatus: { type: "string", nullable: true },
+                  toStatus: { type: "string" },
+                  changedBy: { type: "string", nullable: true },
+                  actorType: { type: "string", nullable: true },
+                  reason: { type: "string", nullable: true },
+                  createdAt: { type: "string", format: "date-time" }
+                }
               }
             }
           }
