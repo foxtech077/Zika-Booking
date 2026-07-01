@@ -108,6 +108,24 @@ export default function ListingReviewPage() {
     },
   });
 
+  const { data: reviewTasksData } = useQuery({
+    queryKey: ["listing-review-tasks", id],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: { tasks: any[] } }>(`/admin/listings/${id}/review-tasks`);
+      return res.data.data ?? res.data;
+    },
+    enabled: !!token,
+  });
+
+  const { data: moderationHistoryData } = useQuery({
+    queryKey: ["listing-moderation-history", id],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: { history: any[] } }>(`/admin/listings/${id}/moderation-history`);
+      return res.data.data ?? res.data;
+    },
+    enabled: !!token,
+  });
+
   async function viewDocument(docId: string) {
     if (activeDocId === docId && docUrl) return;
     setDocLoading(true);
@@ -278,11 +296,10 @@ export default function ListingReviewPage() {
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Review Task</span>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${
-                activeTask.status === "escalated" 
-                  ? "bg-red-50 text-red-700 border-red-200" 
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${activeTask.status === "escalated"
+                  ? "bg-red-50 text-red-700 border-red-200"
                   : "bg-blue-50 text-blue-700 border-blue-200"
-              }`}>
+                }`}>
                 {activeTask.status}
               </span>
             </div>
@@ -291,13 +308,12 @@ export default function ListingReviewPage() {
               <span>Deadline: <span className="font-medium text-slate-800">{formatDate(activeTask.slaDeadline)}</span></span>
               <span>
                 SLA Tracker:{" "}
-                <span className={`font-semibold ${
-                  getSlaInfo(activeTask.slaDeadline, activeTask.status).color === "danger"
+                <span className={`font-semibold ${getSlaInfo(activeTask.slaDeadline, activeTask.status).color === "danger"
                     ? "text-red-600"
                     : getSlaInfo(activeTask.slaDeadline, activeTask.status).color === "suspended"
-                    ? "text-amber-600"
-                    : "text-green-600"
-                }`}>
+                      ? "text-amber-600"
+                      : "text-green-600"
+                  }`}>
                   {getSlaInfo(activeTask.slaDeadline, activeTask.status).text}
                 </span>
               </span>
@@ -464,6 +480,71 @@ export default function ListingReviewPage() {
                 <div className="p-2 flex justify-end">
                   <a href={docUrl.url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Open in new tab ↗</a>
                 </div>
+              </div>
+            )}
+          </Section>
+
+          {/* Review Task History */}
+          <Section title={`Review Task History (${reviewTasksData?.tasks?.length ?? 0})`}>
+            {(!reviewTasksData?.tasks || reviewTasksData.tasks.length === 0) ? (
+              <p className="text-sm text-gray-400">No review task history found.</p>
+            ) : (
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                {reviewTasksData.tasks.map((task: any) => (
+                  <div key={task.id} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50 space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-700">Submission #{task.submissionNumber}</span>
+                      <span className={`px-2 py-0.5 rounded-full font-medium border ${
+                        task.status === "resolved" 
+                          ? "bg-green-50 text-green-700 border-green-200" 
+                          : "bg-blue-50 text-blue-700 border-blue-200"
+                      }`}>
+                        {task.status}
+                      </span>
+                    </div>
+                    <div className="text-gray-500 flex justify-between">
+                      <span>Assignee: {task.assignedTo || "Unassigned"}</span>
+                      <span>Created: {formatDate(task.createdAt)}</span>
+                    </div>
+                    {task.outcome && (
+                      <div className="text-gray-600 font-medium">Outcome: <span className="capitalize">{task.outcome}</span></div>
+                    )}
+                    {task.adminNote && (
+                      <div className="bg-white p-2 rounded border border-gray-100 mt-1 italic text-gray-600">
+                        Note: {task.adminNote}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          {/* Moderation History */}
+          <Section title={`Moderation History (${moderationHistoryData?.history?.length ?? 0})`}>
+            {(!moderationHistoryData?.history || moderationHistoryData.history.length === 0) ? (
+              <p className="text-sm text-gray-400">No moderation audit trail found.</p>
+            ) : (
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                {moderationHistoryData.history.map((log: any) => (
+                  <div key={log.id} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50 space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-gray-800 capitalize">{log.action.replace(/_/g, " ")}</span>
+                      <span className="text-[10px] text-gray-400">{formatDate(log.createdAt)}</span>
+                    </div>
+                    <div className="text-gray-500">Actor Role: <span className="capitalize">{log.actorRole.replace(/_/g, " ")}</span></div>
+                    {log.metadata && Object.keys(log.metadata).length > 0 && (
+                      <div className="bg-white p-2 rounded border border-gray-100 mt-1 space-y-0.5 text-gray-600">
+                        {Object.entries(log.metadata).map(([key, val]: any) => (
+                          <div key={key} className="flex justify-between">
+                            <span className="text-gray-400 font-medium">{key}:</span>
+                            <span className="font-semibold max-w-[150px] truncate" title={String(val)}>{String(val)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </Section>

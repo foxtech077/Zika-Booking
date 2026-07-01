@@ -440,9 +440,8 @@ export default function PromotionsPage() {
             <>
               <button
                 onClick={(e) => toggleStatus(p, e)}
-                className={`p-1.5 rounded-lg transition-colors ${
-                  p.status === "active" ? "text-success hover:bg-success/5" : "text-slate-400 hover:bg-slate-100"
-                }`}
+                className={`p-1.5 rounded-lg transition-colors ${p.status === "active" ? "text-success hover:bg-success/5" : "text-slate-400 hover:bg-slate-100"
+                  }`}
                 title={p.status === "active" ? "Pause Promotion" : "Activate Promotion"}
               >
                 {p.status === "active" ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
@@ -499,11 +498,10 @@ export default function PromotionsPage() {
               setStatusTab(status);
               setPage(1);
             }}
-            className={`px-4 py-2 text-sm font-semibold capitalize border-b-2 transition-all cursor-pointer ${
-              statusTab === status
+            className={`px-4 py-2 text-sm font-semibold capitalize border-b-2 transition-all cursor-pointer ${statusTab === status
                 ? "border-primary text-primary"
                 : "border-transparent text-slate-500 hover:text-slate-700"
-            }`}
+              }`}
           >
             {status}
           </button>
@@ -607,8 +605,8 @@ export default function PromotionsPage() {
                 selected.discountType === "percentage"
                   ? `${selected.discountValue}%`
                   : selected.discountType === "fixed"
-                  ? formatCurrency(selected.discountValue ?? 0, "USD")
-                  : "—"
+                    ? formatCurrency(selected.discountValue ?? 0, "USD")
+                    : "—"
               } />
               <InfoRow label="Apply at Checkout" value={selected.applyToBooking ? "Yes (Auto-Applied)" : "No (Label Only)"} />
               <InfoRow label="Status" value={<Badge label={selected.status} status={selected.status} />} />
@@ -737,7 +735,6 @@ export default function PromotionsPage() {
               value={form.validFrom}
               onChange={(val) => setForm((f) => ({ ...f, validFrom: val }))}
               minDate={todayYMD}
-              showTime
               required
             />
 
@@ -747,7 +744,6 @@ export default function PromotionsPage() {
               value={form.validUntil}
               onChange={(val) => setForm((f) => ({ ...f, validUntil: val }))}
               minDate={form.validFrom || todayYMD}
-              showTime
               required
             />
 
@@ -780,16 +776,16 @@ export default function PromotionsPage() {
               options={
                 editModal
                   ? [
-                      { value: "active", label: "Active" },
-                      { value: "scheduled", label: "Scheduled" },
-                      { value: "paused", label: "Paused" },
-                      { value: "expired", label: "Expired" },
-                      { value: "superseded", label: "Superseded" },
-                    ]
+                    { value: "active", label: "Active" },
+                    { value: "scheduled", label: "Scheduled" },
+                    { value: "paused", label: "Paused" },
+                    { value: "expired", label: "Expired" },
+                    { value: "superseded", label: "Superseded" },
+                  ]
                   : [
-                      { value: "active", label: "Active" },
-                      { value: "scheduled", label: "Scheduled" },
-                    ]
+                    { value: "active", label: "Active" },
+                    { value: "scheduled", label: "Scheduled" },
+                  ]
               }
               value={form.status}
               onChange={(val) => setForm((f) => ({ ...f, status: val as any }))}
