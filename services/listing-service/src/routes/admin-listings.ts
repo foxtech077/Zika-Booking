@@ -216,9 +216,9 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const isCountryManager = admin.adminRole === "country_manager";
 
     const listingFilter: any = {
-      status: "pending_review",
-    };
-
+      status: { in: ["pending_review", "auto_suspended"]
+    },
+  };
     if (isCountryManager) {
       if (country) {
         if (admin.countryScope.includes(country)) {
@@ -378,26 +378,34 @@ export async function adminListingRoutes(app: FastifyInstance) {
             reviewTasks: { type: "array", items: { type: "object" } },
             
             // ── ADD THESE NEW SCHEMA PROPERTIES HERE: ──
-            price: { type: "number", nullable: true },
+            description: { type: "string", nullable: true },
+            currency: { type: "string", nullable: true },
+            pricePerNight: { type: "number", nullable: true },
             cancellationPolicy: { type: "string", nullable: true },
-            
+            smokingAllowed: { type: "boolean", nullable: true },
+            petsAllowed: { type: "boolean", nullable: true },
             // Hotel Specific
             roomType: { type: "string", nullable: true },
-            units: { type: "integer", nullable: true },
-            
+            unitCount: { type: "integer", nullable: true },
             // Apartment Specific
             bedrooms: { type: "integer", nullable: true },
             bathrooms: { type: "integer", nullable: true },
             maxGuests: { type: "integer", nullable: true },
-            
+            longStayEnabled: { type: "boolean", nullable: true },
+            longStayDiscountValue: { type: "number", nullable: true },
+            longStayDiscountType: { type: "string", nullable: true },
+            longStayMinNights: { type: "integer", nullable: true },
             // Car Specific
-            vehicle: { type: "string", nullable: true },
+            carMake: { type: "string", nullable: true },
+            carModel: { type: "string", nullable: true },
+            carYear: { type: "integer", nullable: true },
             transmission: { type: "string", nullable: true },
             fuelType: { type: "string", nullable: true },
             seats: { type: "integer", nullable: true },
             mileagePolicy: { type: "string", nullable: true },
+            mileageLimitKm: { type: "integer", nullable: true },
             // ───────────────────────────────────────────
-          }, // This is the closing brace on line 379
+          }, 
         }),
         404: ErrorResponse,
 
@@ -477,29 +485,36 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         ...listing,
-        price: listing.category === "car" 
+        pricePerNight: listing.category === "car" 
           ? (listing.pricePerDay ? Number(listing.pricePerDay) : null)
           : (listing.pricePerNight ? Number(listing.pricePerNight) : null),
         cancellationPolicy: listing.cancellationPolicy,
-        
-                // Hotel-only fields (omitted for cars and apartments)
+        description: listing.description,
+        currency: listing.currency,
+        // Hotel-only fields (omitted for cars and apartments)
         roomType: listing.category === "hotel" ? listing.roomType : undefined,
-        units: listing.category === "hotel" ? listing.unitCount : undefined,
+        unitCount: listing.category === "hotel" ? listing.unitCount : undefined,
+        smokingAllowed: listing.category !== "car" ? listing.smokingAllowed : undefined,
+        petsAllowed: listing.category !== "car" ? listing.petsAllowed : undefined,
         
         // Apartment-only fields (omitted for hotels and cars)
         bedrooms: listing.category === "apartment" ? listing.bedrooms : undefined,
         bathrooms: listing.category === "apartment" ? listing.bathrooms : undefined,
         maxGuests: listing.category === "apartment" ? listing.maxGuests : undefined,
+        longStayEnabled: listing.category === "apartment" ? listing.longStayEnabled : undefined,
+        longStayDiscountValue: listing.category === "apartment" ? (listing.longStayDiscountValue ? Number(listing.longStayDiscountValue) : null) : undefined,
+        longStayDiscountType: listing.category === "apartment" ? listing.longStayDiscountType : undefined,
+        longStayMinNights: listing.category === "apartment" ? listing.longStayMinNights : undefined,
         
         // Car-only fields (omitted for hotels and apartments)
-        vehicle: listing.category === "car" && listing.carMake && listing.carModel
-          ? `${listing.carMake} ${listing.carModel}` 
-          : undefined,
+        carMake: listing.category === "car" ? listing.carMake : undefined,
+        carModel: listing.category === "car" ? listing.carModel : undefined,
+        carYear: listing.category === "car" ? listing.carYear : undefined,
         transmission: listing.category === "car" ? listing.transmission : undefined,
         fuelType: listing.category === "car" ? listing.fuelType : undefined,
         seats: listing.category === "car" ? listing.seats : undefined,
         mileagePolicy: listing.category === "car" ? listing.mileagePolicy : undefined,
-
+        mileageLimitKm: listing.category === "car" ? listing.mileageLimitKm : undefined,
 
         amenities: groupedAmenities,
         photos: await withSignedPhotos(listing.photos),
@@ -2135,6 +2150,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             country: true,
             town: true,
             pricePerNight: true,
+             pricePerDay: true,
             currency: true,
             submissionCount: true,
             providerId: true,
@@ -2150,7 +2166,17 @@ export async function adminListingRoutes(app: FastifyInstance) {
       ]);
 
       const signedListings = await Promise.all(
-        listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
+        listings.map(async (l) => {
+          const pricePerNight = l.category === "car"
+            ? (l.pricePerDay ? Number(l.pricePerDay) : null)
+            : (l.pricePerNight ? Number(l.pricePerNight) : null);
+          
+          return {
+            ...l,
+            pricePerNight,
+            photos: await withSignedPhotos(l.photos),
+          };
+        }),
       );
       return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
     } catch (err: any) {
