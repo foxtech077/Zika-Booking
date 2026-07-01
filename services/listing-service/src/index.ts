@@ -21,6 +21,7 @@ import { bookingDocumentRoutes } from "./routes/booking-documents.js";
 import { loyaltyRoutes } from "./routes/loyalty.js";
 import { locationRoutes } from "./routes/location.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { profilePhotoRoutes } from "./routes/profile-photos.js";
 import { startVoucherExpiryWarner } from "./lib/voucherExpiryWarner.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
@@ -316,6 +317,7 @@ app.all("/admin/payouts/*", async (req, reply) => {
   await app.register(loyaltyRoutes);
   await app.register(locationRoutes);
   await app.register(notificationRoutes);
+  await app.register(profilePhotoRoutes);
 
   return app;
 }

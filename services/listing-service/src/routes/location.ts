@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { sendSuccess, sendError } from "../lib/errors.js";
 
-const IPAPI_BASE = "https://ipapi.co";
+const IPAPI_BASE = "https://ipwho.is";
 
 export async function locationRoutes(app: FastifyInstance) {
   app.get(
@@ -56,32 +56,36 @@ export async function locationRoutes(app: FastifyInstance) {
           });
         }
 
-        const res = await fetch(`${IPAPI_BASE}/${ip}/json/`, {
+        const res = await fetch(`${IPAPI_BASE}/${ip}`, {
           headers: { Accept: "application/json" },
           signal: AbortSignal.timeout(5000),
         });
 
         if (!res.ok) {
-          req.log.warn({ ip, status: res.status }, "ipapi.co returned non-OK status");
+          req.log.warn({ ip, status: res.status }, "ipwho.is returned non-OK status");
           return sendError(reply, 502, "LOCATION_FETCH_FAILED", "Failed to fetch location data.");
         }
 
         const data = (await res.json()) as Record<string, unknown>;
 
-        if (data["error"]) {
-          return sendError(reply, 400, "LOCATION_ERROR", String(data["reason"] ?? "Location lookup failed."));
+        if (data["success"] === false) {
+          req.log.warn({ ip, message: data["message"] }, "ipwho.is lookup failed");
+          return sendError(reply, 400, "LOCATION_ERROR", String(data["message"] ?? "Location lookup failed."));
         }
+
+        const timezone = (data["timezone"] as Record<string, unknown> | null);
+        const currency = (data["currency"] as Record<string, unknown> | null);
 
         return sendSuccess(reply, 200, {
           ip,
           city:        (data["city"]         as string  | null) ?? null,
           region:      (data["region"]        as string  | null) ?? null,
-          country:     (data["country_name"]  as string  | null) ?? null,
+          country:     (data["country"]       as string  | null) ?? null,
           countryCode: (data["country_code"]  as string  | null) ?? null,
           lat:         (data["latitude"]      as number  | null) ?? null,
           lng:         (data["longitude"]     as number  | null) ?? null,
-          timezone:    (data["timezone"]      as string  | null) ?? null,
-          currency:    (data["currency"]      as string  | null) ?? null,
+          timezone:    (timezone?.["id"]      as string  | null) ?? null,
+          currency:    (currency?.["code"]    as string  | null) ?? null,
           isLocalhost: false,
         });
       } catch (err) {
