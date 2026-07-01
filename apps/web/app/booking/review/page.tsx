@@ -292,7 +292,11 @@ export default function BookingReviewPage() {
         } else if (status === "failed" || status === "timed_out") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
-          setPayError("Payment failed. Please try again.");
+          setPayError(
+            status === "timed_out"
+              ? "Payment request timed out. Please try again."
+              : "Payment failed. Please try again.",
+          );
           setStep("payment");
         }
       } catch { }

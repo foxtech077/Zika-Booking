@@ -12,7 +12,7 @@ export default function CarsPage() {
         </div>
       }
     >
-      <CategoryListingsClient category="car" />
+      <CategoryListingsClient key="car" category="car" />
     </Suspense>
   );
 }

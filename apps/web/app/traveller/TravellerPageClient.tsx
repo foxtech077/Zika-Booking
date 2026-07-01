@@ -17,6 +17,7 @@ import ListingCard from "./components/ListingCard";
 import { ActivityPromoBanner, PersonalVoucherBanner } from "./components/PromoBanner";
 import { isPromotionValid } from "./utils/promo-utils";
 import PhotoGallery from "./components/PhotoGallery";
+import GalleryLightbox from "./components/GalleryLightbox";
 import ReservationCard from "./components/ReservationCard";
 import MapView from "./components/MapView";
 import type { PublicListingDetail } from "@/types";
@@ -70,20 +71,35 @@ interface ActivePromotion {
 }
 
 interface ApplicableVoucher {
-  id: string;
   code: string;
-  description?: string;
-  discountAmount: number;
+  title?: string;
+  description?: string | null;
+  activityScope?: string;
+  discountType: "percentage" | "fixed";
+  discountValue: number;
+  maxDiscount?: number | null;
+  minOrderValue?: number | null;
+  computedDiscount: number;
+  validUntil: string;
+  hoursUntilExpiry: number;
+  applicable: boolean;
+  reason?: string | null;
 }
 
 interface WalletVoucher {
-  id: string;
+  voucherId: string;
   code: string;
-  description?: string;
+  title?: string;
+  description?: string | null;
+  activityScope?: string;
   discountType: "percentage" | "fixed";
   discountValue: number;
-  minOrderValue?: number;
-  validUntil?: string;
+  maxDiscount?: number | null;
+  minOrderValue?: number | null;
+  validUntil: string;
+  hoursUntilExpiry: number;
+  status?: string;
+  assignedAt?: string;
 }
 
 
@@ -270,6 +286,7 @@ export default function TravellerDashboard() {
   // Auto-applicable vouchers (context-filtered, fetched after lock)
   const [applicableVouchers, setApplicableVouchers] = useState<ApplicableVoucher[]>([]);
   const [loadingApplicableVouchers, setLoadingApplicableVouchers] = useState(false);
+  const [bestVoucher, setBestVoucher] = useState<ApplicableVoucher | null>(null);
 
   // Full wallet — all vouchers assigned to this user (GET /vouchers/wallet)
   const [walletVouchers, setWalletVouchers] = useState<WalletVoucher[]>([]);
@@ -327,6 +344,11 @@ export default function TravellerDashboard() {
   // Kainook Rewards custom modal state
   const [showRewardsModal, setShowRewardsModal] = useState(false);
 
+  // Photo gallery lightbox state
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [descExpanded, setDescExpanded] = useState(false);
+
   // Pre-fill checkout form from store user (no API call needed)
   useEffect(() => {
     if (user) {
@@ -336,21 +358,20 @@ export default function TravellerDashboard() {
     }
   }, [user?.id]);
 
-  // Handle ?tab=bookings and ?listing=<id> URL params on first mount
-  const urlTabHandled = useRef(false);
+  // Handle ?tab=bookings and ?listing=<id> URL params — reactive to navigation
+  const tabParam = searchParams.get("tab");
+  const listingParam = searchParams.get("listing");
   useEffect(() => {
-    if (!ready || urlTabHandled.current) return;
-    const tab = searchParams.get("tab");
-    const listingId = searchParams.get("listing");
-    if (tab === "bookings") {
-      urlTabHandled.current = true;
+    if (!ready) return;
+    if (tabParam === "bookings") {
       setActiveTab("bookings");
       if (user) fetchGuestBookings();
-    } else if (listingId) {
-      urlTabHandled.current = true;
-      handleSelectListing(listingId);
+    } else if (listingParam) {
+      handleSelectListing(listingParam);
+    } else {
+      setActiveTab((prev) => (prev === "bookings" ? "home" : prev));
     }
-  }, [ready, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, tabParam, listingParam, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Success state
   const [bookingSuccessModal, setBookingSuccessModal] = useState<{
@@ -392,7 +413,7 @@ export default function TravellerDashboard() {
   // Derived guest count
   const searchGuests = searchAdults + searchChildren;
 
-  // Client-side filtered listings (bedrooms / bathrooms applied on top of API results)
+  // Client-side filtered listings (bedrooms / bathrooms / rating applied on top of API results)
   const displayedListings = React.useMemo(() => {
     let result = listings;
     if (filterBedrooms !== null) {
@@ -407,8 +428,19 @@ export default function TravellerDashboard() {
         return filterBathrooms >= 3 ? baths >= 3 : baths === filterBathrooms;
       });
     }
+    // Client-side rating filter: backend extracts rating_min but does not apply it to its query
+    if (selectedRating !== null) {
+      result = result.filter((l) => (l.starRating ?? 0) >= selectedRating);
+    }
+    // Client-side sort for options the backend does not support
+    if (sortBy === "rating_desc") {
+      result = [...result].sort((a, b) => (b.starRating ?? 0) - (a.starRating ?? 0));
+    } else if (sortBy === "popularity_desc") {
+      result = [...result].sort((a, b) => (a.distanceKm ?? 0) - (b.distanceKm ?? 0));
+    }
+    console.log("Listings Returned:", result.length);
     return result;
-  }, [listings, filterBedrooms, filterBathrooms]);
+  }, [listings, filterBedrooms, filterBathrooms, selectedRating, sortBy]);
 
   // Derived discount — voucher wins only when it saves more than the promotion.
   // Neither stacks with the other; we always pick the higher value.
@@ -682,6 +714,13 @@ export default function TravellerDashboard() {
   // Reusable Voucher dropdown & Manual entry component
   function renderVoucherSelector() {
     if (!detailListing) return null;
+    const displayVouchers = applicableVouchers.filter((v) => v.applicable);
+    console.log("[Voucher] Render Check", {
+      walletVouchers: walletVouchers.length,
+      applicableVouchers: applicableVouchers.length,
+      displayVouchers: displayVouchers.length,
+      bestVoucher,
+    });
     return (
       <div className="space-y-3 pt-3 border-t border-slate-100">
         <div className="flex items-center justify-between">
@@ -704,13 +743,13 @@ export default function TravellerDashboard() {
         </div>
         {!voucherApplied && (
           <div className="space-y-2">
-            {/* Wallet dropdown */}
-            {loadingWalletVouchers ? (
+            {/* Applicable vouchers dropdown */}
+            {loadingApplicableVouchers ? (
               <div className="flex items-center gap-2 text-xs text-slate-400 py-0.5">
                 <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-[#1D8D2B] rounded-full animate-spin" />
                 Loading your vouchers…
               </div>
-            ) : walletVouchers.length > 0 ? (
+            ) : displayVouchers.length > 0 ? (
               <div className="relative">
                 <select
                   value={voucherCode}
@@ -725,16 +764,17 @@ export default function TravellerDashboard() {
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-700 appearance-none cursor-pointer focus:outline-none focus:border-[#1D8D2B] pr-7"
                 >
                   <option value="">Select an available voucher…</option>
-                  {walletVouchers.map((v) => {
+                  {displayVouchers.map((v) => {
                     const discountStr = v.discountType === "percentage"
                       ? `${v.discountValue}% off`
                       : `${detailListing.currency} ${v.discountValue.toLocaleString()} off`;
                     const expiryStr = v.validUntil
                       ? ` (Exp: ${new Date(v.validUntil).toLocaleDateString("en-GB", { day: "numeric", month: "short" })})`
                       : "";
-                    const descStr = v.description ? ` — ${v.description}` : "";
+                    const label = v.title || v.description;
+                    const descStr = label ? ` — ${label}` : "";
                     return (
-                      <option key={v.id} value={v.code}>
+                      <option key={v.code} value={v.code}>
                         {v.code}: {discountStr}{descStr}{expiryStr}
                       </option>
                     );
@@ -750,7 +790,7 @@ export default function TravellerDashboard() {
             <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 flex gap-2 items-center">
               <input
                 type="text"
-                placeholder={walletVouchers.length > 0 ? "Or enter code manually" : "Enter voucher code"}
+                placeholder={displayVouchers.length > 0 ? "Or enter code manually" : "Enter voucher code"}
                 value={voucherCode}
                 onChange={(e) => setVoucherCode(e.target.value)}
                 onKeyDown={(e) => {
@@ -785,7 +825,7 @@ export default function TravellerDashboard() {
 
   // Filter Debounce Handler — re-fetch whenever any filter or sort changes while on the search tab
   useEffect(() => {
-    if (activeTab !== "search" || listings.length === 0) return;
+    if (activeTab !== "search") return;
     const handler = setTimeout(() => { handleSearch(); }, 600);
     return () => clearTimeout(handler);
   }, [priceMin, priceMax, selectedRating, selectedCancellation, sortBy, showInstantOnly, selectedAmenities, activeTab]);
@@ -917,7 +957,30 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenities = selectedAmenities.join(",");
+
+      // Map frontend sort values to backend enum: sort param is "sort" (not "sort_by")
+      const SORT_MAP: Record<string, string> = {
+        distance_asc: "distance",
+        price_asc: "price_asc",
+        price_desc: "price_desc",
+        newest: "newest",
+        rating_desc: "recommended",
+        popularity_desc: "recommended",
+      };
+      params.sort = SORT_MAP[sortBy] ?? "recommended";
+
+      // For cars: "automatic"/"manual" in selectedAmenities map to the transmission param.
+      // For hotels/apartments: all selectedAmenities are amenity keys → amenity_ids.
+      if (activeCategory === "car") {
+        const transmissionVal = selectedAmenities.find((a) => a === "automatic" || a === "manual");
+        if (transmissionVal) params.transmission = transmissionVal;
+      } else {
+        if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.join(",");
+      }
+
+      const activeFilters = { priceMin, priceMax, selectedRating, selectedCancellation, sortBy, selectedAmenities, showInstantOnly };
+      console.log("Active Filters:", activeFilters);
+      console.log("Search Params:", params);
 
       if (activeCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
@@ -1007,7 +1070,17 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenities = selectedAmenities.join(",");
+      const LOAD_MORE_SORT_MAP: Record<string, string> = {
+        distance_asc: "distance", price_asc: "price_asc", price_desc: "price_desc",
+        newest: "newest", rating_desc: "recommended", popularity_desc: "recommended",
+      };
+      params.sort = LOAD_MORE_SORT_MAP[sortBy] ?? "recommended";
+      if (searchCategory === "car") {
+        const transmissionVal = selectedAmenities.find((a) => a === "automatic" || a === "manual");
+        if (transmissionVal) params.transmission = transmissionVal;
+      } else {
+        if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.join(",");
+      }
       if (searchCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
         if (searchCheckOut) params.check_out = searchCheckOut;
@@ -1061,7 +1134,11 @@ export default function TravellerDashboard() {
     setActivePromotion(null);
     setPromotionDiscount(0);
     setApplicableVouchers([]);
+    setBestVoucher(null);
     setWalletVouchers([]);
+    setGalleryOpen(false);
+    setGalleryIndex(0);
+    setDescExpanded(false);
     setDetailCheckIn("");
     setDetailCheckOut("");
     setDetailPickupDate("");
@@ -1113,7 +1190,7 @@ export default function TravellerDashboard() {
         // dropdown is populated in the details step (before the booking lock).
         if (hasAuthToken) {
           fetchWalletVouchers();
-          fetchApplicableVouchers(details.id, details.category, details.country);
+          fetchApplicableVouchers(details.id, details.category, details.country, details.pricePerNight);
         }
       } else {
         setDetailListing(null);
@@ -1231,7 +1308,16 @@ export default function TravellerDashboard() {
         setCheckoutStep("review");
         setPaymentId(null);
         if (paymentPollRef.current) clearInterval(paymentPollRef.current);
-        fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country);
+        const _isCar = detailListing.category === "car";
+        const _start = _isCar ? detailPickupDate : detailCheckIn;
+        const _end = _isCar ? detailReturnDate : detailCheckOut;
+        const _days = calcDays(_start, _end);
+        const _base = detailListing.pricePerNight * _days;
+        const _serviceFee = _days > 0 ? Math.ceil(_base * 0.05) : 0;
+        const _taxRate = TAX_RATES[detailListing.country] ?? 0;
+        const _taxAmount = Math.ceil(_base * _taxRate);
+        const _lockTotalAmount = Math.max(0, _base + _serviceFee + _taxAmount);
+        fetchApplicableVouchers(detailListing.id, detailListing.category, detailListing.country, _lockTotalAmount);
         fetchWalletVouchers();
       } else {
         const msg = res.data?.error?.message ?? (res.data as any)?.message ?? "Unable to hold these dates. Please try again.";
@@ -1337,24 +1423,30 @@ export default function TravellerDashboard() {
 
   // Fetch auto-assigned vouchers applicable to the current booking context.
   // Guard removed: if a lock was obtained, the backend already confirmed the user is authenticated.
-  async function fetchApplicableVouchers(listingId: string, category: string, country: string) {
+  async function fetchApplicableVouchers(listingId: string, category: string, country: string, totalAmount: number) {
     setLoadingApplicableVouchers(true);
     try {
-      console.log("[ZikaSearch] Fetching applicable vouchers for listing:", listingId, category, country);
+      console.log("[Voucher] Fetching applicable vouchers", { listingId, category, country, totalAmount });
       const res = await listingApi.get<any>("/vouchers/applicable", {
-        params: { listingId, category, country },
+        params: { listingId, category, country, totalAmount },
       });
-      console.log("[ZikaSearch] Applicable vouchers API response:", res.data);
+      console.log("[Voucher] Raw API Response", res.data);
+      console.log("[Voucher] Voucher Array", res.data?.data?.vouchers);
+      console.log("[Voucher] Best Voucher", res.data?.data?.bestVoucher);
       if (res.data.success) {
-        const vouchers = res.data.data ?? [];
-        console.log("[ZikaSearch] Applicable vouchers count received:", vouchers.length);
+        const vouchers: ApplicableVoucher[] = res.data.data?.vouchers ?? [];
+        const best: ApplicableVoucher | null = res.data.data?.bestVoucher ?? null;
+        console.log("[Voucher] State Update", vouchers.length, vouchers);
         setApplicableVouchers(vouchers);
+        setBestVoucher(best);
       } else {
         setApplicableVouchers([]);
+        setBestVoucher(null);
       }
     } catch (err) {
-      console.error("[ZikaSearch] fetchApplicableVouchers error:", err);
+      console.error("[Voucher] Applicable voucher fetch failed", err);
       setApplicableVouchers([]);
+      setBestVoucher(null);
     } finally {
       setLoadingApplicableVouchers(false);
     }
@@ -1368,7 +1460,7 @@ export default function TravellerDashboard() {
       const res = await listingApi.get<any>("/vouchers/wallet");
       console.log("[ZikaSearch] Wallet vouchers API response:", res.data);
       if (res.data.success) {
-        const vouchers = res.data.data ?? [];
+        const vouchers: WalletVoucher[] = res.data.data?.vouchers ?? [];
         console.log("[ZikaSearch] Wallet vouchers count received:", vouchers.length);
         setWalletVouchers(vouchers);
       } else {
@@ -1404,7 +1496,11 @@ export default function TravellerDashboard() {
         } else if (status === "failed" || status === "timed_out") {
           clearInterval(paymentPollRef.current!);
           paymentPollRef.current = null;
-          setBookingError("Payment failed. Please try again.");
+          setBookingError(
+            status === "timed_out"
+              ? "Payment request timed out. Please try again."
+              : "Payment failed. Please try again.",
+          );
           setCheckoutStep("details");
         }
       } catch { /* ignore transient errors */ }
@@ -1752,89 +1848,159 @@ export default function TravellerDashboard() {
               </div>
             ) : detailListing ? (
               <>
-                {/* Header Section */}
-                <div className="lg:col-span-12 space-y-4">
-                  <h1 className="text-4xl font-serif font-bold text-slate-900 leading-tight">
-                    {detailListing.name}
-                  </h1>
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 text-sm font-semibold text-slate-700">
-                      {detailListing.starRating && <span className="flex items-center gap-1"><span className="text-[#1D8D2B]">⭐</span> {detailListing.starRating}</span>}
-                      <span className="text-slate-400">•</span>
-                      <span className="underline cursor-pointer hover:text-slate-900">{detailListing.address}, {detailListing.town}, {detailListing.country}</span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm font-semibold text-slate-700">
-                      <button className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                        Share
-                      </button>
-                      <button className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                {/* Gallery Lightbox — full-screen modal */}
+                {galleryOpen && (
+                  <GalleryLightbox
+                    photos={detailListing.photos}
+                    initialIndex={galleryIndex}
+                    name={detailListing.name}
+                    onClose={() => setGalleryOpen(false)}
+                  />
+                )}
 
-                {/* Photo Grid Section */}
+                {/* Photo Grid Section — appears first */}
                 <div className="lg:col-span-12">
                   <PhotoGallery
                     listingId={detailListing.id}
                     name={detailListing.name}
                     imageUrl={detailListing.primaryPhotoUrl || detailListing.photos?.[0]?.cdnUrl}
                     photos={detailListing.photos}
+                    onPhotoClick={(i) => { setGalleryIndex(i); setGalleryOpen(true); }}
+                    onShowAll={() => { setGalleryIndex(0); setGalleryOpen(true); }}
                   />
+                </div>
+
+                {/* Header Section — below gallery */}
+                <div className="lg:col-span-12 space-y-3">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <h1 className="text-3xl md:text-4xl font-serif font-bold text-slate-900 leading-tight">
+                        {detailListing.name}
+                      </h1>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600">
+                        {detailListing.starRating && (
+                          <span className="flex items-center gap-1 font-semibold">
+                            <svg className="w-4 h-4 text-amber-400 fill-amber-400" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                            {detailListing.starRating}
+                          </span>
+                        )}
+                        {detailListing.starRating && <span className="text-slate-300">·</span>}
+                        <span className="hover:underline cursor-pointer">
+                          {[detailListing.town, detailListing.country].filter(Boolean).join(", ")}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Share + Wishlist */}
+                    <div className="flex items-center gap-2 shrink-0 mt-1">
+                      <button className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                        Share
+                      </button>
+                      <button
+                        onClick={() => handleToggleFavourite(detailListing.id)}
+                        className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border transition ${isFavourited(detailListing.id) ? "bg-red-50 border-red-200 text-red-600" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
+                      >
+                        <svg className={`w-4 h-4 ${isFavourited(detailListing.id) ? "fill-red-500 stroke-red-500" : "fill-none stroke-current"}`} strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
+                        {isFavourited(detailListing.id) ? "Saved" : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                  {/* Property badges */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {detailListing.starRating && detailListing.starRating >= 4 && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold rounded-full">
+                        <svg className="w-3 h-3 fill-amber-500" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                        {detailListing.starRating >= 4.5 ? "Diamond Tier Choice" : "Top Rated"}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold rounded-full">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
+                      ZikaVerified
+                    </span>
+                    {detailListing.cancellationPolicy === "flexible" && (
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold rounded-full">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        Free Cancellation
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Left Column (Main content) */}
                 <div className="lg:col-span-8 space-y-8 text-left text-slate-800">
+
                   {/* Listing summary row */}
-                  <div className="pb-5 border-b border-slate-200">
-                    <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                      {detailListing.category !== "car" ? (
-                        <>
-                          {detailListing.maxGuests && <span>{detailListing.maxGuests} guests</span>}
-                          {detailListing.bedrooms && <><span>·</span><span>{detailListing.bedrooms} bedrooms</span></>}
-                          {detailListing.bathrooms && <><span>·</span><span>{detailListing.bathrooms} baths</span></>}
-                          {detailListing.roomType && <><span>·</span><span className="capitalize">{detailListing.roomType}</span></>}
-                        </>
-                      ) : (
-                        <>
-                          {detailListing.carMake && <span>{detailListing.carMake} {detailListing.carModel} {detailListing.carYear}</span>}
-                          {detailListing.seats && <><span>·</span><span>{detailListing.seats} seats</span></>}
-                          {detailListing.transmission && <><span>·</span><span className="capitalize">{detailListing.transmission}</span></>}
-                          {detailListing.fuelType && <><span>·</span><span className="capitalize">{detailListing.fuelType}</span></>}
-                        </>
-                      )}
-                    </div>
-                  </div>
+                  {(() => {
+                    const tags: string[] = [];
+                    if (detailListing.category !== "car") {
+                      if (detailListing.maxGuests) tags.push(`${detailListing.maxGuests} guests`);
+                      if (detailListing.bedrooms) tags.push(`${detailListing.bedrooms} bedroom${detailListing.bedrooms !== 1 ? "s" : ""}`);
+                      if (detailListing.bathrooms) tags.push(`${detailListing.bathrooms} bath${detailListing.bathrooms !== 1 ? "s" : ""}`);
+                      if (detailListing.roomType) tags.push(detailListing.roomType);
+                    } else {
+                      if (detailListing.carMake) tags.push(`${detailListing.carMake} ${detailListing.carModel ?? ""} ${detailListing.carYear ?? ""}`.trim());
+                      if (detailListing.seats) tags.push(`${detailListing.seats} seats`);
+                      if (detailListing.transmission) tags.push(detailListing.transmission);
+                      if (detailListing.fuelType) tags.push(detailListing.fuelType);
+                    }
+                    if (tags.length === 0) return null;
+                    return (
+                      <div className="pb-6 border-b border-slate-200">
+                        <div className="flex flex-wrap gap-2">
+                          {tags.map((t, i) => (
+                            <span key={i} className="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-semibold rounded-full capitalize">
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Description */}
                   {detailListing.description && (
                     <div className="pb-6 border-b border-slate-200">
-                      <p className="text-slate-600 leading-relaxed">{detailListing.description}</p>
+                      <h2 className="text-xl font-bold text-slate-900 mb-3">About this {detailListing.category === "car" ? "vehicle" : detailListing.category === "apartment" ? "apartment" : "property"}</h2>
+                      <div className="relative">
+                        <p className={`text-slate-600 leading-relaxed text-sm ${!descExpanded && detailListing.description.length > 320 ? "line-clamp-5" : ""}`}>
+                          {detailListing.description}
+                        </p>
+                        {detailListing.description.length > 320 && (
+                          <button
+                            onClick={() => setDescExpanded(!descExpanded)}
+                            className="mt-2 text-sm font-semibold text-[#1D8D2B] hover:text-[#0c2614] transition flex items-center gap-1"
+                          >
+                            {descExpanded ? "Show less" : "Read more"}
+                            <svg className={`w-3.5 h-3.5 transition-transform ${descExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
 
                   {/* Amenities from API */}
                   {(detailListing.amenities?.length > 0 || detailListing.customAmenities?.length > 0) && (
                     <div className="pb-6 border-b border-slate-200">
-                      <h2 className="text-xl font-semibold mb-5">What this place offers</h2>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <h2 className="text-xl font-bold text-slate-900 mb-4">World-Class Amenities</h2>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         {detailListing.amenities.map((a) => (
-                          <div key={a.id} className="flex items-center gap-3 text-slate-700 text-sm">
-                            <svg className="w-5 h-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {AMENITY_LABELS[a.amenityKey] ?? a.amenityKey}
+                          <div key={a.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                            <div className="w-8 h-8 rounded-lg bg-[#0c2614]/8 flex items-center justify-center shrink-0">
+                              <svg className="w-4 h-4 text-[#1D8D2B]" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <span className="text-xs font-semibold text-slate-700 leading-tight">{AMENITY_LABELS[a.amenityKey] ?? a.amenityKey}</span>
                           </div>
                         ))}
                         {detailListing.customAmenities.map((a) => (
-                          <div key={a.id} className="flex items-center gap-3 text-slate-700 text-sm">
-                            <svg className="w-5 h-5 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {a.name}
+                          <div key={a.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100 hover:border-slate-200 transition">
+                            <div className="w-8 h-8 rounded-lg bg-[#0c2614]/8 flex items-center justify-center shrink-0">
+                              <svg className="w-4 h-4 text-[#1D8D2B]" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </div>
+                            <span className="text-xs font-semibold text-slate-700 leading-tight">{a.name}</span>
                           </div>
                         ))}
                       </div>
@@ -1842,84 +2008,182 @@ export default function TravellerDashboard() {
                   )}
 
                   {/* Listing policy info */}
-                  <div className="pb-6 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-                    {detailListing.cancellationPolicy && (
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Cancellation</p>
-                        <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.cancellationPolicy}</p>
-                      </div>
-                    )}
-                    {detailListing.category !== "car" && detailListing.minStayNights > 1 && (
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Min Stay</p>
-                        <p className="font-semibold text-slate-800 mt-1">{detailListing.minStayNights} nights</p>
-                      </div>
-                    )}
-                    {detailListing.category !== "car" && detailListing.checkinTime && (
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Check-in / out</p>
-                        <p className="font-semibold text-slate-800 mt-1">{detailListing.checkinTime} → {detailListing.checkoutTime}</p>
-                      </div>
-                    )}
-                    {detailListing.category === "car" && detailListing.mileagePolicy && (
-                      <div>
-                        <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Mileage</p>
-                        <p className="font-semibold text-slate-800 mt-1 capitalize">{detailListing.mileagePolicy}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Location Section */}
-                  <div className="pb-6">
-                    <h2 className="text-2xl font-semibold mb-3">Where you'll be</h2>
-                    {detailListing.address && <p className="text-slate-500 text-sm mb-4">{detailListing.address}</p>}
-                    <div className="w-full h-[300px] bg-slate-100 rounded-2xl flex items-center justify-center border border-slate-200">
-                      <div className="text-center space-y-2 text-slate-400">
-                        <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                        </svg>
-                        <p className="text-sm font-semibold text-slate-600">{detailListing.town}{detailListing.country ? `, ${detailListing.country}` : ""}</p>
+                  {(detailListing.cancellationPolicy || (detailListing.category !== "car" && detailListing.minStayNights > 1) || (detailListing.category !== "car" && detailListing.checkinTime) || (detailListing.category === "car" && detailListing.mileagePolicy)) && (
+                    <div className="pb-6 border-b border-slate-200">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+                        {detailListing.cancellationPolicy && (
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Cancellation</p>
+                            <p className="font-semibold text-slate-800 capitalize text-xs">{detailListing.cancellationPolicy}</p>
+                          </div>
+                        )}
+                        {detailListing.category !== "car" && detailListing.minStayNights > 1 && (
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Min Stay</p>
+                            <p className="font-semibold text-slate-800 text-xs">{detailListing.minStayNights} nights</p>
+                          </div>
+                        )}
+                        {detailListing.category !== "car" && detailListing.checkinTime && (
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Check-in / out</p>
+                            <p className="font-semibold text-slate-800 text-xs">{detailListing.checkinTime} → {detailListing.checkoutTime}</p>
+                          </div>
+                        )}
+                        {detailListing.category === "car" && detailListing.mileagePolicy && (
+                          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Mileage</p>
+                            <p className="font-semibold text-slate-800 capitalize text-xs">{detailListing.mileagePolicy}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
+                  )}
+
+                  {/* Location Section */}
+                  <div className="pb-6 border-b border-slate-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-xl font-bold text-slate-900">Location</h2>
+                      {detailListing.address && (
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(detailListing.address + " " + detailListing.town + " " + detailListing.country)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-[#1D8D2B] hover:text-[#0c2614] transition flex items-center gap-1"
+                        >
+                          Get directions
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                        </a>
+                      )}
+                    </div>
+                    {detailListing.address && <p className="text-slate-500 text-sm mb-4">{detailListing.address}, {detailListing.town}, {detailListing.country}</p>}
+                    <div className="w-full h-[260px] bg-slate-100 rounded-2xl overflow-hidden border border-slate-200 relative">
+                      <div className="absolute inset-0 flex items-center justify-center flex-col gap-2 text-slate-400">
+                        <div className="w-12 h-12 rounded-full bg-[#0c2614]/10 flex items-center justify-center">
+                          <svg className="w-6 h-6 text-[#1D8D2B]" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                          </svg>
+                        </div>
+                        <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
+                          <p className="text-xs font-bold text-slate-700">{detailListing.town}{detailListing.country ? `, ${detailListing.country}` : ""}</p>
+                          {detailListing.address && <p className="text-[10px] text-slate-400 mt-0.5">{detailListing.address}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Guest Feedback — Reviews integrated into left column */}
+                  <div className="pb-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-xl font-bold text-slate-900">Guest Feedback</h2>
+                      <GiveReviewEntry listingId={detailListing.id} listingName={detailListing.name} />
+                    </div>
+                    <PublicReviewsSection listingId={detailListing.id} />
                   </div>
                 </div>
 
                 {/* Right Column (Sticky Sidebar) */}
-                <div className="lg:col-span-4 relative lg:sticky lg:top-28 top-4 self-start">
-                  <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
+                <div className="lg:col-span-4 relative lg:sticky lg:top-28 top-4 self-start space-y-4">
+                  <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left">
                     {/* Price header */}
-                    <div className="flex justify-between items-baseline mb-3">
-                      <div className="text-2xl font-bold text-slate-900">
-                        {detailListing.currency} {detailListing.pricePerNight.toLocaleString()}
-                        <span className="text-sm font-normal text-slate-500 ml-1">/ {detailListing.category === "car" ? "day" : "night"}</span>
-                      </div>
-                      {detailListing.starRating && (
-                        <div className="text-sm font-semibold flex items-center gap-1 text-slate-800">
-                          ⭐ {detailListing.starRating}
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <div className="text-3xl font-bold text-slate-900 leading-none">
+                          {detailListing.currency} {detailListing.pricePerNight.toLocaleString()}
                         </div>
-                      )}
+                        <div className="text-sm text-slate-500 mt-1">per {detailListing.category === "car" ? "day" : "night"}</div>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
+                        Best price
+                      </span>
                     </div>
 
-                    {/* Best Offer banner — shown when an active promotion exists */}
+                    {/* Promotion banner */}
                     {activePromotion && (
-                      <div className="mb-4 flex items-center gap-2.5 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2.5">
-                        <span className="text-base shrink-0">🏷️</span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Best Offer</p>
-                          <p className="text-xs font-semibold text-emerald-800 truncate">{activePromotion.name}</p>
+                      <div className="mb-4 flex items-center gap-2.5 bg-[#0c2614]/5 border border-[#1D8D2B]/20 rounded-xl px-3 py-2.5">
+                        <div className="w-7 h-7 rounded-full bg-[#1D8D2B]/10 flex items-center justify-center shrink-0">
+                          <svg className="w-3.5 h-3.5 text-[#1D8D2B]" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                         </div>
-                        <span className="shrink-0 text-xs font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full whitespace-nowrap">
-                          {activePromotion.discountType === "percentage"
-                            ? `${activePromotion.discountValue}% off`
-                            : `${detailListing.currency} ${activePromotion.discountValue} off`}
-                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[10px] font-bold text-[#1D8D2B] uppercase tracking-wider">{activePromotion.labelText ?? "Member Exclusive"}</p>
+                          <p className="text-xs font-semibold text-slate-800 truncate">
+                            Get {activePromotion.discountType === "percentage" ? `${activePromotion.discountValue}% off` : `${detailListing.currency} ${activePromotion.discountValue} off`} with {activePromotion.name}
+                          </p>
+                        </div>
                       </div>
                     )}
 
-                    <div className="mb-4 space-y-3">
+                    {/* Best Offer voucher card */}
+                    {bestVoucher && (
+                      <div className="mb-4 bg-[#0c2614] rounded-xl p-4 text-white">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-300">🎫 Best Offer Available</span>
+                        </div>
+                        <p className="font-bold text-base leading-tight">{bestVoucher.title || bestVoucher.code}</p>
+                        <p className="text-sm text-emerald-300 mt-0.5">
+                          Save {bestVoucher.discountType === "percentage" ? `${bestVoucher.discountValue}%` : `${detailListing.currency} ${bestVoucher.discountValue.toLocaleString()}`} on this booking
+                        </p>
+                        {bestVoucher.hoursUntilExpiry <= 48 && (
+                          <p className="text-xs text-amber-300 flex items-center gap-1 mt-1.5">
+                            <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            Expires in {bestVoucher.hoursUntilExpiry < 1 ? "less than 1 hour" : `${Math.round(bestVoucher.hoursUntilExpiry)} hours`}
+                          </p>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleVoucherApply(bestVoucher.code)}
+                          className="mt-3 w-full py-2 bg-white text-[#0c2614] font-bold text-xs rounded-lg hover:bg-emerald-50 transition"
+                        >
+                          Apply Voucher
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Available Vouchers list */}
+                    {applicableVouchers.length > 0 && (
+                      <div className="mb-4 space-y-2">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Available Vouchers</p>
+                        {applicableVouchers.map((v) => {
+                          const isApplicable = v.applicable;
+                          const isExpiring = isApplicable && v.hoursUntilExpiry <= 48;
+                          return (
+                            <div key={v.code} className={`flex items-start gap-3 p-3 rounded-xl border text-xs ${isApplicable ? "bg-white border-slate-200" : "bg-slate-50 border-slate-100 opacity-60"}`}>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="font-bold text-slate-800 truncate">{v.title || v.code}</span>
+                                  {isApplicable ? (
+                                    isExpiring ? (
+                                      <span className="shrink-0 px-1.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 font-bold rounded text-[9px] uppercase tracking-wide">Expires Soon</span>
+                                    ) : (
+                                      <span className="shrink-0 px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold rounded text-[9px] uppercase tracking-wide">Available</span>
+                                    )
+                                  ) : (
+                                    <span className="shrink-0 px-1.5 py-0.5 bg-slate-100 border border-slate-200 text-slate-500 font-bold rounded text-[9px] uppercase tracking-wide">Not Eligible</span>
+                                  )}
+                                </div>
+                                <p className="text-slate-500 truncate">
+                                  {v.discountType === "percentage" ? `Save ${v.discountValue}%` : `Save ${detailListing.currency} ${v.discountValue.toLocaleString()}`}
+                                  {v.reason ? ` · ${v.reason}` : ""}
+                                </p>
+                                <p className="text-[10px] text-slate-400 font-mono mt-0.5">#{v.code}</p>
+                              </div>
+                              {isApplicable && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleVoucherApply(v.code)}
+                                  className="shrink-0 px-2.5 py-1.5 bg-[#0c2614] text-white font-bold rounded-lg hover:bg-[#081b0d] transition text-[10px] uppercase tracking-wide"
+                                >
+                                  Apply
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="mb-4">
                       <MessageProviderButton listingId={detailListing.id} />
-                      <GiveReviewEntry listingId={detailListing.id} listingName={detailListing.name} />
                     </div>
 
                     {!lockToken ? (() => {
@@ -2059,14 +2323,15 @@ export default function TravellerDashboard() {
                             </div>
                           )}
 
-                          {/* Book Now button */}
+                          {/* Reserve Now button */}
                           <button
                             onClick={handleInitiateLock}
                             disabled={lockingListing || availabilityStatus === "unavailable" || availabilityStatus === "checking"}
-                            className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm"
+                            className="w-full py-4 bg-[#1D8D2B] hover:bg-[#0c2614] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm shadow-lg shadow-[#1D8D2B]/20"
                           >
-                            {lockingListing ? "Securing your dates…" : "Reserve — You won't be charged yet"}
+                            {lockingListing ? "Securing your dates…" : "Reserve Now"}
                           </button>
+                          <p className="text-center text-[10px] text-slate-400 -mt-2">You won't be charged yet</p>
 
                           {/* Dynamic price breakdown */}
                           {days > 0 && (
@@ -2567,9 +2832,39 @@ export default function TravellerDashboard() {
                       Report this listing
                     </div>
                   </div>
-                </div>
-                <div className="lg:col-span-12">
-                  <PublicReviewsSection listingId={detailListing.id} />
+
+                  {/* Loyalty points card */}
+                  {user && (
+                    <div className="bg-[#0c2614] rounded-2xl p-5 text-white">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                          <svg className="w-5 h-5 text-amber-300" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
+                        </div>
+                        <div className="flex-1">
+                          {(() => {
+                            const isCar = detailListing.category === "car";
+                            const start = isCar ? detailPickupDate : detailCheckIn;
+                            const end = isCar ? detailReturnDate : detailCheckOut;
+                            const days = calcDays(start, end);
+                            const base = detailListing.pricePerNight * Math.max(1, days);
+                            const pointsEst = Math.round(base * 0.1);
+                            return (
+                              <>
+                                <p className="font-bold text-sm">Earn {pointsEst > 0 ? pointsEst.toLocaleString() : "loyalty"} Points</p>
+                                <p className="text-xs text-white/60 mt-0.5">
+                                  {user.currentTier === "diamond" ? "Diamond tier member · Priority benefits" :
+                                   user.currentTier === "gold" ? "Gold member · Exclusive perks" :
+                                   user.currentTier === "silver" ? "Silver member · Great rewards" :
+                                   "Bronze member · Earn points on every stay"}
+                                </p>
+                                <p className="text-[10px] text-white/40 mt-1.5">{user.loyaltyPoints.toLocaleString()} current points</p>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
@@ -3316,16 +3611,16 @@ export default function TravellerDashboard() {
                     <label className="block text-xs font-semibold text-slate-700">Amenities</label>
                     <div className="flex flex-wrap gap-2 pt-0.5">
                       {[
-                        { key: "kitchen", label: "Full Kitchen" },
-                        { key: "wifi", label: "Workspace" },
-                        { key: "pool", label: "Balcony" },
-                        { key: "pool", label: "Infinity Pool" },
-                        { key: "gym", label: "24/7 Gym" },
+                        { key: "wifi", label: "Wi-Fi" },
+                        { key: "pool", label: "Pool" },
+                        { key: "kitchen", label: "Kitchen" },
+                        { key: "gym", label: "Gym" },
+                        { key: "parking", label: "Parking" },
                       ].map(({ key, label }) => {
                         const active = selectedAmenities.includes(key);
                         return (
                           <button
-                            key={label}
+                            key={key}
                             onClick={() => setSelectedAmenities((prev) =>
                               active ? prev.filter((a) => a !== key) : [...prev, key]
                             )}
@@ -3568,9 +3863,10 @@ export default function TravellerDashboard() {
                     {hasAuthToken && walletVouchers.length > 0 && (
                       <PersonalVoucherBanner
                         vouchers={walletVouchers.map((v) => ({
-                          id: v.id,
+                          id: v.voucherId,
                           code: v.code,
-                          description: v.description,
+                          title: v.title,
+                          description: v.description ?? undefined,
                           discountAmount: v.discountValue,
                           validUntil: v.validUntil,
                         }))}

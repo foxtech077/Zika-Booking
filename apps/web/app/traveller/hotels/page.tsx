@@ -12,7 +12,7 @@ export default function HotelsPage() {
         </div>
       }
     >
-      <CategoryListingsClient category="hotel" />
+      <CategoryListingsClient key="hotel" category="hotel" />
     </Suspense>
   );
 }
