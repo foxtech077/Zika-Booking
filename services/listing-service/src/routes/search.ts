@@ -385,12 +385,35 @@ export async function searchRoutes(app: FastifyInstance) {
 
       const signedPhotos = await withSignedPhotos(listing.photos);
 
+      // Fetch active promotion badge for this category
+      let promoBadge: { labelText: string; labelColour: string } | null = null;
+      try {
+        const now = new Date();
+        const promo = await (prisma as any).activityPromotion.findFirst({
+          where: { activity: listing.category, status: "active", validFrom: { lte: now }, validUntil: { gte: now } },
+          orderBy: { createdAt: "desc" },
+          select: { labelText: true, labelColour: true },
+        });
+        if (promo) promoBadge = { labelText: promo.labelText, labelColour: promo.labelColour };
+      } catch { /* non-critical */ }
+
       // Strip sensitive car fields pre-booking
       const data: any = {
         ...listing,
         photos: signedPhotos,
         licencePlate: undefined,
         isFavourited: guestId ? isFavourited : undefined,
+        // Add basic information aliases to match /listings/search
+        listingType: listing.category,
+        title: listing.name,
+        city: listing.town,
+        countryCode: listing.country,
+        primaryPhotoUrl: signedPhotos[0]?.cdnUrl ?? null,
+        nightlyRate: listing.category !== "car" && listing.pricePerNight ? Number(listing.pricePerNight) : null,
+        dailyRate: listing.category === "car" && listing.pricePerDay ? Number(listing.pricePerDay) : null,
+        isAccredited: !!listing.approvedAt,
+        longStayDiscountEnabled: listing.longStayEnabled,
+        promoBadge,
       };
       if (data.licencePlate !== undefined) {
         delete data.licencePlate;

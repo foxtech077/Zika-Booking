@@ -1159,6 +1159,7 @@ export async function voucherRoutes(app: FastifyInstance) {
           type: "object",
           properties: {
             isActive: { type: "string", enum: ["true", "false"] },
+            status:   { type: "string", enum: ["active", "paused", "expired", "exhausted"] },
             page:     { type: "integer", minimum: 1, default: 1 },
             limit:    { type: "integer", minimum: 1, maximum: 100, default: 20 },
           },
@@ -1193,7 +1194,7 @@ export async function voucherRoutes(app: FastifyInstance) {
     },
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
-        const q = req.query as { isActive?: string; page?: number; limit?: number };
+        const q = req.query as { isActive?: string; status?: string; page?: number; limit?: number };
         const page  = Number(q.page  ?? 1);
       const limit = Number(q.limit ?? 20);
       const skip  = (page - 1) * limit;
@@ -1201,6 +1202,7 @@ export async function voucherRoutes(app: FastifyInstance) {
       const where: any = {};
       if (q.isActive === "true")  where.isActive = true;
       else if (q.isActive === "false") where.isActive = false;
+      if (q.status) where.status = q.status;
 
       const [vouchers, total] = await Promise.all([
         prisma.voucher.findMany({

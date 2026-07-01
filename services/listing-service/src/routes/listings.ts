@@ -373,16 +373,7 @@ export async function listingRoutes(app: FastifyInstance) {
           id: { type: "string" }
         }
       },
-      response: {
-        200: {
-          type: "object",
-          properties: {
-            success: { type: "boolean" },
-            data: { type: "object", additionalProperties: true }
-          },
-          required: ["success", "data"]
-        }
-      }
+      
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
