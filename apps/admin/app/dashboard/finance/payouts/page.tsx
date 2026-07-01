@@ -306,7 +306,7 @@ export default function PayoutManagementPage() {
         title="Payout Management"
         description="Verify, schedule, approve and retry payouts to accommodation and vehicle rental providers."
         action={
-          canModifyPayouts && (
+          canModifyPayouts && activeTab === "scheduled" && (
             <Button
               variant="primary"
               size="sm"

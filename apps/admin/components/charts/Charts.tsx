@@ -130,37 +130,62 @@ interface DonutChartProps {
   innerValue?: string;
 }
 
-export function DonutChart({ data, height = 220, innerLabel, innerValue }: DonutChartProps) {
+export function DonutChart({ data, height = 180 }: DonutChartProps) {
+  const total = data.reduce((s, d) => s + d.value, 0);
+
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <PieChart>
-        <Pie
-          data={data}
-          cx="50%"
-          cy="50%"
-          innerRadius={60}
-          outerRadius={85}
-          paddingAngle={2}
-          dataKey="value"
-        >
-          {data.map((entry, index) => (
-            <Cell key={index} fill={entry.color} />
-          ))}
-        </Pie>
-        <Tooltip
-          contentStyle={{
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            fontSize: 12,
-          }}
-          formatter={(v) => [typeof v === "number" ? formatNumber(v) : String(v ?? ""), ""]}
-        />
-        <Legend
-          wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
-          iconType="circle"
-          iconSize={8}
-        />
-      </PieChart>
-    </ResponsiveContainer>
+    <div className="flex items-center justify-between gap-4 w-full">
+      {/* Left side: Pie Chart */}
+      <div className="flex-shrink-0 w-[130px]" style={{ height: `${height}px` }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={36}
+              outerRadius={52}
+              paddingAngle={3}
+              dataKey="value"
+            >
+              {data.map((entry, index) => (
+                <Cell key={index} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              contentStyle={{
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                fontSize: 11,
+                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.07)",
+              }}
+              formatter={(v) => [typeof v === "number" ? formatNumber(v) : String(v ?? ""), ""]}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Right side: Premium Custom Legend */}
+      <div className="flex-1 min-w-0 space-y-1.5 pr-2">
+        {data.map((entry, index) => {
+          const pct = total > 0 ? (entry.value / total) * 100 : 0;
+          return (
+            <div key={index} className="flex items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="h-2.5 w-2.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="font-medium text-slate-600 truncate">{entry.name}</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-right flex-shrink-0">
+                <span className="font-semibold text-slate-800 tabular">{entry.value}</span>
+                <span className="text-slate-400 font-medium text-[10px] tabular">({pct.toFixed(0)}%)</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

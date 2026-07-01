@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { 
-  RotateCcw, Search, Eye, Plus, Check, X, CreditCard, 
-  AlertCircle, DollarSign, FileText, Info 
+import {
+  RotateCcw, Search, Eye, Plus, Check, X, CreditCard,
+  AlertCircle, DollarSign, FileText, Info
 } from "lucide-react";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -94,7 +94,7 @@ export default function RefundManagementPage() {
   const selectedTxDetails = null;
   const maxRefundValue = 0;
 
-  const canModifyRefunds = canAccess(user?.role as AdminRole, "manage_finance");
+  const canModifyRefunds = canAccess(user?.role as AdminRole, "manage_finance") || user?.role === "country_manager";
 
   const processMutation = useMutation({
     mutationFn: async ({ id, action, reason }: { id: string; action: "approve" | "deny"; reason?: string }) => {
@@ -185,9 +185,9 @@ export default function RefundManagementPage() {
       key: "status",
       label: "Status",
       render: (r) => (
-        <Badge 
-          label={r.status === "pending" ? "Pending Approval" : r.status} 
-          status={r.status === "succeeded" ? "confirmed" : r.status === "failed" ? "cancelled_by_guest" : "pending_payment"} 
+        <Badge
+          label={r.status === "pending" ? "Pending Approval" : r.status}
+          status={r.status === "succeeded" ? "confirmed" : r.status === "failed" ? "cancelled_by_guest" : "pending_payment"}
         />
       ),
     },
@@ -301,9 +301,9 @@ export default function RefundManagementPage() {
                   {formatCurrency(Number(selectedRefund.amount), selectedRefund.currency)}
                 </span>
               </div>
-              <Badge 
-                label={selectedRefund.status === "pending" ? "Pending Approval" : selectedRefund.status} 
-                status={selectedRefund.status === "succeeded" ? "confirmed" : selectedRefund.status === "failed" ? "cancelled_by_guest" : "pending_payment"} 
+              <Badge
+                label={selectedRefund.status === "pending" ? "Pending Approval" : selectedRefund.status}
+                status={selectedRefund.status === "succeeded" ? "confirmed" : selectedRefund.status === "failed" ? "cancelled_by_guest" : "pending_payment"}
               />
             </div>
 
@@ -426,10 +426,10 @@ export default function RefundManagementPage() {
         footer={
           <>
             <Button variant="secondary" size="sm" onClick={() => setRejectConfirm(null)}>Cancel</Button>
-            <Button 
-              variant="danger" 
-              size="sm" 
-              onClick={handleReject} 
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleReject}
               disabled={!rejectionReason}
               loading={actionLoading}
             >

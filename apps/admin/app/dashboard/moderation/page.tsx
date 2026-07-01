@@ -179,7 +179,7 @@ export default function ModerationPage() {
   const [starModal, setStarModal] = useState<any | null>(null);
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
-  
+
   const [docViewer, setDocViewer] = useState<{ url: string; fileType: string; label: string } | null>(null);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
   const [photoLightbox, setPhotoLightbox] = useState<{ photos: any[]; index: number } | null>(null);
@@ -502,21 +502,24 @@ export default function ModerationPage() {
         width="lg"
         footer={
           selectedTask && (
-            <div className="flex gap-2 w-full justify-between items-center">
-              <div className="flex gap-2">
+            <div className="flex flex-wrap gap-3 w-full justify-between items-center py-2 px-1">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
-                  leftIcon={<ArrowUpRight className="h-4 w-4" />}
+                  className="bg-amber-50 hover:bg-amber-100/80 border-amber-200 text-amber-800 focus:ring-amber-500/20 whitespace-nowrap"
+                  leftIcon={<ShieldAlert className="h-4 w-4 text-amber-600" />}
                   onClick={() => setEscalationModal(true)}
                 >
                   Escalate Task
                 </Button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="bg-emerald-500 hover:bg-emerald-600 text-white border-transparent focus:ring-emerald-500/20 whitespace-nowrap"
+                  leftIcon={<ShieldCheck className="h-4 w-4" />}
                   onClick={() => setResolveType("unblock_warning")}
                 >
                   Unblock (Warning)
@@ -524,6 +527,8 @@ export default function ModerationPage() {
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200 focus:ring-slate-500/20 whitespace-nowrap"
+                  leftIcon={<CheckCircle className="h-4 w-4 text-slate-500" />}
                   onClick={() => setResolveType("unblock_no_warning")}
                 >
                   Unblock (No Warning)
@@ -531,6 +536,8 @@ export default function ModerationPage() {
                 <Button
                   variant="secondary"
                   size="sm"
+                  className="bg-rose-50 hover:bg-rose-100/80 border-rose-200 text-rose-800 focus:ring-rose-500/20 whitespace-nowrap"
+                  leftIcon={<ShieldOff className="h-4 w-4 text-rose-600" />}
                   onClick={() => setResolveType("keep_suspended")}
                 >
                   Keep Suspended
@@ -539,6 +546,7 @@ export default function ModerationPage() {
                   <Button
                     variant="danger"
                     size="sm"
+                    className="whitespace-nowrap"
                     leftIcon={<Ban className="h-4 w-4" />}
                     onClick={() => setResolveType("ban")}
                   >
@@ -685,10 +693,10 @@ export default function ModerationPage() {
           resolveType === "unblock_warning"
             ? "Reactivate the listing on the platform and issue a formal warning notification to the provider."
             : resolveType === "unblock_no_warning"
-            ? "Reactivate the listing immediately. This overrides the suspension without warnings."
-            : resolveType === "keep_suspended"
-            ? "Maintain the active suspension status and request clarifications or fixes from the provider."
-            : "Permanently ban this listing from the ZikaBooking platform. This action is irreversible."
+              ? "Reactivate the listing immediately. This overrides the suspension without warnings."
+              : resolveType === "keep_suspended"
+                ? "Maintain the active suspension status and request clarifications or fixes from the provider."
+                : "Permanently ban this listing from the ZikaBooking platform. This action is irreversible."
         }
         size="sm"
         footer={

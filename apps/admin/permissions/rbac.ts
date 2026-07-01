@@ -87,6 +87,7 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_channel",
     "view_reports",
     "view_commission",
+    "view_refunds",
   ],
   sales: [
     "view_dashboard",
