@@ -73,6 +73,15 @@ export function capitalize(s?: string | null): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+import { COUNTRIES } from "./countries";
+
+export function getCountryNames(codes?: string[] | null): string {
+  if (!codes || codes.length === 0) return "No Countries";
+  return codes
+    .map(code => COUNTRIES.find(c => c.code.toUpperCase() === code.toUpperCase())?.name ?? code)
+    .join(", ");
+}
+
 export function slugToLabel(s?: string | null): string {
   if (!s) return "";
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());

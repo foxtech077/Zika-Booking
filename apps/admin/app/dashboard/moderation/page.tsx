@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ShieldAlert, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight,
-  ShieldAlert as AlertIcon, RefreshCw, UserCheck, UserX, Clock, ArrowUpRight, Ban
+  ShieldAlert as AlertIcon, RefreshCw, UserCheck, UserX, Clock, ArrowUpRight, Ban,
+  Star, ShieldOff, ShieldCheck, Edit
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
@@ -169,6 +170,15 @@ export default function ModerationPage() {
   const [adminNote, setAdminNote] = useState("");
   const [escalationModal, setEscalationModal] = useState(false);
   const [escalationReason, setEscalationReason] = useState("");
+
+  // Direct listing actions
+  const [suspendModal, setSuspendModal] = useState<any | null>(null);
+  const [suspendReason, setSuspendReason] = useState("");
+  const [reinstateConfirm, setReinstateConfirm] = useState<any | null>(null);
+  const [reinstateReason, setReinstateReason] = useState("");
+  const [starModal, setStarModal] = useState<any | null>(null);
+  const [newStar, setNewStar] = useState("3");
+  const [starReason, setStarReason] = useState("");
   
   const [docViewer, setDocViewer] = useState<{ url: string; fileType: string; label: string } | null>(null);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
@@ -269,6 +279,36 @@ export default function ModerationPage() {
     },
   });
 
+  const directSuspendMut = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      listingApi.post(`/admin/listings/${id}/suspend`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["moderation-queue"] });
+      setSuspendModal(null);
+      setSuspendReason("");
+    },
+  });
+
+  const directReinstateMut = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      listingApi.post(`/admin/listings/${id}/reinstate`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["moderation-queue"] });
+      setReinstateConfirm(null);
+      setReinstateReason("");
+    },
+  });
+
+  const directStarMut = useMutation({
+    mutationFn: ({ id, starRating, reason }: any) =>
+      listingApi.patch(`/admin/listings/${id}/star-rating`, { starRating: parseInt(starRating), reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["moderation-queue"] });
+      setStarModal(null);
+      setStarReason("");
+    },
+  });
+
   // Helper: dynamic color coding and timing text calculation for SLA deadlines
   const getSlaInfo = (deadlineStr: string, taskState: string) => {
     if (taskState === "resolved") return { text: "Resolved", color: "active" };
@@ -343,7 +383,41 @@ export default function ModerationPage() {
       label: "",
       align: "right",
       render: (t) => (
-        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-end gap-2 items-center" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => router.push(`/dashboard/listings/${t.listing.id}`)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
+            title="Edit / Review"
+          >
+            <Edit className="h-3.5 w-3.5" />
+          </button>
+          {t.listing.status === "approved" && (
+            <button
+              onClick={() => setStarModal(t.listing)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-500 hover:bg-amber-50 transition-colors"
+              title="Update star rating"
+            >
+              <Star className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {["approved", "active"].includes(t.listing.status) && (
+            <button
+              onClick={() => setSuspendModal(t.listing)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-warning hover:bg-warning/5 transition-colors"
+              title="Suspend"
+            >
+              <ShieldOff className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {["suspended", "auto_suspended"].includes(t.listing.status) && (
+            <button
+              onClick={() => setReinstateConfirm(t.listing)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-success hover:bg-success/5 transition-colors"
+              title="Reinstate"
+            >
+              <ShieldCheck className="h-3.5 w-3.5" />
+            </button>
+          )}
           {t.assignedTo ? (
             t.assignedTo === user?.id ? (
               <Button
@@ -685,6 +759,93 @@ export default function ModerationPage() {
           onClose={() => setDocViewer(null)}
         />
       )}
+
+      {/* Suspend modal */}
+      <ActionModal
+        open={!!suspendModal}
+        onClose={() => { setSuspendModal(null); setSuspendReason(""); }}
+        title="Suspend listing"
+        description={`Please provide a reason to suspend "${suspendModal?.name}".`}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={() => { setSuspendModal(null); setSuspendReason(""); }}>Cancel</Button>
+            <Button variant="danger" disabled={!suspendReason.trim()} loading={directSuspendMut.isPending} onClick={() => suspendModal && directSuspendMut.mutate({ id: suspendModal.id, reason: suspendReason })}>Suspend</Button>
+          </div>
+        }
+      >
+        <textarea
+          className="w-full text-sm border border-gray-300 rounded-lg p-2 resize-none mt-2 focus:outline-none"
+          value={suspendReason}
+          onChange={(e) => setSuspendReason(e.target.value)}
+          placeholder="Describe the reason for suspension…"
+          required
+          rows={3}
+        />
+      </ActionModal>
+
+      {/* Reinstate confirm */}
+      <ActionModal
+        open={!!reinstateConfirm}
+        onClose={() => { setReinstateConfirm(null); setReinstateReason(""); }}
+        title="Reinstate listing"
+        description={`Provide a reason for reinstating "${reinstateConfirm?.name}"?`}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={() => { setReinstateConfirm(null); setReinstateReason(""); }}>Cancel</Button>
+            <Button loading={directReinstateMut.isPending} onClick={() => reinstateConfirm && directReinstateMut.mutate({ id: reinstateConfirm.id, reason: reinstateReason })}>Reinstate</Button>
+          </div>
+        }
+      >
+        <textarea
+          className="w-full text-sm border border-gray-300 rounded-lg p-2 resize-none mt-2 focus:outline-none"
+          value={reinstateReason}
+          onChange={(e) => setReinstateReason(e.target.value)}
+          placeholder="Optional reason for reinstatement…"
+          rows={3}
+        />
+      </ActionModal>
+
+      {/* Star rating modal */}
+      <ActionModal
+        open={!!starModal}
+        onClose={() => { setStarModal(null); setStarReason(""); }}
+        title="Update star rating"
+        description={`Update verified star rating for "${starModal?.name}"`}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={() => { setStarModal(null); setStarReason(""); }}>Cancel</Button>
+            <Button loading={directStarMut.isPending} onClick={() => starModal && directStarMut.mutate({ id: starModal.id, starRating: newStar, reason: starReason })}>Update</Button>
+          </div>
+        }
+      >
+        <div className="space-y-4 mt-2">
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Star Rating</label>
+            <select
+              className="w-full border border-gray-300 rounded-lg p-2 text-sm bg-white focus:outline-none"
+              value={newStar}
+              onChange={(e) => setNewStar(e.target.value)}
+            >
+              {[1, 2, 3, 4, 5].map((s) => (
+                <option key={s} value={s}>{s}★</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">Reason / Context</label>
+            <textarea
+              className="w-full text-sm border border-gray-300 rounded-lg p-2 resize-none focus:outline-none"
+              value={starReason}
+              onChange={(e) => setStarReason(e.target.value)}
+              placeholder="Provide a reason for the star rating update..."
+              rows={3}
+            />
+          </div>
+        </div>
+      </ActionModal>
     </div>
   );
 }

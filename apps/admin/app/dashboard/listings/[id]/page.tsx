@@ -96,6 +96,10 @@ export default function ListingReviewPage() {
   const [showEscalate, setShowEscalate] = useState(false);
   const [escalateReason, setEscateReason] = useState("");
 
+  // Reinstate state
+  const [showReinstate, setShowReinstate] = useState(false);
+  const [reinstateReason, setReinstateReason] = useState("");
+
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { token, user } = useAuthStore();
@@ -169,8 +173,12 @@ export default function ListingReviewPage() {
   });
 
   const reinstateMutation = useMutation({
-    mutationFn: () => listingApi.post(`/admin/listings/${id}/reinstate`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["listing-review", id] }),
+    mutationFn: (reason?: string) => listingApi.post(`/admin/listings/${id}/reinstate`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["listing-review", id] });
+      setShowReinstate(false);
+      setReinstateReason("");
+    },
     onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Reinstatement failed."),
   });
 
@@ -284,7 +292,7 @@ export default function ListingReviewPage() {
             <Button variant="danger" onClick={() => { setShowSuspend(true); setActionError(null); }}>Suspend listing</Button>
           )}
           {isSuspended && (
-            <Button onClick={() => reinstateMutation.mutate()} loading={reinstateMutation.isPending}>Reinstate listing</Button>
+            <Button onClick={() => { setShowReinstate(true); setReinstateReason(""); setActionError(null); }}>Reinstate listing</Button>
           )}
         </div>
       </div>
@@ -691,6 +699,24 @@ export default function ListingReviewPage() {
             <Button variant="secondary" onClick={() => setShowEscalate(false)}>Cancel</Button>
             <Button variant="danger" onClick={() => escalateMutation.mutate({ taskId: activeTask.id, reason: escalateReason })} loading={escalateMutation.isPending}>
               Escalate Task
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Reinstate modal ───────────────────────────────────────────────── */}
+      {showReinstate && (
+        <Modal title="Reinstate Listing" onClose={() => setShowReinstate(false)}>
+          <p className="text-sm text-gray-600 mb-4">Please provide a reason for reinstating this listing. The host will be notified by email.</p>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
+            <textarea className={textarea} rows={3} value={reinstateReason} onChange={(e) => setReinstateReason(e.target.value)} maxLength={500} placeholder="Provide context for why this listing is being reinstated..." />
+          </div>
+          {actionError && <p className="text-sm text-red-600 mb-3">{actionError}</p>}
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setShowReinstate(false)}>Cancel</Button>
+            <Button onClick={() => reinstateMutation.mutate(reinstateReason)} loading={reinstateMutation.isPending}>
+              Confirm Reinstatement
             </Button>
           </div>
         </Modal>

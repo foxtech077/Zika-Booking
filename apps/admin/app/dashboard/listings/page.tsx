@@ -64,6 +64,7 @@ export default function ListingsPage() {
   const [suspendModal, setSuspendModal] = useState<Listing | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
   const [reinstateConfirm, setReinstateConfirm] = useState<Listing | null>(null);
+  const [reinstateReason, setReinstateReason] = useState("");
   const [starModal, setStarModal] = useState<Listing | null>(null);
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
@@ -106,8 +107,9 @@ export default function ListingsPage() {
   });
 
   const reinstateMut = useMutation({
-    mutationFn: (id: string) => listingApi.post(`/admin/listings/${id}/reinstate`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setReinstateConfirm(null); },
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      listingApi.post(`/admin/listings/${id}/reinstate`, { reason }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setReinstateConfirm(null); setReinstateReason(""); },
   });
 
   const starMut = useMutation({
@@ -379,16 +381,27 @@ export default function ListingsPage() {
       </ActionModal>
 
       {/* Reinstate confirm */}
-      <ConfirmModal
+      <ActionModal
         open={!!reinstateConfirm}
-        onClose={() => setReinstateConfirm(null)}
-        onConfirm={() => reinstateConfirm && reinstateMut.mutate(reinstateConfirm.id)}
-        loading={reinstateMut.isPending}
+        onClose={() => { setReinstateConfirm(null); setReinstateReason(""); }}
         title="Reinstate listing"
-        description={`Restore "${reinstateConfirm?.name}" to live status?`}
-        variant="info"
-        confirmLabel="Reinstate"
-      />
+        description={`Provide a reason for reinstating "${reinstateConfirm?.name}"?`}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={() => { setReinstateConfirm(null); setReinstateReason(""); }}>Cancel</Button>
+            <Button loading={reinstateMut.isPending} onClick={() => reinstateConfirm && reinstateMut.mutate({ id: reinstateConfirm.id, reason: reinstateReason })}>Reinstate</Button>
+          </div>
+        }
+      >
+        <textarea
+          className="w-full text-sm border border-gray-300 rounded-lg p-2 resize-none mt-2"
+          value={reinstateReason}
+          onChange={(e) => setReinstateReason(e.target.value)}
+          placeholder="Optional reason for reinstatement…"
+          rows={3}
+        />
+      </ActionModal>
 
       {/* Star rating modal */}
       <ActionModal
