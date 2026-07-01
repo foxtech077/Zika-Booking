@@ -72,6 +72,7 @@ export interface Listing {
 export type BookingStatus =
   | "pending_payment"
   | "confirmed"
+  | "checked_in"
   | "completed"
   | "cancelled_by_guest"
   | "cancelled_by_provider"
