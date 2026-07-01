@@ -377,7 +377,7 @@ app.post(
   // ── OPTIONS handler for CORS preflight on alias route
 
   // ── Alias GET /listings/conversations/unread-count — same as above for compatibility
-  app.get("/listings/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+  app.get("/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
     // Reuse the same logic as the original route
     try {
       const userId = (req as ProviderRequest).providerId;
