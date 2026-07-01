@@ -374,11 +374,33 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   uploadedTypes: { type: "array", items: { type: "string" } },
                 },
               },
-            },
+                        },
             reviewTasks: { type: "array", items: { type: "object" } },
-          },
+            
+            // ── ADD THESE NEW SCHEMA PROPERTIES HERE: ──
+            price: { type: "number", nullable: true },
+            cancellationPolicy: { type: "string", nullable: true },
+            
+            // Hotel Specific
+            roomType: { type: "string", nullable: true },
+            units: { type: "integer", nullable: true },
+            
+            // Apartment Specific
+            bedrooms: { type: "integer", nullable: true },
+            bathrooms: { type: "integer", nullable: true },
+            maxGuests: { type: "integer", nullable: true },
+            
+            // Car Specific
+            vehicle: { type: "string", nullable: true },
+            transmission: { type: "string", nullable: true },
+            fuelType: { type: "string", nullable: true },
+            seats: { type: "integer", nullable: true },
+            mileagePolicy: { type: "string", nullable: true },
+            // ───────────────────────────────────────────
+          }, // This is the closing brace on line 379
         }),
         404: ErrorResponse,
+
         401: ErrorResponse,
         403: ErrorResponse,
       },
@@ -455,6 +477,30 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         ...listing,
+        price: listing.category === "car" 
+          ? (listing.pricePerDay ? Number(listing.pricePerDay) : null)
+          : (listing.pricePerNight ? Number(listing.pricePerNight) : null),
+        cancellationPolicy: listing.cancellationPolicy,
+        
+                // Hotel-only fields (omitted for cars and apartments)
+        roomType: listing.category === "hotel" ? listing.roomType : undefined,
+        units: listing.category === "hotel" ? listing.unitCount : undefined,
+        
+        // Apartment-only fields (omitted for hotels and cars)
+        bedrooms: listing.category === "apartment" ? listing.bedrooms : undefined,
+        bathrooms: listing.category === "apartment" ? listing.bathrooms : undefined,
+        maxGuests: listing.category === "apartment" ? listing.maxGuests : undefined,
+        
+        // Car-only fields (omitted for hotels and apartments)
+        vehicle: listing.category === "car" && listing.carMake && listing.carModel
+          ? `${listing.carMake} ${listing.carModel}` 
+          : undefined,
+        transmission: listing.category === "car" ? listing.transmission : undefined,
+        fuelType: listing.category === "car" ? listing.fuelType : undefined,
+        seats: listing.category === "car" ? listing.seats : undefined,
+        mileagePolicy: listing.category === "car" ? listing.mileagePolicy : undefined,
+
+
         amenities: groupedAmenities,
         photos: await withSignedPhotos(listing.photos),
         docChecklist,
