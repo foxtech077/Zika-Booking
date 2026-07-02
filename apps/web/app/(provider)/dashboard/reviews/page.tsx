@@ -110,7 +110,7 @@ function nestedName(value: unknown, fallback: string) {
   return readString(obj.name ?? obj.fullName ?? obj.title, fallback);
 }
 
-function normalizeReview(raw: unknown): ProviderReview {
+function normalizeReview(raw: unknown, listingId?: string, name?: string | undefined): ProviderReview {
   const item = raw as Record<string, unknown>;
   const guest = (item.guest ?? item.customer ?? item.user ?? {}) as Record<string, unknown>;
   const listing = (item.listing ?? item.property ?? {}) as Record<string, unknown>;
