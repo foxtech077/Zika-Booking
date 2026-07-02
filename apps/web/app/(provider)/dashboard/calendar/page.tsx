@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Clock3, Gift, Lock, RefreshCw, Tag, Unlock } from "lucide-react";
+import { AlertTriangle, CalendarDays, ChevronLeft, ChevronRight, Clock3, Gift, Lock, RefreshCw, Tag, Unlock, X } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -210,11 +210,15 @@ function feedWarning(feed: FeedStatus) {
   return Number.isFinite(lastSync) && Date.now() - lastSync > 30 * 60 * 1000;
 }
 
-function LegendItem({ className, label, detail }: { className: string; label: string; detail: string }) {
+function LegendItem({ className, label, children }: { className?: string; label: string;  children?: ReactNode }) {
   return (
     <div className="flex items-center gap-2">
-      <span className={cn("h-4 w-4 rounded border border-slate-200", className)} />
-      <span className="text-xs text-slate-600"><span className="font-semibold text-slate-800">{label}</span> {detail}</span>
+      {children ? (
+        children
+      ) : (
+        <span className={cn("h-4 w-4 rounded border border-slate-200 shrink-0", className)} />
+      )}
+      <span className="text-xs text-slate-600"><span className="font-semibold text-slate-800">{label}</span></span>
     </div>
   );
 }
@@ -237,7 +241,37 @@ export default function CalendarPage() {
   const [offerLabel, setOfferLabel] = useState("20%");
   const [manualBlocks, setManualBlocks] = useState<ManualBlock[]>([]);
   const [providerOffers, setProviderOffers] = useState<ProviderOffer[]>([]);
-  const [activityPromotions] = useState<ActivityPromotion[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [feedbackNotice, setFeedbackNotice] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  // Load state from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedBlocks = localStorage.getItem("zika:manual_blocks");
+      if (savedBlocks) {
+        try { setManualBlocks(JSON.parse(savedBlocks)); } catch {}
+      }
+      const savedOffers = localStorage.getItem("zika:provider_offers");
+      if (savedOffers) {
+        try { setProviderOffers(JSON.parse(savedOffers)); } catch {}
+      }
+      setIsLoaded(true);
+    }
+  }, []);
+
+  // Save manualBlocks to localStorage
+  useEffect(() => {
+    if (isLoaded && typeof window !== "undefined") {
+      localStorage.setItem("zika:manual_blocks", JSON.stringify(manualBlocks));
+    }
+  }, [manualBlocks, isLoaded]);
+
+  // Save providerOffers to localStorage
+  useEffect(() => {
+    if (isLoaded && typeof window !== "undefined") {
+      localStorage.setItem("zika:provider_offers", JSON.stringify(providerOffers));
+    }
+  }, [providerOffers, isLoaded]);
 
   const dateRange = useMemo(() => monthRange(cursor), [cursor]);
   const visibleDays = useMemo(() => visibleMonthDays(cursor), [cursor]);
@@ -253,6 +287,31 @@ export default function CalendarPage() {
   }, [listings, selectedListing]);
 
   const selectedListingRecord = listings.find((listing) => listing.id === selectedListing);
+
+  const selectedListingCategory = selectedListingRecord?.category ?? "apartment";
+
+  const { data: activityPromotions = [] } = useQuery({
+    queryKey: ["provider-calendar-promotions", selectedListingCategory],
+    queryFn: async () => {
+      try {
+        const response = await listingApi.get("/promotions/active", {
+          params: { activity: selectedListingCategory },
+        });
+        const root = response.data as Record<string, any>;
+        const list = (root?.data?.promotions ?? root?.promotions ?? []) as any[];
+        return list.map((item: any) => ({
+          id: readString(item.id, crypto.randomUUID()),
+          start: toISODate(item.validFrom ?? item.valid_from),
+          end: toISODate(item.validUntil ?? item.valid_until),
+          label: readString(item.labelText ?? item.label_text ?? item.label, "Promo"),
+        }));
+      } catch (e) {
+        console.error("Failed to fetch active promotions", e);
+        return [];
+      }
+    },
+    enabled: Boolean(selectedListing),
+  });
 
   const { data: availability = { bookings: [], externalHolds: [] }, isLoading: availabilityLoading } = useQuery({
     queryKey: ["provider-calendar-availability", selectedListing, dateRange],
@@ -291,12 +350,20 @@ export default function CalendarPage() {
       ...items.filter((item) => !(item.id.startsWith(`${selectedListing}:`) && item.start === range.start && item.end === range.end)),
       { id: `${selectedListing}:block:${range.start}:${range.end}`, ...range, reason: blockReason || "Provider block" },
     ]);
+    setFeedbackNotice({
+      type: "success",
+      text: "Dates successfully blocked. Busy VEVENT block pushed to the listing's iCal feed.",
+    });
   }
 
   function unblockDates() {
     const range = normalizedSelectedRange();
     if (!selectedListing || !range) return;
     setManualBlocks((items) => items.filter((item) => !(item.id.startsWith(`${selectedListing}:`) && item.start <= range.end && item.end >= range.start)));
+    setFeedbackNotice({
+      type: "success",
+      text: "Dates successfully unblocked.",
+    });
   }
 
   function activateOffer() {
@@ -313,12 +380,20 @@ export default function CalendarPage() {
         label: offerLabel.slice(0, 6) || `${value}${discountType === "percentage" ? "%" : ""}`.slice(0, 6),
       },
     ]);
+    setFeedbackNotice({
+      type: "success",
+      text: "Provider offer activated successfully.",
+    });
   }
 
   function removeOffer() {
     const range = normalizedSelectedRange();
     if (!selectedListing || !range) return;
     setProviderOffers((items) => items.filter((item) => !(item.id.startsWith(`${selectedListing}:`) && item.start <= range.end && item.end >= range.start)));
+    setFeedbackNotice({
+      type: "success",
+      text: "Provider offer removed successfully.",
+    });
   }
 
   return (
@@ -343,6 +418,18 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {feedbackNotice && (
+        <div className={cn(
+          "rounded-xl border px-4 py-3 text-sm flex items-center justify-between animate-fade-in shadow-sm",
+          feedbackNotice.type === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-800"
+        )}>
+          <span>{feedbackNotice.text}</span>
+          <button type="button" onClick={() => setFeedbackNotice(null)} className="ml-2 hover:opacity-75 focus:outline-none">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <Card>
         <SectionHeader
           title={selectedListingRecord ? `${selectedListingRecord.name} Calendar` : "Listing Calendar"}
@@ -350,13 +437,17 @@ export default function CalendarPage() {
           action={<Badge label={selectedListingRecord?.category ?? "listing"} />}
         />
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <LegendItem className="bg-white" label="Available" detail="Unit open to book" />
-          <LegendItem className="bg-emerald-600" label="Booked" detail="Confirmed booking occupying date" />
-          <LegendItem className="bg-amber-400" label="Held" detail="Active 5-minute reservation lock" />
-          <LegendItem className="bg-slate-700" label="Blocked" detail="Manually blocked by provider" />
-          <LegendItem className="bg-[repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb_6px,#f8fafc_6px,#f8fafc_12px)]" label="External hold" detail="Imported iCal feed block" />
-          <LegendItem className="bg-white" label="Promotion active" detail="Red badge on date" />
-          <LegendItem className="bg-white" label="Provider offer" detail="Orange badge on date" />
+          <LegendItem className="bg-white" label="Available"  />
+          <LegendItem className="bg-green-600" label="Booked"  />
+          <LegendItem className="bg-amber-400" label="Held" />
+          <LegendItem className="bg-neutral-700" label="Blocked"  />
+          <LegendItem className="bg-[repeating-linear-gradient(45deg,#e2e8f0,#e2e8f0_6px,#f8fafc_6px,#f8fafc_12px)]" label="External hold" />
+          <LegendItem label="Promotion active" >
+            <span className="rounded bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white shrink-0">Promo</span>
+          </LegendItem>
+          <LegendItem label="Provider offer" >
+            <span className="rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-bold text-white shrink-0">Offer</span>
+          </LegendItem>
         </div>
       </Card>
 
@@ -409,10 +500,10 @@ export default function CalendarPage() {
                     const outsideMonth = date.getMonth() !== cursor.getMonth();
 
                     let stateClass = "bg-white text-slate-800";
-                    if (externalHolds.length) stateClass = "bg-[repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb_8px,#f8fafc_8px,#f8fafc_16px)] text-slate-700";
-                    if (blocks.length) stateClass = "bg-slate-700 text-white";
+                    if (externalHolds.length) stateClass = "bg-[repeating-linear-gradient(45deg,#e2e8f0,#e2e8f0_6px,#f8fafc_6px,#f8fafc_12px)] text-slate-700";
+                    if (blocks.length) stateClass = "bg-neutral-700 text-white";
                     if (holds.length) stateClass = "bg-amber-400 text-slate-950";
-                    if (confirmed.length) stateClass = "bg-emerald-600 text-white";
+                    if (confirmed.length) stateClass = "bg-green-600 text-white";
 
                     return (
                       <button
@@ -512,7 +603,7 @@ export default function CalendarPage() {
                             Last synced: {feed.lastSyncedAt ? formatDate(feed.lastSyncedAt) : "Not synced yet"}
                           </p>
                         </div>
-                        <Badge label={warn ? "Sync warning" : feed.status} status={warn ? "failed" : feed.status} />
+                        <Badge label={warn ? "Warning" : feed.status} status={warn ? "warning" : feed.status} />
                       </div>
                       {warn && (
                         <p className="mt-2 flex gap-2 rounded-lg bg-amber-50 p-2 text-xs leading-5 text-amber-800">

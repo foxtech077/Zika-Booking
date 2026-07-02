@@ -8,7 +8,7 @@ import {
     BookOpen, Calendar, Search, X, CheckCircle, XCircle, Clock,
     DollarSign, User, Eye, Check, Ban, AlertCircle, ChevronLeft,
     ChevronRight, ChevronDown, Phone, Mail, CreditCard, FileText, Calendar as CalendarIcon,
-    TrendingUp, TrendingDown, MoreVertical
+    TrendingUp, TrendingDown, MoreVertical, LogIn
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ type Booking = ProviderBooking & {
     notes?: string;
 };
 
-type BookingAction = "approve" | "cancel";
+type BookingAction = "approve" | "cancel" | "check-in";
 
 type ActionFeedback = {
     type: BookingAction;
@@ -40,6 +40,7 @@ const bookingStatusConfig: Record<string, { label: string; color: string }> = {
     pending: { label: "Pending", color: "#eab308" },
     pending_payment: { label: "Pending", color: "#eab308" },
     confirmed: { label: "Confirmed", color: "#22c55e" },
+    checked_in: { label: "Checked In", color: "#0f766e" },
     cancelled: { label: "Cancelled", color: "#ef4444" },
     cancelled_by_guest: { label: "Cancelled by Guest", color: "#ef4444" },
     cancelled_by_provider: { label: "Cancelled by Provider", color: "#ef4444" },
@@ -69,6 +70,7 @@ const bookingStatusOptions: SelectOption[] = [
     { value: "", label: "All Status" },
     { value: "pending_payment", label: "Pending" },
     { value: "confirmed", label: "Confirmed" },
+    { value: "checked_in", label: "Checked In" },
     { value: "completed", label: "Completed" },
     { value: "cancelled", label: "Cancelled" },
     { value: "cancelled_by_guest", label: "Cancelled by Guest" },
@@ -151,7 +153,7 @@ function toDateOnly(date: Date) {
 }
 
 function inferPaymentStatus(status: string) {
-    if (status === "confirmed" || status === "completed") return "paid";
+    if (status === "confirmed" || status === "checked_in" || status === "completed") return "paid";
     if (status.includes("cancelled")) return "refunded";
     if (status === "failed") return "failed";
     return "pending";
@@ -214,6 +216,23 @@ async function fetchProviderBookingsByStatusFilter(params: Record<string, string
 function bookingLoadErrorMessage(err: any) {
     if (err.response?.status === 401) return "Session expired. Please log in again.";
     return "Unable to load bookings. Please try again.";
+}
+
+function unwrapActionResponse(data: any) {
+    return data?.data ?? data ?? {};
+}
+
+function getApiErrorMessage(err: any, fallback: string) {
+    return err.response?.data?.message
+        || err.response?.data?.error?.message
+        || err.message
+        || fallback;
+}
+
+function isCheckInPayoutPartialSuccess(err: any) {
+    const message = JSON.stringify(err.response?.data ?? err.message ?? "");
+    return message.includes("Failed to schedule payout internally")
+        || message.includes("Payout not found");
 }
 
 // Status Badge Component
@@ -428,10 +447,13 @@ const ConfirmationDialog = ({
 }) => {
     const dialogRef = useRef<HTMLDivElement | null>(null);
     const isCancel = action === "cancel";
-    const title = isCancel ? "Cancel Booking" : "Approve Booking";
+    const isCheckIn = action === "check-in";
+    const title = isCancel ? "Cancel Booking" : isCheckIn ? "Check In Guest" : "Approve Booking";
     const message = isCancel
-        ? "Are you sure you want to cancel this booking?"
-        : "Are you sure you want to approve this booking?";
+        ? "Are you sure you want to cancel this booking? The guest will receive a full refund."
+        : isCheckIn
+            ? "Confirm that the guest has arrived and should be checked in."
+            : "Are you sure you want to approve this booking?";
 
     useEffect(() => {
         const previousActiveElement = document.activeElement as HTMLElement | null;
@@ -498,7 +520,7 @@ const ConfirmationDialog = ({
             >
                 <div className="px-6 pt-6">
                     <div className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-full ${isCancel ? "bg-amber-50 text-amber-700 ring-1 ring-amber-100" : "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100"}`}>
-                        {isCancel ? <Ban className="h-5 w-5" /> : <Check className="h-5 w-5" />}
+                        {isCancel ? <Ban className="h-5 w-5" /> : isCheckIn ? <LogIn className="h-5 w-5" /> : <Check className="h-5 w-5" />}
                     </div>
                     <h2 id="booking-action-title" className="text-lg font-semibold text-slate-950">
                         {title}
@@ -541,7 +563,17 @@ const ConfirmationDialog = ({
                                 : "bg-slate-950 hover:bg-slate-800 focus:ring-slate-200"
                             }`}
                     >
-                        {isPending ? (isCancel ? "Cancelling..." : "Approving...") : isCancel ? "Cancel Booking" : "Yes, Approve"}
+                        {isPending
+                            ? isCancel
+                                ? "Cancelling..."
+                                : isCheckIn
+                                    ? "Checking in..."
+                                    : "Approving..."
+                            : isCancel
+                                ? "Cancel Booking"
+                                : isCheckIn
+                                    ? "Check In Guest"
+                                    : "Yes, Approve"}
                     </button>
                 </div>
             </motion.div>
@@ -551,6 +583,7 @@ const ConfirmationDialog = ({
 
 const ActionFeedbackCard = ({ feedback }: { feedback: ActionFeedback }) => {
     const isCancel = feedback.type === "cancel";
+    const isCheckIn = feedback.type === "check-in";
 
     return (
         <motion.div
@@ -574,7 +607,7 @@ const ActionFeedbackCard = ({ feedback }: { feedback: ActionFeedback }) => {
                     animate={{ scale: [0.72, 1.08, 1] }}
                     transition={{ duration: 0.42, ease: "easeOut" }}
                 >
-                    {isCancel ? <Ban className="h-7 w-7" /> : <CheckCircle className="h-7 w-7" />}
+                    {isCancel ? <Ban className="h-7 w-7" /> : isCheckIn ? <LogIn className="h-7 w-7" /> : <CheckCircle className="h-7 w-7" />}
                 </motion.div>
                 <p className="text-base font-semibold text-slate-950">{feedback.message}</p>
             </motion.div>
@@ -761,11 +794,12 @@ export default function BookingsPage() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["provider-bookings"] });
+            queryClient.invalidateQueries({ queryKey: ["provider-bookings-summary"] });
             setActionFeedback({ type: "approve", message: "Booking Approved" });
             setTimeout(() => setActionFeedback(null), 1800);
         },
         onError: (err: any) => {
-            const message = err.response?.data?.message || err.message || "Failed to confirm booking";
+            const message = getApiErrorMessage(err, "Failed to confirm booking");
             setNotification({ type: "error", message });
             setTimeout(() => setNotification(null), 4000);
         },
@@ -774,15 +808,47 @@ export default function BookingsPage() {
     const cancelMutation = useMutation({
         mutationFn: async ({ bookingId, reason }: { bookingId: string; reason: string }) => {
             const response = await listingApi.post(`/provider/bookings/${bookingId}/cancel`, { reasonCode: "provider_cancelled", reasonText: reason });
-            return response.data;
+            return unwrapActionResponse(response.data);
         },
-        onSuccess: () => {
+        onSuccess: (result: any) => {
             queryClient.invalidateQueries({ queryKey: ["provider-bookings"] });
-            setActionFeedback({ type: "cancel", message: "Booking Cancelled" });
+            queryClient.invalidateQueries({ queryKey: ["provider-bookings-summary"] });
+            const refundAmount = Number(result.refundAmount);
+            const refundText = Number.isFinite(refundAmount)
+                ? ` Full refund: ${formatCurrency(refundAmount, result.currency || "USD")}.`
+                : "";
+            setActionFeedback({ type: "cancel", message: `${result.message || "Booking Cancelled."}${refundText}` });
             setTimeout(() => setActionFeedback(null), 1800);
         },
         onError: (err: any) => {
-            const message = err.response?.data?.message || err.response?.data?.error?.message || err.message || "Failed to cancel booking";
+            const message = getApiErrorMessage(err, "Failed to cancel booking");
+            setNotification({ type: "error", message });
+            setTimeout(() => setNotification(null), 4000);
+        },
+    });
+
+    const checkInMutation = useMutation({
+        mutationFn: async (bookingId: string) => {
+            const response = await listingApi.post(`/provider/bookings/${bookingId}/check-in`, {});
+            return unwrapActionResponse(response.data);
+        },
+        onSuccess: (result: any) => {
+            queryClient.invalidateQueries({ queryKey: ["provider-bookings"] });
+            queryClient.invalidateQueries({ queryKey: ["provider-bookings-summary"] });
+            setActionFeedback({ type: "check-in", message: result.message || "Guest Checked In" });
+            setTimeout(() => setActionFeedback(null), 1800);
+        },
+        onError: (err: any) => {
+            if (isCheckInPayoutPartialSuccess(err)) {
+                queryClient.invalidateQueries({ queryKey: ["provider-bookings"] });
+                queryClient.invalidateQueries({ queryKey: ["provider-bookings-summary"] });
+                setNotification(null);
+                setActionFeedback({ type: "check-in", message: "Guest Checked In" });
+                setTimeout(() => setActionFeedback(null), 1800);
+                return;
+            }
+
+            const message = getApiErrorMessage(err, "Failed to check in guest");
             setNotification({ type: "error", message });
             setTimeout(() => setNotification(null), 4000);
         },
@@ -796,6 +862,10 @@ export default function BookingsPage() {
     const handleCancelOpen = (bookingId: string) => {
         setCancelReason("");
         setPendingAction({ type: "cancel", bookingId });
+    };
+
+    const handleCheckIn = (bookingId: string) => {
+        setPendingAction({ type: "check-in", bookingId });
     };
 
     const closePendingAction = useCallback(() => {
@@ -812,10 +882,16 @@ export default function BookingsPage() {
             return;
         }
 
+        if (pendingAction.type === "check-in") {
+            checkInMutation.mutate(pendingAction.bookingId);
+            setPendingAction(null);
+            return;
+        }
+
         if (!cancelReason.trim()) return;
         cancelMutation.mutate({ bookingId: pendingAction.bookingId, reason: cancelReason });
         closePendingAction();
-    }, [cancelMutation, cancelReason, closePendingAction, confirmMutation, pendingAction]);
+    }, [cancelMutation, cancelReason, checkInMutation, closePendingAction, confirmMutation, pendingAction]);
 
     const handleViewDetails = (booking: Booking) => {
         setSelectedBooking(booking);
@@ -923,14 +999,6 @@ export default function BookingsPage() {
                         <Check className="w-4 h-4" />
                     </button>
                     <button
-                        onClick={() => handleCancelOpen(booking.id)}
-                        disabled={cancelMutation.isPending}
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
-                        title="Cancel"
-                    >
-                        <Ban className="w-4 h-4" />
-                    </button>
-                    <button
                         onClick={() => handleViewDetails(booking)}
                         className="p-1.5 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
                         title="Details"
@@ -944,6 +1012,14 @@ export default function BookingsPage() {
         if (status === 'confirmed') {
             return (
                 <div className="flex gap-1.5">
+                    <button
+                        onClick={() => handleCheckIn(booking.id)}
+                        disabled={checkInMutation.isPending}
+                        className="p-1.5 text-green-700 hover:bg-green-50 rounded-md transition-colors disabled:opacity-50"
+                        title="Check in"
+                    >
+                        <LogIn className="w-4 h-4" />
+                    </button>
                     <button
                         onClick={() => handleCancelOpen(booking.id)}
                         disabled={cancelMutation.isPending}
@@ -1504,7 +1580,13 @@ export default function BookingsPage() {
                 {pendingAction && (
                     <ConfirmationDialog
                         action={pendingAction.type}
-                        isPending={pendingAction.type === "approve" ? confirmMutation.isPending : cancelMutation.isPending}
+                        isPending={
+                            pendingAction.type === "approve"
+                                ? confirmMutation.isPending
+                                : pendingAction.type === "check-in"
+                                    ? checkInMutation.isPending
+                                    : cancelMutation.isPending
+                        }
                         cancelReason={cancelReason}
                         onCancelReasonChange={setCancelReason}
                         onClose={closePendingAction}

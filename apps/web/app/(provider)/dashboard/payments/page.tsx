@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
@@ -25,7 +25,7 @@ import {
   Settings,
   XCircle,
 } from "lucide-react";
-import { getAllPayouts, type Payout, type PayoutStatus } from "@/lib/payment-api";
+import { getAllPayouts, startStripeConnect, getMerchantProfile, getStripeConnectStatus, refreshStripeConnect, type Payout, type PayoutStatus, type StripeConnectStatusResponse } from "@/lib/payment-api";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -73,6 +73,8 @@ function bucketFor(status: PayoutStatus): keyof Omit<DashboardSummary, "currency
       return "failed";
     case "cancelled":
       return "cancelled";
+    default:
+      return "total";
   }
 }
 
@@ -192,6 +194,43 @@ function SummaryCard({
 }
 
 export default function PaymentDashboardPage() {
+  const [stripeConnectLoading, setStripeConnectLoading] = useState(false);
+  const [stripeConnectError, setStripeConnectError] = useState<string | null>(null);
+  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatusResponse | null>(null);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(false);
+
+  // Fetch merchant profile
+  const {
+    data: merchantData,
+    isLoading: merchantLoading,
+    refetch: refetchMerchant,
+  } = useQuery({
+    queryKey: ["provider-merchant-profile"],
+    queryFn: async () => {
+      const response = await getMerchantProfile();
+      return response.data;
+    },
+    staleTime: 2 * 60_000,
+    retry: false,
+  });
+
+  // Fetch Stripe Connect status
+  const {
+    data: stripeStatusData,
+    isLoading: stripeStatusLoading,
+    refetch: refetchStripeStatus,
+  } = useQuery({
+    queryKey: ["provider-stripe-connect-status"],
+    queryFn: async () => {
+      const response = await getStripeConnectStatus();
+      setStripeStatus(response.data);
+      return response.data;
+    },
+    staleTime: 1 * 60_000,
+    retry: false,
+  });
+
+  // Fetch payouts
   const {
     data: payouts = [],
     isLoading,
@@ -206,6 +245,29 @@ export default function PaymentDashboardPage() {
     retry: false,
     refetchOnWindowFocus: false,
   });
+
+  // Handle page visibility to re-check Stripe status when user returns from Stripe
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        // User returned to tab - re-check Stripe status
+        setIsCheckingStatus(true);
+        refetchStripeStatus();
+        refetchMerchant();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [refetchStripeStatus, refetchMerchant]);
+
+  // Clear checking status after a moment
+  useEffect(() => {
+    if (isCheckingStatus) {
+      const timer = setTimeout(() => setIsCheckingStatus(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isCheckingStatus]);
 
   const summary = useMemo(() => buildDashboardSummary(payouts), [payouts]);
 
@@ -224,6 +286,149 @@ export default function PaymentDashboardPage() {
   const currency = summary.currency;
   const errorMessage = error instanceof Error ? error.message : "The payout API returned an unexpected error.";
   const showLoading = isLoading || (isFetching && payouts.length === 0);
+
+  const handleStartStripeConnect = async () => {
+    setStripeConnectLoading(true);
+    setStripeConnectError(null);
+    try {
+      // Ensure token exists before making request
+      const token = typeof window !== "undefined" 
+        ? (sessionStorage.getItem("zika:access_token") ?? localStorage.getItem("zika:access_token"))
+        : null;
+      
+      if (!token) {
+        setStripeConnectError("Authentication required. Please login first.");
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      const response = await startStripeConnect();
+      
+      // Check if response is valid
+      if (!response || !response.data) {
+        setStripeConnectError("Invalid response from server");
+        return;
+      }
+
+      const onboardingUrl = response.data?.onboardingUrl;
+      
+      if (onboardingUrl && onboardingUrl.startsWith("https://")) {
+        // Open Stripe onboarding in new tab
+        window.open(onboardingUrl, "_blank", "noopener,noreferrer");
+        
+        // Check status after user returns
+        setTimeout(() => {
+          if (document.visibilityState === "visible") {
+            refetchStripeStatus();
+          }
+        }, 3000);
+      } else {
+        setStripeConnectError("Invalid onboarding URL from backend: " + (onboardingUrl || "no URL"));
+      }
+    } catch (err) {
+      let message = "Failed to start Stripe Connect onboarding";
+      
+      if (err instanceof Error) {
+        message = err.message;
+      }
+      
+      // Check if it's a 401 (Unauthorized)
+      const axiosErr = err as any;
+      if (axiosErr?.response?.status === 401) {
+        message = "Your session expired. Please login again.";
+        setTimeout(() => {
+          window.location.href = "/auth/login";
+        }, 1500);
+      }
+      
+      setStripeConnectError(message);
+    } finally {
+      setStripeConnectLoading(false);
+    }
+  };
+
+  const handleRefreshStripeConnect = async () => {
+    setStripeConnectLoading(true);
+    setStripeConnectError(null);
+    try {
+      // Ensure token exists
+      const token = typeof window !== "undefined" 
+        ? (sessionStorage.getItem("zika:access_token") ?? localStorage.getItem("zika:access_token"))
+        : null;
+      
+      if (!token) {
+        setStripeConnectError("Authentication required. Please login first.");
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      const response = await refreshStripeConnect();
+      
+      if (!response || !response.data) {
+        setStripeConnectError("Invalid response from server");
+        return;
+      }
+
+      const onboardingUrl = response.data?.onboardingUrl;
+      
+      if (onboardingUrl && onboardingUrl.startsWith("https://")) {
+        window.open(onboardingUrl, "_blank", "noopener,noreferrer");
+      } else {
+        setStripeConnectError("Failed to refresh onboarding URL");
+      }
+    } catch (err) {
+      let message = "Failed to refresh Stripe Connect";
+      
+      if (err instanceof Error) {
+        message = err.message;
+      }
+      
+      const axiosErr = err as any;
+      if (axiosErr?.response?.status === 401) {
+        message = "Your session expired. Please login again.";
+        setTimeout(() => {
+          window.location.href = "/auth/login";
+        }, 1500);
+      }
+      
+      setStripeConnectError(message);
+    } finally {
+      setStripeConnectLoading(false);
+    }
+  };
+
+  const handleCheckStripeStatus = async () => {
+    setIsCheckingStatus(true);
+    try {
+      // Ensure token exists
+      const token = typeof window !== "undefined" 
+        ? (sessionStorage.getItem("zika:access_token") ?? localStorage.getItem("zika:access_token"))
+        : null;
+      
+      if (!token) {
+        window.location.href = "/auth/login";
+        return;
+      }
+
+      await refetchStripeStatus();
+    } catch (err) {
+      let message = "Failed to check Stripe status";
+      
+      if (err instanceof Error) {
+        message = err.message;
+      }
+      
+      const axiosErr = err as any;
+      if (axiosErr?.response?.status === 401) {
+        window.location.href = "/auth/login";
+        return;
+      }
+      
+      setStripeConnectError(message);
+    } finally {
+      setIsCheckingStatus(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -352,6 +557,74 @@ export default function PaymentDashboardPage() {
             </Card>
 
             <Card>
+              <SectionHeader title="Stripe Connect Status" subtitle="Account verification status" />
+              {stripeStatusLoading ? (
+                <div className="space-y-3">
+                  <div className="h-4 bg-slate-200 rounded animate-pulse" />
+                  <div className="h-4 bg-slate-200 rounded animate-pulse w-2/3" />
+                </div>
+              ) : stripeStatus ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Account Connected</span>
+                    {stripeStatus.stripeAccountId ? (
+                      <Badge label="Connected" status="paid" dot />
+                    ) : (
+                      <Badge label="Not Connected" status="cancelled" dot />
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Payouts Enabled</span>
+                    {stripeStatus.payoutsEnabled ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Charges Enabled</span>
+                    {stripeStatus.chargesEnabled ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">Details Submitted</span>
+                    {stripeStatus.detailsSubmitted ? (
+                      <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    {!stripeStatus.onboardingComplete && (
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        loading={stripeConnectLoading}
+                        onClick={handleRefreshStripeConnect}
+                      >
+                        Continue Setup
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={isCheckingStatus}
+                      onClick={handleCheckStripeStatus}
+                    >
+                      Refresh Status
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-slate-600 py-4">Unable to load Stripe status</div>
+              )}
+            </Card>
+          </div>
+
+            <Card>
               <SectionHeader title="Available Actions" subtitle="Primary provider payment actions" />
               <div className="grid gap-2">
                 {[
@@ -374,7 +647,29 @@ export default function PaymentDashboardPage() {
                     <ArrowRight className="ml-auto h-4 w-4 text-slate-400 transition-colors group-hover:text-green-600" />
                   </Link>
                 ))}
+                <button
+                  onClick={handleStartStripeConnect}
+                  disabled={stripeConnectLoading}
+                  className="group flex items-center gap-3 rounded-xl border border-transparent p-3 transition-colors hover:border-emerald-100 hover:bg-emerald-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-green-700 transition-colors group-hover:bg-green-100 [&>svg]:h-4 [&>svg]:w-4">
+                    <CreditCard />
+                  </span>
+                  <span className="text-sm font-semibold text-slate-700 transition-colors group-hover:text-green-800">
+                    Connect Stripe
+                  </span>
+                  {stripeConnectLoading ? (
+                    <RefreshCw className="ml-auto h-4 w-4 text-slate-400 animate-spin" />
+                  ) : (
+                    <ArrowRight className="ml-auto h-4 w-4 text-slate-400 transition-colors group-hover:text-green-600" />
+                  )}
+                </button>
               </div>
+              {stripeConnectError && (
+                <div className="mt-4 rounded-lg bg-red-50 p-3 border border-red-200">
+                  <p className="text-xs font-medium text-red-700">{stripeConnectError}</p>
+                </div>
+              )}
 
               <div className="mt-6 rounded-xl border border-emerald-100 bg-emerald-50 p-4">
                 <div className="flex items-start gap-3">
@@ -390,7 +685,6 @@ export default function PaymentDashboardPage() {
                 </div>
               </div>
             </Card>
-          </div>
 
           <Card padding="none">
             <div className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-center sm:justify-between">
