@@ -23,7 +23,7 @@ type Booking = ProviderBooking & {
     notes?: string;
 };
 
-type BookingAction = "approve" | "cancel" | "check-in";
+type BookingAction = "approve" | "decline" | "cancel" | "check-in";
 
 type ActionFeedback = {
     type: BookingAction;
@@ -37,8 +37,8 @@ type SelectOption = {
 
 // Status Config
 const bookingStatusConfig: Record<string, { label: string; color: string }> = {
-    pending: { label: "Pending", color: "#eab308" },
-    pending_payment: { label: "Pending", color: "#eab308" },
+    pending: { label: "Awaiting Approval", color: "#f59e0b" },
+    pending_payment: { label: "Awaiting Approval", color: "#f59e0b" },
     confirmed: { label: "Confirmed", color: "#22c55e" },
     checked_in: { label: "Checked In", color: "#0f766e" },
     cancelled: { label: "Cancelled", color: "#ef4444" },
@@ -447,13 +447,16 @@ const ConfirmationDialog = ({
 }) => {
     const dialogRef = useRef<HTMLDivElement | null>(null);
     const isCancel = action === "cancel";
+    const isDecline = action === "decline";
     const isCheckIn = action === "check-in";
-    const title = isCancel ? "Cancel Booking" : isCheckIn ? "Check In Guest" : "Approve Booking";
+    const title = isCancel ? "Cancel Booking" : isDecline ? "Decline Request" : isCheckIn ? "Check In Guest" : "Approve Booking";
     const message = isCancel
         ? "Are you sure you want to cancel this booking? The guest will receive a full refund."
-        : isCheckIn
-            ? "Confirm that the guest has arrived and should be checked in."
-            : "Are you sure you want to approve this booking?";
+        : isDecline
+            ? "Declining will cancel this booking request and refund the traveller."
+            : isCheckIn
+                ? "Confirm that the guest has arrived and should be checked in."
+                : "Are you sure you want to approve this booking?";
 
     useEffect(() => {
         const previousActiveElement = document.activeElement as HTMLElement | null;
@@ -483,6 +486,8 @@ const ConfirmationDialog = ({
                 event.preventDefault();
                 firstElement.focus();
             }
+
+
         };
 
         document.addEventListener("keydown", handleKeyDown);
@@ -519,8 +524,8 @@ const ConfirmationDialog = ({
                 transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             >
                 <div className="px-6 pt-6">
-                    <div className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-full ${isCancel ? "bg-amber-50 text-amber-700 ring-1 ring-amber-100" : "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100"}`}>
-                        {isCancel ? <Ban className="h-5 w-5" /> : isCheckIn ? <LogIn className="h-5 w-5" /> : <Check className="h-5 w-5" />}
+                    <div className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-full ${(isCancel || isDecline) ? "bg-amber-50 text-amber-700 ring-1 ring-amber-100" : "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100"}`}>
+                        {(isCancel || isDecline) ? <Ban className="h-5 w-5" /> : isCheckIn ? <LogIn className="h-5 w-5" /> : <Check className="h-5 w-5" />}
                     </div>
                     <h2 id="booking-action-title" className="text-lg font-semibold text-slate-950">
                         {title}
@@ -529,36 +534,34 @@ const ConfirmationDialog = ({
                         {message}
                     </p>
                 </div>
-
-                {isCancel && (
+                {(isCancel || isDecline) && (
                     <div className="px-6 pt-5">
                         <label htmlFor="cancel-reason" className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                            Cancellation reason
+                            {isDecline ? "Reason for declining (optional)" : "Cancellation reason"}
                         </label>
                         <textarea
                             id="cancel-reason"
                             value={cancelReason}
                             onChange={(event) => onCancelReasonChange?.(event.target.value)}
-                            placeholder="Enter cancellation reason..."
+                            placeholder={isDecline ? "Let the traveller know why you're declining..." : "Enter cancellation reason..."}
                             className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-100"
                             rows={4}
                         />
                     </div>
                 )}
-
                 <div className="flex items-center justify-end gap-3 px-6 py-6">
                     <button
                         type="button"
                         onClick={onClose}
                         className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100"
                     >
-                        {isCancel ? "Keep Booking" : "Cancel"}
+                        {isCancel ? "Keep Booking" : isDecline ? "Keep Request" : "Cancel"}
                     </button>
                     <button
                         type="button"
                         onClick={onConfirm}
                         disabled={isPending || (isCancel && !cancelReason?.trim())}
-                        className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${isCancel
+                        className={`rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50 ${(isCancel || isDecline)
                                 ? "bg-amber-700 hover:bg-amber-800 focus:ring-amber-100"
                                 : "bg-slate-950 hover:bg-slate-800 focus:ring-slate-200"
                             }`}
@@ -566,14 +569,18 @@ const ConfirmationDialog = ({
                         {isPending
                             ? isCancel
                                 ? "Cancelling..."
-                                : isCheckIn
-                                    ? "Checking in..."
-                                    : "Approving..."
+                                : isDecline
+                                    ? "Declining..."
+                                    : isCheckIn
+                                        ? "Checking in..."
+                                        : "Approving..."
                             : isCancel
                                 ? "Cancel Booking"
-                                : isCheckIn
-                                    ? "Check In Guest"
-                                    : "Yes, Approve"}
+                                : isDecline
+                                    ? "Decline Request"
+                                    : isCheckIn
+                                        ? "Check In Guest"
+                                        : "Yes, Approve"}
                     </button>
                 </div>
             </motion.div>
@@ -854,6 +861,27 @@ export default function BookingsPage() {
         },
     });
 
+    const declineMutation = useMutation({
+        mutationFn: async ({ bookingId, reason }: { bookingId: string; reason: string }) => {
+            const response = await listingApi.post(`/provider/bookings/${bookingId}/cancel`, {
+                reasonCode: "provider_declined",
+                reasonText: reason || "Provider declined the booking request.",
+            });
+            return unwrapActionResponse(response.data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["provider-bookings"] });
+            queryClient.invalidateQueries({ queryKey: ["provider-bookings-summary"] });
+            setActionFeedback({ type: "decline", message: "Booking Request Declined" });
+            setTimeout(() => setActionFeedback(null), 1800);
+        },
+        onError: (err: any) => {
+            const message = getApiErrorMessage(err, "Failed to decline booking");
+            setNotification({ type: "error", message });
+            setTimeout(() => setNotification(null), 4000);
+        },
+    });
+
     // Handlers
     const handleConfirm = (bookingId: string) => {
         setPendingAction({ type: "approve", bookingId });
@@ -862,6 +890,11 @@ export default function BookingsPage() {
     const handleCancelOpen = (bookingId: string) => {
         setCancelReason("");
         setPendingAction({ type: "cancel", bookingId });
+    };
+
+    const handleDeclineOpen = (bookingId: string) => {
+        setCancelReason("");
+        setPendingAction({ type: "decline", bookingId });
     };
 
     const handleCheckIn = (bookingId: string) => {
@@ -888,10 +921,16 @@ export default function BookingsPage() {
             return;
         }
 
+        if (pendingAction.type === "decline") {
+            declineMutation.mutate({ bookingId: pendingAction.bookingId, reason: cancelReason });
+            closePendingAction();
+            return;
+        }
+
         if (!cancelReason.trim()) return;
         cancelMutation.mutate({ bookingId: pendingAction.bookingId, reason: cancelReason });
         closePendingAction();
-    }, [cancelMutation, cancelReason, checkInMutation, closePendingAction, confirmMutation, pendingAction]);
+    }, [cancelMutation, cancelReason, checkInMutation, closePendingAction, confirmMutation, declineMutation, pendingAction]);
 
     const handleViewDetails = (booking: Booking) => {
         setSelectedBooking(booking);
@@ -997,6 +1036,14 @@ export default function BookingsPage() {
                         title="Confirm"
                     >
                         <Check className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={() => handleDeclineOpen(booking.id)}
+                        disabled={declineMutation.isPending}
+                        className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
+                        title="Decline"
+                    >
+                        <Ban className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => handleViewDetails(booking)}

@@ -10,6 +10,7 @@ import { listingsService } from "@/services/listings";
 import { cn } from "@/lib/utils";
 import type { ListingCategory } from "@/types/provider";
 import { useAuthStore } from "@/stores/auth";
+import BookingModeSelector from "../[id]/edit/_forms/shared/BookingModeSelector";
 
 const TOKEN_KEY = "zika:access_token";
 
@@ -191,6 +192,12 @@ export default function NewListingPage() {
             </div>
           </button>
         ))}
+      </div>
+
+      <div className="mb-6">
+        <BookingModeSelector onChange={(v) => {
+          try { localStorage.setItem("zika:listing-new-booking-mode", v); } catch {}
+        }} />
       </div>
 
       <div className="flex items-center gap-3">

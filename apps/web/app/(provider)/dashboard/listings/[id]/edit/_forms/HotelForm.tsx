@@ -27,6 +27,7 @@ import { AMENITY_OPTIONS, CATEGORY_MAP, groupAmenities, flattenGroupedAmenities 
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
 import { getCurrencyForCountry } from "./shared/countryCurrencyMap";
+import BookingModeSelector from "./shared/BookingModeSelector";
 
 // ── Enums (values match backend exactly) ────────────────────────────────────
 
@@ -71,7 +72,7 @@ type HotelState = {
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
-  // instantBooking: boolean;
+  bookingMode: string;
 };
 
 function initState(l: Listing): HotelState {
@@ -98,7 +99,7 @@ function initState(l: Listing): HotelState {
     customAmenities:    ((l as any).customAmenities ?? []).map((a: any) =>
                           typeof a === "string" ? a : (a?.label ?? "")),
     customInput:        "",
-    // instantBooking:     (l as any).instantBooking ?? false,
+    bookingMode:         (l as any).instantBooking ? "instant" : (l as any).bookingMode ?? "instant",
   };
 }
 
@@ -159,7 +160,8 @@ function buildPayload(s: HotelState): Record<string, unknown> {
 
   p.amenities = groupAmenities(s.selectedAmenities);
   p.customAmenities = s.customAmenities.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean);
-  // p.instantBooking = s.instantBooking;
+  // Map bookingMode ("instant" | "request") → instantBooking boolean for the backend
+  p.instantBooking = s.bookingMode !== "request";
   return p;
 }
 
@@ -581,15 +583,9 @@ export function HotelForm({ listingId, listing }: Props) {
                   />
                 </div>
                 <div className="flex items-center gap-6 pt-1">
-                  {/* <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={s.instantBooking}
-                      onChange={(e) => set("instantBooking", e.target.checked)}
-                      className="rounded border-slate-300 text-primary focus:ring-primary"
-                    />
-                    <span className="text-sm text-slate-700 font-medium">Instant Booking (Auto-confirm)</span>
-                  </label> */}
+                  <div className="w-full">
+                    <BookingModeSelector listingId={listingId} value={s.bookingMode} onChange={(v) => set("bookingMode", v)} />
+                  </div>
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"

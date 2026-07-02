@@ -22,6 +22,7 @@ import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
 import { getCurrencyForCountry } from "./shared/countryCurrencyMap";
+import BookingModeSelector from "./shared/BookingModeSelector";
 
 // ── Enums (values must match backend Zod enum exactly) ───────────────────────
 
@@ -138,7 +139,7 @@ type CarState = {
   crossBorderAllowed: boolean;
   airportPickup: boolean;
   returnSameLocation: boolean;
-  instantBooking: boolean;
+  bookingMode?: string;
 };
 
 function toNullableNumber(v: unknown): number | null {
@@ -236,7 +237,7 @@ function initState(l: Listing): CarState {
     crossBorderAllowed: a.crossBorderAllowed ?? false,
     airportPickup: a.airportPickup ?? false,
     returnSameLocation: a.returnSameLocation ?? true,
-    instantBooking: a.instantBooking ?? false,
+    bookingMode: a.instantBooking ? "instant" : (a.bookingMode ?? "instant"),
   };
 }
 
@@ -323,7 +324,8 @@ function buildPayload(s: CarState): Record<string, unknown> {
   p.returnSameLocation = s.returnSameLocation;
   p.pickupHoursFrom = s.pickupHoursFrom || null;
   p.pickupHoursTo = s.pickupHoursTo || null;
-  p.instantBooking = s.instantBooking;
+  // Map bookingMode ("instant" | "request") → instantBooking boolean for the backend
+  p.instantBooking = s.bookingMode !== "request";
 
   return p;
 }
@@ -812,6 +814,9 @@ export function CarForm({ listingId, listing }: Props) {
                     error={tried && !(Number(s.pricePerDay) > 0) ? "Daily rate must be > 0." : undefined}
                   />
                   <CurrencyCombobox label="Currency" value={s.currency} onChange={(val) => set("currency", val)} />
+                </div>
+                <div>
+                  <BookingModeSelector listingId={listing.id} value={s.bookingMode} onChange={(v) => set("bookingMode", v)} />
                 </div>
                 <Select
                   label="Cancellation Policy"
