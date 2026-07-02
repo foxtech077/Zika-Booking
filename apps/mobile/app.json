@@ -31,6 +31,7 @@
         "backgroundColor": "#1a73e8"
       },
       "package": "com.kainook.app",
+      "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -88,8 +89,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "f3dcdc9c-2b63-47f1-9f2c-8d2327efef3a"
+        "projectId": "7115f44e-c149-4511-ae7b-b5c7514a464d"
       }
-    }
+    },
+    "owner": "abishekjoel"
   }
 }

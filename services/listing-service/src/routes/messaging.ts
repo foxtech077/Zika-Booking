@@ -290,6 +290,31 @@ app.post(
         }
       });
 
+      if (filtered) {
+        try {
+          const redis = getRedis();
+          const violationKey = `msg:violation:count:${userId}`;
+          const count = await redis.incr(violationKey);
+          
+          if (count >= 3) {
+            // Suspend user status in DB
+            await prisma.$executeRawUnsafe(
+              `UPDATE auth."User" SET status = 'suspended', "updatedAt" = NOW() WHERE id = $1`,
+              userId
+            );
+            // Send suspension warning notification
+            fireNotification(userId, {
+              type: "messaging_suspended",
+              title: "Account Suspended ",
+              body: "Your account has been suspended for repeated violations of our contact-sharing policy.",
+              data: { reason: "repeated_contact_sharing_violations" }
+            });
+          }
+        } catch (err: any) {
+          req.log.error({ err }, "Failed to track contact sharing violation");
+        }
+      }
+
       await prisma.conversation.update({
         where: { id },
         data: { updatedAt: new Date() },
@@ -349,7 +374,11 @@ app.post(
 );
 
   // ── GET /conversations/unread-count — unread message count ────────────
+  // ── OPTIONS handler for CORS preflight on alias route
+
+  // ── Alias GET /listings/conversations/unread-count — same as above for compatibility
   app.get("/conversations/unread-count", { schema: { tags: ["Messaging"] }, preHandler: [requireProvider] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    // Reuse the same logic as the original route
     try {
       const userId = (req as ProviderRequest).providerId;
 
@@ -365,8 +394,9 @@ app.post(
 
       return sendSuccess(reply, 200, { unreadCount: count });
     } catch (err) {
-      req.log.error({ err }, "Failed to fetch unread conversations count");
+      req.log.error({ err }, "Failed to fetch unread conversations count (alias)");
       return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching unread message count.");
     }
   });
+
 }

@@ -99,59 +99,79 @@ export interface BookingDetail {
 }
 
 // ── Receipt (GET /guests/me/bookings/:id/receipt) ─────────────────────────────
+// Backend returns a nested structure — these sub-interfaces mirror it exactly.
 
 export interface ReceiptLineItem {
   label: string;
   amount: number;
-  // "debit" = added cost, "credit" = discount, "total" = grand total
-  type: "debit" | "credit" | "subtotal" | "total";
+  // values from backend: "subtotal" | "fee" | "discount" | "voucher"
+  type: string;
+}
+
+export interface ReceiptGuest {
+  name: string;
+  email: string;
+  phone?: string | null;
+}
+
+export interface ReceiptListing {
+  id: string;
+  title: string | null;
+  type: string;             // "hotel" | "apartment" | "car"
+  address: string | null;
+  town: string | null;
+  country: string | null;
+}
+
+export interface ReceiptPeriod {
+  checkIn?: string | null;
+  checkOut?: string | null;
+  pickupDatetime?: string | null;
+  returnDatetime?: string | null;
+  nightsOrDays: number;
+}
+
+export interface ReceiptTotals {
+  subtotal: number;
+  discountAmount: number;
+  deliveryFee: number;
+  voucherDiscount: number;
+  total: number;
+  currency: string;
+}
+
+export interface ReceiptPayment {
+  paymentId: string | null;
+  confirmedAt: string | null;
 }
 
 export interface Receipt {
-  id: string;
+  receiptNumber: string;
   bookingReference: string;
+  bookingId: string;
   issuedAt: string;
-  guestName: string;
-  guestEmail: string;
-  listingTitle: string;
-  listingAddress: string;
-  listingTown?: string;
-  listingCountry?: string;
-  checkIn?: string;
-  checkOut?: string;
-  pickupDatetime?: string;
-  returnDatetime?: string;
-  lineItems?: ReceiptLineItem[];
-  subtotal: number;
-  discountAmount?: number;
-  serviceFee?: number;
-  taxAmount?: number;
-  deliveryFee?: number;
-  totalAmount: number;
-  currency: string;
-  paymentMethod?: string;
-  paymentProvider?: string;
-  paymentDate?: string;
-  paymentStatus?: string;
-  transactionId?: string;
+  status: string;
+  guest: ReceiptGuest;
+  listing: ReceiptListing;
+  period: ReceiptPeriod;
+  lineItems: ReceiptLineItem[];
+  totals: ReceiptTotals;
+  payment: ReceiptPayment;
 }
 
 // ── QR Code (GET /guests/me/bookings/:id/qr-code) ────────────────────────────
 
 export interface QRCodeData {
-  // Backend returns either an image URL or base64 data URI
-  qrCodeUrl: string;
+  qrCodeUrl: string;          // presigned S3 PNG URL, valid 1 hour
   bookingReference: string;
-  expiresAt?: string;
+  expiresAt: string;
 }
 
 // ── Voucher PDF (GET /guests/me/bookings/:id/voucher-pdf) ─────────────────────
 
 export interface VoucherPdf {
-  // Backend returns a signed S3/CDN download URL
-  downloadUrl: string;
-  filename?: string;
-  expiresAt?: string;
+  voucherPdfUrl: string;      // presigned S3 PDF URL, valid 1 hour
+  expiresAt: string;
 }
 
 // ── Payment methods (GET /guests/me/payment-methods) ─────────────────────────

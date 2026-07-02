@@ -13,6 +13,8 @@ import type { AuditLog } from "@/types/admin";
 import { Button } from "@/components/ui/Button";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const fetchAudit = (params: Record<string, string>) =>
   api.get(`/admin/audit-logs?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -68,7 +70,12 @@ function DiffViewer({ oldVal, newVal }: { oldVal: string | null; newVal: string 
 }
 
 export default function AuditPage() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_audit")) {
+    return <AccessDenied />;
+  }
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");

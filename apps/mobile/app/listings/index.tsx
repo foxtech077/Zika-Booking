@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   scroll: { padding: 16 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   addButton: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",

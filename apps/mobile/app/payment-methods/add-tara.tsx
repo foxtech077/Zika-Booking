@@ -85,8 +85,13 @@ export default function AddTaraAccountScreen() {
           </View>
           <Text style={s.successTitle}>Mobile Money Added</Text>
           <Text style={s.successBody}>
+<<<<<<< HEAD
             {(savedMethod as any).mobileNumber ?? `${countryPrefix}${mobileNumber}`} has
             been saved. You can now pay with mobile money at checkout.
+=======
+            {`${countryPrefix}${mobileNumber}`} has been saved. You can now pay
+            with mobile money at checkout.
+>>>>>>> 3fec114e9cbc6a7d744f932bf30e6a68223c7b49
           </Text>
           <TouchableOpacity
             style={s.primaryBtn}

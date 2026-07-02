@@ -11,6 +11,9 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { Avatar } from "@/components/ui/Avatar";
 import { formatRelativeTime, truncate } from "@/lib/utils";
 import type { Conversation, Message } from "@/types/admin";
+import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const fetchConversations = (params: Record<string, string>) =>
   listingApi.get(`/admin/conversations?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -19,6 +22,12 @@ const fetchMessages = (id: string) =>
   listingApi.get(`/admin/conversations/${id}/messages`).then((r) => r.data.data ?? r.data);
 
 export default function MessagingPage() {
+  const { user, _hasHydrated } = useAuthStore();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_messaging")) {
+    return <AccessDenied />;
+  }
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");

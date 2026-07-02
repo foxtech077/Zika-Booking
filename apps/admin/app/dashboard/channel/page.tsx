@@ -11,11 +11,20 @@ import { Button } from "@/components/ui/Button";
 import { formatRelativeTime, formatDate, truncate } from "@/lib/utils";
 import type { IcalFeed } from "@/types/admin";
 import { useAlert } from "@/hooks/useAlert";
+import { useAuthStore } from "@/stores/auth";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 const fetchFeeds = (params: Record<string, string>) =>
   listingApi.get(`/admin/ical-feeds?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
 
 export default function ChannelPage() {
+  const { user, _hasHydrated } = useAuthStore();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_channel")) {
+    return <AccessDenied />;
+  }
+
   const qc = useQueryClient();
   const { showAlert } = useAlert();
   const [page, setPage] = useState(1);

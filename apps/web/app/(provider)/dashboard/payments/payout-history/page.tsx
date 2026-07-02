@@ -340,6 +340,7 @@ export default function PayoutHistoryPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const errorMessage = extractErrorMessage(error, "The payout history request failed.");
+  const showLoading = isLoading || (isFetching && payouts.length === 0);
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -365,7 +366,7 @@ export default function PayoutHistoryPage() {
             <p className="mt-0.5 text-sm text-slate-500">All provider payout records returned by the backend.</p>
           </div>
         </div>
-        <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !isLoading} onClick={() => refetch()}>
+        <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !showLoading} onClick={() => refetch()}>
           Refresh
         </Button>
       </div>
@@ -374,7 +375,7 @@ export default function PayoutHistoryPage() {
         <ErrorState message={errorMessage} onRetry={() => refetch()} />
       ) : (
         <>
-          {!isLoading && payouts.length > 0 && (
+          {!showLoading && payouts.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <SummaryCard
                 label="Total Payouts"
@@ -466,7 +467,7 @@ export default function PayoutHistoryPage() {
               <Badge label={`${filtered.length} payouts`} variant="info" />
             </div>
 
-            {isLoading ? (
+            {showLoading ? (
               <SkeletonRows />
             ) : pageItems.length === 0 ? (
               <EmptyState filtered={filtered.length !== payouts.length} />

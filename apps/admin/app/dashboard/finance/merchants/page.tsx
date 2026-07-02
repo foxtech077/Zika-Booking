@@ -27,6 +27,8 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { canAccess } from "@/permissions/rbac";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 // -- Types ---------------------------------------------------------------------
 
@@ -300,8 +302,12 @@ function MerchantDetailDrawer({
 // -- Main Page -----------------------------------------------------------------
 
 export default function MerchantManagementPage() {
-  const { user } = useAuthStore();
+  const { user, _hasHydrated } = useAuthStore();
   const qc = useQueryClient();
+
+  if (_hasHydrated && !canAccess(user?.role as any, "view_merchants")) {
+    return <AccessDenied />;
+  }
 
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(1);

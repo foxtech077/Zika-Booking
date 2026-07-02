@@ -25,7 +25,7 @@ export function Button({ title, loading, variant = "primary", disabled, ...props
       disabled={disabled || loading}
       {...props}
     >
-      {loading && <ActivityIndicator size="small" color={variant === "primary" ? "#fff" : "#1a73e8"} className="mr-2" />}
+      {loading && <ActivityIndicator size="small" color={variant === "primary" ? "#fff" : "#16a34a"} className="mr-2" />}
       <Text className={textVariants[variant]}>{title}</Text>
     </TouchableOpacity>
   );

@@ -13,6 +13,7 @@ import {
 import { prisma } from "../lib/prisma";
 import { hashPassword, verifyPassword } from "../lib/password";
 import { generateToken, hashToken } from "../lib/crypto";
+import { z } from "zod";
 import {
   signAccessToken,
   generateRefreshToken,
@@ -36,6 +37,20 @@ const COOKIE_OPTS = {
   maxAge: REFRESH_TTL,
   path: "/",
 };
+
+
+// POST schema - only photoUrl is allowed
+export const postProfileSchema = z.object({
+  photoUrl: z.string().url("Invalid photo URL"),
+});
+
+// PATCH schema - name, photoUrl, and businessName (for providers)
+export const patchProfileSchema = z.object({
+  firstName: z.string().min(1, "First name cannot be empty").optional(),
+  lastName: z.string().min(1, "Last name cannot be empty").optional(),
+  photoUrl: z.string().url("Invalid photo URL").optional().nullable(),
+  businessName: z.string().max(255).optional().nullable(),
+});
 
 // ── Helper: issue tokens and set cookie ─────────────────────────────────────
 
@@ -916,10 +931,220 @@ export async function authRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "RESET_FAILED", "Password reset could not be completed. Please request a new reset link.");
     }
   });
+  // ── GET /auth/profile  (Get profile details with dynamic payment methods) ──
+  app.get(
+    "/auth/profile",
+    {
+      schema: {
+        tags: ["User Auth"],
+        summary: "Get current user profile (with loyalty, tier, and payment methods)",
+        security: [{ bearerAuth: [] }],
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (req as FastifyRequest & { userId: string }).userId;
+
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            userType: true,
+            photoUrl: true,
+            loyaltyPoints: true,
+            currentTier: true,
+            businessName: true,
+            country: true,
+          }
+        });
+
+        if (!user) {
+          return sendError(reply, 404, "USER_NOT_FOUND", "Profile not found.");
+        }
+
+        return sendSuccess(reply, 200, {
+          profile: {
+            id: user.id,
+            firstname: user.firstName,
+            lastname: user.lastName,
+            email: user.email,
+            userType: user.userType,
+            photoUrl: user.photoUrl,
+            loyaltyPoints: user.loyaltyPoints,
+            currentTier: user.currentTier,
+            businessName: user.businessName,
+            country: user.country,
+          }
+        });
+      } catch (err: any) {
+        req.log.error(err, "Failed to fetch profile");
+        return sendError(reply, 500, "SERVER_ERROR", "Could not fetch profile. Please try again.");
+      }
+    }
+  );
+
+  // ── POST /auth/profile  (Post only photo) ──────────────────────────────────
+  app.post(
+    "/auth/profile",
+    {
+      schema: {
+        tags: ["User Auth"],
+        summary: "Upload or set the profile photo URL",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          required: ["photoUrl"],
+          properties: {
+            photoUrl: { type: "string", format: "uri", description: "URL of the uploaded profile photo" },
+          },
+        },
+       
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const userId = (req as FastifyRequest & { userId: string }).userId;
+
+        const parsed = postProfileSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return sendError(
+            reply,
+            422,
+            "VALIDATION_ERROR",
+            "Validation failed",
+            zodFieldErrors((parsed.error as ZodError).issues)
+          );
+        }
+
+        const updatedUser = await prisma.user.update({
+          where: { id: userId },
+          data: { photoUrl: parsed.data.photoUrl },
+          select: { photoUrl: true }
+        });
+
+        return sendSuccess(reply, 201, {
+          message: "Profile photo set successfully.",
+          photoUrl: updatedUser.photoUrl,
+        });
+      } catch (err: any) {
+        req.log.error(err, "Failed to set photo");
+        return sendError(reply, 500, "SERVER_ERROR", "Could not set photo. Please try again.");
+      }
+    }
+  );
+
+  // ── PATCH /auth/profile/:id  (Partially Update Profile by User ID) ──────────
+  app.patch(
+    "/auth/profile/:id",
+    {
+      schema: {
+        tags: ["User Auth"],
+        summary: "Partially update profile details (name, photo, business name)",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: {
+            id: { type: "string", description: "The User ID to update" },
+          },
+        },
+      body: {
+          type: "object",
+          properties: {
+            firstName: { type: "string" },
+            lastName: { type: "string" },
+            photoUrl: { type: "string", format: "uri", nullable: true },
+            businessName: { type: "string", nullable: true, description: "Provider business name (only allowed for providers)" },
+          },
+        },
+        
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const authUserId = (req as FastifyRequest & { userId: string }).userId;
+        const { id } = req.params as { id: string };
+
+        // Guard: Prevent users from updating profiles other than their own
+        if (authUserId !== id) {
+          return sendError(reply, 403, "FORBIDDEN", "You are not authorized to update this profile.");
+        }
+
+        // Validate request body using Zod
+        const parsed = patchProfileSchema.safeParse(req.body);
+        if (!parsed.success) {
+          return sendError(
+            reply,
+            422,
+            "VALIDATION_ERROR",
+            "Validation failed",
+            zodFieldErrors((parsed.error as ZodError).issues)
+          );
+        }
+
+        const { firstName, lastName, photoUrl, businessName } = parsed.data;
+
+        // Fetch current user type to validate business name restriction
+        const userRecord = await prisma.user.findUnique({
+          where: { id },
+          select: { userType: true }
+        });
+
+        if (!userRecord) {
+          return sendError(reply, 404, "USER_NOT_FOUND", "Profile not found.");
+        }
+
+        // Restrict businessName to providers
+        if (businessName !== undefined && userRecord.userType !== "provider") {
+          return sendError(reply, 400, "BAD_REQUEST", "businessName can only be updated for provider accounts.");
+        }
+
+        // Map updates
+        const updateData: Record<string, any> = {};
+        if (photoUrl !== undefined) updateData.photoUrl = photoUrl;
+        if (businessName !== undefined) updateData.businessName = businessName;
+        
+        // Split name into firstName & lastName
+         if (firstName !== undefined) updateData.firstName = firstName;
+        if (lastName !== undefined) updateData.lastName = lastName;
+
+        const updatedUser = await prisma.user.update({
+          where: { id },
+          data: updateData,
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            photoUrl: true,
+            businessName: true,
+          }
+        });
+
+        return sendSuccess(reply, 200, {
+          message: "Profile updated successfully.",
+          profile: {
+            id: updatedUser.id,
+            name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
+            photoUrl: updatedUser.photoUrl,
+            businessName: updatedUser.businessName,
+          },
+        });
+      } catch (err: any) {
+        req.log.error(err, "Failed to update profile");
+        return sendError(reply, 500, "SERVER_ERROR", "Could not update profile. Please try again.");
+      }
+    }
+  );
 
   // ── POST /auth/oauth/google  (UC-1.6) ──────────────────────────────────────
   app.post("/auth/oauth/google", {
-    schema: {
+    schema: { 
       tags: ["User Auth"], body: {
         type: "object",
         required: ["idToken"],
@@ -1243,7 +1468,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
-      const redirectUri = `${webBaseUrl}/auth/oauth/google/callback`;
+      const redirectUri = `${webBaseUrl}/api/auth/oauth/google/callback`;
       const client = new OAuth2Client({
         clientId: process.env["GOOGLE_CLIENT_ID_WEB"],
         clientSecret: process.env["GOOGLE_CLIENT_SECRET"],

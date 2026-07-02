@@ -385,12 +385,35 @@ export async function searchRoutes(app: FastifyInstance) {
 
       const signedPhotos = await withSignedPhotos(listing.photos);
 
+      // Fetch active promotion badge for this category
+      let promoBadge: { labelText: string; labelColour: string } | null = null;
+      try {
+        const now = new Date();
+        const promo = await (prisma as any).activityPromotion.findFirst({
+          where: { activity: listing.category, status: "active", validFrom: { lte: now }, validUntil: { gte: now } },
+          orderBy: { createdAt: "desc" },
+          select: { labelText: true, labelColour: true },
+        });
+        if (promo) promoBadge = { labelText: promo.labelText, labelColour: promo.labelColour };
+      } catch { /* non-critical */ }
+
       // Strip sensitive car fields pre-booking
       const data: any = {
         ...listing,
         photos: signedPhotos,
         licencePlate: undefined,
         isFavourited: guestId ? isFavourited : undefined,
+        // Add basic information aliases to match /listings/search
+        listingType: listing.category,
+        title: listing.name,
+        city: listing.town,
+        countryCode: listing.country,
+        primaryPhotoUrl: signedPhotos[0]?.cdnUrl ?? null,
+        nightlyRate: listing.category !== "car" && listing.pricePerNight ? Number(listing.pricePerNight) : null,
+        dailyRate: listing.category === "car" && listing.pricePerDay ? Number(listing.pricePerDay) : null,
+        isAccredited: !!listing.approvedAt,
+        longStayDiscountEnabled: listing.longStayEnabled,
+        promoBadge,
       };
       if (data.licencePlate !== undefined) {
         delete data.licencePlate;
@@ -441,24 +464,41 @@ export async function searchRoutes(app: FastifyInstance) {
       }
       const rangeEnd = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + 3, 1);
 
-      const bookings = await prisma.booking.findMany({
-        where: {
-          listingId: id,
-          status: { in: ["pending_payment", "confirmed"] as any },
-          OR: [
-            { checkIn: { gte: rangeStart, lt: rangeEnd }, checkOut: { not: null } },
-            { pickupDatetime: { gte: rangeStart, lt: rangeEnd }, returnDatetime: { not: null } },
-          ],
-        },
-        select: { checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true },
-      });
+            const [bookings, blockedDates] = await Promise.all([
+        prisma.booking.findMany({
+          where: {
+            listingId: id,
+            status: { in: ["pending_payment", "confirmed", "checked_in"] as any },
+            OR: [
+              { checkIn: { gte: rangeStart, lt: rangeEnd }, checkOut: { not: null } },
+              { pickupDatetime: { gte: rangeStart, lt: rangeEnd }, returnDatetime: { not: null } },
+            ],
+          },
+          select: { checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true },
+        }),
+        prisma.icalBlockedDate.findMany({
+          where: {
+            listingId: id,
+            startDate: { gte: rangeStart },
+            endDate: { lt: rangeEnd },
+          },
+          select: { startDate: true, endDate: true },
+        }),
+      ]);
 
-      const unavailableRanges = bookings.map((b) => ({
-        start: (b.checkIn ?? b.pickupDatetime)?.toISOString().slice(0, 10) ?? null,
-        end: (b.checkOut ?? b.returnDatetime)?.toISOString().slice(0, 10) ?? null,
-      })).filter((r) => r.start && r.end);
+      const unavailableRanges = [
+        ...bookings.map((b) => ({
+          start: (b.checkIn ?? b.pickupDatetime)?.toISOString().slice(0, 10) ?? null,
+          end: (b.checkOut ?? b.returnDatetime)?.toISOString().slice(0, 10) ?? null,
+        })),
+        ...blockedDates.map((bd) => ({
+          start: bd.startDate.toISOString().slice(0, 10),
+          end: bd.endDate.toISOString().slice(0, 10),
+        })),
+      ].filter((r) => r.start && r.end);
 
       return sendSuccess(reply, 200, { unavailableRanges });
+
       } catch (err) {
         req.log.error({ err }, "Failed to fetch listing availability");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while fetching availability.");

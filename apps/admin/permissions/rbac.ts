@@ -93,7 +93,6 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_bookings",
     "manage_manual_booking",
     "view_messaging",
-    "view_commission",
   ],
   support: [
     "view_dashboard",
@@ -184,6 +183,11 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Commission History", href: "/dashboard/commission/history", icon: "History", permission: "view_commission" },
       { label: "Financial Reports", href: "/dashboard/finance/reports", icon: "BarChart3", permission: "view_finance" },
       { label: "Refund Management", href: "/dashboard/finance/refunds", icon: "RotateCcw", permission: "view_refunds" },
+    ],
+  },
+  {
+    group: "Marketing",
+    items: [
       { label: "Vouchers", href: "/dashboard/vouchers", icon: "Ticket", permission: "view_vouchers" },
       { label: "Activity Promotions", href: "/dashboard/promotions", icon: "Tag", permission: "view_promotions" },
     ],

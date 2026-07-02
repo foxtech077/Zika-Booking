@@ -1,4 +1,3 @@
-"use client";
 import { useState, useMemo } from "react";
 import {
   View,
@@ -13,8 +12,8 @@ import {
   Alert,
   ScrollView,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
+import { AppLayout } from "../../components/layout/AppLayout";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
@@ -383,35 +382,8 @@ export default function ListingsScreen() {
   const isRefreshing = listingsQ.isRefetching;
 
   return (
-    <View style={s.container}>
-      {/* ── Header ─────────────────────────────────────────── */}
-      <SafeAreaView edges={["top"]} style={s.header}>
-        <View style={s.headerRow}>
-          <View style={s.headerLeft}>
-            <Image
-              source={require("../../assets/logo.png")}
-              style={s.logo}
-              resizeMode="contain"
-            />
-            <Text style={s.headerTitle}>Manage Listings</Text>
-          </View>
-          <View style={s.headerIcons}>
-            <TouchableOpacity
-              style={s.iconBtn}
-              onPress={() => router.push("/notifications" as any)}
-            >
-              <Feather name="bell" size={17} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.iconBtn}
-              onPress={() => router.push("/(provider)/profile" as any)}
-            >
-              <Feather name="settings" size={17} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-
+    <AppLayout>
+      <View style={s.container}>
       {/* ── Scrollable body ─────────────────────────────────── */}
       <FlatList
         data={isLoading ? [] : filtered}
@@ -556,7 +528,8 @@ export default function ListingsScreen() {
       >
         <Feather name="plus" size={28} color="#fff" />
       </TouchableOpacity>
-    </View>
+      </View>
+    </AppLayout>
   );
 }
 
@@ -564,31 +537,6 @@ export default function ListingsScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F1F5F9" },
-
-  // Header
-  header: { backgroundColor: K.colors.darkGreen },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: 14,
-  },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
-  logo: { width: 30, height: 30, borderRadius: 7 },
-  headerTitle: { fontSize: K.font.xl, fontWeight: "800", color: "#fff" },
-  headerIcons: { flexDirection: "row", gap: 8 },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: K.colors.glassBg,
-    borderWidth: 1,
-    borderColor: K.colors.glassBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconBtnText: { fontSize: 16 },
 
   // Scroll
   scroll: { padding: 16, paddingTop: 0 },
@@ -807,7 +755,7 @@ const s = StyleSheet.create({
   // FAB
   fab: {
     position: "absolute",
-    bottom: 96,
+    bottom: 20,
     right: 20,
     width: 58,
     height: 58,

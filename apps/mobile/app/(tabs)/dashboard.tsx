@@ -217,7 +217,7 @@ export default function ProviderDashboardScreen() {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#1a73e8" />
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#16a34a" />
         }
       >
         {/* Stats row 1 */}
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
   },
   chartBar: {
     width: "60%",
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 4,
     minHeight: 4,
   },
@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
   errorState: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16 },
   errorText: { fontSize: 16, color: "#6b7280" },
   retryBtn: {
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 24,

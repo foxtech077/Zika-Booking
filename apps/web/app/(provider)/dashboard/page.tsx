@@ -1,130 +1,70 @@
 "use client";
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Banknote,
-  BookOpen,
-  Building2,
-  CalendarDays,
-  CheckCircle2,
-  Clock3,
-  DollarSign,
-  MessageSquare,
-  Plus,
-  RefreshCw,
-  Star,
-  TrendingDown,
-  TrendingUp,
-  XCircle,
-} from "lucide-react";
+import { ArrowRight, Banknote, CalendarDays, RefreshCw, Star } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
-import { useAuthStore } from "@/stores/auth";
-import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card, SectionHeader } from "@/components/ui/Card";
-import { RatingStars, RevenueAreaChart } from "@/components/charts/Charts";
-import { cn, formatCurrency, formatDate, formatMonthLabel, formatRelativeTime } from "@/lib/utils";
+import { Input, Select } from "@/components/ui/Input";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
-type BookingStatus = "pending" | "confirmed" | "cancelled" | "completed" | "failed";
-type ListingStatus = "active" | "draft" | "pending_approval" | "suspended" | "rejected";
-type PaymentStatus = "paid" | "pending" | "failed" | "refunded";
+const NET_TOOLTIP = "This is your earnings after ZikaBooking's 5% service fee. ZikaBooking retains the remainder.";
 
-interface DashboardAnalytics {
-  totalListings: number;
-  activeListings: number;
-  totalBookings: number;
-  upcomingBookings: number;
-  pendingBookings: number;
-  cancelledBookings: number;
-  totalEarnings: number;
-  thisMonthEarnings: number;
-  averageRating: number;
-  totalReviews: number;
-  trends: Record<string, number>;
-}
+type BookingStatus =
+  | "pending_payment"
+  | "confirmed"
+  | "completed"
+  | "cancelled_by_guest"
+  | "cancelled_by_provider"
+  | "cancelled_by_system";
 
 interface Booking {
   id: string;
-  bookingId: string;
+  reference: string;
+  listingId: string;
+  listingName: string;
+  listingCategory: "hotel" | "apartment" | "car";
   guestName: string;
-  propertyName: string;
   checkIn: string;
   checkOut: string;
-  totalAmount: number;
+  guests: number;
+  rentalDays: number;
+  netPayout: number;
   currency: string;
   status: BookingStatus;
-  paymentStatus: PaymentStatus;
-}
-console.log("WEB PROVIDER DASHBOARD");
-interface Review {
-  id: string;
-  guestName: string;
-  listingName: string;
-  rating: number;
-  comment: string;
   createdAt: string;
+  confirmedAt: string | null;
 }
 
 interface ListingSummary {
   id: string;
   name: string;
-  status: ListingStatus;
-  location: string;
-  totalBookings: number;
-  rating: number;
-  price: number;
+  category: "hotel" | "apartment" | "car";
+  status: string;
   currency: string;
-  availabilityStatus: string;
-  image?: string;
+  unitCount: number | null;
+  licencePlate: string | null;
+  carMake: string | null;
+  carModel: string | null;
+  carYear: number | null;
 }
 
-interface EarningsOverview {
-  total: number;
-  monthly: number;
-  pendingPayouts: number;
-  completedPayouts: number;
-  monthlyRevenue: Array<{ month: string; revenue: number; bookings?: number }>;
+interface ReviewSummary {
+  averageRating: number;
+  totalReviews: number;
 }
 
-interface AvailabilityItem {
-  id: string;
-  date: string;
-  end?: string;
-  status: "blocked" | "reserved" | "available";
-  label: string;
-}
-
-interface ActivityItem {
-  id: string;
-  type: "booking" | "cancelled" | "review" | "listing";
-  title: string;
-  detail: string;
-  createdAt: string;
-}
-
-interface DashboardBundle {
-  analytics: DashboardAnalytics;
+interface DashboardData {
   bookings: Booking[];
-  reviews: Review[];
   listings: ListingSummary[];
-  earnings: EarningsOverview;
-  availability: AvailabilityItem[];
-  activity: ActivityItem[];
+  reviews: ReviewSummary;
   hasError: boolean;
 }
 
-function readString(value: unknown, fallback = "") {
-  return typeof value === "string" && value.trim() ? value : fallback;
-}
-
-function readNumber(value: unknown, fallback = 0) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
+type SortKey = "checkIn" | "listingName" | "netPayout";
 
 function unwrap(payload: unknown) {
   const root = payload as Record<string, unknown>;
@@ -140,578 +80,407 @@ function unwrapList(payload: unknown, keys: string[]) {
   return Array.isArray(payload) ? payload : [];
 }
 
-function normalizeBookingStatus(value: unknown): BookingStatus {
-  const status = readString(value, "pending").toLowerCase();
-  if (status.includes("cancel")) return "cancelled";
-  if (status === "confirmed" || status === "completed" || status === "failed") return status;
-  return "pending";
+function readString(value: unknown, fallback = "") {
+  return typeof value === "string" && value.trim() ? value : fallback;
 }
 
-function normalizePaymentStatus(value: unknown): PaymentStatus {
-  const status = readString(value, "pending").toLowerCase();
-  if (status === "paid" || status === "failed" || status === "refunded") return status;
-  return "pending";
+function readNumber(value: unknown, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
-function normalizeListingStatus(value: unknown): ListingStatus {
-  const status = readString(value, "draft").toLowerCase().replace(/[\s-]/g, "_");
-  if (status === "active" || status === "suspended" || status === "rejected" || status === "pending_approval") return status;
-  return "draft";
+function toDateOnly(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function endOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function addMonths(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function isWithin(value: string | null, from: Date, to: Date) {
+  if (!value) return false;
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date >= from && date <= to;
+}
+
+function overlapsToday(booking: Booking) {
+  const today = toDateOnly(new Date().toISOString());
+  return booking.checkIn <= today && booking.checkOut >= today;
+}
+
+function activeLock(booking: Booking) {
+  const created = new Date(booking.createdAt).getTime();
+  return booking.status === "pending_payment" && Number.isFinite(created) && Date.now() - created < 5 * 60 * 1000;
+}
+
+function formatGuestName(fullName: string) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? "Guest";
+  const first = parts[0] ?? "Guest";
+  const last = parts[parts.length - 1] ?? "";
+  return `${first} ${last.charAt(0)}.`;
 }
 
 function normalizeBooking(raw: unknown): Booking {
   const item = raw as Record<string, unknown>;
-  const guest = (item.guest ?? item.customer ?? {}) as Record<string, unknown>;
-  const listing = (item.listing ?? item.property ?? {}) as Record<string, unknown>;
-  const payment = (item.payment ?? {}) as Record<string, unknown>;
-  const id = readString(item.id ?? item._id ?? item.bookingId, "booking");
+  const first = readString(item.guestFirstName);
+  const last = readString(item.guestLastName);
+  const listingId = readString(item.listingId);
+  const category = readString(item.listingCategory, "apartment") as Booking["listingCategory"];
+  const start = category === "car" ? item.pickupDatetime : item.checkIn;
+  const end = category === "car" ? item.returnDatetime : item.checkOut;
 
   return {
-    id,
-    bookingId: readString(item.bookingId ?? item.reference ?? item.code, id),
-    guestName: readString(item.guestName ?? item.customerName ?? guest.name ?? guest.fullName, "Guest"),
-    propertyName: readString(item.propertyName ?? item.listingTitle ?? item.listingName ?? listing.name ?? listing.title, "Listing"),
-    checkIn: readString(item.checkIn ?? item.checkInDate ?? item.startDate ?? item.pickupDatetime, new Date().toISOString()),
-    checkOut: readString(item.checkOut ?? item.checkOutDate ?? item.endDate ?? item.dropoffDatetime, new Date().toISOString()),
-    totalAmount: readNumber(item.totalAmount ?? item.providerPayout ?? item.amount ?? payment.amount),
-    currency: readString(item.currency ?? payment.currency, "USD"),
-    status: normalizeBookingStatus(item.status),
-    paymentStatus: normalizePaymentStatus(item.paymentStatus ?? payment.status),
-  };
-}
-
-function normalizeReview(raw: unknown): Review {
-  const item = raw as Record<string, unknown>;
-  const guest = (item.guest ?? item.customer ?? {}) as Record<string, unknown>;
-  const listing = (item.listing ?? item.property ?? {}) as Record<string, unknown>;
-  const id = readString(item.id ?? item._id ?? item.reviewId, crypto.randomUUID());
-
-  return {
-    id,
-    guestName: readString(item.guestName ?? item.customerName ?? guest.name ?? guest.fullName, "Guest"),
-    listingName: readString(item.listingName ?? item.propertyName ?? listing.name ?? listing.title, "Listing"),
-    rating: Math.min(5, Math.max(0, readNumber(item.rating ?? item.stars))),
-    comment: readString(item.comment ?? item.body ?? item.review ?? item.message, "No written comment."),
-    createdAt: readString(item.createdAt ?? item.date, new Date().toISOString()),
+    id: readString(item.id, crypto.randomUUID()),
+    reference: readString(item.reference ?? item.bookingId, "ZIKA-XXXX-CC"),
+    listingId,
+    listingName: readString(item.listingTitle ?? item.listingName, "Listing"),
+    listingCategory: category,
+    guestName: formatGuestName(`${first} ${last}`.trim() || readString(item.guestName, "Guest")),
+    checkIn: toDateOnly(readString(start, new Date().toISOString())),
+    checkOut: toDateOnly(readString(end, new Date().toISOString())),
+    guests: readNumber(item.adults) + readNumber(item.children),
+    rentalDays: Math.max(1, readNumber(item.nightsOrDays, 1)),
+    netPayout: readNumber(item.providerPayout),
+    currency: readString(item.currency, "USD"),
+    status: readString(item.status, "pending_payment") as BookingStatus,
+    createdAt: readString(item.createdAt, new Date().toISOString()),
+    confirmedAt: readString(item.confirmedAt) || null,
   };
 }
 
 function normalizeListing(raw: unknown): ListingSummary {
   const item = raw as Record<string, unknown>;
-  const location = (item.location ?? item.address ?? {}) as Record<string, unknown>;
-  const media = Array.isArray(item.media) ? item.media[0] as Record<string, unknown> : {};
-  const id = readString(item.id ?? item._id ?? item.listingId, crypto.randomUUID());
-
   return {
-    id,
-    name: readString(item.name ?? item.title, "Untitled listing"),
-    status: normalizeListingStatus(item.status),
-    location: readString(
-      item.locationText ?? item.city ?? location.city ?? location.country,
-      "Location not set"
-    ),
-    totalBookings: readNumber(item.totalBookings ?? item.bookingsCount),
-    rating: readNumber(item.rating ?? item.averageRating),
-    price: readNumber(item.price ?? item.basePrice ?? item.nightlyPrice),
+    id: readString(item.id, crypto.randomUUID()),
+    name: readString(item.name, "Untitled listing"),
+    category: readString(item.category, "apartment") as ListingSummary["category"],
+    status: readString(item.status, "draft"),
     currency: readString(item.currency, "USD"),
-    availabilityStatus: readString(item.availabilityStatus ?? item.availability, "Available"),
-    image: readString(item.image ?? item.coverImage ?? media.url),
+    unitCount: item.unitCount === null || item.unitCount === undefined ? null : readNumber(item.unitCount),
+    licencePlate: item.licencePlate === null || item.licencePlate === undefined ? null : readString(item.licencePlate),
+    carMake: item.carMake === null || item.carMake === undefined ? null : readString(item.carMake),
+    carModel: item.carModel === null || item.carModel === undefined ? null : readString(item.carModel),
+    carYear: item.carYear === null || item.carYear === undefined ? null : readNumber(item.carYear),
   };
 }
 
-function normalizeEarnings(payload: unknown): EarningsOverview {
-  const data = unwrap(payload);
-  const allTime = (data.allTime ?? data.summary ?? {}) as Record<string, unknown>;
-  const monthlyRaw = Array.isArray(data.monthly) ? data.monthly : Array.isArray(data.monthlyRevenue) ? data.monthlyRevenue : [];
-  const monthlyRevenue = monthlyRaw.map((raw) => {
-    const item = raw as Record<string, unknown>;
-    return {
-      month: readString(item.month ?? item.period, new Date().toISOString().slice(0, 7)),
-      revenue: readNumber(item.revenue ?? item.payout ?? item.total),
-      bookings: readNumber(item.bookings ?? item.bookingCount),
-    };
-  });
-
-  return {
-    total: readNumber(data.totalEarnings ?? allTime.payout ?? allTime.revenue),
-    monthly: readNumber(data.thisMonthEarnings ?? data.monthlyEarnings ?? monthlyRevenue.at(-1)?.revenue),
-    pendingPayouts: readNumber(data.pendingPayouts ?? allTime.pendingPayouts),
-    completedPayouts: readNumber(data.completedPayouts ?? allTime.completedPayouts),
-    monthlyRevenue,
-  };
-}
-
-function normalizeAvailability(raw: unknown): AvailabilityItem[] {
-  const data = unwrap(raw);
-  const lists = [
-    ...unwrapList(data.bookedRanges ?? data.bookings ?? [], ["items"]).map((item) => ({ item, status: "reserved" as const })),
-    ...unwrapList(data.blockedRanges ?? data.blockedDates ?? [], ["items"]).map((item) => ({ item, status: "blocked" as const })),
-  ];
-
-  return lists.slice(0, 8).map(({ item, status }) => {
-    const value = item as Record<string, unknown>;
-    const start = readString(value.start ?? value.startDate ?? value.from, new Date().toISOString());
-    return {
-      id: readString(value.id ?? value._id, crypto.randomUUID()),
-      date: start,
-      end: readString(value.end ?? value.endDate ?? value.to),
-      status,
-      label: readString(value.summary ?? value.guestName ?? value.reason, status === "blocked" ? "Blocked date" : "Reserved stay"),
-    };
-  });
-}
-
-function emptyBundle(): DashboardBundle {
-  return {
-    analytics: {
-      totalListings: 0,
-      activeListings: 0,
-      totalBookings: 0,
-      upcomingBookings: 0,
-      pendingBookings: 0,
-      cancelledBookings: 0,
-      totalEarnings: 0,
-      thisMonthEarnings: 0,
-      averageRating: 0,
-      totalReviews: 0,
-      trends: {},
-    },
-    bookings: [],
-    reviews: [],
-    listings: [],
-    earnings: { total: 0, monthly: 0, pendingPayouts: 0, completedPayouts: 0, monthlyRevenue: [] },
-    availability: [],
-    activity: [],
-    hasError: false,
-  };
-}
-
-async function safeGet(path: string) {
+async function safeGet(path: string, params?: Record<string, unknown>) {
   try {
-    const response = await listingApi.get(path);
+    const response = await listingApi.get(path, params ? { params } : undefined);
     return { data: response.data, failed: false };
   } catch {
     return { data: null, failed: true };
   }
 }
 
-async function fetchDashboardBundle(): Promise<DashboardBundle> {
-  const [dashboardRes, listingsRes, bookingsRes, reviewsRes, earningsRes] = await Promise.all([
-    safeGet("/provider/dashboard"),
+async function fetchAllBookings() {
+  const first = await listingApi.get("/provider/bookings", { params: { offset: 0, limit: 50 } });
+  const data = unwrap(first.data);
+  const total = readNumber(data.total, 0);
+  const bookings = unwrapList(first.data, ["bookings", "items", "results"]).map(normalizeBooking);
+
+  for (let offset = 50; offset < total; offset += 50) {
+    const page = await listingApi.get("/provider/bookings", { params: { offset, limit: 50 } });
+    bookings.push(...unwrapList(page.data, ["bookings", "items", "results"]).map(normalizeBooking));
+  }
+  return bookings;
+}
+
+async function fetchDashboardData(): Promise<DashboardData> {
+  const [listingsRes, reviewsRes, bookingsResult] = await Promise.all([
     safeGet("/provider/listings/summary"),
-    safeGet("/provider/bookings?limit=8"),
-    safeGet("/provider/reviews?limit=6"),
-    safeGet("/provider/earnings"),
+    safeGet("/provider/reviews", { limit: 1 }),
+    fetchAllBookings().then((data) => ({ data, failed: false })).catch(() => ({ data: [] as Booking[], failed: true })),
   ]);
 
-  const dashboard = unwrap(dashboardRes.data);
-  const bookings = unwrapList(bookingsRes.data, ["bookings", "items", "results", "recentBookings"]).map(normalizeBooking);
-  const reviews = unwrapList(reviewsRes.data, ["reviews", "items", "results"]).map(normalizeReview);
-  const listings = unwrapList(listingsRes.data, ["listings", "items", "results", "summary"]).map(normalizeListing);
-  const earnings = normalizeEarnings(earningsRes.data);
-  const availabilityRes = listings[0]?.id ? await safeGet(`/provider/availability/${listings[0].id}`) : { data: null, failed: false };
-  const availability = normalizeAvailability(availabilityRes.data);
+  const listingRows = unwrapList(listingsRes.data, ["listings", "items", "results"]);
+  const listings = await Promise.all(
+    listingRows.map(async (row) => {
+      const base = normalizeListing(row);
+      const detail = await safeGet(`/listings/${base.id}`);
+      const detailData = unwrap(detail.data);
+      return normalizeListing({ ...base, ...detailData });
+    })
+  );
 
-  const analytics: DashboardAnalytics = {
-    totalListings: readNumber(dashboard.totalListings ?? dashboard.totalListingsCount, listings.length),
-    activeListings: readNumber(dashboard.activeListings ?? dashboard.activeListingsCount, listings.filter((item) => item.status === "active").length),
-    totalBookings: readNumber(dashboard.totalBookings ?? dashboard.totalBookingsCount, bookings.length),
-    upcomingBookings: readNumber(dashboard.upcomingBookings ?? dashboard.upcomingBookingsCount, bookings.filter((item) => item.status === "confirmed").length),
-    pendingBookings: readNumber(dashboard.pendingBookings ?? dashboard.pendingBookingsCount, bookings.filter((item) => item.status === "pending").length),
-    cancelledBookings: readNumber(dashboard.cancelledBookings ?? dashboard.cancelledBookingsCount, bookings.filter((item) => item.status === "cancelled").length),
-    totalEarnings: readNumber(dashboard.totalEarnings, earnings.total),
-    thisMonthEarnings: readNumber(dashboard.thisMonthEarnings, earnings.monthly),
-    averageRating: readNumber(dashboard.averageRating, reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : 0),
-    totalReviews: readNumber(dashboard.totalReviews ?? dashboard.totalReviewsCount, reviews.length),
-    trends: (dashboard.trends ?? {}) as Record<string, number>,
-  };
-
-  const activity = buildActivity(bookings, reviews, listings);
+  const reviewData = unwrap(reviewsRes.data);
   return {
-    analytics,
-    bookings,
-    reviews,
+    bookings: bookingsResult.data,
     listings,
-    earnings,
-    availability,
-    activity,
-    hasError: dashboardRes.failed || listingsRes.failed || bookingsRes.failed || reviewsRes.failed || earningsRes.failed || availabilityRes.failed,
+    reviews: {
+      averageRating: readNumber(reviewData.averageRating),
+      totalReviews: readNumber(reviewData.totalReviews ?? reviewData.total),
+    },
+    hasError: listingsRes.failed || reviewsRes.failed || bookingsResult.failed,
   };
 }
 
-function buildActivity(bookings: Booking[], reviews: Review[], listings: ListingSummary[]): ActivityItem[] {
-  const bookingActivity = bookings.slice(0, 4).map((booking) => ({
-    id: `booking-${booking.id}`,
-    type: booking.status === "cancelled" ? "cancelled" as const : "booking" as const,
-    title: booking.status === "cancelled" ? "Booking cancelled" : "Booking created",
-    detail: `${booking.guestName} - ${booking.propertyName}`,
-    createdAt: booking.checkIn,
-  }));
-  const reviewActivity = reviews.slice(0, 3).map((review) => ({
-    id: `review-${review.id}`,
-    type: "review" as const,
-    title: "Review received",
-    detail: `${review.rating}/5 from ${review.guestName}`,
-    createdAt: review.createdAt,
-  }));
-  const listingActivity = listings.slice(0, 3).map((listing) => ({
-    id: `listing-${listing.id}`,
-    type: "listing" as const,
-    title: listing.status === "active" ? "Listing approved" : "Listing updated",
-    detail: listing.name,
-    createdAt: new Date().toISOString(),
-  }));
-  return [...bookingActivity, ...reviewActivity, ...listingActivity]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 8);
+function NetCurrency({ amount, currency = "USD", className }: { amount: number; currency?: string; className?: string }) {
+  return (
+    <span className={cn("group relative inline-flex cursor-help font-semibold", className)} title={NET_TOOLTIP}>
+      {formatCurrency(amount, currency)}
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-64 -translate-x-1/2 scale-0 rounded-lg bg-slate-950 px-2 py-1.5 text-center text-[11px] font-normal text-white shadow-xl transition-all group-hover:scale-100">
+        {NET_TOOLTIP}
+      </span>
+    </span>
+  );
 }
 
-function OverviewCard({
-  title,
-  value,
-  icon,
-  trend,
-  loading,
-  tone,
-}: {
-  title: string;
-  value: string | number;
-  icon: ReactNode;
-  trend?: number;
-  loading: boolean;
-  tone: string;
-}) {
-  const positive = (trend ?? 0) >= 0;
+function MetricCard({ label, value, hint, financial }: { label: string; value: ReactNode; hint: string; financial?: boolean }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-5 hover:shadow-[0_6px_24px_rgba(0,0,0,0.09)] transition-shadow duration-200">
-      {loading ? (
-        <div className="h-20 rounded-xl bg-slate-100 animate-pulse" />
-      ) : (
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[12px] font-semibold text-slate-400 uppercase tracking-wide">{title}</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900 leading-none">{value}</p>
-            {trend !== undefined && (
-              <p className={cn("mt-2.5 flex items-center gap-1 text-[11px] font-semibold", positive ? "text-emerald-600" : "text-red-500")}>
-                {positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                {Math.abs(trend).toFixed(1)}%
-              </p>
-            )}
-          </div>
-          <div className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-sm [&>svg]:h-5 [&>svg]:w-5", tone)}>
-            {icon}
-          </div>
-        </div>
-      )}
+    <Card className="min-h-[132px]">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <div className="mt-3 text-2xl font-bold text-slate-950">{financial ? <span title={NET_TOOLTIP}>{value}</span> : value}</div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">{hint}</p>
+    </Card>
+  );
+}
+
+function EmptyState({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center">
+      <p className="font-semibold text-slate-900">{title}</p>
+      <p className="mt-1 text-sm text-slate-500">{message}</p>
     </div>
   );
 }
 
-function EmptyState({ title, message, icon }: { title: string; message: string; icon: ReactNode }) {
-  return (
-    <div className="flex min-h-[180px] flex-col items-center justify-center rounded-xl border border-dashed border-border text-center">
-      <div className="text-slate-300 [&>svg]:h-10 [&>svg]:w-10">{icon}</div>
-      <p className="mt-3 font-semibold text-slate-900">{title}</p>
-      <p className="mt-1 max-w-sm text-sm text-slate-500">{message}</p>
-    </div>
-  );
-}
+export default function ProviderDashboardPage() {
+  const [sortKey, setSortKey] = useState<SortKey>("checkIn");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [listingFilter, setListingFilter] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
-export default function DashboardPage() {
-  const { user } = useAuthStore();
-  const { data = emptyBundle(), isLoading, isFetching, refetch } = useQuery({
-    queryKey: ["provider-dashboard-page-bundle"],
-    queryFn: fetchDashboardBundle,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+  const { data = { bookings: [], listings: [], reviews: { averageRating: 0, totalReviews: 0 }, hasError: false }, isLoading, isFetching, refetch } = useQuery({
+    queryKey: ["provider-dashboard-prd"],
+    queryFn: fetchDashboardData,
   });
 
-  const firstName = user?.firstName ?? "Partner";
-  const trend = data.analytics.trends;
-  const chartData = data.earnings.monthlyRevenue.length ? data.earnings.monthlyRevenue : [];
-  const payoutProgress = data.earnings.total ? Math.min(100, (data.earnings.completedPayouts / data.earnings.total) * 100) : 0;
+  const now = new Date();
+  const currentMonthStart = startOfMonth(now);
+  const currentMonthEnd = endOfMonth(now);
+  const lastMonth = addMonths(now, -1);
+  const lastMonthStart = startOfMonth(lastMonth);
+  const lastMonthEnd = endOfMonth(lastMonth);
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
-  const statCards = useMemo(
-    () => [
-      { title: "Total Listings",     value: data.analytics.totalListings,                                         icon: <Building2 />,   trend: trend.totalListings,     tone: "bg-green-700 text-white" },
-      { title: "Active Listings",    value: data.analytics.activeListings,                                        icon: <CheckCircle2 />, trend: trend.activeListings,    tone: "bg-green-700 text-white" },
-      { title: "Total Bookings",     value: data.analytics.totalBookings,                                         icon: <BookOpen />,    trend: trend.totalBookings,     tone: "bg-green-700 text-white" },
-      { title: "Upcoming Bookings",  value: data.analytics.upcomingBookings,                                      icon: <CalendarDays />, trend: trend.upcomingBookings,  tone: "bg-green-700 text-white" },
-      { title: "Pending Bookings",   value: data.analytics.pendingBookings,                                       icon: <Clock3 />,      trend: trend.pendingBookings,   tone: "bg-green-700 text-white" },
-      { title: "Cancelled Bookings", value: data.analytics.cancelledBookings,                                     icon: <XCircle />,     trend: trend.cancelledBookings, tone: "bg-red-500 text-white" },
-      { title: "Total Earnings",     value: formatCurrency(data.analytics.totalEarnings),                        icon: <DollarSign />,  trend: trend.totalEarnings,     tone: "bg-green-700 text-white" },
-      { title: "This Month Earnings",value: formatCurrency(data.analytics.thisMonthEarnings),                    icon: <TrendingUp />,  trend: trend.thisMonthEarnings, tone: "bg-green-700 text-white" },
-      { title: "Average Rating",     value: data.analytics.averageRating ? data.analytics.averageRating.toFixed(1) : "0.0", icon: <Star />, trend: trend.averageRating, tone: "bg-green-700 text-white" },
-      { title: "Total Reviews",      value: data.analytics.totalReviews,                                         icon: <MessageSquare />,trend: trend.totalReviews,     tone: "bg-green-700 text-white" },
-    ],
-    [data.analytics, trend]
-  );
+  const confirmedStatuses = new Set<BookingStatus>(["confirmed", "completed"]);
+  const cancelledStatuses = new Set<BookingStatus>(["cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"]);
+  const completedBookings = data.bookings.filter((booking) => booking.status === "completed");
+  const confirmedBookings = data.bookings.filter((booking) => confirmedStatuses.has(booking.status));
+
+  const primaryCurrency = data.bookings.find((booking) => booking.currency)?.currency ?? data.listings.find((listing) => listing.currency)?.currency ?? "USD";
+  const metrics = {
+    netAllTime: completedBookings.reduce((sum, booking) => sum + booking.netPayout, 0),
+    netThisMonth: completedBookings.filter((booking) => isWithin(booking.confirmedAt ?? booking.createdAt, currentMonthStart, currentMonthEnd)).reduce((sum, booking) => sum + booking.netPayout, 0),
+    netLastMonth: completedBookings.filter((booking) => isWithin(booking.confirmedAt ?? booking.createdAt, lastMonthStart, lastMonthEnd)).reduce((sum, booking) => sum + booking.netPayout, 0),
+    pendingPayout: data.bookings.filter((booking) => booking.status === "confirmed" && new Date(booking.checkIn) <= now).reduce((sum, booking) => sum + booking.netPayout, 0),
+    totalBookings: confirmedBookings.length,
+    bookingsThisMonth: confirmedBookings.filter((booking) => isWithin(booking.confirmedAt ?? booking.createdAt, currentMonthStart, currentMonthEnd)).length,
+    cancellationRate: (() => {
+      const recent = data.bookings.filter((booking) => new Date(booking.createdAt) >= ninetyDaysAgo);
+      if (!recent.length) return 0;
+      return (recent.filter((booking) => cancelledStatuses.has(booking.status)).length / recent.length) * 100;
+    })(),
+    averageRating: data.reviews.averageRating,
+  };
+
+  const upcomingBookings = useMemo(() => {
+    const today = toDateOnly(new Date().toISOString());
+    const filtered = data.bookings.filter((booking) => {
+      if (!["confirmed"].includes(booking.status)) return false;
+      if (booking.checkIn < today) return false;
+      if (listingFilter !== "all" && booking.listingId !== listingFilter) return false;
+      if (fromDate && booking.checkIn < fromDate) return false;
+      if (toDate && booking.checkIn > toDate) return false;
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      const direction = sortOrder === "asc" ? 1 : -1;
+      if (sortKey === "listingName") return a.listingName.localeCompare(b.listingName) * direction;
+      if (sortKey === "netPayout") return (a.netPayout - b.netPayout) * direction;
+      return a.checkIn.localeCompare(b.checkIn) * direction;
+    });
+  }, [data.bookings, fromDate, listingFilter, sortKey, sortOrder, toDate]);
+
+  const availableUnits = useMemo(() => {
+    return data.listings.map((listing) => {
+      const listingBookings = data.bookings.filter((booking) => booking.listingId === listing.id);
+      const booked = listingBookings.filter((booking) => booking.status === "confirmed" && overlapsToday(booking)).length;
+      const held = listingBookings.filter((booking) => activeLock(booking) && overlapsToday(booking)).length;
+      const total = listing.category === "hotel" ? listing.unitCount ?? 1 : 1;
+      return {
+        ...listing,
+        totalUnits: total,
+        booked,
+        held,
+        available: Math.max(0, total - booked - held),
+      };
+    });
+  }, [data.bookings, data.listings]);
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortOrder((value) => (value === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortOrder("asc");
+    }
+  }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      {/* ── Greeting header ── */}
+    <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Good morning, {firstName} 👋
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">Here is your provider performance overview.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-950">Provider Dashboard</h1>
+          <p className="mt-1 text-sm text-slate-500">All financial figures are net amounts after ZikaBooking&apos;s 5% service fee.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !isLoading} onClick={() => refetch()}>
-            Refresh
-          </Button>
-          <Link href="/dashboard/listings/new">
-            <Button icon={<Plus />}>Add New Listing</Button>
-          </Link>
-        </div>
+        <Button variant="outline" icon={<RefreshCw />} loading={isFetching && !isLoading} onClick={() => refetch()}>
+          Refresh
+        </Button>
       </div>
 
       {data.hasError && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Some dashboard APIs did not respond, so available sections are shown with safe fallback data.
+          Some provider data could not be loaded. The dashboard is showing the available scoped records only.
         </div>
       )}
 
-      {/* ── Stat cards ── */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {statCards.map((card) => (
-          <OverviewCard key={card.title} {...card} loading={isLoading} />
-        ))}
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-[1.5fr_0.8fr]">
-        <Card>
-          <SectionHeader
-            title="Earnings Overview"
-            subtitle="Revenue trends and payout performance"
-            action={<Link href="/dashboard/earnings"><Button variant="ghost" size="sm">View earnings</Button></Link>}
-          />
-          <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
-            <div>
-              {isLoading ? (
-                <div className="h-64 rounded-xl bg-slate-100 animate-pulse" />
-              ) : chartData.length === 0 ? (
-                <EmptyState title="No earnings data" message="Revenue trends will appear after completed bookings." icon={<Banknote />} />
-              ) : (
-                <RevenueAreaChart data={chartData} height={260} />
-              )}
-            </div>
-            <div className="space-y-3">
-              <PayoutMetric label="Total earnings" value={formatCurrency(data.earnings.total)} />
-              <PayoutMetric label="Monthly earnings" value={formatCurrency(data.earnings.monthly)} />
-              <PayoutMetric label="Pending payouts" value={formatCurrency(data.earnings.pendingPayouts)} />
-              <PayoutMetric label="Completed payouts" value={formatCurrency(data.earnings.completedPayouts)} />
-              <div className="rounded-xl bg-slate-50 p-3">
-                <div className="mb-2 flex justify-between text-xs text-slate-500">
-                  <span>Payout progress</span>
-                  <span>{payoutProgress.toFixed(0)}%</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${payoutProgress}%` }} />
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card>
-          <SectionHeader title="Quick Actions" subtitle="Common provider workflows" />
-          <div className="grid gap-2">
-            {[
-              { label: "Add New Listing", href: "/dashboard/listings/new", icon: <Building2 /> },
-              { label: "View All Bookings", href: "/dashboard/bookings", icon: <BookOpen /> },
-              { label: "Manage Availability", href: "/dashboard/calendar", icon: <CalendarDays /> },
-              { label: "View Earnings", href: "/dashboard/earnings", icon: <DollarSign /> },
-              { label: "Messages", href: "/dashboard/messaging", icon: <MessageSquare /> },
-              { label: "Calendar Sync", href: "/dashboard/channel", icon: <RefreshCw /> },
-            ].map((action) => (
-              <Link key={action.href} href={action.href} className="flex items-center gap-3 rounded-xl p-3 transition-colors hover:bg-slate-50">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-primary [&>svg]:h-4 [&>svg]:w-4">{action.icon}</span>
-                <span className="text-sm font-semibold text-slate-700">{action.label}</span>
-                <ArrowRight className="ml-auto h-4 w-4 text-slate-400" />
-              </Link>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-[1.25fr_0.75fr]">
-        <Card>
-          <SectionHeader
-            title="Recent Bookings"
-            subtitle="Latest provider reservations"
-            action={<Link href="/dashboard/bookings"><Button variant="outline" size="sm">View all</Button></Link>}
-          />
-          {isLoading ? (
-            <RowsSkeleton rows={5} />
-          ) : data.bookings.length === 0 ? (
-            <EmptyState title="No bookings yet" message="Bookings will appear here once guests reserve your listings." icon={<BookOpen />} />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[780px] text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-slate-50">
-                    {["Booking ID", "Guest", "Property", "Check-in", "Check-out", "Amount", "Status", "Payment"].map((heading) => (
-                      <th key={heading} className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{heading}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {data.bookings.map((booking) => (
-                    <tr key={booking.id} className="hover:bg-slate-50">
-                      <td className="px-3 py-3 font-mono text-xs text-slate-600">{booking.bookingId}</td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <Avatar name={booking.guestName} size="sm" />
-                          <span className="font-medium text-slate-900">{booking.guestName}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-slate-600">{booking.propertyName}</td>
-                      <td className="px-3 py-3 text-slate-500">{formatDate(booking.checkIn)}</td>
-                      <td className="px-3 py-3 text-slate-500">{formatDate(booking.checkOut)}</td>
-                      <td className="px-3 py-3 font-semibold text-slate-900">{formatCurrency(booking.totalAmount, booking.currency)}</td>
-                      <td className="px-3 py-3"><Badge label={booking.status} status={booking.status} /></td>
-                      <td className="px-3 py-3"><Badge label={booking.paymentStatus} status={booking.paymentStatus} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-
-        <Card>
-          <SectionHeader title="Recent Reviews" subtitle="Latest guest feedback" action={<Link href="/dashboard/reviews"><Button variant="ghost" size="sm">View all</Button></Link>} />
-          {isLoading ? (
-            <RowsSkeleton rows={4} />
-          ) : data.reviews.length === 0 ? (
-            <EmptyState title="No reviews yet" message="Guest reviews will appear after completed stays." icon={<Star />} />
-          ) : (
-            <div className="max-h-[430px] space-y-3 overflow-y-auto pr-1">
-              {data.reviews.map((review) => (
-                <div key={review.id} className="rounded-xl border border-border p-4">
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900">{review.guestName}</p>
-                      <p className="text-xs text-slate-500">{review.listingName}</p>
-                    </div>
-                    <RatingStars rating={review.rating} />
-                  </div>
-                  <p className="line-clamp-3 text-sm leading-6 text-slate-600">{review.comment}</p>
-                  <p className="mt-2 text-xs text-slate-400">{formatDate(review.createdAt)}</p>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-[1fr_390px]">
-        <Card>
-          <SectionHeader title="Listings Summary" subtitle="Property performance and availability" action={<Link href="/dashboard/listings"><Button variant="outline" size="sm">Manage listings</Button></Link>} />
-          {isLoading ? (
-            <RowsSkeleton rows={4} />
-          ) : data.listings.length === 0 ? (
-            <EmptyState title="No listings available" message="Create your first listing to start receiving bookings." icon={<Building2 />} />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              {data.listings.slice(0, 6).map((listing) => (
-                <div key={listing.id} className="rounded-xl border border-border p-3 transition-all hover:border-primary/40 hover:shadow-sm">
-                  <div className="flex gap-3">
-                    <div className="h-20 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-100">
-                      {listing.image ? (
-                        <img src={listing.image} alt={listing.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-slate-300"><Building2 className="h-7 w-7" /></div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="truncate font-semibold text-slate-900">{listing.name}</p>
-                        <Badge label={listing.status.replace("_", " ")} status={listing.status === "active" ? "confirmed" : "pending"} />
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">{listing.location}</p>
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                        <span><strong className="text-slate-900">{listing.totalBookings}</strong><br />Bookings</span>
-                        <span><strong className="text-slate-900">{listing.rating || "0.0"}</strong><br />Rating</span>
-                        <span><strong className="text-slate-900">{formatCurrency(listing.price, listing.currency)}</strong><br />Price</span>
-                      </div>
-                      <p className="mt-2 text-xs font-medium text-emerald-700">{listing.availabilityStatus}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        <div className="space-y-5">
-          <Card>
-            <SectionHeader title="Availability Preview" subtitle="Blocked and reserved dates" />
-            {isLoading ? (
-              <RowsSkeleton rows={4} />
-            ) : data.availability.length === 0 ? (
-              <EmptyState title="No blocked dates" message="Reserved and blocked dates will appear here." icon={<CalendarDays />} />
-            ) : (
-              <div className="space-y-2">
-                {data.availability.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                      <p className="text-xs text-slate-500">
-                        {formatDate(item.date)}{item.end ? ` to ${formatDate(item.end)}` : ""}
-                      </p>
-                    </div>
-                    <Badge label={item.status} status={item.status === "reserved" ? "confirmed" : "pending"} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card>
-            <SectionHeader title="Recent Activity" subtitle="Latest account events" />
-            {data.activity.length === 0 ? (
-              <EmptyState title="No recent activity" message="Booking, review, and listing updates will appear here." icon={<Clock3 />} />
-            ) : (
-              <div className="space-y-4">
-                {data.activity.map((item) => (
-                  <div key={item.id} className="flex gap-3">
-                    <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary">
-                      {item.type === "review" ? <Star className="h-4 w-4" /> : item.type === "listing" ? <Building2 className="h-4 w-4" /> : <BookOpen className="h-4 w-4" />}
-                    </span>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                      <p className="text-xs text-slate-500">{item.detail}</p>
-                      <p className="mt-1 text-[11px] text-slate-400">{formatRelativeTime(item.createdAt)}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+      <section className="space-y-4">
+        <SectionHeader title="Financial Summary" subtitle="Provider-scoped earnings and booking performance." />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard label="Net revenue - all time" financial value={<NetCurrency amount={metrics.netAllTime} currency={primaryCurrency} />} hint="Sum of completed payouts received, after commission and taxes." />
+          <MetricCard label="Net revenue - this month" financial value={<NetCurrency amount={metrics.netThisMonth} currency={primaryCurrency} />} hint="Current calendar month earnings, net of commission." />
+          <MetricCard label="Net revenue - last month" financial value={<NetCurrency amount={metrics.netLastMonth} currency={primaryCurrency} />} hint="Prior calendar month earnings for comparison." />
+          <MetricCard label="Pending payout" financial value={<NetCurrency amount={metrics.pendingPayout} currency={primaryCurrency} />} hint="Check-in has occurred, but payout has not yet been disbursed." />
+          <MetricCard label="Total bookings - all time" value={metrics.totalBookings.toLocaleString()} hint="All confirmed bookings across your listings." />
+          <MetricCard label="Bookings - this month" value={metrics.bookingsThisMonth.toLocaleString()} hint="Confirmed bookings in the current calendar month." />
+          <MetricCard label="Cancellation rate" value={`${metrics.cancellationRate.toFixed(1)}%`} hint="Cancelled bookings as a percentage of bookings in the last 90 days." />
+          <MetricCard label="Average rating" value={<span className="inline-flex items-center gap-2"><Star className="h-5 w-5 fill-amber-400 text-amber-400" />{metrics.averageRating.toFixed(1)}</span>} hint="Mean star rating across listings, weighted by review count." />
         </div>
+      </section>
+
+      <Card>
+        <div className="mb-5 flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-end lg:justify-between">
+          <SectionHeader title="Upcoming Bookings" subtitle="Future confirmed or active bookings across your listings." />
+          <div className="grid gap-3 sm:grid-cols-3 lg:w-[620px]">
+            <Select
+              label="Listing"
+              value={listingFilter}
+              onChange={(event) => setListingFilter(event.target.value)}
+              options={[{ value: "all", label: "All listings" }, ...data.listings.map((listing) => ({ value: listing.id, label: listing.name }))]}
+            />
+            <Input label="From" type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} />
+            <Input label="To" type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} />
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="h-64 animate-pulse rounded-xl bg-slate-100" />
+        ) : upcomingBookings.length === 0 ? (
+          <EmptyState title="No upcoming bookings" message="Future confirmed bookings will appear here." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-3">Booking Reference</th>
+                  <th className="px-3 py-3"><button onClick={() => toggleSort("listingName")}>Listing Name</button></th>
+                  <th className="px-3 py-3">Guest Display Name</th>
+                  <th className="px-3 py-3"><button onClick={() => toggleSort("checkIn")}>Check-in Date</button></th>
+                  <th className="px-3 py-3">Check-out Date</th>
+                  <th className="px-3 py-3">Guests / Rental Days</th>
+                  <th className="px-3 py-3"><button onClick={() => toggleSort("netPayout")}>Net Payout Amount</button></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {upcomingBookings.map((booking) => (
+                  <tr key={booking.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-3 font-mono text-xs text-slate-600">{booking.reference}</td>
+                    <td className="px-3 py-3 font-semibold text-slate-900">{booking.listingName}</td>
+                    <td className="px-3 py-3 text-slate-700">{booking.guestName}</td>
+                    <td className="px-3 py-3 text-slate-600">{formatDate(booking.checkIn)}</td>
+                    <td className="px-3 py-3 text-slate-600">{formatDate(booking.checkOut)}</td>
+                    <td className="px-3 py-3 text-slate-600">
+                      {booking.listingCategory === "car" ? `${booking.rentalDays} rental day${booking.rentalDays === 1 ? "" : "s"}` : `${Math.max(1, booking.guests)} guest${Math.max(1, booking.guests) === 1 ? "" : "s"}`}
+                    </td>
+                    <td className="px-3 py-3"><NetCurrency amount={booking.netPayout} currency={booking.currency} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <SectionHeader title="Available Units" subtitle="Per-listing availability right now. Click a listing to open its calendar." />
+        {isLoading ? (
+          <div className="h-56 animate-pulse rounded-xl bg-slate-100" />
+        ) : availableUnits.length === 0 ? (
+          <EmptyState title="No listings" message="Create a listing to track availability." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-3">Listing Name</th>
+                  <th className="px-3 py-3">Category</th>
+                  <th className="px-3 py-3 text-center">Total Units</th>
+                  <th className="px-3 py-3 text-center">Units Currently Booked</th>
+                  <th className="px-3 py-3 text-center">Units Held</th>
+                  <th className="px-3 py-3 text-center">Units Available Now</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {availableUnits.map((listing) => (
+                  <tr key={listing.id} className="group hover:bg-slate-50">
+                    <td className="px-3 py-3">
+                      <Link href={`/dashboard/calendar?listing=${listing.id}`} className="inline-flex items-center gap-2 font-semibold text-slate-900 group-hover:text-green-800">
+                        {listing.name}
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                      {listing.category === "car" && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                          <span>{[listing.carYear, listing.carMake, listing.carModel].filter(Boolean).join(" ") || "Vehicle"}</span>
+                          {listing.licencePlate && <span className="font-mono uppercase">{listing.licencePlate}</span>}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3"><Badge label={listing.category} /></td>
+                    <td className="px-3 py-3 text-center font-semibold">{listing.totalUnits}</td>
+                    <td className="px-3 py-3 text-center font-semibold text-emerald-700">{listing.booked}</td>
+                    <td className="px-3 py-3 text-center font-semibold text-amber-700">{listing.held}</td>
+                    <td className="px-3 py-3 text-center">
+                      <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-semibold", listing.available > 0 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600")}>
+                        {listing.available}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+        Guest contact details are not shown. Provider communication must happen through in-app messaging only.
       </div>
-    </div>
-  );
-}
-
-function PayoutMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <p className="text-xs font-medium text-slate-500">{label}</p>
-      <p className="mt-1 font-bold text-slate-900">{value}</p>
-    </div>
-  );
-}
-
-function RowsSkeleton({ rows }: { rows: number }) {
-  return (
-    <div className="space-y-3">
-      {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="h-16 rounded-xl bg-slate-100 animate-pulse" />
-      ))}
     </div>
   );
 }

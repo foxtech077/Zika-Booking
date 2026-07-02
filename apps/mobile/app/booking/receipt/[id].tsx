@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -6,89 +7,106 @@ import {
   Share,
   ActivityIndicator,
   StyleSheet,
+  RefreshControl,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, Stack } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useReceipt } from "../../../hooks/booking";
-import type { Receipt } from "../../../lib/types/booking";
+import type { Receipt, ReceiptLineItem } from "../../../lib/types/booking";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDate(isoStr: string): string {
-  return new Date(isoStr).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function formatDateTime(isoStr: string): string {
-  return new Date(isoStr).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatCurrency(amount: number, currency: string): string {
-  return `${currency} ${amount.toLocaleString()}`;
-}
-
-async function shareReceipt(receipt: Receipt) {
-  const lines = [
-    "══════════════════════════════",
-    "         KAINOOK RECEIPT",
-    "══════════════════════════════",
-    `Receipt #:  ${receipt.id}`,
-    `Booking:    ${receipt.bookingReference}`,
-    `Issued:     ${formatDate(receipt.issuedAt)}`,
-    "",
-    "── Property ──────────────────",
-    receipt.listingTitle,
-    receipt.listingAddress ?? "",
-    "",
-    "── Guest ─────────────────────",
-    receipt.guestName,
-    receipt.guestEmail,
-    "",
-    "── Pricing ───────────────────",
-    `Subtotal:   ${formatCurrency(receipt.subtotal, receipt.currency)}`,
-    receipt.discountAmount && receipt.discountAmount > 0
-      ? `Discount:   -${formatCurrency(receipt.discountAmount, receipt.currency)}`
-      : "",
-    receipt.serviceFee && receipt.serviceFee > 0
-      ? `Service:    +${formatCurrency(receipt.serviceFee, receipt.currency)}`
-      : "",
-    receipt.taxAmount && receipt.taxAmount > 0
-      ? `Taxes:      +${formatCurrency(receipt.taxAmount, receipt.currency)}`
-      : "",
-    receipt.deliveryFee && receipt.deliveryFee > 0
-      ? `Delivery:   +${formatCurrency(receipt.deliveryFee, receipt.currency)}`
-      : "",
-    `TOTAL:      ${formatCurrency(receipt.totalAmount, receipt.currency)}`,
-    "",
-    receipt.paymentMethod ? `Paid via:   ${receipt.paymentMethod}` : "",
-    receipt.paymentDate ? `Paid on:    ${formatDate(receipt.paymentDate)}` : "",
-    receipt.transactionId ? `Txn ID:     ${receipt.transactionId}` : "",
-    "══════════════════════════════",
-    "Powered by Kainook",
-  ]
-    .filter(Boolean)
-    .join("\n");
-
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
   try {
-    await Share.share({ message: lines, title: `Receipt ${receipt.bookingReference}` });
-  } catch {
-    // User dismissed share sheet
-  }
+    return new Date(iso).toLocaleDateString("en-GB", {
+      day: "numeric", month: "long", year: "numeric",
+    });
+  } catch { return iso; }
 }
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+function fmtDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString("en-GB", {
+      day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  } catch { return iso; }
+}
 
-function ReceiptRow({
+function fmtMoney(amount: number | null | undefined, currency: string): string {
+  if (amount == null) return `${currency} —`;
+  return `${currency} ${Math.abs(amount).toLocaleString()}`;
+}
+
+function statusLabel(s: string): string {
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function listingTypeLabel(t: string): string {
+  if (t === "car") return "Car Rental";
+  if (t === "apartment") return "Apartment";
+  return "Hotel";
+}
+
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+function SkeletonLoader() {
+  const opacity = useRef(new Animated.Value(0.35)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 1, duration: 750, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.35, duration: 750, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [opacity]);
+
+  const B = ({ w, h = 13 }: { w: number | `${number}%`; h?: number }) => (
+    <Animated.View style={{ width: w as any, height: h, backgroundColor: "#e5e7eb", borderRadius: 6, opacity }} />
+  );
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }} showsVerticalScrollIndicator={false}>
+      <View style={s.card}>
+        <B w={90} h={11} /><B w="65%" h={22} /><B w="45%" h={13} /><B w={130} h={13} />
+      </View>
+      <View style={s.card}>
+        <B w={70} h={11} /><B w="80%" h={18} /><B w={80} h={20} />
+        <B w="60%" h={13} /><B w="50%" h={13} />
+      </View>
+      <View style={s.card}>
+        <B w={55} h={11} /><B w="70%" h={17} /><B w="55%" h={13} />
+      </View>
+      <View style={s.card}>
+        <B w={65} h={11} />
+        {[1, 2, 3].map((i) => (
+          <View key={i} style={s.skRow}>
+            <B w="55%" /><B w="25%" />
+          </View>
+        ))}
+        <View style={{ height: 1, backgroundColor: "#e5e7eb", marginVertical: 4 }} />
+        <View style={s.skRow}><B w="40%" h={17} /><B w="28%" h={17} /></View>
+      </View>
+      <View style={s.card}>
+        <B w={65} h={11} />
+        {[1, 2, 3].map((i) => (
+          <View key={i} style={s.skRow}>
+            <B w="45%" /><B w="40%" />
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+// ── Row ───────────────────────────────────────────────────────────────────────
+
+function Row({
   label,
   value,
   highlight = false,
@@ -100,49 +118,105 @@ function ReceiptRow({
   credit?: boolean;
 }) {
   return (
-    <View style={[s.row, highlight && s.rowHighlight]}>
-      <Text style={[s.rowLabel, highlight && s.rowLabelHighlight]}>{label}</Text>
-      <Text
-        style={[
-          s.rowValue,
-          highlight && s.rowValueHighlight,
-          credit && s.rowValueCredit,
-        ]}
-      >
+    <View style={[s.row, highlight && s.rowHL]}>
+      <Text style={[s.rowLabel, highlight && s.rowLabelHL]} numberOfLines={2}>{label}</Text>
+      <Text style={[s.rowValue, highlight && s.rowValueHL, credit && s.rowValueCredit]}>
         {value}
       </Text>
     </View>
   );
 }
 
-// ── Main Screen ───────────────────────────────────────────────────────────────
+// ── Share helper ──────────────────────────────────────────────────────────────
+
+async function buildShareText(r: Receipt): Promise<void> {
+  const cur = r.totals.currency;
+  const lines = [
+    "══════════════════════════════",
+    "         KAINOOK RECEIPT",
+    "══════════════════════════════",
+    `Receipt:    ${r.receiptNumber}`,
+    `Booking:    ${r.bookingReference}`,
+    `Status:     ${statusLabel(r.status)}`,
+    `Issued:     ${fmtDate(r.issuedAt)}`,
+    "",
+    "── Property ──────────────────",
+    r.listing.title ?? "—",
+    `Type:  ${listingTypeLabel(r.listing.type)}`,
+    [r.listing.address, r.listing.town, r.listing.country].filter(Boolean).join(", "),
+    "",
+    r.period.checkIn
+      ? `Check-in:  ${fmtDate(r.period.checkIn)}`
+      : r.period.pickupDatetime
+      ? `Pick-up:   ${fmtDateTime(r.period.pickupDatetime)}`
+      : "",
+    r.period.checkOut
+      ? `Check-out: ${fmtDate(r.period.checkOut)}`
+      : r.period.returnDatetime
+      ? `Return:    ${fmtDateTime(r.period.returnDatetime)}`
+      : "",
+    "",
+    "── Guest ─────────────────────",
+    r.guest.name,
+    r.guest.email,
+    "",
+    "── Pricing ───────────────────",
+    ...r.lineItems.map((li) =>
+      `${li.label}${" ".repeat(Math.max(1, 24 - li.label.length))}${
+        li.amount < 0 ? "– " : ""
+      }${fmtMoney(Math.abs(li.amount), cur)}`
+    ),
+    `${"TOTAL".padEnd(24)}${fmtMoney(r.totals.total, cur)}`,
+    "",
+    r.payment.paymentId ? `Payment ID: ${r.payment.paymentId}` : "",
+    r.payment.confirmedAt ? `Paid on:    ${fmtDateTime(r.payment.confirmedAt)}` : "",
+    "══════════════════════════════",
+    "Powered by Kainook",
+  ].filter((l) => l !== undefined);
+
+  await Share.share({
+    message: lines.join("\n"),
+    title: `Receipt ${r.bookingReference}`,
+  });
+}
+
+// ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function ReceiptScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { data: receipt, isLoading, isError, refetch } = useReceipt(id);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const { data: receipt, isLoading, isError, error, refetch } = useReceipt(id);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refetch();
+    setRefreshing(false);
+  }, [refetch]);
+
+  // ── Loading ──────────────────────────────────────────────────────────────
 
   if (isLoading) {
     return (
-      <SafeAreaView style={s.container}>
-        <View style={s.centered}>
-          <ActivityIndicator size="large" color="#1a73e8" />
-          <Text style={s.loadingText}>Loading receipt...</Text>
-        </View>
+      <SafeAreaView style={s.container} edges={["bottom"]}>
+        <Stack.Screen options={{ title: "Receipt", headerShown: true, headerBackTitle: "Back" }} />
+        <SkeletonLoader />
       </SafeAreaView>
     );
   }
 
+  // ── Error ────────────────────────────────────────────────────────────────
+
   if (isError || !receipt) {
+    const errMsg = (error as any)?.error?.message ?? "The receipt could not be loaded.";
     return (
-      <SafeAreaView style={s.container}>
+      <SafeAreaView style={s.container} edges={["bottom"]}>
+        <Stack.Screen options={{ title: "Receipt", headerShown: true, headerBackTitle: "Back" }} />
         <View style={s.centered}>
           <Ionicons name="receipt-outline" size={56} color="#d1d5db" />
-          <Text style={s.errorTitle}>Receipt unavailable</Text>
-          <Text style={s.errorBody}>
-            The receipt for this booking could not be loaded. It may still be
-            generating — try again shortly.
-          </Text>
+          <Text style={s.errTitle}>Receipt unavailable</Text>
+          <Text style={s.errBody}>{errMsg}</Text>
           <TouchableOpacity style={s.primaryBtn} onPress={() => void refetch()}>
             <Text style={s.primaryBtnText}>Try Again</Text>
           </TouchableOpacity>
@@ -154,151 +228,149 @@ export default function ReceiptScreen() {
     );
   }
 
+  const cur = receipt.totals.currency;
+  const isCar = receipt.listing.type === "car";
+  const address = [receipt.listing.address, receipt.listing.town, receipt.listing.country]
+    .filter(Boolean)
+    .join(", ");
+
+  // ── Success ──────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={s.container} edges={["bottom"]}>
+      <Stack.Screen options={{ title: "Receipt", headerShown: true, headerBackTitle: "Back" }} />
+
       <ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />
+        }
       >
-        {/* Header */}
-        <View style={s.header}>
+        {/* ── Header card ───────────────────────────────────────────── */}
+        <View style={s.headerCard}>
           <View style={s.headerIconWrap}>
-            <Ionicons name="receipt-outline" size={36} color="#1a73e8" />
+            <Ionicons name="receipt-outline" size={34} color="#16a34a" />
           </View>
-          <Text style={s.headerTitle}>Receipt</Text>
-          <Text style={s.headerRef}>{receipt.bookingReference}</Text>
-          <Text style={s.headerDate}>Issued {formatDate(receipt.issuedAt)}</Text>
+          <Text style={s.receiptNum}>{receipt.receiptNumber}</Text>
+          <Text style={s.bookingRef}>{receipt.bookingReference}</Text>
+
+          <View style={[s.statusBadge, statusStyle(receipt.status)]}>
+            <Text style={[s.statusText, statusTextStyle(receipt.status)]}>
+              {statusLabel(receipt.status)}
+            </Text>
+          </View>
+
+          <Text style={s.issuedAt}>Issued {fmtDate(receipt.issuedAt)}</Text>
         </View>
 
-        {/* Property */}
+        {/* ── Property card ─────────────────────────────────────────── */}
         <View style={s.card}>
           <Text style={s.cardLabel}>Property</Text>
-          <Text style={s.cardTitle}>{receipt.listingTitle}</Text>
-          <Text style={s.cardSubtitle}>
-            {[receipt.listingAddress, receipt.listingTown, receipt.listingCountry]
-              .filter(Boolean)
-              .join(", ")}
+
+          <View style={s.propRow}>
+            <Text style={s.propTitle} numberOfLines={2}>
+              {receipt.listing.title ?? "—"}
+            </Text>
+            <View style={s.typeBadge}>
+              <Text style={s.typeBadgeText}>{listingTypeLabel(receipt.listing.type)}</Text>
+            </View>
+          </View>
+
+          {address ? <Text style={s.propAddr}>{address}</Text> : null}
+
+          {isCar ? (
+            <>
+              {receipt.period.pickupDatetime ? (
+                <Text style={s.propDate}>
+                  Pick-up: {fmtDateTime(receipt.period.pickupDatetime)}
+                </Text>
+              ) : null}
+              {receipt.period.returnDatetime ? (
+                <Text style={s.propDate}>
+                  Return: {fmtDateTime(receipt.period.returnDatetime)}
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {receipt.period.checkIn ? (
+                <Text style={s.propDate}>
+                  Check-in: {fmtDate(receipt.period.checkIn)}
+                </Text>
+              ) : null}
+              {receipt.period.checkOut ? (
+                <Text style={s.propDate}>
+                  Check-out: {fmtDate(receipt.period.checkOut)}
+                </Text>
+              ) : null}
+            </>
+          )}
+
+          <Text style={s.propDuration}>
+            {receipt.period.nightsOrDays} {isCar ? "day" : "night"}
+            {receipt.period.nightsOrDays !== 1 ? "s" : ""}
           </Text>
-          {receipt.checkIn && receipt.checkOut && (
-            <Text style={s.cardSubtitle}>
-              {formatDate(receipt.checkIn)} – {formatDate(receipt.checkOut)}
-            </Text>
-          )}
-          {receipt.pickupDatetime && receipt.returnDatetime && (
-            <Text style={s.cardSubtitle}>
-              Pickup: {formatDateTime(receipt.pickupDatetime)} → Return:{" "}
-              {formatDateTime(receipt.returnDatetime)}
-            </Text>
-          )}
         </View>
 
-        {/* Guest */}
+        {/* ── Guest card ────────────────────────────────────────────── */}
         <View style={s.card}>
           <Text style={s.cardLabel}>Guest</Text>
-          <Text style={s.cardTitle}>{receipt.guestName}</Text>
-          <Text style={s.cardSubtitle}>{receipt.guestEmail}</Text>
+          <Text style={s.guestName}>{receipt.guest.name}</Text>
+          <Text style={s.guestEmail}>{receipt.guest.email}</Text>
+          {receipt.guest.phone ? (
+            <Text style={s.guestEmail}>{receipt.guest.phone}</Text>
+          ) : null}
         </View>
 
-        {/* Pricing */}
+        {/* ── Pricing card ──────────────────────────────────────────── */}
         <View style={s.card}>
           <Text style={s.cardLabel}>Pricing</Text>
 
-          <ReceiptRow
-            label="Subtotal"
-            value={formatCurrency(receipt.subtotal, receipt.currency)}
-          />
-
-          {receipt.discountAmount != null && receipt.discountAmount > 0 && (
-            <ReceiptRow
-              label="Discount"
-              value={`– ${formatCurrency(receipt.discountAmount, receipt.currency)}`}
-              credit
+          {receipt.lineItems.map((item: ReceiptLineItem, i: number) => (
+            <Row
+              key={i}
+              label={item.label}
+              value={
+                item.amount < 0
+                  ? `– ${fmtMoney(item.amount, cur)}`
+                  : fmtMoney(item.amount, cur)
+              }
+              credit={item.amount < 0}
             />
-          )}
-
-          {receipt.serviceFee != null && receipt.serviceFee > 0 && (
-            <ReceiptRow
-              label="Service fee"
-              value={`+ ${formatCurrency(receipt.serviceFee, receipt.currency)}`}
-            />
-          )}
-
-          {receipt.taxAmount != null && receipt.taxAmount > 0 && (
-            <ReceiptRow
-              label="Taxes"
-              value={`+ ${formatCurrency(receipt.taxAmount, receipt.currency)}`}
-            />
-          )}
-
-          {receipt.deliveryFee != null && receipt.deliveryFee > 0 && (
-            <ReceiptRow
-              label="Delivery fee"
-              value={`+ ${formatCurrency(receipt.deliveryFee, receipt.currency)}`}
-            />
-          )}
-
-          {/* Custom line items from backend if provided */}
-          {receipt.lineItems?.map((item, i) =>
-            item.type !== "total" && item.type !== "subtotal" ? (
-              <ReceiptRow
-                key={i}
-                label={item.label}
-                value={formatCurrency(item.amount, receipt.currency)}
-                credit={item.type === "credit"}
-              />
-            ) : null
-          )}
+          ))}
 
           <View style={s.divider} />
-          <ReceiptRow
+
+          <Row
             label="Total Paid"
-            value={formatCurrency(receipt.totalAmount, receipt.currency)}
+            value={fmtMoney(receipt.totals.total, cur)}
             highlight
           />
         </View>
 
-        {/* Payment info */}
-        {(receipt.paymentMethod ||
-          receipt.paymentDate ||
-          receipt.transactionId ||
-          receipt.paymentStatus) && (
+        {/* ── Payment card ──────────────────────────────────────────── */}
+        {(receipt.payment.paymentId || receipt.payment.confirmedAt) ? (
           <View style={s.card}>
             <Text style={s.cardLabel}>Payment</Text>
-            {receipt.paymentMethod && (
-              <ReceiptRow label="Method" value={receipt.paymentMethod} />
-            )}
-            {receipt.paymentDate && (
-              <ReceiptRow
-                label="Date"
-                value={formatDate(receipt.paymentDate)}
-              />
-            )}
-            {receipt.paymentStatus && (
-              <ReceiptRow
-                label="Status"
-                value={receipt.paymentStatus
-                  .replace(/_/g, " ")
-                  .replace(/\b\w/g, (c) => c.toUpperCase())}
-              />
-            )}
-            {receipt.transactionId && (
-              <ReceiptRow
-                label="Transaction ID"
-                value={receipt.transactionId}
-              />
-            )}
+            {receipt.payment.paymentId ? (
+              <Row label="Payment ID" value={receipt.payment.paymentId} />
+            ) : null}
+            {receipt.payment.confirmedAt ? (
+              <Row label="Confirmed" value={fmtDateTime(receipt.payment.confirmedAt)} />
+            ) : null}
           </View>
-        )}
+        ) : null}
 
-        {/* Powered by */}
+        {/* ── Footer ───────────────────────────────────────────────── */}
         <View style={s.footer}>
           <Text style={s.footerText}>Powered by Kainook</Text>
         </View>
 
-        {/* Share button */}
+        {/* ── Share button ──────────────────────────────────────────── */}
         <TouchableOpacity
           style={s.shareBtn}
-          onPress={() => void shareReceipt(receipt)}
+          onPress={() => void buildShareText(receipt)}
           activeOpacity={0.85}
         >
           <Ionicons name="share-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
@@ -309,107 +381,127 @@ export default function ReceiptScreen() {
   );
 }
 
+// ── Status badge helpers ───────────────────────────────────────────────────────
+
+function statusStyle(status: string) {
+  if (status === "confirmed" || status === "completed")
+    return { backgroundColor: "#dcfce7", borderColor: "#86efac" };
+  if (status === "cancelled_by_guest" || status === "cancelled_by_provider" || status === "cancelled_by_system")
+    return { backgroundColor: "#fee2e2", borderColor: "#fca5a5" };
+  if (status === "pending" || status === "pending_payment")
+    return { backgroundColor: "#fef9c3", borderColor: "#fde047" };
+  return { backgroundColor: "#f3f4f6", borderColor: "#d1d5db" };
+}
+
+function statusTextStyle(status: string) {
+  if (status === "confirmed" || status === "completed") return { color: "#15803d" };
+  if (status.startsWith("cancelled")) return { color: "#dc2626" };
+  if (status === "pending" || status === "pending_payment") return { color: "#92400e" };
+  return { color: "#374151" };
+}
+
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
-  container:    { flex: 1, backgroundColor: "#f9fafb" },
-  centered:     { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
-  scroll:       { padding: 16, paddingBottom: 40 },
+  container:  { flex: 1, backgroundColor: "#f3f4f6" },
+  centered:   { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
+  scroll:     { padding: 16, paddingBottom: 40, gap: 12 },
 
-  // Loading / error
-  loadingText:  { fontSize: 14, color: "#6b7280", marginTop: 12 },
-  errorTitle:   { fontSize: 20, fontWeight: "700", color: "#111827", marginTop: 16, textAlign: "center" },
-  errorBody:    { fontSize: 14, color: "#6b7280", textAlign: "center", lineHeight: 20, marginBottom: 24 },
+  skRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
 
-  // Header
-  header: {
-    alignItems: "center",
-    paddingVertical: 28,
+  // Error
+  errTitle: { fontSize: 20, fontWeight: "700", color: "#111827", marginTop: 16, textAlign: "center" },
+  errBody:  { fontSize: 14, color: "#6b7280", textAlign: "center", lineHeight: 20, marginBottom: 24 },
+
+  // Header card
+  headerCard: {
     backgroundColor: "#fff",
-    borderRadius: 18,
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#e5e7eb",
-    marginBottom: 16,
-    paddingHorizontal: 20,
+    gap: 6,
   },
   headerIconWrap: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: "#eff6ff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
+    width: 64, height: 64, borderRadius: 32,
+    backgroundColor: "#f0fdf4",
+    alignItems: "center", justifyContent: "center",
+    marginBottom: 8,
   },
-  headerTitle:  { fontSize: 22, fontWeight: "800", color: "#111827", marginBottom: 4 },
-  headerRef:    { fontSize: 14, fontWeight: "700", color: "#1a73e8", letterSpacing: 0.5, marginBottom: 4 },
-  headerDate:   { fontSize: 12, color: "#6b7280" },
+  receiptNum:  { fontSize: 13, fontWeight: "700", color: "#16a34a", letterSpacing: 0.4 },
+  bookingRef:  { fontSize: 18, fontWeight: "800", color: "#111827" },
+  statusBadge: {
+    borderRadius: 20, borderWidth: 1,
+    paddingHorizontal: 12, paddingVertical: 4, marginTop: 2,
+  },
+  statusText:  { fontSize: 12, fontWeight: "700" },
+  issuedAt:    { fontSize: 12, color: "#6b7280", marginTop: 4 },
 
-  // Card
+  // Shared card
   card: {
     backgroundColor: "#fff",
     borderRadius: 14,
     padding: 16,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: "#e5e7eb",
-    gap: 4,
+    gap: 6,
   },
   cardLabel: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#6b7280",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    marginBottom: 8,
+    fontSize: 11, fontWeight: "700", color: "#6b7280",
+    textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6,
   },
-  cardTitle:    { fontSize: 16, fontWeight: "700", color: "#111827" },
-  cardSubtitle: { fontSize: 13, color: "#6b7280", marginTop: 2 },
 
-  // Row
-  row:                { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 6 },
-  rowHighlight:       { paddingTop: 4 },
-  rowLabel:           { fontSize: 14, color: "#374151", flex: 1 },
-  rowLabelHighlight:  { fontSize: 15, fontWeight: "700", color: "#111827" },
-  rowValue:           { fontSize: 14, color: "#111827", fontWeight: "500" },
-  rowValueHighlight:  { fontSize: 16, fontWeight: "800", color: "#111827" },
-  rowValueCredit:     { color: "#16a34a" },
+  // Property
+  propRow:    { flexDirection: "row", alignItems: "flex-start", gap: 8 },
+  propTitle:  { fontSize: 16, fontWeight: "700", color: "#111827", flex: 1 },
+  typeBadge:  {
+    backgroundColor: "#f0fdf4", borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  typeBadgeText: { fontSize: 11, fontWeight: "600", color: "#16a34a" },
+  propAddr:   { fontSize: 13, color: "#6b7280" },
+  propDate:   { fontSize: 13, color: "#374151", fontWeight: "500" },
+  propDuration: { fontSize: 12, color: "#9ca3af", marginTop: 2 },
 
-  divider:      { height: 1, backgroundColor: "#e5e7eb", marginVertical: 8 },
+  // Guest
+  guestName:  { fontSize: 15, fontWeight: "700", color: "#111827" },
+  guestEmail: { fontSize: 13, color: "#6b7280" },
 
-  // Footer
-  footer:       { alignItems: "center", marginVertical: 16 },
-  footerText:   { fontSize: 12, color: "#9ca3af" },
+  // Pricing rows
+  row:         { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", paddingVertical: 5 },
+  rowHL:       { paddingTop: 6 },
+  rowLabel:    { fontSize: 14, color: "#374151", flex: 1, marginRight: 12 },
+  rowLabelHL:  { fontSize: 15, fontWeight: "700", color: "#111827" },
+  rowValue:    { fontSize: 14, color: "#111827", fontWeight: "500" },
+  rowValueHL:  { fontSize: 16, fontWeight: "800" },
+  rowValueCredit: { color: "#16a34a" },
 
-  // Share button
+  divider:     { height: 1, backgroundColor: "#e5e7eb", marginVertical: 6 },
+
+  // Footer & share
+  footer:      { alignItems: "center", paddingVertical: 12 },
+  footerText:  { fontSize: 12, color: "#9ca3af" },
   shareBtn: {
     flexDirection: "row",
-    backgroundColor: "#1a73e8",
+    backgroundColor: "#16a34a",
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginTop: 4,
   },
   shareBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 
-  // Buttons
   primaryBtn: {
-    backgroundColor: "#1a73e8",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    width: "100%",
-    marginBottom: 12,
+    backgroundColor: "#16a34a", borderRadius: 12,
+    paddingVertical: 14, alignItems: "center",
+    width: "100%", marginBottom: 12,
   },
   primaryBtnText: { color: "#fff", fontWeight: "700", fontSize: 15 },
   secondaryBtn: {
-    borderWidth: 1,
-    borderColor: "#d1d5db",
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: "center",
-    width: "100%",
+    borderWidth: 1, borderColor: "#d1d5db", borderRadius: 12,
+    paddingVertical: 14, alignItems: "center", width: "100%",
   },
   secondaryBtnText: { color: "#374151", fontWeight: "600", fontSize: 15 },
 });

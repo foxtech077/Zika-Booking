@@ -45,6 +45,7 @@ export default function BookingsPage() {
   const isAdminOrSuperAdmin = user?.role === "super_admin" || user?.role === "admin";
   const isCountryManager = user?.role === "country_manager";
   const canManualBook = canAccess(role, "manage_manual_booking");
+  const canCancelBooking = canAccess(role, "manage_bookings");
   // scopedCountries only applies to country_manager (not admin — admin sees all)
   const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
   const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin" || (user?.role === "country_manager" && scopedCountries.length > 1);
@@ -230,7 +231,7 @@ export default function BookingsPage() {
       width: "80px",
       render: (b) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          {["pending_payment", "confirmed"].includes(b.status) && (
+          {(b.status === "pending_payment" || (canCancelBooking && b.status === "confirmed")) && (
             <button
               onClick={() => setCancelModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
@@ -270,11 +271,12 @@ export default function BookingsPage() {
       />
 
       <Card padding="none">
-        <FilterBar 
-        
+        <FilterBar
           search={q}
           onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
           filters={[
             {
               key: "status",
@@ -374,7 +376,7 @@ export default function BookingsPage() {
         description={`${selected?.guestFirstName} ${selected?.guestLastName} · ${selected?.guestEmail}`}
         width="md"
         footer={
-          selected && ["pending_payment", "confirmed"].includes(selected.status) ? (
+          selected && (selected.status === "pending_payment" || (canCancelBooking && selected.status === "confirmed")) ? (
             <Button
               variant="danger"
               size="sm"

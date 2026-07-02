@@ -119,7 +119,6 @@ export default function VerifyPendingScreen() {
     verifyMutation.mutate(token);
   }
 
-  const isLocalhost = pastedLink.toLowerCase().includes("localhost");
   const extractedTokenValue = extractToken(pastedLink);
 
   return (
@@ -144,8 +143,8 @@ export default function VerifyPendingScreen() {
       
       <View style={styles.instructionsContainer}>
         <Text style={styles.instructionStep}>1. Open your verification email.</Text>
-        <Text style={styles.instructionStep}>2. Long-press the "Verify Email" button and copy the link.</Text>
-        <Text style={styles.instructionStep}>3. Paste the link or the raw token below to activate your account.</Text>
+        <Text style={styles.instructionStep}>2. Tap "Verify Email" — the app should open automatically.</Text>
+        <Text style={styles.instructionStep}>3. If the link doesn't open the app, copy it and paste it below.</Text>
       </View>
 
       <TouchableOpacity
@@ -180,10 +179,10 @@ export default function VerifyPendingScreen() {
       {showPaste && (
         <View style={styles.pasteCard}>
           <View style={styles.warningBox}>
-            <Text style={styles.warningTitle}>⚠️ Note for Mobile Users</Text>
+            <Text style={styles.warningTitle}>Link not opening automatically?</Text>
             <Text style={styles.warningText}>
-              Verification links in the email contain "localhost", which cannot be opened directly on your phone.
-              Instead, copy the link from your email and paste it below. We will handle the rest!
+              Copy the verification link from your email and paste it below.
+              We'll extract the token and verify your account.
             </Text>
           </View>
 
@@ -194,7 +193,7 @@ export default function VerifyPendingScreen() {
             style={[styles.pasteInput, pasteError ? styles.pasteInputError : null]}
             value={pastedLink}
             onChangeText={(v) => { setPastedLink(v); setPasteError(""); }}
-            placeholder="Paste http://localhost:3000/verify?token=... or the 64-char token here"
+            placeholder="Paste https://kainook.com/verify?token=... or the 64-char token here"
             placeholderTextColor={K.colors.textLightDim}
             autoCapitalize="none"
             autoCorrect={false}
@@ -202,12 +201,12 @@ export default function VerifyPendingScreen() {
             numberOfLines={3}
           />
 
-          {isLocalhost && extractedTokenValue && (
+          {extractedTokenValue && !pasteError && (
             <View style={styles.infoBox}>
               <Text style={styles.infoText}>
-                ✨ Localhost URL detected! Successfully extracted token:{"\n"}
+                ✅ Token found:{" "}
                 <Text style={styles.tokenHighlight}>
-                  {extractedTokenValue.substring(0, 8)}...{extractedTokenValue.substring(extractedTokenValue.length - 8)}
+                  {extractedTokenValue.substring(0, 8)}…{extractedTokenValue.substring(extractedTokenValue.length - 8)}
                 </Text>
               </Text>
             </View>
