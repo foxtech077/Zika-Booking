@@ -158,6 +158,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           taskStatus: { type: "string", enum: ["open", "escalated"] },
           starRating: { type: "string", description: "Filter by claimed star rating (1–5)" },
           slaStatus: { type: "string", enum: ["breached", "approaching", "ok"], description: "SLA breach status" },
+          status: { type: "string", enum: ["pending_review", "auto_suspended"], description: "Filter listings by status" },
           sortBy: { type: "string", enum: ["sla_deadline", "submitted_at"], default: "sla_deadline" },
           ...PageQuery,
         },
@@ -206,7 +207,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
     if (!checkAdminRole(req, reply)) return;
     const admin = req as AdminRequest;
 
-    const { country, starRating, taskStatus, slaStatus, page = "1", limit = "20", sortBy = "sla_deadline" } = req.query as Record<string, string>;
+    const { country, starRating, taskStatus, slaStatus, status, page = "1", limit = "20", sortBy = "sla_deadline" } = req.query as Record<string, string>;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const take = Math.min(parseInt(limit, 10), 100);
@@ -233,9 +234,11 @@ export async function adminListingRoutes(app: FastifyInstance) {
     const isCountryManager = admin.adminRole === "country_manager";
 
     const listingFilter: any = {
-      status: { in: ["pending_review", "auto_suspended"]
-    },
-  };
+      status: status
+        ? status
+        : { in: ["pending_review", "auto_suspended"] },
+    };
+
     if (isCountryManager) {
       if (country) {
         if (admin.countryScope.includes(country)) {
@@ -391,9 +394,9 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   uploadedTypes: { type: "array", items: { type: "string" } },
                 },
               },
-                        },
+            },
             reviewTasks: { type: "array", items: { type: "object" } },
-            
+
             // ── ADD THESE NEW SCHEMA PROPERTIES HERE: ──
             description: { type: "string", nullable: true },
             currency: { type: "string", nullable: true },
@@ -422,7 +425,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             mileagePolicy: { type: "string", nullable: true },
             mileageLimitKm: { type: "integer", nullable: true },
             // ───────────────────────────────────────────
-          }, 
+          },
         }),
         404: ErrorResponse,
 
@@ -502,7 +505,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         ...listing,
-        pricePerNight: listing.category === "car" 
+        pricePerNight: listing.category === "car"
           ? (listing.pricePerDay ? Number(listing.pricePerDay) : null)
           : (listing.pricePerNight ? Number(listing.pricePerNight) : null),
         cancellationPolicy: listing.cancellationPolicy,
@@ -513,7 +516,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         unitCount: listing.category === "hotel" ? listing.unitCount : undefined,
         smokingAllowed: listing.category !== "car" ? listing.smokingAllowed : undefined,
         petsAllowed: listing.category !== "car" ? listing.petsAllowed : undefined,
-        
+
         // Apartment-only fields (omitted for hotels and cars)
         bedrooms: listing.category === "apartment" ? listing.bedrooms : undefined,
         bathrooms: listing.category === "apartment" ? listing.bathrooms : undefined,
@@ -522,7 +525,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         longStayDiscountValue: listing.category === "apartment" ? (listing.longStayDiscountValue ? Number(listing.longStayDiscountValue) : null) : undefined,
         longStayDiscountType: listing.category === "apartment" ? listing.longStayDiscountType : undefined,
         longStayMinNights: listing.category === "apartment" ? listing.longStayMinNights : undefined,
-        
+
         // Car-only fields (omitted for hotels and apartments)
         carMake: listing.category === "car" ? listing.carMake : undefined,
         carModel: listing.category === "car" ? listing.carModel : undefined,
@@ -1751,7 +1754,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           id: { type: "string", description: "Listing ID" },
         },
       },
-            body: {
+      body: {
         type: "object",
         properties: {
           reason: {
@@ -1799,7 +1802,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
         throw error;
       }
-     const { reason, warning } = req.body as { reason?: string; warning?: boolean };
+      const { reason, warning } = req.body as { reason?: string; warning?: boolean };
       const listing = await prisma.listing.findUnique({ where: { id } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
       if (listing.status !== "suspended" && listing.status !== "auto_suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
@@ -1838,7 +1841,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         }),
       ]);
 
-            fetchProviderEmail(listing.providerId)
+      fetchProviderEmail(listing.providerId)
         .then((email) => {
           if (email) {
             if (warning) {
@@ -2182,7 +2185,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             country: true,
             town: true,
             pricePerNight: true,
-             pricePerDay: true,
+            pricePerDay: true,
             currency: true,
             submissionCount: true,
             providerId: true,
@@ -2202,7 +2205,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           const pricePerNight = l.category === "car"
             ? (l.pricePerDay ? Number(l.pricePerDay) : null)
             : (l.pricePerNight ? Number(l.pricePerNight) : null);
-          
+
           return {
             ...l,
             pricePerNight,

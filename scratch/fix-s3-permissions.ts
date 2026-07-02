@@ -76,29 +76,33 @@ async function main() {
     console.error("Failed to update Public Access Block Configuration:", err.message);
   }
 
-  // 4. Let's try to add a Bucket Policy that allows public reads for brand/*
+  // 4. Let's try to add a Bucket Policy that allows public reads for brand/*, profiles/*, and listings/*
   const policyDocument = JSON.stringify({
     Version: "2012-10-17",
     Statement: [
       {
-        Sid: "PublicReadForBrand",
+        Sid: "PublicReadForBrandProfilesListings",
         Effect: "Allow",
         Principal: "*",
         Action: "s3:GetObject",
-        Resource: `arn:aws:s3:::${BUCKET}/brand/*`,
+        Resource: [
+          `arn:aws:s3:::${BUCKET}/brand/*`,
+          `arn:aws:s3:::${BUCKET}/profiles/*`,
+          `arn:aws:s3:::${BUCKET}/listings/*`,
+        ],
       },
     ],
   });
 
   try {
-    console.log("Attempting to apply bucket policy for public access to brand/*...");
+    console.log("Attempting to apply bucket policy for public access to brand/*, profiles/*, and listings/*...");
     await s3.send(
       new PutBucketPolicyCommand({
         Bucket: BUCKET,
         Policy: policyDocument,
       })
     );
-    console.log("Successfully applied public read bucket policy to brand/*!");
+    console.log("Successfully applied public read bucket policy!");
   } catch (err: any) {
     console.error("Failed to apply bucket policy:", err.message);
   }
