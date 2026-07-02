@@ -290,7 +290,7 @@ export default function ProviderBookingDetailScreen() {
 
     const lines = [
       "══════════════════════════",
-      "  ZIKABOOKING RESERVATION",
+      "  KAINOOK RESERVATION",
       "══════════════════════════",
       `Ref:    ${booking.reference}`,
       `Status: ${STATUS_CFG[booking.status]?.label ?? booking.status}`,

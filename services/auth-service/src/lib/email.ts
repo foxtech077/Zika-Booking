@@ -119,6 +119,8 @@ export async function sendVerificationEmail(
   });
 }
 
+
+
 export async function sendWelcomeEmail(to: string, firstName: string): Promise<void> {
   await sendWithRetry({
     to,

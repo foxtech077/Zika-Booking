@@ -14,6 +14,7 @@ interface AuthState {
   hasCompletedOnboarding: boolean;
   localCurrency: string | null;
   setAuth: (user: PublicUser, accessToken: string) => Promise<void>;
+  updateUser: (patch: Partial<PublicUser>) => Promise<void>;
   clearAuth: () => Promise<void>;
   hydrate: () => Promise<void>;
   setCompletedOnboarding: (completed: boolean) => Promise<void>;
@@ -23,7 +24,17 @@ interface AuthState {
 const ONBOARDING_COMPLETED_KEY = "zika_onboarding_completed";
 const LOCAL_CURRENCY_KEY = "zika_local_currency";
 
-export const useAuthStore = create<AuthState>((set) => ({
+// photoUrl is excluded from anything written to SecureStore: /auth/profile and
+// PATCH /auth/profile/:id now return a presigned S3 URL valid for ~15 minutes,
+// so persisting it would mean serving an expired/broken image on next app
+// launch. It only ever lives in-memory (this store's runtime state + the
+// short-TTL React Query cache in hooks/profile.ts) and is re-fetched as needed.
+function stripPersistedFields(user: PublicUser): PublicUser {
+  const { photoUrl, ...rest } = user;
+  return rest;
+}
+
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   accessToken: null,
   isLoading: false,
@@ -34,9 +45,23 @@ export const useAuthStore = create<AuthState>((set) => ({
   setAuth: async (user, accessToken) => {
     const currency = getCurrencyForCountry(user.country).code;
     await SecureStore.setItemAsync(ACCESS_TOKEN_KEY, accessToken);
-    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(user));
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(stripPersistedFields(user)));
     await SecureStore.setItemAsync(LOCAL_CURRENCY_KEY, currency);
     set({ user, accessToken, localCurrency: currency });
+  },
+
+  // Merges a partial update (e.g. after editing the profile or changing the
+  // photo) into the in-memory user object so every screen reading from the
+  // store reflects it immediately, without a full re-login. `photoUrl` is
+  // kept in-memory only (see stripPersistedFields) since GET/PATCH /auth/profile
+  // now return a short-lived (~15min) presigned S3 URL that must never be
+  // written to persistent storage.
+  updateUser: async (patch) => {
+    const current = get().user;
+    if (!current) return;
+    const merged = { ...current, ...patch };
+    await SecureStore.setItemAsync(USER_KEY, JSON.stringify(stripPersistedFields(merged)));
+    set({ user: merged });
   },
 
   clearAuth: async () => {

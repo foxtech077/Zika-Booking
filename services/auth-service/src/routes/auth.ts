@@ -26,6 +26,7 @@ import {
 } from "../lib/email";
 import { incrementCounter, getCooldown, setCooldown } from "../lib/redis";
 import { sendError, sendSuccess, zodFieldErrors } from "../lib/errors";
+import { signPhotoUrl } from "../lib/s3";
 import { OAuth2Client } from "google-auth-library";
 import * as jose from "jose";
 
@@ -973,7 +974,7 @@ export async function authRoutes(app: FastifyInstance) {
             lastname: user.lastName,
             email: user.email,
             userType: user.userType,
-            photoUrl: user.photoUrl,
+            photoUrl: await signPhotoUrl(user.photoUrl),
             loyaltyPoints: user.loyaltyPoints,
             currentTier: user.currentTier,
             businessName: user.businessName,
@@ -1131,7 +1132,7 @@ export async function authRoutes(app: FastifyInstance) {
           profile: {
             id: updatedUser.id,
             name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
-            photoUrl: updatedUser.photoUrl,
+            photoUrl: await signPhotoUrl(updatedUser.photoUrl),
             businessName: updatedUser.businessName,
           },
         });

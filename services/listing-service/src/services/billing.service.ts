@@ -8,6 +8,7 @@ export type BillingInput = {
   deliveryFee?: number;
   promotionDiscount: number;
   voucherAmount: number;
+  pointsDiscount?: number;
   taxRate: number;
   commissionRate: number;
 };
@@ -19,6 +20,7 @@ export type BillingResult = {
   subtotal: number;
   promotionDiscount: number;
   voucherDiscount: number;
+  pointsDiscount: number;
   serviceFee: number;
   taxAmount: number;
   deliveryFee: number;
@@ -39,8 +41,12 @@ export function calculateBilling(input: BillingInput): BillingResult {
       : calcDays(input.checkIn, input.checkOut);
 
   const baseAmount = Number((units * input.rate).toFixed(2));
+  const pointsDiscount = Number((input.pointsDiscount ?? 0).toFixed(2));
+
   // PRD 15.9: discount = best(promotion_discount, voucher_discount)
-  const discount = Number(Math.max(input.promotionDiscount, input.voucherAmount).toFixed(2));
+  const bestPromoVoucher = Math.max(input.promotionDiscount, input.voucherAmount);
+  const discount = Number((bestPromoVoucher + pointsDiscount).toFixed(2));
+
   const subtotal = Number(Math.max(0, baseAmount - discount).toFixed(2));
   // PRD 15.9: service_fee = CEILING(subtotal × commission_rate, 2dp)
   const serviceFee = Math.ceil(subtotal * input.commissionRate * 100) / 100;
@@ -57,6 +63,7 @@ export function calculateBilling(input: BillingInput): BillingResult {
     subtotal,
     promotionDiscount: input.promotionDiscount,
     voucherDiscount: input.voucherAmount,
+    pointsDiscount,
     serviceFee,
     taxAmount,
     deliveryFee,

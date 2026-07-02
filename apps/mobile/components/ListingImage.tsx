@@ -1,8 +1,14 @@
-import { Image } from "react-native";
+import { View, Animated, StyleSheet } from "react-native";
+import { useRef } from "react";
 import { useAuthStore } from "../store/auth";
 import { useSignedPhoto } from "../lib/s3-client";
 
-export function ListingImage({ uri, style, resizeMode = "cover", onError }: {
+export function ListingImage({
+  uri,
+  style,
+  resizeMode = "cover",
+  onError,
+}: {
   uri: string | null | undefined;
   style: any;
   resizeMode?: "cover" | "contain" | "stretch" | "center";
@@ -10,20 +16,37 @@ export function ListingImage({ uri, style, resizeMode = "cover", onError }: {
 }) {
   const token = useAuthStore((s) => s.accessToken);
   const { signedUrl } = useSignedPhoto(uri);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  if (!signedUrl) return null;
+  function handleLoad() {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 280, useNativeDriver: true }).start();
+  }
 
-  // Only add Bearer token when the image URL routes through our own API gateway and is not an S3 presigned URL
-  const isApiUrl = signedUrl.includes("api.kainook.com") && !signedUrl.includes("amazonaws.com");
+  if (!signedUrl) {
+    return <View style={[style, imgStyles.placeholder]} />;
+  }
+
+  const isApiUrl =
+    signedUrl.includes("api.kainook.com") && !signedUrl.includes("amazonaws.com");
+
+  const source = isApiUrl && token
+    ? { uri: signedUrl, headers: { Authorization: `Bearer ${token}` } }
+    : { uri: signedUrl };
 
   return (
-    <Image
-      source={isApiUrl && token
-        ? { uri: signedUrl, headers: { Authorization: `Bearer ${token}` } }
-        : { uri: signedUrl }}
-      style={style}
-      resizeMode={resizeMode}
-      onError={onError}
-    />
+    <View style={style}>
+      <View style={[StyleSheet.absoluteFill, imgStyles.placeholder]} />
+      <Animated.Image
+        source={source}
+        style={[StyleSheet.absoluteFill, { opacity: fadeAnim }]}
+        resizeMode={resizeMode}
+        onLoad={handleLoad}
+        onError={onError}
+      />
+    </View>
   );
 }
+
+const imgStyles = StyleSheet.create({
+  placeholder: { backgroundColor: "#e5e7eb" },
+});

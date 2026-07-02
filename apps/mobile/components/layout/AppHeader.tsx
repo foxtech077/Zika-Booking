@@ -3,11 +3,11 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useAuthStore } from "../../store/auth";
+import { useUnreadNotificationCount } from "../../hooks/notifications";
 import { K } from "../../constants/theme";
 
 interface Props {
   onBurgerPress: () => void;
-  unreadCount?: number;
 }
 
 function timeGreeting() {
@@ -17,8 +17,10 @@ function timeGreeting() {
   return "Good evening,";
 }
 
-export function AppHeader({ onBurgerPress, unreadCount = 0 }: Props) {
+export function AppHeader({ onBurgerPress }: Props) {
   const user = useAuthStore((s) => s.user);
+  const { data: notifData } = useUnreadNotificationCount();
+  const unreadCount = notifData?.count ?? 0;
 
   return (
     <SafeAreaView edges={["top"]} style={s.safe}>

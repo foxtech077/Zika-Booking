@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
 import { withSignedPhotos } from "../lib/s3.js";
-import { DriveType } from "../generated/index.js";
+import { DriveType, FuelType } from "../generated/index.js";
 
 // ── Geo helper ────────────────────────────────────────────────────────────────
 
@@ -89,26 +89,36 @@ export async function searchRoutes(app: FastifyInstance) {
     const limit = Math.min(parseInt(q["limit"] ?? "20", 10), 50);
     const cursor = q["cursor"] ? parseInt(q["cursor"], 10) : 0;
 
-    // Filters
+    // Filters — common
     const priceMin = q["price_min"] ? parseFloat(q["price_min"]) : undefined;
     const priceMax = q["price_max"] ? parseFloat(q["price_max"]) : undefined;
     const ratingMin = q["rating_min"] ? parseFloat(q["rating_min"]) : undefined;
     const cancellationPolicy = q["cancellation_policy"];
     const amenityIds = q["amenity_ids"] ? q["amenity_ids"].split(",") : undefined;
+    const smokingAllowed = q["smoking_allowed"];
+    const petsAllowed = q["pets_allowed"];
+    const roomType = q["room_type"];
     // Hotel filters
     const starRatings = q["star_rating"] ? q["star_rating"].split(",").map(Number) : undefined;
     // Apartment filters
     const bedroomsMin = q["bedrooms_min"] ? parseInt(q["bedrooms_min"], 10) : undefined;
+    const bathroomsMin = q["bathrooms_min"] ? parseInt(q["bathrooms_min"], 10) : undefined;
     const maxGuestsMin = q["max_guests_min"] ? parseInt(q["max_guests_min"], 10) : undefined;
     const longStayDiscount = q["long_stay_discount"] === "true";
+    const minStayNights = q["min_stay_nights"] ? parseInt(q["min_stay_nights"], 10) : undefined;
     // Car filters
+    const carMake = q["car_make"];
+    const carModel = q["car_model"];
     const transmission = q["transmission"];
+    const fuelType = q["fuel_type"];
     const seatsMin = q["seats_min"] ? parseInt(q["seats_min"], 10) : undefined;
     const mileagePolicy = q["mileage_policy"];
     const carCategory = q["car_category"];
     const driveType = q["drive_type"];
     const airConditioning = q["air_conditioning"];
     const driverAge = q["driver_age"] ? parseInt(q["driver_age"], 10) : undefined;
+    const minRentalDays = q["min_rental_days"] ? parseInt(q["min_rental_days"], 10) : undefined;
+    const delivery = q["delivery"];
 
     if (!category || isNaN(lat) || isNaN(lng)) {
       return sendError(reply, 400, "INVALID_PARAMS", "category, lat, and lng are required.");
@@ -128,11 +138,27 @@ export async function searchRoutes(app: FastifyInstance) {
     if (priceMin !== undefined) where[priceField] = { ...where[priceField], gte: priceMin };
     if (priceMax !== undefined) where[priceField] = { ...where[priceField], lte: priceMax };
     if (cancellationPolicy) where.cancellationPolicy = cancellationPolicy;
+    if (roomType) where.roomType = roomType;
+    if (smokingAllowed !== undefined) where.smokingAllowed = smokingAllowed === "true";
+    if (petsAllowed !== undefined) where.petsAllowed = petsAllowed === "true";
+    // Hotel
     if (starRatings?.length) where.starRating = { in: starRatings };
+    // Apartment
     if (bedroomsMin !== undefined) where.bedrooms = { gte: bedroomsMin };
+    if (bathroomsMin !== undefined) where.bathrooms = { gte: bathroomsMin };
     if (maxGuestsMin !== undefined) where.maxGuests = { gte: maxGuestsMin };
     if (longStayDiscount) where.longStayEnabled = true;
+    // Car
+    if (carMake) where.carMake = { contains: carMake, mode: "insensitive" };
+    if (carModel) where.carModel = { contains: carModel, mode: "insensitive" };
     if (transmission) where.transmission = transmission;
+    if (fuelType) {
+      const ftMap: Record<string, FuelType> = {
+        petrol: FuelType.petrol, diesel: FuelType.diesel, electric: FuelType.electric,
+        hybrid: FuelType.hybrid, lpg: FuelType.lpg,
+      };
+      if (ftMap[fuelType]) where.fuelType = ftMap[fuelType];
+    }
     if (seatsMin !== undefined) where.seats = { gte: seatsMin };
     if (mileagePolicy) where.mileagePolicy = mileagePolicy;
     if (carCategory) where.carCategory = carCategory;
@@ -142,15 +168,22 @@ export async function searchRoutes(app: FastifyInstance) {
       else if (driveType === "AWD") where.driveType = DriveType.AWD;
     }
     if (airConditioning !== undefined) where.airConditioning = airConditioning === "true";
-    if (driverAge !== undefined) {
-      where.OR = [
-        { minimumDriverAge: null },
-        { minimumDriverAge: { lte: driverAge } },
-      ];
-    }
+    if (delivery !== undefined) where.deliveryEnabled = delivery === "true";
     if (amenityIds?.length) {
       where.amenities = { some: { amenityKey: { in: amenityIds } } };
     }
+    // Nullable range guards — combined into AND so they don't overwrite each other
+    const andClauses: any[] = [];
+    if (driverAge !== undefined) {
+      andClauses.push({ OR: [{ minimumDriverAge: null }, { minimumDriverAge: { lte: driverAge } }] });
+    }
+    if (minRentalDays !== undefined) {
+      andClauses.push({ OR: [{ minimumRentalDays: null }, { minimumRentalDays: { lte: minRentalDays } }] });
+    }
+    if (minStayNights !== undefined) {
+      andClauses.push({ OR: [{ minStayNights: null }, { minStayNights: { lte: minStayNights } }] });
+    }
+    if (andClauses.length) where.AND = andClauses;
 
     // Fetch candidates (wide net — geo filter in JS)
     const candidates = await prisma.listing.findMany({
@@ -177,7 +210,19 @@ export async function searchRoutes(app: FastifyInstance) {
     const bookedIds = await getBookedListingIds(
       candidateIds, checkIn, checkOut, pickupDatetime, returnDatetime,
     );
-    const available = withDistance.filter((l) => !bookedIds.has(l.id));
+    let available = withDistance.filter((l) => !bookedIds.has(l.id));
+
+    // Review rating post-filter (single aggregate query over the filtered set)
+    if (ratingMin !== undefined) {
+      const ratingAggs = await prisma.listingReview.groupBy({
+        by: ["listingId"],
+        where: { listingId: { in: available.map((l) => l.id) }, isHidden: false },
+        _avg: { rating: true },
+        having: { rating: { _avg: { gte: ratingMin } } },
+      });
+      const qualifiedIds = new Set(ratingAggs.map((r) => r.listingId));
+      available = available.filter((l) => qualifiedIds.has(l.id));
+    }
 
     // Sort
     const sortPriceField = category === "car" ? "pricePerDay" : "pricePerNight";
@@ -307,27 +352,37 @@ export async function searchRoutes(app: FastifyInstance) {
           cursor: { type: "integer", default: 0, description: "Pagination offset cursor" },
           price_min: { type: "number", description: "Minimum price per night/day" },
           price_max: { type: "number", description: "Maximum price per night/day" },
-          rating_min: { type: "number", description: "Minimum rating" },
+          rating_min: { type: "number", description: "Minimum average guest review rating (0–5). Only listings with rated reviews >= this value are returned." },
           cancellation_policy: { type: "string", description: "Cancellation policy filter" },
-          amenity_ids: { type: "string", description: "Comma-separated amenity keys" },
+          amenity_ids: { type: "string", description: "Comma-separated amenity keys to require (e.g. wifi,pool)" },
+          smoking_allowed: { type: "string", enum: ["true", "false"], description: "Filter by smoking policy" },
+          pets_allowed: { type: "string", enum: ["true", "false"], description: "Filter by pet policy" },
+          room_type: {
+            type: "string",
+            enum: ["standard", "superior", "deluxe", "suite", "junior_suite", "studio", "family_room", "presidential_suite"],
+            description: "Hotel room type filter",
+          },
           // Hotel filters
-          star_rating: { type: "string", description: "Comma-separated star ratings e.g. 3,4,5" },
+          star_rating: { type: "string", description: "Comma-separated hotel star classifications e.g. 3,4,5" },
           // Apartment filters
           bedrooms_min: { type: "integer", description: "Minimum number of bedrooms" },
+          bathrooms_min: { type: "integer", description: "Minimum number of bathrooms" },
           max_guests_min: { type: "integer", description: "Minimum max-guests capacity" },
-          long_stay_discount: { type: "string", enum: ["true", "false"], description: "Filter listings with long-stay discount" },
+          long_stay_discount: { type: "string", enum: ["true", "false"], description: "Filter listings that have a long-stay discount enabled" },
+          min_stay_nights: { type: "integer", description: "User's planned stay duration in nights — filters out listings that require more than this many nights minimum" },
           // Car filters
-          transmission: { type: "string", enum: ["automatic", "manual"], description: "Transmission type" },
+          car_make: { type: "string", description: "Car brand/make (case-insensitive partial match, e.g. Toyota)" },
+          car_model: { type: "string", description: "Car model (case-insensitive partial match, e.g. Hilux)" },
+          transmission: { type: "string", enum: ["automatic", "manual", "semi_auto"], description: "Transmission type" },
+          fuel_type: { type: "string", enum: ["petrol", "diesel", "electric", "hybrid", "lpg"], description: "Fuel type filter" },
           seats_min: { type: "integer", description: "Minimum number of seats" },
-          mileage_policy: { type: "string", description: "Mileage policy filter" },
-          car_category: { type: "string", description: "Car category (e.g. suv, sedan)" },
-          drive_type: {
-            type: "string",
-            enum: ["2WD", "4WD", "AWD"],
-            description: "Drive type (2WD, 4WD, AWD)"
-          },
+          mileage_policy: { type: "string", enum: ["unlimited", "limited"], description: "Mileage policy filter" },
+          car_category: { type: "string", enum: ["Economy", "Compact", "SUV", "Minivan", "Pickup", "Luxury", "Electric", "Convertible"], description: "Car category" },
+          drive_type: { type: "string", enum: ["2WD", "4WD", "AWD"], description: "Drive type" },
           air_conditioning: { type: "string", enum: ["true", "false"], description: "Air conditioning filter" },
-          driver_age: { type: "integer", description: "Driver age for minimum age check" },
+          driver_age: { type: "integer", description: "Driver age — filters out listings with minimum driver age requirement above this value" },
+          min_rental_days: { type: "integer", description: "User's planned rental duration in days — filters out listings that require more than this many days minimum" },
+          delivery: { type: "string", enum: ["true", "false"], description: "Filter by delivery availability" },
         },
         required: ["category", "lat", "lng"],
       },

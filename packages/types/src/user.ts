@@ -32,6 +32,7 @@ export interface PublicUser {
   emailVerified: boolean;
   currentTier: LoyaltyTier;
   loyaltyPoints: number;
+  photoUrl?: string | null;
 }
 
 export type AdminRole =

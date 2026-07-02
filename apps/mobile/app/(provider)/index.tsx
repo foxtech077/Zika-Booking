@@ -298,7 +298,7 @@ function BookingRow({ booking, isLast }: { booking: RecentBooking; isLast: boole
         </Text>
       </View>
       <View style={brow.right}>
-        <Text style={brow.amount}>${fmtMoney(booking.providerPayout)}</Text>
+        <Text style={brow.amount}>{booking.currency} {fmtMoney(booking.providerPayout)}</Text>
         <Text style={[brow.status, { color: st.color }]}>{st.label}</Text>
       </View>
     </TouchableOpacity>

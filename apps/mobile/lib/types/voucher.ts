@@ -11,14 +11,24 @@ export interface ApplicableVoucher {
   code: string;
   title?: string;
   description?: string;
+  activityScope?: ActivityScope;
   discountType: DiscountType;
   discountValue: number;
   maxDiscount: number | null;
   minOrderValue: number | null;
   computedDiscount: number;
   validUntil: string;
+  hoursUntilExpiry?: number;
   applicable: boolean;
   reason: string | null;
+}
+
+export type VoucherBannerState = "active" | "expiring_soon" | "none";
+
+export interface ApplicableVouchersResponse {
+  bannerState: VoucherBannerState;
+  bestVoucher: ApplicableVoucher | null;
+  vouchers: ApplicableVoucher[];
 }
 
 export interface ValidatedVoucher {
@@ -47,7 +57,11 @@ export interface VoucherValidateResult {
   voucher: ValidatedVoucher | null;
 }
 
+export type WalletVoucherStatus = "active" | "paused" | "expired" | "exhausted";
+
+// Matches the actual GET /vouchers/wallet response shape.
 export interface WalletVoucher {
+  voucherId: string;
   code: string;
   title: string;
   description?: string | null;
@@ -55,14 +69,13 @@ export interface WalletVoucher {
   discountValue: number;
   maxDiscount?: number | null;
   minOrderValue?: number | null;
-  activity: ActivityScope;
-  validFrom: string;
+  activityScope: ActivityScope;
   validUntil: string;
-  usedAt?: string | null;
-  isUsed: boolean;
+  hoursUntilExpiry: number;
+  status: WalletVoucherStatus;
+  assignedAt: string;
 }
 
 export interface VoucherWalletResponse {
   vouchers: WalletVoucher[];
-  total: number;
 }

@@ -10,7 +10,7 @@ import { handleRoleAndStatusRedirect } from "./login";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 
 export default function ResetPasswordScreen() {
-  // Token comes from deep link: zikabooking://reset-password?token=...
+  // Token comes from deep link: kainook://reset-password?token=...
   const { token } = useLocalSearchParams<{ token?: string }>();
   const [form, setForm] = useState({ password: "", confirmPassword: "" });
   const [errors, setErrors] = useState<{ password?: string; confirmPassword?: string; general?: string }>({});

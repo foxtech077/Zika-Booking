@@ -1,43 +1,33 @@
-export interface ConversationParticipant {
-  id: string;
-  firstName: string;
-  lastName: string;
-  userType: "guest" | "provider";
-  avatarUrl?: string | null;
-}
-
-export interface LastMessage {
-  body: string;
-  createdAt: string;
-  senderId: string;
-}
-
+// Matches GET /conversations response
 export interface ConversationSummary {
   id: string;
   listingId?: string | null;
-  listingTitle?: string | null;
   bookingId?: string | null;
-  participants: ConversationParticipant[];
-  lastMessage?: LastMessage | null;
-  unreadCount: number;
+  guestId: string;
+  providerId: string;
+  status: string;
+  lastMessage?: {
+    body: string;
+    senderId: string;
+    senderType: string;
+    createdAt: string;
+  } | null;
   updatedAt: string;
 }
 
+// Matches GET /conversations/:id/messages response
 export interface Message {
   id: string;
-  conversationId: string;
   senderId: string;
-  senderFirstName?: string;
-  senderLastName?: string;
+  senderType: string;
   body: string;
+  isFiltered?: boolean;
+  readAt: string | null;
   createdAt: string;
-  readAt?: string | null;
 }
 
 export interface MessagesResponse {
   messages: Message[];
-  total: number;
-  nextCursor?: string | null;
 }
 
 export interface ConversationsResponse {
@@ -49,9 +39,14 @@ export interface UnreadCountResponse {
   unreadCount: number;
 }
 
+// Matches POST /conversations request body
 export interface StartConversationPayload {
-  recipientId: string;
-  body: string;
-  listingId?: string;
+  listingId: string;
   bookingId?: string;
+}
+
+// Matches POST /conversations response
+export interface StartConversationResponse {
+  conversationId: string;
+  isNew: boolean;
 }

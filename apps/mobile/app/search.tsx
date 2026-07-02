@@ -1,23 +1,21 @@
-﻿import { useState, useCallback, useEffect } from "react";
+﻿import { useState, useCallback, useEffect, useMemo, memo } from "react";
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Image,
   ActivityIndicator,
   ScrollView,
+  RefreshControl,
   TextInput,
   Modal,
-  Platform,
-  Linking,
   Alert,
   Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 
 // Safely load MapView and Marker to prevent crashes in environments without the native module
@@ -34,6 +32,8 @@ try {
 import { listingApi } from "../lib/listing-api";
 import { useAuthStore } from "../store/auth";
 import { ListingImage } from "../components/ListingImage";
+import { ActivePromotion, applyPromotion } from "../lib/promotions";
+import { useLocationStore } from "../store/location";
 
 
 // Deterministic coordinates calculator from search center + distance
@@ -92,7 +92,7 @@ const CITY_COORDS: Record<string, { lat: number; lng: number; town: string; coun
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SortOption = "recommended" | "price_asc" | "price_desc" | "nearest";
+type SortOption = "recommended" | "price_asc" | "price_desc" | "distance" | "newest";
 
 interface GeoResult {
   lat: number;
@@ -136,13 +136,33 @@ interface SearchResponse {
   };
 }
 
+interface Promotion {
+  id: string;
+  title: string;
+  description?: string;
+  discountPercent?: number | null;
+  discountAmount?: number | null;
+  activity?: string | null;
+  expiresAt?: string | null;
+  ctaRoute?: string | null;
+}
+
+// ─── Category tabs ────────────────────────────────────────────────────────────
+
+const CATEGORY_TABS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: "hotel", label: "Hotels", icon: "business-outline" },
+  { key: "apartment", label: "Apartments", icon: "home-outline" },
+  { key: "car", label: "Cars", icon: "car-outline" },
+];
+
 // ─── Sort options ─────────────────────────────────────────────────────────────
 
 const SORT_OPTIONS: { key: SortOption; label: string }[] = [
   { key: "recommended", label: "Recommended" },
   { key: "price_asc", label: "Price ↑" },
   { key: "price_desc", label: "Price ↓" },
-  { key: "nearest", label: "Nearest" },
+  { key: "distance", label: "Distance" },
+  { key: "newest", label: "Newest" },
 ];
 
 // ─── Helper: star rendering ───────────────────────────────────────────────────
@@ -219,9 +239,11 @@ interface ResultCardProps {
   returnDatetime?: string;
   onFavouriteToggle: (id: string, current: boolean) => void;
   favouriteLoading: string | null;
+  signedPhotoUrl: string | null;
+  promotion?: ActivePromotion | null;
 }
 
-function ResultCard({
+const ResultCard = memo(function ResultCard({
   item,
   category,
   checkIn,
@@ -231,6 +253,8 @@ function ResultCard({
   returnDatetime,
   onFavouriteToggle,
   favouriteLoading,
+  signedPhotoUrl,
+  promotion,
 }: ResultCardProps) {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -238,6 +262,7 @@ function ResultCard({
   const isCar = category === "car";
   const price = isCar ? item.dailyRate : item.nightlyRate;
   const priceLabel = isCar ? "/day" : "/night";
+  const promoted = applyPromotion(price, promotion ?? null);
 
   function handlePress() {
     const params: Record<string, string> = {};
@@ -259,8 +284,8 @@ function ResultCard({
     <TouchableOpacity style={cardStyles.card} onPress={handlePress} activeOpacity={0.88}>
       {/* Photo */}
       <View style={cardStyles.photoWrapper}>
-        {!imgError && item.primaryPhotoUrl ? (
-          <ListingImage uri={item.primaryPhotoUrl} style={cardStyles.photo} onError={() => setImgError(true)} />
+        {!imgError && signedPhotoUrl ? (
+          <ListingImage uri={signedPhotoUrl} style={cardStyles.photo} onError={() => setImgError(true)} />
         ) : (
           <View style={[cardStyles.photo, cardStyles.photoPlaceholder, { alignItems: "center", justifyContent: "center" }]}>
             <Text style={{ fontSize: 36 }}>{isCar ? "🚗" : "🏨"}</Text>
@@ -373,11 +398,25 @@ function ResultCard({
         {/* Footer: price + cancellation */}
         <View style={cardStyles.footer}>
           {price != null ? (
-            <Text style={cardStyles.price}>
-              <Text style={cardStyles.priceCurrency}>{item.currency} </Text>
-              {price.toLocaleString()}
-              <Text style={cardStyles.priceUnit}>{priceLabel}</Text>
-            </Text>
+            promoted.hasPromotion && promoted.discountedPrice != null ? (
+              <View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                  <Text style={cardStyles.originalPrice}>{item.currency} {price.toLocaleString()}</Text>
+                  <Text style={cardStyles.promoBadge}>🔥 {promoted.labelText}</Text>
+                </View>
+                <Text style={cardStyles.price}>
+                  <Text style={cardStyles.priceCurrency}>{item.currency} </Text>
+                  {Math.round(promoted.discountedPrice).toLocaleString()}
+                  <Text style={cardStyles.priceUnit}>{priceLabel}</Text>
+                </Text>
+              </View>
+            ) : (
+              <Text style={cardStyles.price}>
+                <Text style={cardStyles.priceCurrency}>{item.currency} </Text>
+                {price.toLocaleString()}
+                <Text style={cardStyles.priceUnit}>{priceLabel}</Text>
+              </Text>
+            )
           ) : (
             <Text style={cardStyles.priceUnavailable}>Price on request</Text>
           )}
@@ -386,7 +425,7 @@ function ResultCard({
       </View>
     </TouchableOpacity>
   );
-}
+});
 
 const cardStyles = StyleSheet.create({
   card: {
@@ -432,6 +471,8 @@ const cardStyles = StyleSheet.create({
   priceCurrency: { fontSize: 12, fontWeight: "600", color: PRIMARY },
   priceUnit: { fontSize: 12, fontWeight: "400", color: MUTED },
   priceUnavailable: { fontSize: 13, color: MUTED, fontStyle: "italic" },
+  originalPrice: { fontSize: 13, color: MUTED, textDecorationLine: "line-through" },
+  promoBadge: { fontSize: 11, fontWeight: "800", color: "#DC2626" },
 
   // Overlay Badges
   badgeOverlayContainer: {
@@ -474,9 +515,21 @@ export default function SearchScreen() {
     guests?: string;
     pickupDatetime?: string;
     returnDatetime?: string;
+    detectedLat?: string;
+    detectedLng?: string;
   }>();
 
-  const { category = "hotel", placeName = "", checkIn, checkOut, guests, pickupDatetime, returnDatetime } = params;
+  const { category: initialCategory = "hotel", placeName = "", checkIn, checkOut, guests, pickupDatetime, returnDatetime, detectedLat: rawDetectedLat, detectedLng: rawDetectedLng } = params;
+
+  // Category is local state (not just a route param) so the user can switch
+  // between Hotels/Apartments/Cars from within the Search screen itself,
+  // instead of having to navigate back and re-enter with a different category.
+  const [category, setCategory] = useState(initialCategory);
+
+  // IP-based detected location — used as default when user hasn't typed a place
+  const detectedLoc = useLocationStore((s) => s.location);
+  const fallbackLat = rawDetectedLat ? Number(rawDetectedLat) : (detectedLoc?.lat ?? null);
+  const fallbackLng = rawDetectedLng ? Number(rawDetectedLng) : (detectedLoc?.lng ?? null);
 
   // Search destination refiner state
   const [searchInput, setSearchInput] = useState(placeName);
@@ -492,67 +545,96 @@ export default function SearchScreen() {
   // Dynamic filter state variables
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
-  const [ratingMin, setRatingMin] = useState<number | null>(null);
-  const [radiusKm, setRadiusKm] = useState(500);
-  const [onlyPromotions, setOnlyPromotions] = useState(false);
+  const [radiusKm, setRadiusKm] = useState(25);
+  const [onlyPromotions, setOnlyPromotions] = useState(false); // apartment-only: long_stay_discount
+  const [cancellationPolicy, setCancellationPolicy] = useState<string | null>(null);
 
   const [lastPlaceName, setLastPlaceName] = useState("");
 
   // Hotel specifics
   const [starRating, setStarRating] = useState<string[]>([]);
-  const [roomType, setRoomType] = useState<string | null>(null);
   const [amenityIds, setAmenityIds] = useState<string[]>([]);
+
+  // Hotel + Apartment (backend's max_guests_min isn't category-gated)
+  const [maxGuestsMin, setMaxGuestsMin] = useState<number | null>(null);
 
   // Apartment specifics
   const [bedroomsMin, setBedroomsMin] = useState<number | null>(null);
-  const [bathroomsMin, setBathroomsMin] = useState<number | null>(null);
-  const [maxGuestsMin, setMaxGuestsMin] = useState<number | null>(null);
 
   // Car specifics
   const [carCategory, setCarCategory] = useState<string | null>(null);
   const [transmission, setTransmission] = useState<string | null>(null);
   const [mileagePolicy, setMileagePolicy] = useState<string | null>(null);
+  const [driveType, setDriveType] = useState<string | null>(null);
+  const [airConditioning, setAirConditioning] = useState(false);
+  const [seatsMin, setSeatsMin] = useState<number | null>(null);
+  const [driverAge, setDriverAge] = useState("");
 
   const [sort, setSort] = useState<SortOption>("recommended");
   const [cursor, setCursor] = useState<string | null>(null);
   const [allResults, setAllResults] = useState<SearchResult[]>([]);
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Active filters calculation
   const hasActiveFilters =
     priceMin !== "" ||
     priceMax !== "" ||
-    ratingMin !== null ||
     radiusKm !== 25 ||
     onlyPromotions ||
+    cancellationPolicy !== null ||
     starRating.length > 0 ||
-    roomType !== null ||
     amenityIds.length > 0 ||
     bedroomsMin !== null ||
-    bathroomsMin !== null ||
     maxGuestsMin !== null ||
     carCategory !== null ||
     transmission !== null ||
-    mileagePolicy !== null;
+    mileagePolicy !== null ||
+    driveType !== null ||
+    airConditioning ||
+    seatsMin !== null ||
+    driverAge !== "";
 
   const handleResetFilters = () => {
     setPriceMin("");
     setPriceMax("");
-    setRatingMin(null);
     setRadiusKm(25);
     setOnlyPromotions(false);
+    setCancellationPolicy(null);
     setStarRating([]);
-    setRoomType(null);
     setAmenityIds([]);
     setBedroomsMin(null);
-    setBathroomsMin(null);
     setMaxGuestsMin(null);
     setCarCategory(null);
     setTransmission(null);
     setMileagePolicy(null);
+    setDriveType(null);
+    setAirConditioning(false);
+    setSeatsMin(null);
+    setDriverAge("");
     setCursor(null);
     setAllResults([]);
   };
+
+  // Category-specific filters don't carry over between Hotels/Apartments/Cars
+  // (e.g. star_rating means nothing for a car search) — price/cancellation
+  // policy/radius/sort are general enough to keep across the switch.
+  function handleCategoryChange(next: string) {
+    if (next === category) return;
+    setCategory(next);
+    setStarRating([]);
+    setAmenityIds([]);
+    setBedroomsMin(null);
+    setMaxGuestsMin(null);
+    setOnlyPromotions(false);
+    setCarCategory(null);
+    setTransmission(null);
+    setMileagePolicy(null);
+    setDriveType(null);
+    setAirConditioning(false);
+    setSeatsMin(null);
+    setDriverAge("");
+  }
 
   // ── Step 1: Geocode (falls back to local city map when API requires auth) ──
   const { data: geo } = useQuery<GeoResult | null>({
@@ -624,19 +706,13 @@ export default function SearchScreen() {
   };
 
   // ── Step 2: Search ──
-  // API returns price_asc as expensive-first and price_desc as cheap-first (inverted)
-  const sortParamMap: Record<SortOption, string> = {
-    recommended: "recommended",
-    price_asc: "price_desc",
-    price_desc: "price_asc",
-    nearest: "nearest",
-  };
-
+  // SortOption keys match the backend's `sort` enum exactly (recommended, price_asc,
+  // price_desc, distance, newest) — sent straight through, no remapping needed.
   const searchQueryKey = [
     "search",
     category,
-    geo?.lat,
-    geo?.lng,
+    geo?.lat ?? fallbackLat,
+    geo?.lng ?? fallbackLng,
     sort,
     checkIn,
     checkOut,
@@ -646,18 +722,20 @@ export default function SearchScreen() {
     cursor,
     priceMin,
     priceMax,
-    ratingMin,
     radiusKm,
     onlyPromotions,
+    cancellationPolicy,
     starRating,
-    roomType,
     amenityIds,
     bedroomsMin,
-    bathroomsMin,
     maxGuestsMin,
     carCategory,
     transmission,
     mileagePolicy,
+    driveType,
+    airConditioning,
+    seatsMin,
+    driverAge,
   ];
 
   const {
@@ -669,38 +747,44 @@ export default function SearchScreen() {
   } = useQuery<SearchResponse["data"]>({
     queryKey: searchQueryKey,
     queryFn: async () => {
-      // When geo is unavailable (keyword search), use global centre + large radius
-      const effectiveLat = geo?.lat ?? 0;
-      const effectiveLng = geo?.lng ?? 0;
-      const effectiveRadius = geo ? radiusKm : 20000;
+      // Priority: geocoded place → detected IP location → global (0,0)
+      const effectiveLat = geo?.lat ?? fallbackLat ?? 0;
+      const effectiveLng = geo?.lng ?? fallbackLng ?? 0;
+      const hasSpatialContext = !!(geo || fallbackLat);
+      const effectiveRadius = geo ? radiusKm : hasSpatialContext ? radiusKm : 20000;
 
       const qp = new URLSearchParams({
         category,
         lat: String(effectiveLat),
         lng: String(effectiveLng),
         radius_km: String(effectiveRadius),
-        sort: sortParamMap[sort],
+        sort,
         limit: "50",
       });
 
       if (priceMin) qp.set("price_min", priceMin);
       if (priceMax) qp.set("price_max", priceMax);
-      if (ratingMin) qp.set("rating_min", String(ratingMin));
-      if (onlyPromotions) qp.set("long_stay_discount", "true");
+      if (cancellationPolicy) qp.set("cancellation_policy", cancellationPolicy);
+      // long_stay_discount only makes sense for apartments (the field it filters,
+      // listing.longStayEnabled, is an apartment long-stay-discount toggle)
+      if (onlyPromotions && category === "apartment") qp.set("long_stay_discount", "true");
+      // max_guests_min isn't category-gated server-side — offered for hotel + apartment
+      if (maxGuestsMin !== null && category !== "car") qp.set("max_guests_min", String(maxGuestsMin));
 
       if (category === "hotel") {
         if (starRating.length) qp.set("star_rating", starRating.join(","));
-        if (roomType) qp.set("room_type", roomType);
         if (amenityIds.length) qp.set("amenity_ids", amenityIds.join(","));
       } else if (category === "apartment") {
         if (bedroomsMin !== null) qp.set("bedrooms_min", String(bedroomsMin));
-        if (bathroomsMin !== null) qp.set("bathrooms_min", String(bathroomsMin));
-        if (maxGuestsMin !== null) qp.set("max_guests_min", String(maxGuestsMin));
         if (amenityIds.length) qp.set("amenity_ids", amenityIds.join(","));
       } else if (category === "car") {
         if (carCategory) qp.set("car_category", carCategory);
         if (transmission) qp.set("transmission", transmission);
         if (mileagePolicy) qp.set("mileage_policy", mileagePolicy);
+        if (driveType) qp.set("drive_type", driveType);
+        if (airConditioning) qp.set("air_conditioning", "true");
+        if (seatsMin !== null) qp.set("seats_min", String(seatsMin));
+        if (driverAge.trim()) qp.set("driver_age", driverAge.trim());
       }
 
       if (category === "hotel" || category === "apartment") {
@@ -795,12 +879,137 @@ export default function SearchScreen() {
     );
   };
 
+  // ── Pull to refresh ──
+  async function handleRefresh() {
+    setRefreshing(true);
+    setCursor(null);
+    await retrySearch();
+    setRefreshing(false);
+  }
+
+  // ── Active filter badges (shown above results, each individually removable) ──
+  const currencyPrefix = allResults[0]?.currency ? `${allResults[0].currency} ` : "";
+  interface FilterBadge { key: string; label: string; onRemove: () => void }
+  const activeFilterBadges: FilterBadge[] = useMemo(() => {
+    const badges: FilterBadge[] = [];
+    if (priceMin || priceMax) {
+      const label = priceMin && priceMax
+        ? `${currencyPrefix}${priceMin}-${priceMax}`
+        : priceMin
+        ? `${currencyPrefix}${priceMin}+`
+        : `Up to ${currencyPrefix}${priceMax}`;
+      badges.push({ key: "price", label, onRemove: () => { setPriceMin(""); setPriceMax(""); } });
+    }
+    if (cancellationPolicy) {
+      badges.push({
+        key: "cancellation",
+        label: cancellationPolicy.charAt(0).toUpperCase() + cancellationPolicy.slice(1),
+        onRemove: () => setCancellationPolicy(null),
+      });
+    }
+    if (starRating.length) {
+      badges.push({ key: "stars", label: `★${starRating.join(",")}+`, onRemove: () => setStarRating([]) });
+    }
+    for (const a of amenityIds) {
+      badges.push({ key: `amenity-${a}`, label: a.replace(/_/g, " "), onRemove: () => toggleAmenity(a) });
+    }
+    if (bedroomsMin !== null) {
+      badges.push({ key: "bedrooms", label: `${bedroomsMin}+ bed`, onRemove: () => setBedroomsMin(null) });
+    }
+    if (maxGuestsMin !== null) {
+      badges.push({ key: "guests", label: `${maxGuestsMin}+ guests`, onRemove: () => setMaxGuestsMin(null) });
+    }
+    if (onlyPromotions) {
+      badges.push({ key: "longstay", label: "Long-stay discount", onRemove: () => setOnlyPromotions(false) });
+    }
+    if (carCategory) {
+      badges.push({ key: "carcat", label: carCategory, onRemove: () => setCarCategory(null) });
+    }
+    if (transmission) {
+      badges.push({
+        key: "transmission",
+        label: transmission.charAt(0).toUpperCase() + transmission.slice(1),
+        onRemove: () => setTransmission(null),
+      });
+    }
+    if (mileagePolicy) {
+      badges.push({
+        key: "mileage",
+        label: mileagePolicy.charAt(0).toUpperCase() + mileagePolicy.slice(1),
+        onRemove: () => setMileagePolicy(null),
+      });
+    }
+    if (driveType) {
+      badges.push({ key: "drivetype", label: driveType, onRemove: () => setDriveType(null) });
+    }
+    if (airConditioning) {
+      badges.push({ key: "ac", label: "A/C", onRemove: () => setAirConditioning(false) });
+    }
+    if (seatsMin !== null) {
+      badges.push({ key: "seats", label: `${seatsMin}+ seats`, onRemove: () => setSeatsMin(null) });
+    }
+    if (driverAge) {
+      badges.push({ key: "driverage", label: `Age ${driverAge}`, onRemove: () => setDriverAge("") });
+    }
+    return badges;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    priceMin, priceMax, cancellationPolicy, starRating, amenityIds, bedroomsMin, maxGuestsMin,
+    onlyPromotions, carCategory, transmission, mileagePolicy, driveType, airConditioning, seatsMin, driverAge,
+  ]);
+
+  // Any filter change (including removing a badge) starts a fresh page-1 search
+  // instead of appending onto whatever page was already loaded before the change.
+  useEffect(() => {
+    setCursor(null);
+    setAllResults([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    priceMin, priceMax, radiusKm, onlyPromotions, cancellationPolicy, starRating, amenityIds,
+    bedroomsMin, maxGuestsMin, carCategory, transmission, mileagePolicy, driveType, airConditioning, seatsMin, driverAge,
+  ]);
+
   // Geo is optional — if unavailable, search falls back to global (lat=0,lng=0,radius=20000)
 
   const isFirstLoad = searchLoading && allResults.length === 0;
   const isLoadingMore = searchFetching && allResults.length > 0;
   const hasNextPage = !!searchData?.nextCursor;
   const totalCount = searchData?.totalCount ?? 0;
+
+  // Active promotion for the current search category
+  const { data: categoryPromotions } = useQuery<Promotion[]>({
+    queryKey: ["promotions-active", category],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: Promotion[] }>(`/promotions/active?activity=${category}`);
+      return res.data.data ?? [];
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const activePromotion = categoryPromotions?.[0] ?? null;
+
+  // Fetch signed photo URLs for all search results via /listings/:id/public
+  const searchResultIds = useMemo(() => allResults.map((r) => r.id), [allResults]);
+  const signedPhotoQueries = useQueries({
+    queries: searchResultIds.map((id) => ({
+      queryKey: ["public-photo", id],
+      queryFn: async (): Promise<string | null> => {
+        try {
+          const res = await listingApi.get<{
+            data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
+          }>(`/listings/${id}/public`);
+          return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
+        } catch { return null; }
+      },
+      staleTime: 5 * 60_000,
+      gcTime: 10 * 60_000,
+      retry: false,
+    })),
+  });
+  const signedPhotoMap = useMemo<Record<string, string | null>>(
+    () => Object.fromEntries(searchResultIds.map((id, i) => [id, signedPhotoQueries[i]?.data ?? null])),
+    [searchResultIds, signedPhotoQueries],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
@@ -837,6 +1046,24 @@ export default function SearchScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* ── Category tabs ── */}
+      <View style={styles.categoryTabRow}>
+        {CATEGORY_TABS.map((tab) => {
+          const active = category === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.categoryTab, active && styles.categoryTabActive]}
+              onPress={() => handleCategoryChange(tab.key)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={tab.icon} size={16} color={active ? "#fff" : MUTED} />
+              <Text style={[styles.categoryTabText, active && styles.categoryTabTextActive]}>{tab.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       {/* ── Sort bar ── */}
       <View style={styles.sortBar}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortScroll}>
@@ -863,6 +1090,48 @@ export default function SearchScreen() {
               ? `${allResults.length.toLocaleString()} listing${allResults.length !== 1 ? "s" : ""} ${geo ? `near ${geo.town}` : placeName ? `matching "${placeName}"` : "found"}`
               : `No listings found${geo ? ` near ${geo.town}` : placeName ? ` for "${placeName}"` : ""}`}
           </Text>
+        </View>
+      )}
+
+      {/* ── Active filter badges ── */}
+      {!isFirstLoad && !searchError && activeFilterBadges.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.badgesRow}
+          style={styles.badgesScroll}
+        >
+          {activeFilterBadges.map((b) => (
+            <TouchableOpacity key={b.key} style={styles.filterBadge} onPress={b.onRemove} activeOpacity={0.75}>
+              <Text style={styles.filterBadgeText} numberOfLines={1}>{b.label}</Text>
+              <Ionicons name="close-circle" size={15} color={PRIMARY} />
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity style={styles.clearAllBadge} onPress={handleResetFilters} activeOpacity={0.75}>
+            <Text style={styles.clearAllBadgeText}>Clear all</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+
+      {/* ── Active promotion banner ── */}
+      {activePromotion && !isFirstLoad && !searchError && (
+        <View style={promoBannerStyles.wrap}>
+          <Text style={promoBannerStyles.fire}>🔥</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={promoBannerStyles.text} numberOfLines={1}>{activePromotion.title}</Text>
+            {activePromotion.description ? (
+              <Text style={promoBannerStyles.sub} numberOfLines={1}>{activePromotion.description}</Text>
+            ) : null}
+          </View>
+          {(activePromotion.discountPercent != null || activePromotion.discountAmount != null) && (
+            <View style={promoBannerStyles.discBadge}>
+              <Text style={promoBannerStyles.discText}>
+                {activePromotion.discountPercent != null
+                  ? `-${activePromotion.discountPercent}%`
+                  : `-${activePromotion.discountAmount}`}
+              </Text>
+            </View>
+          )}
         </View>
       )}
 
@@ -968,6 +1237,8 @@ export default function SearchScreen() {
                   returnDatetime={returnDatetime}
                   onFavouriteToggle={handleFavouriteToggle}
                   favouriteLoading={favouriteLoading}
+                  signedPhotoUrl={signedPhotoMap[selectedListing.id] ?? null}
+                  promotion={activePromotion as unknown as ActivePromotion | null}
                 />
                 <TouchableOpacity
                   style={styles.closePreviewBtn}
@@ -985,6 +1256,12 @@ export default function SearchScreen() {
             style={styles.list}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={PRIMARY} />
+            }
+            windowSize={7}
+            maxToRenderPerBatch={8}
+            removeClippedSubviews
             renderItem={({ item }) => (
               <ResultCard
                 item={item}
@@ -996,6 +1273,8 @@ export default function SearchScreen() {
                 returnDatetime={returnDatetime}
                 onFavouriteToggle={handleFavouriteToggle}
                 favouriteLoading={favouriteLoading}
+                signedPhotoUrl={signedPhotoMap[item.id] ?? null}
+                promotion={activePromotion as unknown as ActivePromotion | null}
               />
             )}
             ListEmptyComponent={
@@ -1088,17 +1367,17 @@ export default function SearchScreen() {
               </View>
             </View>
 
-            {/* RATINGS FILTER */}
-            <Text style={filterStyles.sectionTitle}>Minimum Guest Rating</Text>
+            {/* CANCELLATION POLICY */}
+            <Text style={filterStyles.sectionTitle}>Cancellation Policy</Text>
             <View style={filterStyles.rowChips}>
-              {[(null as any), 3, 4, 5].map((stars) => (
+              {[(null as any), "flexible", "moderate", "strict"].map((policy) => (
                 <TouchableOpacity
-                  key={stars ?? "any"}
-                  style={[filterStyles.chip, ratingMin === stars && filterStyles.chipActive]}
-                  onPress={() => setRatingMin(stars)}
+                  key={policy ?? "any"}
+                  style={[filterStyles.chip, cancellationPolicy === policy && filterStyles.chipActive]}
+                  onPress={() => setCancellationPolicy(policy)}
                 >
-                  <Text style={[filterStyles.chipText, ratingMin === stars && filterStyles.chipTextActive]}>
-                    {stars === null ? "Any" : `${stars} ★ & up`}
+                  <Text style={[filterStyles.chipText, cancellationPolicy === policy && filterStyles.chipTextActive]}>
+                    {policy === null ? "Any" : policy.charAt(0).toUpperCase() + policy.slice(1)}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -1120,19 +1399,41 @@ export default function SearchScreen() {
               ))}
             </View>
 
-            {/* PROMOTIONS ONLY */}
-            <View style={filterStyles.rowToggle}>
-              <View style={{ flex: 1 }}>
-                <Text style={filterStyles.toggleTitle}>Long-stay promotions</Text>
-                <Text style={filterStyles.toggleSub}>Show listings offering active long stay discounts</Text>
+            {/* PROMOTIONS ONLY — apartment only (filters listing.longStayEnabled) */}
+            {category === "apartment" && (
+              <View style={filterStyles.rowToggle}>
+                <View style={{ flex: 1 }}>
+                  <Text style={filterStyles.toggleTitle}>Long-stay discount</Text>
+                  <Text style={filterStyles.toggleSub}>Show listings offering a long-stay discount</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setOnlyPromotions(!onlyPromotions)}
+                  style={[filterStyles.toggleSwitch, onlyPromotions && filterStyles.toggleSwitchActive]}
+                >
+                  <View style={[filterStyles.toggleDot, onlyPromotions && filterStyles.toggleDotActive]} />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity
-                onPress={() => setOnlyPromotions(!onlyPromotions)}
-                style={[filterStyles.toggleSwitch, onlyPromotions && filterStyles.toggleSwitchActive]}
-              >
-                <View style={[filterStyles.toggleDot, onlyPromotions && filterStyles.toggleDotActive]} />
-              </TouchableOpacity>
-            </View>
+            )}
+
+            {/* Max Guests — hotel + apartment (backend's max_guests_min isn't category-gated) */}
+            {(category === "hotel" || category === "apartment") && (
+              <>
+                <Text style={filterStyles.sectionTitle}>Min Guest Capacity</Text>
+                <View style={filterStyles.rowChips}>
+                  {[(null as any), 2, 4, 6].map((cap) => (
+                    <TouchableOpacity
+                      key={cap ?? "any"}
+                      style={[filterStyles.chip, maxGuestsMin === cap && filterStyles.chipActive]}
+                      onPress={() => setMaxGuestsMin(cap)}
+                    >
+                      <Text style={[filterStyles.chipText, maxGuestsMin === cap && filterStyles.chipTextActive]}>
+                        {cap === null ? "Any" : `${cap}+ guests`}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
 
             {/* HOTEL SPECIFIC FILTERS */}
             {category === "hotel" && (
@@ -1148,22 +1449,6 @@ export default function SearchScreen() {
                     >
                       <Text style={[filterStyles.chipText, starRating.includes(star) && filterStyles.chipTextActive]}>
                         {star} Star
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {/* Room Types */}
-                <Text style={filterStyles.sectionTitle}>Room Style</Text>
-                <View style={filterStyles.rowChips}>
-                  {["standard", "superior", "deluxe", "suite"].map((style) => (
-                    <TouchableOpacity
-                      key={style}
-                      style={[filterStyles.chip, roomType === style && filterStyles.chipActive]}
-                      onPress={() => setRoomType(roomType === style ? null : style)}
-                    >
-                      <Text style={[filterStyles.chipText, roomType === style && filterStyles.chipTextActive]}>
-                        {style.charAt(0).toUpperCase() + style.slice(1)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -1206,42 +1491,10 @@ export default function SearchScreen() {
                   ))}
                 </View>
 
-                {/* Bathrooms */}
-                <Text style={filterStyles.sectionTitle}>Min Bathrooms</Text>
-                <View style={filterStyles.rowChips}>
-                  {[(null as any), 1, 2, 3].map((baths) => (
-                    <TouchableOpacity
-                      key={baths ?? "any"}
-                      style={[filterStyles.chip, bathroomsMin === baths && filterStyles.chipActive]}
-                      onPress={() => setBathroomsMin(baths)}
-                    >
-                      <Text style={[filterStyles.chipText, bathroomsMin === baths && filterStyles.chipTextActive]}>
-                        {baths === null ? "Any" : `${baths}+ bath`}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
-                {/* Guests */}
-                <Text style={filterStyles.sectionTitle}>Min Guest Capacity</Text>
-                <View style={filterStyles.rowChips}>
-                  {[(null as any), 2, 4, 6].map((cap) => (
-                    <TouchableOpacity
-                      key={cap ?? "any"}
-                      style={[filterStyles.chip, maxGuestsMin === cap && filterStyles.chipActive]}
-                      onPress={() => setMaxGuestsMin(cap)}
-                    >
-                      <Text style={[filterStyles.chipText, maxGuestsMin === cap && filterStyles.chipTextActive]}>
-                        {cap === null ? "Any" : `${cap}+ guests`}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-
                 {/* Amenities */}
                 <Text style={filterStyles.sectionTitle}>Amenities</Text>
                 <View style={filterStyles.groupedChips}>
-                  {["wifi", "kitchen", "washing_machine", "parking", "air_conditioning", "workspace", "tv", "security"].map((a) => (
+                  {["wifi", "kitchen", "parking", "air_conditioning", "smart_tv", "work_desk", "security_24h", "elevator"].map((a) => (
                     <TouchableOpacity
                       key={a}
                       style={[filterStyles.chip, amenityIds.includes(a) && filterStyles.chipActive, { marginBottom: 8 }]}
@@ -1262,7 +1515,7 @@ export default function SearchScreen() {
                 {/* Vehicle Category */}
                 <Text style={filterStyles.sectionTitle}>Vehicle Category</Text>
                 <View style={filterStyles.groupedChips}>
-                  {["Economy", "Compact", "SUV", "Minivan", "Luxury", "Electric", "Convertible"].map((catOption) => (
+                  {["Economy", "Compact", "SUV", "Minivan", "Pickup", "Luxury", "Electric", "Convertible"].map((catOption) => (
                     <TouchableOpacity
                       key={catOption}
                       style={[filterStyles.chip, carCategory === catOption && filterStyles.chipActive, { marginBottom: 8 }]}
@@ -1306,6 +1559,68 @@ export default function SearchScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+
+                {/* Drive Type */}
+                <Text style={filterStyles.sectionTitle}>Drive Type</Text>
+                <View style={filterStyles.rowChips}>
+                  {[(null as any), "2WD", "4WD", "AWD"].map((dt) => (
+                    <TouchableOpacity
+                      key={dt ?? "any"}
+                      style={[filterStyles.chip, driveType === dt && filterStyles.chipActive]}
+                      onPress={() => setDriveType(dt)}
+                    >
+                      <Text style={[filterStyles.chipText, driveType === dt && filterStyles.chipTextActive]}>
+                        {dt === null ? "Any" : dt}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Seats */}
+                <Text style={filterStyles.sectionTitle}>Min Seats</Text>
+                <View style={filterStyles.rowChips}>
+                  {[(null as any), 2, 4, 5, 7].map((n) => (
+                    <TouchableOpacity
+                      key={n ?? "any"}
+                      style={[filterStyles.chip, seatsMin === n && filterStyles.chipActive]}
+                      onPress={() => setSeatsMin(n)}
+                    >
+                      <Text style={[filterStyles.chipText, seatsMin === n && filterStyles.chipTextActive]}>
+                        {n === null ? "Any" : `${n}+ seats`}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Driver Age */}
+                <Text style={filterStyles.sectionTitle}>Your Age</Text>
+                <View style={filterStyles.row}>
+                  <View style={filterStyles.priceInputBox}>
+                    <Text style={filterStyles.priceLabel}>Excludes cars requiring an older minimum driver age</Text>
+                    <TextInput
+                      style={filterStyles.priceInput}
+                      placeholder="Any"
+                      keyboardType="numeric"
+                      value={driverAge}
+                      onChangeText={(t) => setDriverAge(t.replace(/\D/g, ""))}
+                      maxLength={2}
+                    />
+                  </View>
+                </View>
+
+                {/* Air Conditioning */}
+                <View style={filterStyles.rowToggle}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={filterStyles.toggleTitle}>Air Conditioning</Text>
+                    <Text style={filterStyles.toggleSub}>Only show cars with air conditioning</Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setAirConditioning(!airConditioning)}
+                    style={[filterStyles.toggleSwitch, airConditioning && filterStyles.toggleSwitchActive]}
+                  >
+                    <View style={[filterStyles.toggleDot, airConditioning && filterStyles.toggleDotActive]} />
+                  </TouchableOpacity>
+                </View>
               </>
             )}
 
@@ -1322,6 +1637,34 @@ export default function SearchScreen() {
     </SafeAreaView>
   );
 }
+
+// ─── Promotion banner styles ──────────────────────────────────────────────────
+
+const promoBannerStyles = StyleSheet.create({
+  wrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF7ED",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FED7AA",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  fire:      { fontSize: 18 },
+  text:      { fontSize: 13, fontWeight: "700", color: "#92400e" },
+  sub:       { fontSize: 11, color: "#b45309", marginTop: 2 },
+  discBadge: { backgroundColor: "#dc2626", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  discText:  { color: "#fff", fontSize: 11, fontWeight: "800" },
+});
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -1378,6 +1721,32 @@ const styles = StyleSheet.create({
     backgroundColor: DANGER,
   },
 
+  // Category tabs
+  categoryTabRow: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: BORDER,
+  },
+  categoryTab: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: BORDER,
+    borderRadius: 10,
+    paddingVertical: 9,
+    backgroundColor: "#fff",
+  },
+  categoryTabActive: { backgroundColor: PRIMARY, borderColor: PRIMARY },
+  categoryTabText: { fontSize: 13, fontWeight: "600", color: MUTED },
+  categoryTabTextActive: { color: "#fff", fontWeight: "700" },
+
   // Sort bar
   sortBar: {
     backgroundColor: "#fff",
@@ -1407,6 +1776,24 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   resultCountText: { fontSize: 13, color: MUTED },
+
+  // Active filter badges
+  badgesScroll: { maxHeight: 44 },
+  badgesRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 8, alignItems: "center" },
+  filterBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: PRIMARY,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  filterBadgeText: { fontSize: 12, fontWeight: "600", color: PRIMARY, maxWidth: 140 },
+  clearAllBadge: { paddingHorizontal: 8, paddingVertical: 6 },
+  clearAllBadgeText: { fontSize: 12, fontWeight: "700", color: DANGER, textDecorationLine: "underline" },
 
   // List
   list: { flex: 1 },

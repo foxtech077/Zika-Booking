@@ -27,10 +27,7 @@ export function AppLayout({ children }: Props) {
 
   return (
     <View style={s.container}>
-      <AppHeader
-        onBurgerPress={() => setMenuOpen(true)}
-        unreadCount={data?.unreadMessages ?? 0}
-      />
+      <AppHeader onBurgerPress={() => setMenuOpen(true)} />
       <View style={s.content}>{children}</View>
       <BottomTabBar />
       <BurgerDrawer open={menuOpen} onClose={() => setMenuOpen(false)} />
