@@ -99,7 +99,8 @@ async function checkAvailability(
   });
 
   // 3. Reject if total matches exceed the available unit counts
-  if (bookingCount + icalBlockedCount >= unitCount) {
+  const effectiveUnitCount = Math.max(1, unitCount);
+  if (bookingCount + icalBlockedCount >= effectiveUnitCount) {
     return { 
       available: false, 
       reason: "Some of the selected dates within your stay are already booked or unavailable." 
@@ -676,7 +677,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         if (listing.category !== "car" && body.checkIn && body.checkOut) {
           const avail = await checkAvailability(
             listing.id,
-            listing.unitCount ?? 1,
+            Math.max(1, listing.unitCount ?? 1),
             new Date(body.checkIn),
             new Date(body.checkOut)
           );
@@ -695,7 +696,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
           const avail = await checkAvailability(
             listing.id,
-            listing.unitCount ?? 1,
+            Math.max(1, listing.unitCount ?? 1),
             new Date(body.pickupDatetime),
             new Date(body.returnDatetime)
           );
@@ -1416,7 +1417,7 @@ export async function bookingRoutes(app: FastifyInstance) {
               const endDate = booking.checkOut ?? booking.returnDatetime;
               if (startDate && endDate) {
                 const listing = await tx.listing.findUnique({ where: { id: booking.listingId } });
-                const unitCount = listing?.unitCount ?? 1;
+                const unitCount = Math.max(1, listing?.unitCount ?? 1);
 
                 const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
                   SELECT id FROM listing.bookings
