@@ -17,6 +17,7 @@ import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { K } from "../../constants/theme";
+import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,16 +82,19 @@ function SkeletonCard() {
 
 // ── Saved Listing Card ────────────────────────────────────────────────────────
 
-function SavedCard({ item, onRemove, removePending, signedPhotoUrl }: {
+function SavedCard({ item, onRemove, removePending, signedPhotoUrl, promotion }: {
   item: Favourite;
   onRemove: (listingId: string, title: string) => void;
   removePending: boolean;
   signedPhotoUrl: string | null;
+  promotion?: ActivePromotion | null;
 }) {
   const router = useRouter();
   const [imgErr, setImgErr] = useState(false);
   const { listing, savedAt, listingId } = item;
   const location = [listing.city, listing.countryCode].filter(Boolean).join(", ");
+  const unit = listing.category === "car" ? "day" : "night";
+  const promoted = applyPromotion(listing.nightlyRate, promotion ?? null);
 
   return (
     <TouchableOpacity
@@ -130,7 +134,19 @@ function SavedCard({ item, onRemove, removePending, signedPhotoUrl }: {
             <Text style={styles.locText} numberOfLines={1}>{location}</Text>
           </View>
         ) : null}
-        <Text style={styles.cardPrice}>{priceLabel(listing)}</Text>
+        {promoted.hasPromotion && promoted.discountedPrice != null ? (
+          <View>
+            <Text style={styles.cardPriceStrike}>
+              {listing.currency ?? ""} {listing.nightlyRate?.toLocaleString()} / {unit}
+            </Text>
+            <Text style={styles.cardPrice}>
+              {listing.currency ?? ""} {Math.round(promoted.discountedPrice).toLocaleString()} / {unit}
+            </Text>
+            <Text style={styles.promoLabel}>🔥 {promoted.labelText}</Text>
+          </View>
+        ) : (
+          <Text style={styles.cardPrice}>{priceLabel(listing)}</Text>
+        )}
         <Text style={styles.cardSaved}>Saved {daysAgo(savedAt)}</Text>
       </View>
 
@@ -153,6 +169,10 @@ export default function SavedScreen() {
   const router = useRouter();
   const qc     = useQueryClient();
   const user   = useAuthStore((s) => s.user);
+
+  const hotelPromo = useActivePromotion("hotel");
+  const aptPromo   = useActivePromotion("apartment");
+  const carPromo   = useActivePromotion("car");
 
   const [cursor,       setCursor]       = useState<string | null>(null);
   const [allFavourites, setAllFavourites] = useState<Favourite[]>([]);
@@ -276,6 +296,11 @@ export default function SavedScreen() {
             onRemove={handleRemove}
             removePending={removeMutation.isPending}
             signedPhotoUrl={signedPhotoMap[item.listing.id] ?? null}
+            promotion={
+              item.listing.category === "hotel" ? hotelPromo
+              : item.listing.category === "apartment" ? aptPromo
+              : carPromo
+            }
           />
         )}
         contentContainerStyle={isEmpty ? styles.emptyListContent : styles.listContent}
@@ -380,8 +405,10 @@ const styles = StyleSheet.create({
   cardTitle:    { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark, marginBottom: 5, lineHeight: 18 },
   locRow:       { flexDirection: "row", alignItems: "center", gap: 3, marginBottom: 6 },
   locText:      { fontSize: 11, color: K.colors.textMuted, flex: 1 },
-  cardPrice:    { fontSize: K.font.sm, fontWeight: "700", color: K.colors.darkGreen, marginBottom: 3 },
-  cardSaved:    { fontSize: 11, color: K.colors.textMuted },
+  cardPrice:      { fontSize: K.font.sm, fontWeight: "700", color: K.colors.darkGreen, marginBottom: 3 },
+  cardPriceStrike: { fontSize: 11, color: K.colors.textMuted, textDecorationLine: "line-through", marginBottom: 1 },
+  promoLabel:     { fontSize: 10, fontWeight: "800", color: "#DC2626", marginBottom: 3 },
+  cardSaved:      { fontSize: 11, color: K.colors.textMuted },
   removeBtn:    { paddingRight: 14, paddingLeft: 6 },
 
   // Empty state

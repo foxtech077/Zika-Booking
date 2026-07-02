@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
+import { ActivePromotion, applyPromotion } from "../../lib/promotions";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -44,7 +45,7 @@ interface Review {
 }
 interface ReviewsData { reviews: Review[]; total: number; averageRating: number; }
 interface PublicListing {
-  id: string; name: string | null; category: "hotel" | "apartment" | "car";
+  id: string; name: string | null; category: "hotel" | "apartment" | "car"; providerId: string | null;
   status: string; description: string | null; address: string | null;
   town: string | null; country: string | null; lat: number | null; lng: number | null;
   pricePerNight: number | null; pricePerDay: number | null; currency: string | null;
@@ -553,6 +554,9 @@ export default function ListingDetailScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [localStart, setLocalStart] = useState<string | null>(null);
   const [localEnd, setLocalEnd] = useState<string | null>(null);
+  const [showMsgModal, setShowMsgModal] = useState(false);
+  const [msgDraft, setMsgDraft] = useState("");
+  const [msgSending, setMsgSending] = useState(false);
 
   // ── Data ──
   const { data: listing, isLoading, isError } = useQuery<PublicListing>({
@@ -574,9 +578,9 @@ export default function ListingDetailScreen() {
   });
 
   const { data: reviewsData } = useQuery<ReviewsData>({
-    queryKey: ["reviews", id],
+    queryKey: ["reviews", "listing", id, 3],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: ReviewsData }>(`/listings/${id}/reviews?page=1&limit=5`);
+      const res = await listingApi.get<{ data: ReviewsData }>(`/listings/${id}/reviews?page=1&limit=3`);
       return res.data.data;
     },
     enabled: !!id,
@@ -651,6 +655,8 @@ export default function ListingDetailScreen() {
   const rate = isCar ? Number(listing.pricePerDay ?? 0) : Number(listing.pricePerNight ?? 0);
   const rateLabel = isCar ? "per day" : "per night";
   const isFav = listing.isFavourited ?? false;
+  const activePromo = (activePromotions?.[0] as unknown) as ActivePromotion | null | undefined;
+  const promoted = applyPromotion(rate || null, activePromo ?? null);
 
   // Locally selected dates take priority over URL params
   const effectivePU = localStart ?? pickupDatetime;
@@ -775,6 +781,7 @@ export default function ListingDetailScreen() {
   const locationStr = [listing.town, listing.country].filter(Boolean).join(", ");
 
   function handleBook() {
+    if (!listing) return;
     if (!user) {
       Alert.alert("Sign in required", "You need to be signed in to book.", [
         { text: "Cancel", style: "cancel" },
@@ -783,9 +790,32 @@ export default function ListingDetailScreen() {
       return;
     }
     if (isCar) {
-      router.push({ pathname: "/book/[listingId]", params: { listingId: id, pickupDatetime: effectivePU, returnDatetime: effectiveRT } });
+      router.push({ pathname: "/book/[listingId]", params: { listingId: id, pickupDatetime: effectivePU, returnDatetime: effectiveRT, listingCategory: listing.category } });
     } else {
-      router.push({ pathname: "/book/[listingId]", params: { listingId: id, checkIn: effectiveCI, checkOut: effectiveCO, guests } });
+      router.push({ pathname: "/book/[listingId]", params: { listingId: id, checkIn: effectiveCI, checkOut: effectiveCO, guests, listingCategory: listing.category } });
+    }
+  }
+
+  async function handleMessageHost() {
+    if (!msgDraft.trim() || !id) return;
+    setMsgSending(true);
+    try {
+      // Step 1: start or retrieve conversation for this listing
+      const r1 = await listingApi.post<{ data: { conversationId: string; isNew: boolean } }>(
+        "/conversations",
+        { listingId: id }
+      );
+      const convId = r1.data.data.conversationId;
+      // Step 2: send the first message
+      await listingApi.post(`/conversations/${convId}/messages`, { body: msgDraft.trim() });
+      setShowMsgModal(false);
+      setMsgDraft("");
+      router.push(`/conversation/${convId}` as any);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error?.message ?? "Could not send message. Please try again.";
+      Alert.alert("Error", msg);
+    } finally {
+      setMsgSending(false);
     }
   }
 
@@ -890,13 +920,26 @@ export default function ListingDetailScreen() {
           {/* Price */}
           <View style={s.priceRow}>
             <View>
-              <Text style={s.priceAmount}>{curr} {rate.toLocaleString()}</Text>
+              {promoted.hasPromotion && promoted.discountedPrice != null ? (
+                <>
+                  <Text style={s.priceOriginal}>{curr} {rate.toLocaleString()}</Text>
+                  <Text style={s.priceAmount}>{curr} {Math.round(promoted.discountedPrice).toLocaleString()}</Text>
+                </>
+              ) : (
+                <Text style={s.priceAmount}>{curr} {rate.toLocaleString()}</Text>
+              )}
               <Text style={s.priceUnit}>{rateLabel}</Text>
             </View>
-            <View style={s.bestDeal}>
-              <Ionicons name="pricetag" size={11} color={GREEN} />
-              <Text style={s.bestDealText}>Best Price</Text>
-            </View>
+            {promoted.hasPromotion ? (
+              <View style={s.promoDealBadge}>
+                <Text style={s.promoDealText}>🔥 {promoted.labelText}</Text>
+              </View>
+            ) : (
+              <View style={s.bestDeal}>
+                <Ionicons name="pricetag" size={11} color={GREEN} />
+                <Text style={s.bestDealText}>Best Price</Text>
+              </View>
+            )}
           </View>
 
           {isCar && listing.deliveryAvailable && listing.deliveryFee ? (
@@ -920,28 +963,28 @@ export default function ListingDetailScreen() {
         )}
 
         {/* ── Active Promotions ── */}
-        {activePromotions && activePromotions.length > 0 && (
+        {activePromo && (
           <View style={s.section}>
-            <Text style={s.sectionTitle}>Available Promotions</Text>
-            {activePromotions.map((promo, idx) => (
-              <View key={idx} style={pr.card}>
-                <View style={pr.iconWrap}>
-                  <Ionicons name="pricetag" size={18} color="#fff" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={pr.title}>{promo.title}</Text>
-                  <Text style={pr.desc} numberOfLines={2}>{promo.description}</Text>
-                  {promo.expiresAt ? (
-                    <Text style={pr.expiry}>Expires {fmt(promo.expiresAt)}</Text>
-                  ) : null}
-                </View>
-                {promo.discountPercent ? (
-                  <View style={pr.discBadge}>
-                    <Text style={pr.discText}>{promo.discountPercent}%{"\n"}OFF</Text>
-                  </View>
-                ) : null}
+            <Text style={s.sectionTitle}>Best Offer Available</Text>
+            <View style={pr.card}>
+              <View style={pr.iconWrap}>
+                <Ionicons name="pricetag" size={18} color="#fff" />
               </View>
-            ))}
+              <View style={{ flex: 1 }}>
+                <Text style={pr.title}>{activePromo.bannerTitle}</Text>
+                {promoted.savings != null && promoted.savings > 0 && (
+                  <Text style={pr.savings}>You Save {curr} {Math.round(promoted.savings).toLocaleString()}</Text>
+                )}
+                {promoted.originalPrice != null && promoted.discountedPrice != null && (
+                  <Text style={pr.origPrice}>
+                    {curr} {Math.round(promoted.originalPrice).toLocaleString()} → {curr} {Math.round(promoted.discountedPrice).toLocaleString()}
+                  </Text>
+                )}
+              </View>
+              <View style={pr.discBadge}>
+                <Text style={pr.discText}>{activePromo.labelText}</Text>
+              </View>
+            </View>
           </View>
         )}
 
@@ -1060,6 +1103,29 @@ export default function ListingDetailScreen() {
               </View>
             </View>
           </View>
+          {!isProvider && listing.providerId && (
+            <TouchableOpacity
+              style={s.msgHostBtn}
+              onPress={() => {
+                if (!user) {
+                  Alert.alert(
+                    "Sign in required",
+                    "Please sign in to message the host.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Sign In", onPress: () => router.push("/(auth)/login" as any) },
+                    ]
+                  );
+                  return;
+                }
+                setShowMsgModal(true);
+              }}
+              activeOpacity={0.82}
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={18} color={GREEN} />
+              <Text style={s.msgHostBtnText}>Message Host</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── Cancellation ── */}
@@ -1095,7 +1161,21 @@ export default function ListingDetailScreen() {
               <Ionicons name="chatbubble-outline" size={32} color={MUTED} />
               <Text style={{ fontSize: 14, color: MUTED, marginTop: 8 }}>No reviews yet</Text>
             </View>
-          ) : reviews.map(r => <ReviewCard key={r.id} review={r} />)}
+          ) : (
+            <>
+              {reviews.map(r => <ReviewCard key={r.id} review={r} />)}
+              {totalReviews > reviews.length && (
+                <TouchableOpacity
+                  style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 14 }}
+                  onPress={() => router.push(`/listing-reviews/${id}` as any)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: GREEN }}>View All {totalReviews} Reviews</Text>
+                  <Ionicons name="arrow-forward" size={16} color={GREEN} />
+                </TouchableOpacity>
+              )}
+            </>
+          )}
         </View>
 
         {/* ── Location ── */}
@@ -1133,6 +1213,60 @@ export default function ListingDetailScreen() {
         </View>
       </ScrollView>
 
+      {/* ══ MESSAGE HOST MODAL ══ */}
+      <Modal
+        visible={showMsgModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setShowMsgModal(false); setMsgDraft(""); }}
+      >
+        <View style={s.msgBackdrop}>
+          <View style={s.msgCard}>
+            <View style={s.msgCardHeader}>
+              <Text style={s.msgCardTitle}>Message Host</Text>
+              <TouchableOpacity
+                onPress={() => { setShowMsgModal(false); setMsgDraft(""); }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={22} color={TEXT} />
+              </TouchableOpacity>
+            </View>
+            <Text style={s.msgCardSub} numberOfLines={1}>
+              About: {listing.name ?? "this listing"}
+            </Text>
+            <TextInput
+              style={s.msgCardInput}
+              value={msgDraft}
+              onChangeText={setMsgDraft}
+              placeholder="Hi! I'm interested in your listing…"
+              placeholderTextColor={MUTED}
+              multiline
+              maxLength={500}
+              autoFocus
+              textAlignVertical="top"
+            />
+            <TouchableOpacity
+              style={[
+                s.msgSendBtn,
+                (!msgDraft.trim() || msgSending) && s.msgSendBtnOff,
+              ]}
+              onPress={handleMessageHost}
+              disabled={!msgDraft.trim() || msgSending}
+              activeOpacity={0.88}
+            >
+              {msgSending ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="send" size={16} color="#fff" />
+                  <Text style={s.msgSendText}>Send Message</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* ══ FULLSCREEN GALLERY MODAL ══ */}
       <Modal visible={galleryOpen} transparent={false} animationType="fade" onRequestClose={() => setGalleryOpen(false)}>
         <GalleryModal
@@ -1155,8 +1289,18 @@ export default function ListingDetailScreen() {
       {/* ══ STICKY BOTTOM BAR ══ */}
       <View style={s.stickyBar}>
         <View>
-          <Text style={s.stickyRate}>{curr} {rate.toLocaleString()}</Text>
-          <Text style={s.stickyUnit}>{rateLabel}</Text>
+          {promoted.hasPromotion && promoted.discountedPrice != null ? (
+            <>
+              <Text style={s.stickyOriginal}>{curr} {rate.toLocaleString()}</Text>
+              <Text style={s.stickyRate}>{curr} {Math.round(promoted.discountedPrice).toLocaleString()}</Text>
+              <Text style={s.stickyUnit}>{rateLabel} · 🔥 {promoted.labelText}</Text>
+            </>
+          ) : (
+            <>
+              <Text style={s.stickyRate}>{curr} {rate.toLocaleString()}</Text>
+              <Text style={s.stickyUnit}>{rateLabel}</Text>
+            </>
+          )}
         </View>
         {isProvider ? (
           <View style={s.providerBtn}>
@@ -1216,10 +1360,13 @@ const s = StyleSheet.create({
   },
   catBadgeText: { fontSize: 12, fontWeight: "700", color: "#1D4ED8" },
   priceRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 },
+  priceOriginal: { fontSize: 16, fontWeight: "500", color: MUTED, textDecorationLine: "line-through", marginBottom: 2 },
   priceAmount: { fontSize: 28, fontWeight: "900", color: GREEN },
   priceUnit: { fontSize: 13, color: MUTED, fontWeight: "500", marginTop: 2 },
   bestDeal: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: GREEN_LIGHT, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: "#BBF7D0" },
   bestDealText: { fontSize: 11, fontWeight: "700", color: GREEN },
+  promoDealBadge: { backgroundColor: "#FEF2F2", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: "#FECACA", alignSelf: "flex-end" },
+  promoDealText: { fontSize: 12, fontWeight: "800", color: "#DC2626" },
 
   // Promo
   promoBanner: { flexDirection: "row", alignItems: "center", gap: 12, marginHorizontal: 20, marginVertical: 12, backgroundColor: "#FEF2F2", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#FECACA" },
@@ -1270,6 +1417,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 14, paddingBottom: Platform.OS === "ios" ? 30 : 18,
     shadowColor: "#000", shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 8,
   },
+  stickyOriginal: { fontSize: 12, color: MUTED, textDecorationLine: "line-through" },
   stickyRate: { fontSize: 20, fontWeight: "900", color: GREEN },
   stickyUnit: { fontSize: 11, color: MUTED, fontWeight: "500" },
   bookBtn: { flexDirection: "row", alignItems: "center", backgroundColor: GREEN, borderRadius: 16, paddingHorizontal: 24, paddingVertical: 14 },
@@ -1278,6 +1426,39 @@ const s = StyleSheet.create({
   selectDatesBtnText: { color: GREEN, fontWeight: "700", fontSize: 14 },
   providerBtn: { backgroundColor: BG, borderRadius: 16, paddingHorizontal: 18, paddingVertical: 13, borderWidth: 1, borderColor: BORDER },
   providerBtnText: { color: MUTED, fontWeight: "600", fontSize: 13 },
+
+  // Message Host
+  msgHostBtn: {
+    flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14,
+    backgroundColor: GREEN_LIGHT, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12,
+    borderWidth: 1, borderColor: "#BBF7D0", alignSelf: "flex-start",
+  },
+  msgHostBtnText: { fontSize: 14, fontWeight: "700", color: GREEN },
+
+  // Message Host Modal
+  msgBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.52)", justifyContent: "flex-end" },
+  msgCard: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: Platform.OS === "ios" ? 40 : 24,
+  },
+  msgCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  msgCardTitle: { fontSize: 18, fontWeight: "800", color: TEXT },
+  msgCardSub: { fontSize: 13, color: MUTED, marginBottom: 16 },
+  msgCardInput: {
+    backgroundColor: BG, borderRadius: 14, borderWidth: 1, borderColor: BORDER,
+    paddingHorizontal: 16, paddingVertical: 14,
+    fontSize: 14, color: TEXT,
+    minHeight: 100, maxHeight: 180,
+    marginBottom: 16,
+  },
+  msgSendBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: GREEN, borderRadius: 14, paddingVertical: 15,
+  },
+  msgSendBtnOff: { backgroundColor: "#D1D5DB" },
+  msgSendText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
 
 // ── Promotion card styles ─────────────────────────────────────────────────────
@@ -1287,6 +1468,8 @@ const pr = StyleSheet.create({
   title:     { fontSize: 14, fontWeight: "800", color: "#065F46", marginBottom: 3 },
   desc:      { fontSize: 12, color: "#047857", lineHeight: 17, marginBottom: 4 },
   expiry:    { fontSize: 11, color: MUTED },
-  discBadge: { width: 48, height: 48, borderRadius: 10, backgroundColor: GREEN, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  discText:  { fontSize: 10, fontWeight: "800", color: "#fff", textAlign: "center", lineHeight: 14 },
+  savings:   { fontSize: 13, fontWeight: "700", color: "#DC2626", marginBottom: 3 },
+  origPrice: { fontSize: 12, color: "#047857" },
+  discBadge: { minWidth: 52, borderRadius: 10, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center", flexShrink: 0, paddingHorizontal: 8, paddingVertical: 8 },
+  discText:  { fontSize: 11, fontWeight: "800", color: "#fff", textAlign: "center", lineHeight: 15 },
 });

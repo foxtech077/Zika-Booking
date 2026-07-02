@@ -1,3 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
+import { listingApi } from "./listing-api";
+
 // Matches the actual /promotions/active API response shape
 export interface ActivePromotion {
   activity: string;
@@ -49,4 +52,26 @@ export function applyPromotion(
     labelText: promotion.labelText,
     bannerTitle: promotion.bannerTitle,
   };
+}
+
+// Fetches the first active promotion for a category. Shares the same React Query
+// cache key as the home screen's category promo queries so no extra network call
+// is made if the data is already cached.
+export function useActivePromotion(category: string | null | undefined): ActivePromotion | null {
+  const { data } = useQuery<ActivePromotion[]>({
+    queryKey: ["promotions-active", category],
+    queryFn: async () => {
+      if (!category) return [];
+      try {
+        const res = await listingApi.get<{ data: { promotions: ActivePromotion[] } }>(
+          `/promotions/active?activity=${category}`,
+        );
+        return res.data.data.promotions ?? [];
+      } catch { return []; }
+    },
+    enabled: !!category,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  return data?.[0] ?? null;
 }

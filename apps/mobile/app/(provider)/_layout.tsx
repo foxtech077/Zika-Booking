@@ -14,6 +14,7 @@ export default function ProviderLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="listings" />
       <Tabs.Screen name="bookings" />
+      <Tabs.Screen name="messages" />
       <Tabs.Screen name="analytics" />
       <Tabs.Screen name="profile" />
       <Tabs.Screen name="channels"       options={{ href: null }} />

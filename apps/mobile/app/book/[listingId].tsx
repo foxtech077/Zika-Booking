@@ -23,6 +23,7 @@ import { useAuthStore } from "../../store/auth";
 import { useReleaseLock } from "../../hooks/booking";
 import { VoucherSelector } from "../../components/checkout/VoucherSelector";
 import type { ActivityScope } from "../../lib/types/voucher";
+import { useActivePromotion, applyPromotion } from "../../lib/promotions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -151,6 +152,7 @@ export default function BookingFlowScreen() {
     returnDatetime?: string;
     guests?: string;
     listingTitle?: string;
+    listingCategory?: string;
   }>();
 
   const {
@@ -161,7 +163,10 @@ export default function BookingFlowScreen() {
     returnDatetime,
     guests,
     listingTitle,
+    listingCategory,
   } = params;
+
+  const checkoutPromo = useActivePromotion(listingCategory ?? null);
 
   const isCar = !!pickupDatetime;
   const isHotelOrApartment = !isCar;
@@ -215,10 +220,6 @@ export default function BookingFlowScreen() {
   // ── Voucher / promo code ──────────────────────────────────────────────────
   const [voucherCode, setVoucherCode] = useState("");
   const [voucherDiscount, setVoucherDiscount] = useState<number | null>(null);
-
-  // ── AfriPoints redemption ─────────────────────────────────────────────────
-  const userPoints = user?.loyaltyPoints ?? 0;
-  const [usePoints, setUsePoints] = useState(false);
 
   // ── Countdown ─────────────────────────────────────────────────────────────
   const msLeft = useCountdown(lockState?.expiresAt ?? null);
@@ -297,14 +298,19 @@ export default function BookingFlowScreen() {
       const res = await listingApi.post<{ data: { lockToken: string; expiresAt: string; pricingPreview: any } }>(
         "/bookings/initiate", body,
       );
+      // Backend (/bookings/initiate) returns { units, baseAmount, promotionDiscount,
+      // voucherDiscount, serviceFee, taxAmount, deliveryFee, totalAmount, currency } —
+      // there is no nightlyRate/dailyRate/days/nights/subtotal/discountAmount field,
+      // so those must be derived rather than read directly.
       const raw = res.data.data.pricingPreview ?? {};
-      const isCarRebook = !!raw.days;
+      const rebookUnits = raw.units ?? 0;
+      const rebookBaseAmount = raw.baseAmount ?? 0;
       const mapped: PricingPreview = {
-        ratePerUnit: isCarRebook ? (raw.dailyRate ?? 0) : (raw.nightlyRate ?? 0),
-        units: isCarRebook ? (raw.days ?? 0) : (raw.nights ?? 0),
-        unitLabel: isCarRebook ? "days" : "nights",
-        subtotal: raw.subtotal ?? 0,
-        discountAmount: raw.discountAmount ?? undefined,
+        ratePerUnit: rebookUnits > 0 ? rebookBaseAmount / rebookUnits : 0,
+        units: rebookUnits,
+        unitLabel: isCar ? "days" : "nights",
+        subtotal: rebookBaseAmount,
+        discountAmount: raw.promotionDiscount || undefined,
         serviceFee: raw.serviceFee ?? undefined,
         taxAmount: raw.taxAmount ?? undefined,
         deliveryFee: raw.deliveryFee ?? undefined,
@@ -443,15 +449,19 @@ export default function BookingFlowScreen() {
           "/bookings/initiate", body,
         );
 
-        // Map backend field names → component's PricingPreview shape
+        // Backend (/bookings/initiate) returns { units, baseAmount, promotionDiscount,
+        // voucherDiscount, serviceFee, taxAmount, deliveryFee, totalAmount, currency } —
+        // there is no nightlyRate/dailyRate/days/nights/subtotal/discountAmount field,
+        // so those must be derived rather than read directly.
         const raw = res.data.data.pricingPreview ?? {};
-        const isCar = !!raw.days;
+        const units = raw.units ?? 0;
+        const baseAmount = raw.baseAmount ?? 0;
         const mapped: PricingPreview = {
-          ratePerUnit: isCar ? (raw.dailyRate ?? 0) : (raw.nightlyRate ?? 0),
-          units: isCar ? (raw.days ?? 0) : (raw.nights ?? 0),
+          ratePerUnit: units > 0 ? baseAmount / units : 0,
+          units,
           unitLabel: isCar ? "days" : "nights",
-          subtotal: raw.subtotal ?? 0,
-          discountAmount: raw.discountAmount ?? undefined,
+          subtotal: baseAmount,
+          discountAmount: raw.promotionDiscount || undefined,
           serviceFee: raw.serviceFee ?? undefined,
           taxAmount: raw.taxAmount ?? undefined,
           deliveryFee: raw.deliveryFee ?? undefined,
@@ -556,7 +566,6 @@ export default function BookingFlowScreen() {
         guestEmail: email,
       };
       if (voucherCode) body.voucherCode = voucherCode;
-      if (usePoints && userPoints > 0) body.redeemPoints = userPoints;
       if (phone) body.guestPhone = phone;
       if (checkIn) body.checkIn = checkIn;
       if (checkOut) body.checkOut = checkOut;
@@ -832,6 +841,22 @@ export default function BookingFlowScreen() {
 
   const pricing = lockState?.pricingPreview;
 
+  // The backend's /bookings/initiate never actually computes a real promotion
+  // discount (it's hardcoded to a stubbed 0 — see "STEP 2: promotion logic" in
+  // routes/bookings.ts), so the same active-promotion lookup used on listing
+  // cards is reused here and applied client-side to the per-unit rate, then
+  // scaled by the number of nights/days — this is a frontend-only fix.
+  const promo = applyPromotion(pricing?.ratePerUnit ?? null, checkoutPromo);
+  const promoDiscountTotal = promo.hasPromotion
+    ? Math.round((promo.savings ?? 0) * (pricing?.units ?? 0) * 100) / 100
+    : 0;
+  const promoBadgeLabel =
+    promo.hasPromotion && checkoutPromo
+      ? checkoutPromo.discountType === "percentage"
+        ? `${parseFloat(checkoutPromo.discountValue) || 0}% OFF`
+        : `${formatCurrency(parseFloat(checkoutPromo.discountValue) || 0, pricing?.currency ?? "")} OFF`
+      : null;
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Dynamic header title */}
@@ -1075,6 +1100,14 @@ export default function BookingFlowScreen() {
             <View style={styles.summaryCard}>
               <Text style={styles.summaryDateRange}>{formatDateRange()}</Text>
 
+              {/* Promotion banner */}
+              {promo.hasPromotion && checkoutPromo && (
+                <View style={styles.promoBanner}>
+                  <Text style={styles.promoBannerTitle}>🔥 {checkoutPromo.bannerTitle}</Text>
+                  <Text style={styles.promoBannerLabel}>{checkoutPromo.labelText} applied</Text>
+                </View>
+              )}
+
               {/* Pricing breakdown */}
               <View style={styles.pricingSection}>
                 <Text style={styles.pricingTitle}>Pricing</Text>
@@ -1084,24 +1117,34 @@ export default function BookingFlowScreen() {
                     Rate: {pricing.currency} {(pricing.ratePerUnit ?? 0).toLocaleString()} × {pricing.units ?? 0}{" "}
                     {pricing.unitLabel}
                   </Text>
-                  <Text style={styles.priceValue}>
+                  <Text style={[styles.priceValue, promo.hasPromotion && styles.originalPriceStrike]}>
                     {formatCurrency(pricing.subtotal, pricing.currency)}
                   </Text>
                 </View>
 
-                {/* Best discount selection logic */}
+                {promo.hasPromotion && promoBadgeLabel && (
+                  <View style={styles.promoBadge}>
+                    <Text style={styles.promoBadgeText}>🏷 {promoBadgeLabel}</Text>
+                  </View>
+                )}
+
+                {/* Best discount selection logic — promotion vs voucher, best discount wins */}
                 {(() => {
-                  const promoDiscount = pricing.discountAmount ?? 0;
+                  const promoAmt = promoDiscountTotal;
                   const voucherAmt = voucherDiscount ?? 0;
-                  if (promoDiscount > 0 || voucherAmt > 0) {
-                    const bestIsVoucher = voucherAmt > 0 && voucherAmt >= promoDiscount;
-                    const bestAmt = bestIsVoucher ? voucherAmt : promoDiscount;
-                    const bothExist = promoDiscount > 0 && voucherAmt > 0;
+                  if (promoAmt > 0 || voucherAmt > 0) {
+                    const bestIsVoucher = voucherAmt > 0 && voucherAmt >= promoAmt;
+                    const bestAmt = bestIsVoucher ? voucherAmt : promoAmt;
+                    const bothExist = promoAmt > 0 && voucherAmt > 0;
                     return (
                       <View>
                         <View style={styles.priceRow}>
                           <Text style={styles.priceLabel}>
-                            {bestIsVoucher ? `Voucher (${voucherCode})` : "Promotion discount"}
+                            {bestIsVoucher
+                              ? `Voucher (${voucherCode})`
+                              : promoBadgeLabel
+                              ? `Promotion (${promoBadgeLabel})`
+                              : "Promotion discount"}
                             {bothExist ? " ✓ Best deal" : ""}
                           </Text>
                           <Text style={[styles.priceValue, styles.discountValue]}>
@@ -1111,10 +1154,16 @@ export default function BookingFlowScreen() {
                         {bothExist && (
                           <Text style={styles.bestDealNote}>
                             {bestIsVoucher
-                              ? `Voucher saves more than promo (${formatCurrency(promoDiscount, pricing.currency)})`
+                              ? `Voucher saves more than promo (${formatCurrency(promoAmt, pricing.currency)})`
                               : `Promo saves more than voucher (${formatCurrency(voucherAmt, pricing.currency)})`}
                           </Text>
                         )}
+                        <View style={styles.priceRow}>
+                          <Text style={styles.subtotalLabel}>Subtotal</Text>
+                          <Text style={styles.subtotalValue}>
+                            {formatCurrency(Math.max(0, pricing.subtotal - bestAmt), pricing.currency)}
+                          </Text>
+                        </View>
                       </View>
                     );
                   }
@@ -1149,12 +1198,14 @@ export default function BookingFlowScreen() {
                 )}
 
                 {(() => {
-                  const promoAmt   = pricing.discountAmount ?? 0;
+                  const promoAmt   = promoDiscountTotal;
                   const voucherAmt = voucherDiscount ?? 0;
-                  const bestIsVoucher = voucherAmt > 0 && voucherAmt >= promoAmt;
-                  // pricing.total already has promoAmt baked in; subtract the extra voucher savings
-                  const extraOff   = bestIsVoucher ? voucherAmt - promoAmt : 0;
-                  const displayTotal = pricing.total - extraOff;
+                  const bestAmt    = Math.max(promoAmt, voucherAmt);
+                  // pricing.total is computed server-side with no promotion discount
+                  // baked in (the backend's own promotion logic is a stub that always
+                  // returns 0 — see the comment above `promo` further up), so the full
+                  // best-of-promo-or-voucher amount is subtracted here on the frontend.
+                  const displayTotal = Math.max(0, pricing.total - bestAmt);
                   return (
                     <View style={[styles.priceRow, styles.totalRow]}>
                       <Text style={styles.totalLabel}>Total</Text>
@@ -1209,31 +1260,6 @@ export default function BookingFlowScreen() {
                     setVoucherCode("");
                   }}
                 />
-              </View>
-            )}
-
-            {/* AfriPoints redemption */}
-            {userPoints > 0 && (
-              <View style={styles.promoSection}>
-                <View style={styles.afriPointsRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.fieldLabel}>AfriPoints</Text>
-                    <Text style={styles.afriPointsBalance}>
-                      You have {userPoints.toLocaleString()} pts available
-                    </Text>
-                  </View>
-                  <Switch
-                    value={usePoints}
-                    onValueChange={setUsePoints}
-                    trackColor={{ false: "#e5e7eb", true: "#86efac" }}
-                    thumbColor={usePoints ? "#16a34a" : "#9ca3af"}
-                  />
-                </View>
-                {usePoints && (
-                  <Text style={styles.afriPointsNote}>
-                    {userPoints.toLocaleString()} points will be applied to this booking.
-                  </Text>
-                )}
               </View>
             )}
 
@@ -1519,12 +1545,20 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   summaryDateRange: { fontSize: 16, fontWeight: "600", color: "#111827" },
+  promoBanner: { backgroundColor: "#FEF2F2", borderRadius: 10, padding: 12, borderWidth: 1, borderColor: "#FECACA", marginBottom: 12 },
+  promoBannerTitle: { fontSize: 14, fontWeight: "800", color: "#DC2626", marginBottom: 2 },
+  promoBannerLabel: { fontSize: 12, fontWeight: "600", color: "#991B1B" },
   pricingSection: { borderTopWidth: 1, borderTopColor: "#f3f4f6", paddingTop: 14, gap: 8 },
   pricingTitle: { fontSize: 13, fontWeight: "600", color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 },
   priceRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   priceLabel: { fontSize: 14, color: "#374151", flex: 1 },
   priceValue: { fontSize: 14, color: "#111827", fontWeight: "500" },
+  originalPriceStrike: { textDecorationLine: "line-through", color: "#9ca3af", fontWeight: "400" },
   discountValue: { color: "#16a34a" },
+  promoBadge: { alignSelf: "flex-start", backgroundColor: "#FEF2F2", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  promoBadgeText: { fontSize: 12, fontWeight: "700", color: "#DC2626" },
+  subtotalLabel: { fontSize: 14, fontWeight: "600", color: "#111827", flex: 1 },
+  subtotalValue: { fontSize: 14, fontWeight: "600", color: "#111827" },
   totalRow: { borderTopWidth: 1, borderTopColor: "#e5e7eb", marginTop: 4, paddingTop: 8 },
   totalLabel: { fontSize: 16, fontWeight: "700", color: "#111827", flex: 1 },
   totalValue: { fontSize: 16, fontWeight: "700", color: "#16a34a" },
@@ -1536,11 +1570,6 @@ const styles = StyleSheet.create({
   // Voucher selector wrapper
   promoSection: { marginBottom: 20 },
   bestDealNote: { fontSize: 11, color: "#6b7280", marginTop: 2, marginBottom: 2, fontStyle: "italic" },
-
-  // AfriPoints
-  afriPointsRow: { flexDirection: "row", alignItems: "center" },
-  afriPointsBalance: { fontSize: 12, color: "#6b7280", marginTop: 2 },
-  afriPointsNote: { fontSize: 13, color: "#16a34a", fontWeight: "600", marginTop: 8 },
 
   // Terms
   termsRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 20 },

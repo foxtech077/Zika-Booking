@@ -11,6 +11,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
+import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const GREEN = "#1B5E20";
@@ -24,14 +25,8 @@ const SORT_OPTIONS = [
   { key: "recommended", label: "Recommended" },
   { key: "price_asc", label: "Price ↑" },
   { key: "price_desc", label: "Price ↓" },
+  { key: "newest", label: "Newest" },
 ];
-
-// Sort map: UI label → API param (API has price_asc/price_desc inverted)
-const SORT_MAP: Record<string, string> = {
-  recommended: "recommended",
-  price_asc: "price_desc",
-  price_desc: "price_asc",
-};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Listing {
@@ -94,13 +89,15 @@ const badge = StyleSheet.create({
 });
 
 // ── Listing Card ──────────────────────────────────────────────────────────────
-function ListingCard({ item, apiCategory, onPress, signedPhotoUrl }: {
+function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: {
   item: Listing; apiCategory: string; onPress: () => void; signedPhotoUrl: string | null;
+  promotion?: ActivePromotion | null;
 }) {
   const [imgErr, setImgErr] = useState(false);
   const isCar = apiCategory === "car";
   const price = isCar ? item.dailyRate : item.nightlyRate;
   const unit = isCar ? "/day" : "/night";
+  const promoted = applyPromotion(price, promotion ?? null);
 
   return (
     <TouchableOpacity style={card.wrap} onPress={onPress} activeOpacity={0.88}>
@@ -156,11 +153,25 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl }: {
 
         <View style={card.footer}>
           {price != null ? (
-            <Text style={card.price}>
-              <Text style={card.currency}>{item.currency} </Text>
-              {price.toLocaleString()}
-              <Text style={card.unit}>{unit}</Text>
-            </Text>
+            promoted.hasPromotion && promoted.discountedPrice != null ? (
+              <View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                  <Text style={card.originalPrice}>{item.currency} {price.toLocaleString()}</Text>
+                  <Text style={card.promoBadge}>🔥 {promoted.labelText}</Text>
+                </View>
+                <Text style={card.price}>
+                  <Text style={card.currency}>{item.currency} </Text>
+                  {Math.round(promoted.discountedPrice).toLocaleString()}
+                  <Text style={card.unit}>{unit}</Text>
+                </Text>
+              </View>
+            ) : (
+              <Text style={card.price}>
+                <Text style={card.currency}>{item.currency} </Text>
+                {price.toLocaleString()}
+                <Text style={card.unit}>{unit}</Text>
+              </Text>
+            )
           ) : (
             <Text style={card.noPrice}>Price on request</Text>
           )}
@@ -201,6 +212,8 @@ const card = StyleSheet.create({
   currency: { fontSize: 12, fontWeight: "600", color: GREEN },
   unit: { fontSize: 12, fontWeight: "400", color: MUTED },
   noPrice: { fontSize: 13, color: MUTED, fontStyle: "italic" },
+  originalPrice: { fontSize: 13, color: MUTED, textDecorationLine: "line-through" },
+  promoBadge: { fontSize: 11, fontWeight: "800", color: "#DC2626" },
 });
 
 // ── Skeleton ──────────────────────────────────────────────────────────────────
@@ -229,6 +242,8 @@ export default function BrowseCategoryScreen() {
   const screenTitle = category === "apartments" ? "All Apartments" : category === "cars" ? "All Cars" : "All Hotels";
   const icon = category === "cars" ? "🚗" : category === "apartments" ? "🏠" : "🏨";
 
+  const browsePromo = useActivePromotion(apiCategory);
+
   const [keyword, setKeyword] = useState("");
   const [sort, setSort] = useState<string>("recommended");
   const [cursor, setCursor] = useState(0);
@@ -243,7 +258,7 @@ export default function BrowseCategoryScreen() {
         lat: "0",
         lng: "0",
         radius_km: "20000",
-        sort: SORT_MAP[sort] ?? "recommended",
+        sort,
         limit: "50",  // Max allowed — gets all listings in one page for small datasets
       });
       if (cursor > 0) qp.set("cursor", String(cursor));
@@ -416,6 +431,7 @@ export default function BrowseCategoryScreen() {
               apiCategory={apiCategory}
               onPress={() => navToListing(item.id)}
               signedPhotoUrl={signedPhotoMap[item.id] ?? null}
+              promotion={browsePromo}
             />
           )}
           ListEmptyComponent={

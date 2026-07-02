@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
+import { useReviewedBookingIds } from "../../hooks/reviews";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -76,8 +77,6 @@ interface BookingDetail {
   checkedInAt?: string;
   createdAt: string;
   canCancel: boolean;
-  hasReview?: boolean;
-  reviewId?: string;
   earnedPoints?: number;
   redeemPoints?: number;
   pointsDiscount?: number;
@@ -238,39 +237,62 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 // ── Timeline ──────────────────────────────────────────────────────────────────
 
 function Timeline({ booking }: { booking: BookingDetail }) {
-  const events: { label: string; date: string | undefined; done: boolean }[] = [
+  const cancelled = isCancelled(booking.status);
+
+  type TlEvent = { label: string; date: string | undefined; done: boolean; isCancel?: boolean };
+
+  const events: TlEvent[] = [
     { label: "Booking Created", date: booking.createdAt, done: true },
     { label: "Confirmed", date: booking.confirmedAt, done: !!booking.confirmedAt },
-    {
-      label: "Active",
-      date: booking.checkedInAt,
-      done: booking.status === "active" || booking.status === "completed",
-    },
-    { label: "Completed", date: booking.completedAt, done: !!booking.completedAt },
   ];
+
+  if (cancelled) {
+    events.push({ label: "Cancelled", date: booking.cancelledAt, done: true, isCancel: true });
+  } else {
+    const activeDate = booking.checkedInAt
+      ?? (booking.status === "active" ? (booking.checkIn ?? booking.pickupDatetime) : undefined);
+    events.push(
+      {
+        label: "Active",
+        date: activeDate,
+        done: booking.status === "active" || booking.status === "completed",
+      },
+      {
+        // completedAt isn't reliably populated by the backend when a booking
+        // transitions to "completed" (no code path sets it), so status is the
+        // authoritative signal here — completedAt is only used for the date text.
+        label: "Completed",
+        date: booking.completedAt,
+        done: booking.status === "completed",
+      }
+    );
+  }
 
   return (
     <View style={styles.timeline}>
-      {events.map((ev, i) => (
-        <View key={ev.label} style={styles.timelineItem}>
-          <View style={styles.timelineLeft}>
-            <View style={[styles.timelineDot, ev.done && styles.timelineDotDone]} />
-            {i < events.length - 1 && (
-              <View style={[styles.timelineLine, ev.done && styles.timelineLineDone]} />
-            )}
+      {events.map((ev, i) => {
+        const nextDone = i < events.length - 1 ? events[i + 1].done : false;
+        const dotStyle = ev.isCancel ? styles.timelineDotCancelled : styles.timelineDotDone;
+        const labelStyle = ev.isCancel ? styles.timelineLabelCancelled : styles.timelineLabelDone;
+        return (
+          <View key={ev.label} style={styles.timelineItem}>
+            <View style={styles.timelineLeft}>
+              <View style={[styles.timelineDot, ev.done && dotStyle]} />
+              {i < events.length - 1 && (
+                <View style={[styles.timelineLine, ev.done && nextDone && styles.timelineLineDone]} />
+              )}
+            </View>
+            <View style={styles.timelineRight}>
+              <Text style={[styles.timelineLabel, ev.done && labelStyle]}>{ev.label}</Text>
+              {ev.date ? (
+                <Text style={styles.timelineDate}>{formatFullDate(ev.date)}</Text>
+              ) : ev.done ? null : (
+                <Text style={styles.timelinePending}>Pending</Text>
+              )}
+            </View>
           </View>
-          <View style={styles.timelineRight}>
-            <Text style={[styles.timelineLabel, ev.done && styles.timelineLabelDone]}>
-              {ev.label}
-            </Text>
-            {ev.date ? (
-              <Text style={styles.timelineDate}>{formatFullDate(ev.date)}</Text>
-            ) : (
-              <Text style={styles.timelinePending}>Pending</Text>
-            )}
-          </View>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -299,6 +321,11 @@ export default function BookingDetailScreen() {
     refetchInterval: autoRefresh ? 5_000 : false,
     refetchIntervalInBackground: false,
   });
+
+  // GET /guests/me/bookings/:id doesn't actually return hasReview/reviewId —
+  // whether this booking has been reviewed is derived from the guest's own
+  // review list (GET /reviews/me) instead.
+  const reviewedBookingIds = useReviewedBookingIds();
 
   // Fetch signed cover photo via /listings/:id/public (listing.primaryPhotoUrl may be an unsigned S3 URL)
   const { data: signedCoverPhoto } = useQuery<string | null>({
@@ -670,7 +697,7 @@ export default function BookingDetailScreen() {
 
             {/* Review — only for completed bookings */}
             {booking.status === "completed" && (
-              (booking.hasReview || booking.reviewId) ? (
+              reviewedBookingIds.has(booking.id) ? (
                 <View style={styles.reviewSubmittedBox}>
                   <Ionicons name="star" size={16} color="#9ca3af" style={{ marginRight: 6 }} />
                   <Text style={styles.reviewSubmittedText}>Review Submitted</Text>
@@ -943,11 +970,13 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   timelineDotDone: { backgroundColor: "#16a34a", borderColor: "#16a34a" },
+  timelineDotCancelled: { backgroundColor: "#dc2626", borderColor: "#dc2626" },
   timelineLine: { flex: 1, width: 2, backgroundColor: "#e5e7eb", marginVertical: 4 },
   timelineLineDone: { backgroundColor: "#16a34a" },
   timelineRight: { flex: 1, paddingBottom: 16 },
   timelineLabel: { fontSize: 14, fontWeight: "600", color: "#9ca3af" },
   timelineLabelDone: { color: "#111827" },
+  timelineLabelCancelled: { color: "#dc2626" },
   timelineDate: { fontSize: 12, color: "#6b7280", marginTop: 2 },
   timelinePending: { fontSize: 12, color: "#9ca3af", marginTop: 2, fontStyle: "italic" },
 

@@ -4,15 +4,13 @@ import { useEffect, useRef } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StripeProvider } from "@stripe/stripe-react-native";
 import axios from "axios";
 import { getEnvStripePublishableKey } from "../lib/stripe-config";
 import { useAuthStore } from "../store/auth";
-
-const queryClient = new QueryClient({
-  defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
-});
+import { useLocationBootstrap } from "../hooks/useLocation";
+import { queryClient } from "../lib/query-client";
 
 const screenOptionsByName: Record<string, object> = {
   "pending-approval":               { headerShown: false },
@@ -85,6 +83,7 @@ async function verifySession(): Promise<"ok" | "revoked" | "network_error"> {
 export default function RootLayout() {
   const hydrate = useAuthStore((s) => s.hydrate);
   const isHydrated = useAuthStore((s) => s.isHydrated);
+  useLocationBootstrap();
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 

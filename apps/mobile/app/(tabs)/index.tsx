@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, memo } from "react";
 import {
   View, Text, ScrollView, FlatList, TextInput, TouchableOpacity,
-  StyleSheet, Dimensions, Modal, Animated,
+  StyleSheet, Dimensions, Modal, Animated, ImageBackground,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -11,6 +11,10 @@ import { useAuthStore } from "../../store/auth";
 import { listingApi } from "../../lib/listing-api";
 import { ListingImage } from "../../components/ListingImage";
 import { K } from "../../constants/theme";
+import { ActivePromotion, applyPromotion } from "../../lib/promotions";
+import { useLoyaltyProfile } from "../../hooks/loyalty";
+import { useUnreadNotificationCount } from "../../hooks/notifications";
+import { useLocation } from "../../hooks/useLocation";
 
 const { width: W } = Dimensions.get("window");
 
@@ -36,14 +40,6 @@ interface Promotion {
   expiresAt?: string;
 }
 interface Voucher { id: string; code: string; title: string; description?: string; discountPercent?: number; discountAmount?: number; expiresAt?: string }
-interface LoyaltyProfile {
-  tier?: string;
-  points?: number;
-  pointsBalance?: number;
-  totalPoints?: number;
-  nextTierPoints?: number;
-  nextTier?: string;
-}
 interface RecentBooking { id: string; listingId: string; listingTitle?: string; checkIn: string; checkOut: string; status: string; totalAmount: number; currency: string }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -61,6 +57,33 @@ function formatLocalDate(d: Date): string {
 }
 function fmtShortDate(s: string): string {
   try { return new Date(s).toLocaleDateString("en-GB", { day: "2-digit", month: "short" }); } catch { return s; }
+}
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good Morning";
+  if (h < 17) return "Good Afternoon";
+  return "Good Evening";
+}
+
+// ── Countdown Hook ────────────────────────────────────────────────────────────
+
+function useCountdown(expiresAt?: string): string {
+  const [timeLeft, setTimeLeft] = useState("");
+  useEffect(() => {
+    if (!expiresAt) return;
+    function tick() {
+      const diff = new Date(expiresAt!).getTime() - Date.now();
+      if (diff <= 0) { setTimeLeft("ENDED"); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const sv = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(sv).padStart(2, "0")}`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [expiresAt]);
+  return timeLeft;
 }
 
 const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
@@ -84,7 +107,7 @@ function DatePickerModal({ visible, title, minDate, onSelect, onClose }: {
   function isDisabled(day: number) {
     const d = new Date(yr, mo, day); d.setHours(0, 0, 0, 0);
     if (d < today) return true;
-    if (minDate) { const m = new Date(minDate); m.setHours(0, 0, 0, 0); if (d <= m) return true; }
+    if (minDate) { const m2 = new Date(minDate); m2.setHours(0, 0, 0, 0); if (d <= m2) return true; }
     return false;
   }
   return (
@@ -172,11 +195,28 @@ function CarouselSkeleton() {
   );
 }
 
+function EliteCardSkeleton() {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} scrollEnabled={false}
+      contentContainerStyle={{ paddingHorizontal: K.spacing.screen, gap: 14 }}>
+      {[0, 1].map(i => (
+        <View key={i} style={{ gap: 10 }}>
+          <SkeletonBlock width={W - 48} height={220} radius={K.radius.xl} />
+          <SkeletonBlock width={200} height={14} radius={6} />
+          <SkeletonBlock width={120} height={11} radius={6} />
+          <SkeletonBlock width={100} height={18} radius={6} />
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
 // ── Listing Card ──────────────────────────────────────────────────────────────
 
-const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badgeLabel, badgeColor, photoUrl }: {
+const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badgeLabel, badgeColor, photoUrl, promotion }: {
   item: SearchResult; onPress: () => void; width?: number;
   badgeLabel?: string; badgeColor?: string; photoUrl?: string | null;
+  promotion?: ActivePromotion | null;
 }) {
   const isCar = item.listingType === "car";
   const isApt = item.listingType === "apartment";
@@ -188,6 +228,7 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
   const cardTitle = isCar && item.carMake
     ? `${item.carMake} ${item.carModel ?? ""} ${item.carYear ?? ""}`.trim()
     : item.title;
+  const promoted = applyPromotion(rate, promotion ?? null);
   return (
     <TouchableOpacity style={[lc.card, { width }]} onPress={onPress} activeOpacity={0.88}>
       <View style={lc.imgWrap}>
@@ -213,10 +254,23 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
           <Ionicons name="location-outline" size={11} color={K.colors.textMuted} />
           <Text style={lc.loc} numberOfLines={1}>{item.city}</Text>
         </View>
-        <View style={lc.priceRow}>
-          <Text style={lc.price}>{fmtPrice(rate, item.currency)}</Text>
-          {rate ? <Text style={lc.priceUnit}>/{unit}</Text> : null}
-        </View>
+        {promoted.hasPromotion && promoted.discountedPrice != null ? (
+          <View>
+            <View style={lc.priceRow}>
+              <Text style={lc.originalPrice}>{fmtPrice(rate, item.currency)}</Text>
+              <Text style={lc.promoBadgeText}>🔥 {promoted.labelText}</Text>
+            </View>
+            <View style={lc.priceRow}>
+              <Text style={lc.price}>{fmtPrice(Math.round(promoted.discountedPrice), item.currency)}</Text>
+              <Text style={lc.priceUnit}>/{unit}</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={lc.priceRow}>
+            <Text style={lc.price}>{fmtPrice(rate, item.currency)}</Text>
+            {rate ? <Text style={lc.priceUnit}>/{unit}</Text> : null}
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -234,37 +288,211 @@ const lc = StyleSheet.create({
   title: { fontSize: 13, fontWeight: "700", color: K.colors.textDark, marginBottom: 4 },
   locRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 8 },
   loc: { fontSize: 11, color: K.colors.textMuted, flex: 1 },
-  priceRow: { flexDirection: "row", alignItems: "baseline", gap: 2 },
+  priceRow: { flexDirection: "row", alignItems: "baseline", gap: 4, marginBottom: 2 },
+  originalPrice: { fontSize: 11, color: K.colors.textMuted, textDecorationLine: "line-through" },
+  promoBadgeText: { fontSize: 10, fontWeight: "800", color: "#dc2626" },
   price: { fontSize: 15, fontWeight: "800", color: K.colors.darkGreen },
   priceUnit: { fontSize: 11, color: K.colors.textMuted },
 });
 
-// ── Destination Card ──────────────────────────────────────────────────────────
+// ── Elite Card ────────────────────────────────────────────────────────────────
 
-const DestinationCard = memo(function DestinationCard({ city, count, photoUri, onPress }: {
-  city: string; count: number; photoUri: string | null; onPress: () => void;
+const EliteCard = memo(function EliteCard({ item, onPress, badgeLabel, badgeColor, photoUrl, promotion }: {
+  item: SearchResult; onPress: () => void; badgeLabel?: string; badgeColor?: string;
+  photoUrl?: string | null; promotion?: ActivePromotion | null;
 }) {
+  const isCar = item.listingType === "car";
+  const isApt = item.listingType === "apartment";
+  const rate = isCar ? item.dailyRate : item.nightlyRate;
+  const unit = isCar ? "day" : "night";
   const [imgErr, setImgErr] = useState(false);
+  const fallbackEmoji = isCar ? "🚗" : isApt ? "🏠" : "🏨";
+  const cardTitle = isCar && item.carMake
+    ? `${item.carMake} ${item.carModel ?? ""} ${item.carYear ?? ""}`.trim()
+    : item.title;
+  const promoted = applyPromotion(rate, promotion ?? null);
   return (
-    <TouchableOpacity style={dest.card} onPress={onPress} activeOpacity={0.88}>
-      {!imgErr && photoUri
-        ? <ListingImage uri={photoUri} style={dest.photo} onError={() => setImgErr(true)} />
-        : <View style={[dest.photo, dest.photoFallback]}><Text style={{ fontSize: 30 }}>🏙️</Text></View>
-      }
-      <View style={dest.overlay}>
-        <Text style={dest.city} numberOfLines={1}>{city}</Text>
-        <Text style={dest.count}>{count} hotel{count !== 1 ? "s" : ""}</Text>
+    <TouchableOpacity style={ec.card} onPress={onPress} activeOpacity={0.88}>
+      <View style={ec.imgWrap}>
+        {!imgErr && photoUrl
+          ? <ListingImage uri={photoUrl} style={ec.photo} onError={() => setImgErr(true)} />
+          : <View style={[ec.photo, ec.photoFallback]}><Text style={{ fontSize: 52 }}>{fallbackEmoji}</Text></View>
+        }
+        <View style={ec.gradientOverlay} />
+        {badgeLabel && (
+          <View style={[ec.badge, { backgroundColor: badgeColor ?? K.colors.darkGreen }]}>
+            <Text style={ec.badgeText}>{badgeLabel}</Text>
+          </View>
+        )}
+        {item.starRating != null && item.starRating > 0 && (
+          <View style={ec.ratingPill}>
+            <Ionicons name="star" size={12} color="#f5b31a" />
+            <Text style={ec.ratingText}>{item.starRating.toFixed(1)}</Text>
+          </View>
+        )}
+        {item.isAccredited && (
+          <View style={ec.accreditedPill}>
+            <Ionicons name="shield-checkmark" size={10} color={K.colors.accentLight} />
+            <Text style={ec.accreditedText}>Verified</Text>
+          </View>
+        )}
+      </View>
+      <View style={ec.body}>
+        <Text style={ec.title} numberOfLines={1}>{cardTitle}</Text>
+        <View style={ec.locRow}>
+          <Ionicons name="location-outline" size={12} color={K.colors.textMuted} />
+          <Text style={ec.loc} numberOfLines={1}>{item.city}</Text>
+        </View>
+        {promoted.hasPromotion && promoted.discountedPrice != null ? (
+          <View>
+            <View style={ec.priceRow}>
+              <Text style={ec.originalPrice}>{fmtPrice(rate, item.currency)}</Text>
+              <Text style={ec.promoLabel}>🔥 {promoted.labelText}</Text>
+            </View>
+            <View style={ec.priceRow}>
+              <Text style={ec.price}>{fmtPrice(Math.round(promoted.discountedPrice), item.currency)}</Text>
+              <Text style={ec.unit}>/{unit}</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={ec.priceRow}>
+            <Text style={ec.price}>{fmtPrice(rate, item.currency)}</Text>
+            {rate ? <Text style={ec.unit}>/{unit}</Text> : null}
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
 });
-const dest = StyleSheet.create({
-  card: { width: 160, borderRadius: K.radius.xl, overflow: "hidden", marginRight: 12, ...K.shadow.sm },
-  photo: { width: "100%", height: 130 },
+const ec = StyleSheet.create({
+  card: {
+    width: W - 48,
+    backgroundColor: K.colors.bgCard,
+    borderRadius: K.radius.xl,
+    overflow: "hidden",
+    ...K.shadow.md,
+  },
+  imgWrap: { position: "relative" },
+  photo: { width: "100%", height: 220 },
   photoFallback: { backgroundColor: K.colors.bgTint, alignItems: "center", justifyContent: "center" },
-  overlay: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "rgba(2,25,13,0.55)", padding: 10 },
-  city: { color: "#fff", fontWeight: "800", fontSize: 13, marginBottom: 2 },
-  count: { color: "rgba(255,255,255,0.80)", fontSize: 11 },
+  gradientOverlay: {
+    position: "absolute", bottom: 0, left: 0, right: 0, height: 70,
+    backgroundColor: "rgba(2,25,13,0.28)",
+  },
+  badge: {
+    position: "absolute", top: 12, left: 12,
+    borderRadius: K.radius.full, paddingHorizontal: 12, paddingVertical: 5,
+  },
+  badgeText: { color: "#fff", fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
+  ratingPill: {
+    position: "absolute", top: 12, right: 12,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: K.radius.full, paddingHorizontal: 9, paddingVertical: 5,
+    flexDirection: "row", alignItems: "center", gap: 4,
+  },
+  ratingText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  accreditedPill: {
+    position: "absolute", bottom: 12, right: 12,
+    backgroundColor: K.colors.darkGreen,
+    borderRadius: K.radius.full, paddingHorizontal: 8, paddingVertical: 4,
+    flexDirection: "row", alignItems: "center", gap: 4,
+  },
+  accreditedText: { color: "#fff", fontSize: 10, fontWeight: "700" },
+  body: { padding: 14 },
+  title: { fontSize: K.font.base, fontWeight: "800", color: K.colors.textDark, marginBottom: 5 },
+  locRow: { flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 10 },
+  loc: { fontSize: 12, color: K.colors.textMuted, flex: 1 },
+  priceRow: { flexDirection: "row", alignItems: "baseline", gap: 4, marginBottom: 2 },
+  originalPrice: { fontSize: 12, color: K.colors.textMuted, textDecorationLine: "line-through" },
+  promoLabel: { fontSize: 11, fontWeight: "800", color: "#dc2626" },
+  price: { fontSize: K.font.xl, fontWeight: "800", color: K.colors.darkGreen },
+  unit: { fontSize: 12, color: K.colors.textMuted },
+});
+
+// ── Compact Car Card ──────────────────────────────────────────────────────────
+
+const CompactCarCard = memo(function CompactCarCard({ item, onPress, photoUrl, promotion }: {
+  item: SearchResult; onPress: () => void; photoUrl?: string | null; promotion?: ActivePromotion | null;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  const cardTitle = item.carMake
+    ? `${item.carMake} ${item.carModel ?? ""} ${item.carYear ?? ""}`.trim()
+    : item.title;
+  const promoted = applyPromotion(item.dailyRate, promotion ?? null);
+  const pct = promotion?.discountType === "percentage"
+    ? Number(promotion.discountValue)
+    : (item.dailyRate && promoted.savings)
+      ? Math.round((promoted.savings / item.dailyRate) * 100)
+      : null;
+  return (
+    <TouchableOpacity style={cc.card} onPress={onPress} activeOpacity={0.88}>
+      <View style={cc.imgWrap}>
+        {!imgErr && photoUrl
+          ? <ListingImage uri={photoUrl} style={cc.photo} onError={() => setImgErr(true)} />
+          : <View style={[cc.photo, cc.photoFallback]}><Text style={{ fontSize: 28 }}>🚗</Text></View>
+        }
+        {pct && pct > 0 ? (
+          <View style={cc.discBadge}>
+            <Text style={cc.discText}>{pct}% OFF</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={cc.details}>
+        <Text style={cc.title} numberOfLines={1}>{cardTitle}</Text>
+        <View style={cc.specRow}>
+          {item.transmission ? (
+            <View style={cc.spec}>
+              <Ionicons name="settings-outline" size={11} color={K.colors.textMuted} />
+              <Text style={cc.specText}>{item.transmission}</Text>
+            </View>
+          ) : null}
+          {item.seats ? (
+            <View style={cc.spec}>
+              <Ionicons name="people-outline" size={11} color={K.colors.textMuted} />
+              <Text style={cc.specText}>{item.seats} seats</Text>
+            </View>
+          ) : null}
+          <View style={cc.spec}>
+            <Ionicons name="location-outline" size={11} color={K.colors.textMuted} />
+            <Text style={cc.specText}>{item.city}</Text>
+          </View>
+        </View>
+        {promoted.hasPromotion && promoted.discountedPrice != null ? (
+          <View>
+            <Text style={cc.originalPrice}>{fmtPrice(item.dailyRate, item.currency)}</Text>
+            <Text style={cc.price}>{fmtPrice(Math.round(promoted.discountedPrice), item.currency)}<Text style={cc.unit}>/day</Text></Text>
+          </View>
+        ) : (
+          <Text style={cc.price}>{fmtPrice(item.dailyRate, item.currency)}<Text style={cc.unit}>/day</Text></Text>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={K.colors.border} />
+    </TouchableOpacity>
+  );
+});
+const cc = StyleSheet.create({
+  card: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: K.colors.bgCard, borderRadius: K.radius.lg,
+    padding: 12, borderWidth: 1, borderColor: K.colors.border, ...K.shadow.xs,
+    gap: 12,
+  },
+  imgWrap: { position: "relative" },
+  photo: { width: 100, height: 80, borderRadius: K.radius.md },
+  photoFallback: { backgroundColor: K.colors.bgTint, alignItems: "center", justifyContent: "center" },
+  discBadge: {
+    position: "absolute", top: 4, left: 4,
+    backgroundColor: "#dc2626", borderRadius: K.radius.full, paddingHorizontal: 6, paddingVertical: 3,
+  },
+  discText: { color: "#fff", fontSize: 9, fontWeight: "800" },
+  details: { flex: 1 },
+  title: { fontSize: 14, fontWeight: "700", color: K.colors.textDark, marginBottom: 4 },
+  specRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 6 },
+  spec: { flexDirection: "row", alignItems: "center", gap: 3 },
+  specText: { fontSize: 11, color: K.colors.textMuted },
+  originalPrice: { fontSize: 11, color: K.colors.textMuted, textDecorationLine: "line-through", marginBottom: 1 },
+  price: { fontSize: K.font.base, fontWeight: "800", color: K.colors.darkGreen },
+  unit: { fontSize: 11, fontWeight: "400", color: K.colors.textMuted },
 });
 
 // ── Section Head ──────────────────────────────────────────────────────────────
@@ -326,18 +554,12 @@ const PromoBanner = memo(function PromoBanner({ promo, onPress }: {
 });
 const pbn = StyleSheet.create({
   wrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFF7ED",
-    borderRadius: K.radius.md,
-    borderWidth: 1,
-    borderColor: "#FED7AA",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginHorizontal: K.spacing.screen,
-    marginBottom: 10,
-    gap: 10,
-    ...K.shadow.xs,
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#FFF7ED", borderRadius: K.radius.md,
+    borderWidth: 1, borderColor: "#FED7AA",
+    paddingHorizontal: 14, paddingVertical: 10,
+    marginHorizontal: K.spacing.screen, marginBottom: 10,
+    gap: 10, ...K.shadow.xs,
   },
   fire: { fontSize: 18 },
   text: { fontSize: 13, fontWeight: "700", color: "#92400e" },
@@ -346,69 +568,13 @@ const pbn = StyleSheet.create({
   discText: { color: "#fff", fontSize: 11, fontWeight: "800" },
 });
 
-// ── Trending Deal Card ────────────────────────────────────────────────────────
-
-const TrendingDealCard = memo(function TrendingDealCard({ promo, onPress }: {
-  promo: Promotion; onPress: () => void;
-}) {
-  const discountText = promo.discountPercent
-    ? `${promo.discountPercent}% OFF`
-    : promo.discountAmount
-      ? `-${promo.discountAmount}`
-      : "DEAL";
-  const activityEmoji = promo.activity === "hotel" ? "🏨" : promo.activity === "apartment" ? "🏠" : promo.activity === "car" ? "🚗" : "🌍";
-  const activityLabel = promo.activity
-    ? `${activityEmoji} ${promo.activity.charAt(0).toUpperCase()}${promo.activity.slice(1)}s`
-    : "🌍 All";
-  return (
-    <TouchableOpacity style={td.card} onPress={onPress} activeOpacity={0.88}>
-      <Text style={td.activity}>{activityLabel}</Text>
-      <Text style={td.title} numberOfLines={2}>{promo.title}</Text>
-      <View style={td.discWrap}>
-        <Text style={td.disc}>{discountText}</Text>
-      </View>
-      {promo.expiresAt ? (
-        <Text style={td.expiry}>Until {fmtPromoExpiry(promo.expiresAt)}</Text>
-      ) : null}
-      <View style={td.cta}>
-        <Text style={td.ctaText}>Explore</Text>
-        <Ionicons name="arrow-forward" size={11} color={K.colors.accentLight} />
-      </View>
-    </TouchableOpacity>
-  );
-});
-const td = StyleSheet.create({
-  card: {
-    width: 180,
-    backgroundColor: K.colors.darkGreen,
-    borderRadius: K.radius.xl,
-    padding: 16,
-    minHeight: 165,
-    justifyContent: "space-between",
-    ...K.shadow.brand,
-  },
-  activity: { fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.68)", letterSpacing: 0.3 },
-  title: { fontSize: 14, fontWeight: "800", color: "#fff", lineHeight: 20, marginTop: 8, marginBottom: 10, flex: 1 },
-  discWrap: { backgroundColor: K.colors.accent, borderRadius: K.radius.full, paddingHorizontal: 10, paddingVertical: 4, alignSelf: "flex-start", marginBottom: 6 },
-  disc: { color: "#fff", fontSize: 12, fontWeight: "900" },
-  expiry: { fontSize: 10, color: "rgba(255,255,255,0.60)", marginBottom: 8 },
-  cta: { flexDirection: "row", alignItems: "center", gap: 4 },
-  ctaText: { fontSize: 12, fontWeight: "700", color: K.colors.accentLight },
-});
-
-// ── Promo Skeleton ────────────────────────────────────────────────────────────
-
-function PromoSkeletonRow() {
-  return (
-    <View style={{ flexDirection: "row", paddingHorizontal: K.spacing.screen, gap: 14 }}>
-      {[0, 1, 2].map(i => (
-        <View key={i} style={{ width: 180, height: 165, borderRadius: K.radius.xl, backgroundColor: K.colors.bgSubtle }} />
-      ))}
-    </View>
-  );
-}
-
 // ── Promo Slider ──────────────────────────────────────────────────────────────
+
+const PROMO_BG_IMAGES: Record<string, any> = {
+  hotel:     require("../../assets/promotionimgs/hotel.png"),
+  apartment: require("../../assets/promotionimgs/apartement.png"),
+  car:       require("../../assets/promotionimgs/car.png"),
+};
 
 const PROMO_PALETTES = [
   { bg: K.colors.darkGreen, eyebrow: K.colors.accentLight, sub: "rgba(255,255,255,0.72)" },
@@ -423,7 +589,7 @@ const PromoSlider = memo(function PromoSlider({ promos, onPress }: {
   const SLIDE_W = W - K.spacing.screen * 2;
   const scrollRef = useRef<ScrollView>(null);
   const [active, setActive] = useState(0);
-  const timerRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (promos.length <= 1) return;
@@ -450,27 +616,59 @@ const PromoSlider = memo(function PromoSlider({ promos, onPress }: {
       >
         {promos.map((p, idx) => {
           const pal = PROMO_PALETTES[idx % PROMO_PALETTES.length];
+          const dv = (p as any).discountValue;
+          const dt = (p as any).discountType;
+          const discPct = p.discountPercent ?? (dt === "percentage" ? Number(dv) : null);
+          const discAmt = p.discountAmount ?? (dt === "fixed" ? Number(dv) : null);
+          const bgImage = p.activity ? PROMO_BG_IMAGES[p.activity] ?? null : null;
+          const eyebrowText = (p as any).labelText ?? "EXCLUSIVE DEAL";
+          const bannerTitle = (p as any).bannerTitle ?? p.title;
+          const discNum  = discPct != null ? `${discPct}%` : discAmt != null ? `${discAmt}` : null;
+          const discUnit = discPct != null ? "OFF" : discAmt != null ? "SAVE" : null;
           return (
             <TouchableOpacity
               key={idx}
-              style={[ps.slide, { width: SLIDE_W, backgroundColor: pal.bg }]}
+              style={[ps.slideWrap, { width: SLIDE_W }]}
               onPress={() => onPress(p)}
-              activeOpacity={0.88}
+              activeOpacity={0.9}
             >
-              <View style={{ flex: 1 }}>
-                <Text style={[ps.eyebrow, { color: pal.eyebrow }]}>SPECIAL OFFER</Text>
-                <Text style={ps.promoTitle} numberOfLines={2}>{p.title}</Text>
-                <Text style={[ps.promoDesc, { color: pal.sub }]} numberOfLines={2}>{p.description}</Text>
-                <Text style={[ps.ctaText, { color: pal.eyebrow }]}>Explore now →</Text>
-              </View>
-              <View style={ps.iconCol}>
-                <Text style={{ fontSize: 36 }}>🎁</Text>
-                {p.discountPercent ? (
-                  <View style={[ps.pctBadge, { borderColor: pal.eyebrow }]}>
-                    <Text style={[ps.pctText, { color: pal.eyebrow }]}>{p.discountPercent}% OFF</Text>
+              <ImageBackground
+                source={bgImage}
+                style={[ps.slide, { backgroundColor: pal.bg }]}
+                imageStyle={ps.bgImage}
+                resizeMode="cover"
+              >
+                {/* layered scrims: full + left-heavy */}
+                <View style={ps.scrimFull} />
+                <View style={ps.scrimLeft} />
+
+                <View style={ps.contentRow}>
+                  {/* ── Left column ── */}
+                  <View style={ps.leftCol}>
+                    <View style={ps.labelPill}>
+                      <Text style={ps.labelPillText}>⚡ {eyebrowText}</Text>
+                    </View>
+                    <Text style={ps.promoTitle} numberOfLines={2}>{bannerTitle}</Text>
+                    <View style={ps.bookBtn}>
+                      <Text style={ps.bookBtnText}>Book Now</Text>
+                      <Ionicons name="arrow-forward" size={12} color={K.colors.darkGreen} />
+                    </View>
                   </View>
-                ) : null}
-              </View>
+
+                  {/* ── Right — discount stamp ── */}
+                  {discNum ? (
+                    <View style={ps.discStamp}>
+                      <Text style={ps.discNum}>{discNum}</Text>
+                      <View style={ps.discDivider} />
+                      <Text style={ps.discUnit}>{discUnit}</Text>
+                    </View>
+                  ) : (
+                    <View style={ps.discStamp}>
+                      <Text style={{ fontSize: 30 }}>🎁</Text>
+                    </View>
+                  )}
+                </View>
+              </ImageBackground>
             </TouchableOpacity>
           );
         })}
@@ -486,17 +684,118 @@ const PromoSlider = memo(function PromoSlider({ promos, onPress }: {
   );
 });
 const ps = StyleSheet.create({
-  slide: { flexDirection: "row", alignItems: "center", padding: 24, minHeight: 130 },
-  eyebrow: { fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8 },
-  promoTitle: { fontSize: K.font.lg, fontWeight: "800", color: "#fff", lineHeight: 24, marginBottom: 6 },
-  promoDesc: { fontSize: 12, lineHeight: 18, marginBottom: 14 },
-  ctaText: { fontSize: 13, fontWeight: "700" },
-  iconCol: { width: 80, alignItems: "center", justifyContent: "center", gap: 8 },
-  pctBadge: { borderRadius: K.radius.full, borderWidth: 1.5, paddingHorizontal: 8, paddingVertical: 4, marginTop: 6 },
-  pctText: { fontSize: 10, fontWeight: "800" },
+  // wrapper keeps rounded corners + clips image
+  slideWrap: { borderRadius: K.radius.xl, overflow: "hidden" },
+  // ImageBackground fills wrapper
+  slide: { height: 172, justifyContent: "center" },
+  // image sits at 58% opacity so colors show through nicely
+  bgImage: { opacity: 0.58 },
+  // full-card darkening
+  scrimFull: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(2,18,9,0.48)",
+  },
+  // heavier scrim on the left half so text is always readable
+  scrimLeft: {
+    position: "absolute", top: 0, left: 0, bottom: 0, width: "58%",
+    backgroundColor: "rgba(2,18,9,0.38)",
+  },
+  // horizontal content layout
+  contentRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 20, paddingVertical: 22, gap: 14,
+  },
+  leftCol: { flex: 1 },
+  // ⚡ accent label pill
+  labelPill: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(29,158,98,0.22)",
+    borderWidth: 1, borderColor: K.colors.accentLight,
+    borderRadius: K.radius.full,
+    paddingHorizontal: 10, paddingVertical: 4,
+    marginBottom: 10,
+  },
+  labelPillText: { fontSize: 10, fontWeight: "800", color: K.colors.accentLight, letterSpacing: 0.4 },
+  // main title
+  promoTitle: { fontSize: 18, fontWeight: "800", color: "#fff", lineHeight: 25, marginBottom: 16 },
+  // white CTA pill button
+  bookBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    alignSelf: "flex-start",
+    backgroundColor: "#fff",
+    borderRadius: K.radius.full,
+    paddingHorizontal: 16, paddingVertical: 8,
+  },
+  bookBtnText: { fontSize: 12, fontWeight: "700", color: K.colors.darkGreen },
+  // circular discount stamp
+  discStamp: {
+    width: 82, height: 82, borderRadius: 41,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    borderWidth: 1.5, borderColor: "rgba(255,255,255,0.38)",
+    alignItems: "center", justifyContent: "center",
+  },
+  discNum: { fontSize: 28, fontWeight: "900", color: "#fff", lineHeight: 30 },
+  discDivider: { width: 30, height: 1, backgroundColor: "rgba(255,255,255,0.40)", marginVertical: 3 },
+  discUnit: { fontSize: 10, fontWeight: "800", color: "rgba(255,255,255,0.75)", letterSpacing: 1.5, textTransform: "uppercase" },
+  // dots
   dots: { flexDirection: "row", justifyContent: "center", marginTop: 10, gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: K.colors.border },
   dotActive: { width: 18, backgroundColor: K.colors.accent },
+});
+
+// ── Flash Sale Banner ─────────────────────────────────────────────────────────
+
+const FlashSaleBanner = memo(function FlashSaleBanner({ promotion, onPress }: {
+  promotion: Promotion; onPress: () => void;
+}) {
+  const expiresAt = promotion.expiresAt;
+  const timeLeft = useCountdown(expiresAt);
+  const bannerTitle = (promotion as any).bannerTitle ?? promotion.title;
+  const labelText = (promotion as any).labelText ?? "";
+  const dv = (promotion as any).discountValue;
+  const dt = (promotion as any).discountType;
+  const discountText = promotion.discountPercent
+    ? `${promotion.discountPercent}% OFF`
+    : dv
+      ? (dt === "percentage" ? `${dv}% OFF` : `SAVE ${dv}`)
+      : "SAVE NOW";
+  return (
+    <TouchableOpacity style={fsb.card} onPress={onPress} activeOpacity={0.88}>
+      <View style={fsb.leftCol}>
+        <View style={fsb.eyebrowRow}>
+          <Text style={fsb.fire}>⚡</Text>
+          <Text style={fsb.eyebrow}>FLASH SALE</Text>
+        </View>
+        <Text style={fsb.title} numberOfLines={2}>{bannerTitle}</Text>
+        {labelText ? <Text style={fsb.sub}>{labelText}</Text> : null}
+        <View style={fsb.discBadge}>
+          <Text style={fsb.discText}>{discountText}</Text>
+        </View>
+      </View>
+      <View style={fsb.rightCol}>
+        <Text style={fsb.timerLabel}>Ends in</Text>
+        <Text style={fsb.timer}>{timeLeft || "Limited"}</Text>
+        <Ionicons name="arrow-forward-circle-outline" size={28} color={K.colors.accentLight} style={{ marginTop: 10 }} />
+      </View>
+    </TouchableOpacity>
+  );
+});
+const fsb = StyleSheet.create({
+  card: {
+    backgroundColor: K.colors.darkGreen, borderRadius: K.radius.xl, padding: 22,
+    flexDirection: "row", alignItems: "center", ...K.shadow.brand,
+  },
+  leftCol: { flex: 1, paddingRight: 12 },
+  eyebrowRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
+  fire: { fontSize: 16 },
+  eyebrow: { fontSize: 10, fontWeight: "800", color: K.colors.accentLight, letterSpacing: 1.2, textTransform: "uppercase" },
+  title: { fontSize: K.font.xl, fontWeight: "800", color: "#fff", lineHeight: 26, marginBottom: 8 },
+  sub: { fontSize: 12, color: "rgba(255,255,255,0.70)", marginBottom: 10 },
+  discBadge: { backgroundColor: K.colors.accent, borderRadius: K.radius.full, paddingHorizontal: 12, paddingVertical: 5, alignSelf: "flex-start" },
+  discText: { color: "#fff", fontSize: 12, fontWeight: "800" },
+  rightCol: { width: 90, alignItems: "center", justifyContent: "center" },
+  timerLabel: { fontSize: 10, fontWeight: "700", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 },
+  timer: { fontSize: 19, fontWeight: "800", color: "#fff" },
 });
 
 // ── Main Screen ───────────────────────────────────────────────────────────────
@@ -505,6 +804,11 @@ export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? "Traveller";
+
+  // Detected location (IP-based, cached 24 h)
+  const { lat: detectedLat, lng: detectedLng, city: detectedCity } = useLocation();
+  const homeLat = detectedLat ?? 0;
+  const homeLng = detectedLng ?? 0;
 
   const [location, setLocation] = useState("");
   const [checkIn, setCheckIn] = useState<Date | null>(null);
@@ -515,27 +819,33 @@ export default function HomeScreen() {
   // ── Queries ────────────────────────────────────────────────────────────────
 
   const { data: hotelsData, isLoading: hotelsLoading } = useQuery<SearchResult[]>({
-    queryKey: ["home-hotels"],
+    queryKey: ["home-hotels", homeLat, homeLng],
     queryFn: async () => {
-      const res = await listingApi.get<SearchResponse>("/search?category=hotel&lat=0&lng=0&radius_km=20000&sort=recommended&limit=20");
+      const res = await listingApi.get<SearchResponse>(
+        `/search?category=hotel&lat=${homeLat}&lng=${homeLng}&radius_km=20000&sort=recommended&limit=20`
+      );
       return res.data.data.results ?? [];
     },
     staleTime: 120_000,
   });
 
   const { data: apartmentsData, isLoading: aptsLoading } = useQuery<SearchResult[]>({
-    queryKey: ["home-apartments"],
+    queryKey: ["home-apartments", homeLat, homeLng],
     queryFn: async () => {
-      const res = await listingApi.get<SearchResponse>("/search?category=apartment&lat=0&lng=0&radius_km=20000&sort=recommended&limit=10");
+      const res = await listingApi.get<SearchResponse>(
+        `/search?category=apartment&lat=${homeLat}&lng=${homeLng}&radius_km=20000&sort=recommended&limit=10`
+      );
       return res.data.data.results ?? [];
     },
     staleTime: 120_000,
   });
 
   const { data: carsData } = useQuery<SearchResult[]>({
-    queryKey: ["home-cars"],
+    queryKey: ["home-cars", homeLat, homeLng],
     queryFn: async () => {
-      const res = await listingApi.get<SearchResponse>("/search?category=car&lat=0&lng=0&radius_km=20000&sort=recommended&limit=10");
+      const res = await listingApi.get<SearchResponse>(
+        `/search?category=car&lat=${homeLat}&lng=${homeLng}&radius_km=20000&sort=recommended&limit=10`
+      );
       return res.data.data.results ?? [];
     },
     staleTime: 120_000,
@@ -615,18 +925,9 @@ export default function HomeScreen() {
     retry: false,
   });
 
-  const { data: loyalty } = useQuery<LoyaltyProfile | null>({
-    queryKey: ["loyalty-profile-home"],
-    queryFn: async () => {
-      try {
-        const res = await listingApi.get<{ data: LoyaltyProfile }>("/guests/me/loyalty");
-        return res.data.data ?? null;
-      } catch { return null; }
-    },
-    staleTime: 5 * 60_000,
-    enabled: !!user,
-    retry: false,
-  });
+  const { data: loyalty } = useLoyaltyProfile();
+  const { data: notifData } = useUnreadNotificationCount();
+  const notifCount = notifData?.count ?? 0;
 
   const { data: recentBookings } = useQuery<RecentBooking[]>({
     queryKey: ["bookings-home"],
@@ -635,7 +936,7 @@ export default function HomeScreen() {
         const res = await listingApi.get<{ data: { bookings: RecentBooking[] } }>("/guests/me/bookings?limit=10");
         const now = new Date();
         return (res.data.data.bookings ?? [])
-          .filter(b => new Date(b.checkOut) >= now)
+          .filter(b => new Date(b.checkOut) >= now && !b.status.toLowerCase().includes("cancel"))
           .slice(0, 5);
       } catch { return []; }
     },
@@ -646,42 +947,29 @@ export default function HomeScreen() {
 
   // ── Derived data ───────────────────────────────────────────────────────────
 
-  const popularHotels = useMemo(() => (hotelsData ?? []).slice(0, 8), [hotelsData]);
-  const popularApts = useMemo(() => (apartmentsData ?? []).slice(0, 8), [apartmentsData]);
-  const popularCars = useMemo(() => (carsData ?? []).slice(0, 8), [carsData]);
-  const bestOffers = useMemo(() => {
-    const withDiscount = [...(hotelsData ?? []), ...(apartmentsData ?? [])].filter(x => x.longStayDiscountEnabled);
-    const rest = (hotelsData ?? []).filter(x => !x.longStayDiscountEnabled);
-    return [...withDiscount, ...rest].slice(0, 8);
-  }, [hotelsData, apartmentsData]);
+  const popularHotels = useMemo(() => (hotelsData ?? []).slice(0, 10), [hotelsData]);
+  const popularApts   = useMemo(() => (apartmentsData ?? []).slice(0, 8), [apartmentsData]);
+  const popularCars   = useMemo(() => (carsData ?? []).slice(0, 8), [carsData]);
 
-  const featuredDests = useMemo(() => {
-    const cityMap = new Map<string, { item: SearchResult; count: number }>();
-    for (const h of (hotelsData ?? [])) {
-      const e = cityMap.get(h.city);
-      if (e) e.count++;
-      else cityMap.set(h.city, { item: h, count: 1 });
-    }
-    return Array.from(cityMap.entries())
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 8)
-      .map(([city, { item, count }]) => ({ city, item, count }));
-  }, [hotelsData]);
+  const hotelPromo = (hotelPromotions?.[0] ?? null) as unknown as ActivePromotion | null;
+  const aptPromo   = (aptPromotions?.[0]   ?? null) as unknown as ActivePromotion | null;
+  const carPromo   = (carPromotions?.[0]   ?? null) as unknown as ActivePromotion | null;
 
-  // Collect all unique listing IDs across all home sections.
-  // Exclude items whose search-result primaryPhotoUrl is NOT an unsigned S3 URL —
-  // but since we can't tell at this point, always fetch via /listings/:id/public
-  // which returns signed photo URLs safe for the traveller app.
+  function promoFor(item: SearchResult): ActivePromotion | null {
+    if (item.listingType === "hotel") return hotelPromo;
+    if (item.listingType === "apartment") return aptPromo;
+    return carPromo;
+  }
+
+  // All IDs needed for signed photo fetch
   const allListingIds = useMemo(() => {
     const seen = new Set<string>();
-    for (const arr of [bestOffers, popularHotels, popularApts, popularCars, recentlyViewed ?? [], featuredDests.map(d => d.item)]) {
+    for (const arr of [popularHotels, popularApts, popularCars, recentlyViewed ?? []]) {
       for (const item of arr) seen.add(item.id);
     }
     return Array.from(seen);
-  }, [bestOffers, popularHotels, popularApts, popularCars, recentlyViewed, featuredDests]);
+  }, [popularHotels, popularApts, popularCars, recentlyViewed]);
 
-  // GET /listings/:id/public — returns signed photo URLs for the traveller app.
-  // Do NOT use primaryPhotoUrl from search results; those are unsigned S3 URLs → 403.
   const publicPhotoQueries = useQueries({
     queries: allListingIds.map(id => ({
       queryKey: ["public-photo", id],
@@ -721,22 +1009,34 @@ export default function HomeScreen() {
 
   function handleSearch() {
     const p: Record<string, string> = { guests: String(guests) };
-    if (location.trim()) p.placeName = location.trim();
+    const placeName = location.trim() || (detectedCity ?? "");
+    if (placeName) p.placeName = placeName;
+    if (detectedLat != null && !location.trim()) {
+      p.detectedLat = String(detectedLat);
+      p.detectedLng = String(detectedLng ?? 0);
+    }
     if (checkIn) p.checkIn = formatLocalDate(checkIn);
     if (checkOut) p.checkOut = formatLocalDate(checkOut);
     router.push({ pathname: "/search", params: p });
   }
 
   const isLoading = hotelsLoading || aptsLoading;
-  const hotelCount = (hotelsData ?? []).length;
-  const aptCount = (apartmentsData ?? []).length;
-  const carCount = (carsData ?? []).length;
+  const loyaltyPoints = loyalty?.loyaltyPoints ?? 0;
+  const loyaltyTier   = loyalty?.currentTier ?? "";
+  const nextTierTarget = loyalty?.pointsToNextTier ?? null;
+  const nextTierName   = loyalty?.nextTier ?? null;
 
-  // Loyalty — normalise field names (API may use pointsBalance or totalPoints instead of points)
-  const loyaltyPoints = loyalty?.points ?? loyalty?.pointsBalance ?? loyalty?.totalPoints ?? 0;
-  const loyaltyTier = loyalty?.tier ?? "";
-  const TIER_COLORS: Record<string, string> = { bronze: "#cd7f32", silver: "#9ca3af", gold: K.colors.gold, platinum: "#e5e4e2" };
-  const tierColor = TIER_COLORS[loyaltyTier.toLowerCase()] ?? K.colors.accent;
+  // Tier-based card palette
+  // shimmerTop/shimmerBot are used to fake a gradient without LinearGradient
+  const TIER_CARD: Record<string, { bg: string; fg: string; fgMuted: string; btnBg: string; shimmerTop: string; shimmerBot: string }> = {
+    bronze:   { bg: "#C97C3A", fg: "#1e0a00", fgMuted: "rgba(30,10,0,0.50)",   btnBg: "#1e0a00", shimmerTop: "rgba(255,200,130,0.22)", shimmerBot: "rgba(80,30,0,0.18)" },
+    silver:   { bg: "#9EAAB5", fg: "#111827", fgMuted: "rgba(17,24,39,0.50)",   btnBg: "#111827", shimmerTop: "rgba(255,255,255,0.22)", shimmerBot: "rgba(30,40,60,0.18)" },
+    gold:     { bg: "#E8A020", fg: "#1c0f00", fgMuted: "rgba(28,15,0,0.52)",    btnBg: "#1c0f00", shimmerTop: "rgba(255,235,100,0.28)", shimmerBot: "rgba(120,55,0,0.20)" },
+    diamond:  { bg: "#5B8DEF", fg: "#04174a", fgMuted: "rgba(4,23,74,0.52)",    btnBg: "#04174a", shimmerTop: "rgba(200,220,255,0.28)", shimmerBot: "rgba(10,30,100,0.18)" },
+    platinum: { bg: "#DCD5C8", fg: "#1a1a1a", fgMuted: "rgba(26,26,26,0.50)",  btnBg: "#1a1a1a", shimmerTop: "rgba(255,255,255,0.30)", shimmerBot: "rgba(80,70,60,0.15)" },
+  };
+  const tierKey = loyaltyTier.toLowerCase();
+  const tierPalette = TIER_CARD[tierKey] ?? null;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -751,12 +1051,28 @@ export default function HomeScreen() {
         {/* ── Header ── */}
         <View style={s.header}>
           <View style={s.headerLeft}>
-            <Text style={s.greeting}>Hi, {firstName} 👋</Text>
-            <Text style={s.subGreeting}>Where would you like to go?</Text>
+            <Text style={s.greeting}>{getGreeting()} 👋</Text>
+            <Text style={s.subGreeting}>Where would you like to go, {firstName}?</Text>
           </View>
-          <TouchableOpacity style={s.notifBtn} onPress={() => router.push("/notifications" as any)}>
-            <Ionicons name="notifications-outline" size={22} color="#fff" />
-          </TouchableOpacity>
+          <View style={s.headerIcons}>
+            <TouchableOpacity style={s.iconBtn} onPress={() => router.push("/notifications" as any)}>
+              <Ionicons name="notifications-outline" size={21} color="#fff" />
+              {notifCount > 0 && (
+                <View style={s.notifBadge}>
+                  <Text style={s.notifBadgeText}>{notifCount > 9 ? "9+" : notifCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity style={s.avatarBtn} onPress={() => router.push("/profile" as any)}>
+              {user ? (
+                <View style={s.avatarCircle}>
+                  <Text style={s.avatarText}>{(user.firstName?.[0] ?? "U").toUpperCase()}</Text>
+                </View>
+              ) : (
+                <Ionicons name="person-circle-outline" size={36} color="#fff" />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ── Search Card ── */}
@@ -770,7 +1086,7 @@ export default function HomeScreen() {
                 style={s.locationInput}
                 value={location}
                 onChangeText={setLocation}
-                placeholder="Where to?"
+                placeholder={detectedCity ? `Near ${detectedCity}` : "Where to?"}
                 placeholderTextColor={K.colors.textMuted}
                 onSubmitEditing={handleSearch}
                 returnKeyType="search"
@@ -815,7 +1131,7 @@ export default function HomeScreen() {
             </View>
             <TouchableOpacity style={s.searchBtn} onPress={handleSearch} activeOpacity={0.88}>
               <Ionicons name="search" size={18} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={s.searchBtnText}>Search</Text>
+              <Text style={s.searchBtnText}>Search Places</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -835,78 +1151,61 @@ export default function HomeScreen() {
           onClose={() => setDatePicker(null)}
         />
 
-        {/* ── Popular Search Chips ── */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsScroll}>
-          {["Nairobi", "Cape Town", "Lagos", "Accra", "Dar es Salaam", "Kampala", "Kigali"].map(city => (
-            <TouchableOpacity
-              key={city}
-              style={s.searchChip}
-              onPress={() => router.push({ pathname: "/search", params: { placeName: city } } as any)}
-              activeOpacity={0.75}
-            >
-              <Ionicons name="search-outline" size={12} color={K.colors.textMuted} />
-              <Text style={s.searchChipText}>{city}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* ── Promo Banner Carousel ── */}
+        {promotions && promotions.length > 0 && (
+          <View style={{ marginTop: K.spacing.xl, marginBottom: 4 }}>
+            <PromoSlider
+              promos={promotions}
+              onPress={p => {
+                const route = p.ctaRoute ?? (
+                  p.activity === "hotel" ? "/browse/hotels" :
+                  p.activity === "apartment" ? "/browse/apartments" :
+                  p.activity === "car" ? "/browse/cars" : "/search"
+                );
+                router.push(route as any);
+              }}
+            />
+          </View>
+        )}
 
-        {/* ── Categories ── */}
+        {/* ── Category Pills ── */}
         <View style={s.section}>
-          <SectionHead title="Browse by category" onViewAll={() => router.push("/search" as any)} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.catScroll}>
             {[
-              { label: "Hotels", emoji: "🏨", count: hotelCount, route: "/browse/hotels" },
-              { label: "Apartments", emoji: "🏠", count: aptCount, route: "/browse/apartments" },
-              { label: "Car Rentals", emoji: "🚗", count: carCount, route: "/browse/cars" },
+              { label: "Hotels", emoji: "🏨", route: "/browse/hotels" },
+              { label: "Apartments", emoji: "🏠", route: "/browse/apartments" },
+              { label: "Cars", emoji: "🚗", route: "/browse/cars" },
             ].map(cat => (
-              <TouchableOpacity key={cat.label} style={s.catCard} onPress={() => router.push(cat.route as any)} activeOpacity={0.8}>
-                <View style={s.catIconWrap}>
-                  <Text style={{ fontSize: 26 }}>{cat.emoji}</Text>
-                </View>
-                <Text style={s.catLabel}>{cat.label}</Text>
-                {cat.count > 0 ? <Text style={s.catCount}>{cat.count}+</Text> : null}
+              <TouchableOpacity key={cat.label} style={s.catPill} onPress={() => router.push(cat.route as any)} activeOpacity={0.8}>
+                <Text style={s.catPillEmoji}>{cat.emoji}</Text>
+                <Text style={s.catPillLabel}>{cat.label}</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </View>
 
-        {/* ── Promotions Slider ── */}
-        {promotions && promotions.length > 0 && (
+        {/* ── Recently Viewed ── */}
+        {recentlyViewed && recentlyViewed.length > 0 && (
           <View style={s.section}>
-            <SectionHead title="Special offers" subtitle="Limited time deals" />
-            <PromoSlider promos={promotions} onPress={p => router.push((p.ctaRoute ?? "/search") as any)} />
+            <SectionHead title="Recently Viewed" />
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={recentlyViewed.slice(0, 8)}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={s.carousel}
+              ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
+              renderItem={({ item }) => (
+                <ListingCard item={item} width={210} photoUrl={photo(item)} onPress={() => navToListing(item.id)} promotion={promoFor(item)} />
+              )}
+            />
           </View>
-        )}
-
-        {/* ── Trending Deals ── */}
-        {promotions !== undefined && (
-          promotions.length > 0 ? (
-            <View style={s.section}>
-              <SectionHead title="🔥 Trending Deals" subtitle="Hot promotions, grab them fast" />
-              <FlatList
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                data={promotions}
-                keyExtractor={(_, i) => String(i)}
-                contentContainerStyle={s.carousel}
-                ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
-                renderItem={({ item: p }) => {
-                  const route = p.ctaRoute ?? (
-                    p.activity === "hotel" ? "/browse/hotels" :
-                      p.activity === "apartment" ? "/browse/apartments" :
-                        p.activity === "car" ? "/browse/cars" : "/search"
-                  );
-                  return <TrendingDealCard promo={p} onPress={() => router.push(route as any)} />;
-                }}
-              />
-            </View>
-          ) : null
         )}
 
         {/* ── Vouchers ── */}
         {vouchers && vouchers.length > 0 && (
           <View style={s.section}>
-            <SectionHead title="Your vouchers" subtitle="Apply at checkout" onViewAll={() => router.push("/vouchers" as any)} />
+            <SectionHead title="Your Vouchers" subtitle="Apply at checkout" onViewAll={() => router.push("/vouchers" as any)} />
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -915,11 +1214,7 @@ export default function HomeScreen() {
               contentContainerStyle={s.carousel}
               ItemSeparatorComponent={() => <View style={{ width: 12 }} />}
               renderItem={({ item: v }) => (
-                <TouchableOpacity
-                  style={vc.card}
-                  onPress={() => router.push("/vouchers" as any)}
-                  activeOpacity={0.88}
-                >
+                <TouchableOpacity style={vc.card} onPress={() => router.push("/vouchers" as any)} activeOpacity={0.88}>
                   <View style={vc.topRow}>
                     <View style={vc.discBadge}>
                       <Text style={vc.discText}>
@@ -940,94 +1235,30 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Best Offers ── */}
-        <View style={s.section}>
-          <SectionHead title="Best offers" subtitle="Top picks just for you" onViewAll={() => router.push("/browse/hotels" as any)} />
-          {isLoading ? <CarouselSkeleton /> : (
-            <FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              data={bestOffers}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={s.carousel}
-              ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
-              renderItem={({ item }) => (
-                <ListingCard
-                  item={item}
-                  width={240}
-                  badgeLabel={item.longStayDiscountEnabled ? "LONG STAY" : "DEAL"}
-                  badgeColor={item.longStayDiscountEnabled ? "#7c3aed" : "#dc2626"}
-                  photoUrl={photo(item)}
-                  onPress={() => navToListing(item.id)}
-                />
-              )}
-            />
-          )}
-        </View>
-
-        {/* ── Featured Destinations ── */}
-        {featuredDests.length > 0 && (
-          <View style={s.section}>
-            <SectionHead title="Popular destinations" subtitle="Trending places to explore" onViewAll={() => router.push("/search" as any)} />
-            <FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              data={featuredDests}
-              keyExtractor={(d) => d.city}
-              contentContainerStyle={s.carousel}
-              renderItem={({ item: { city, item, count } }) => (
-                <DestinationCard
-                  city={city}
-                  count={count}
-                  photoUri={photo(item)}
-                  onPress={() => router.push({ pathname: "/search", params: { placeName: city } } as any)}
-                />
-              )}
-            />
-          </View>
-        )}
-
-        {/* ── Recently Viewed ── */}
-        {recentlyViewed && recentlyViewed.length > 0 && (
-          <View style={s.section}>
-            <SectionHead title="Recently viewed" />
-            <FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              data={recentlyViewed.slice(0, 8)}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={s.carousel}
-              ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
-              renderItem={({ item }) => (
-                <ListingCard item={item} width={210} photoUrl={photo(item)} onPress={() => navToListing(item.id)} />
-              )}
-            />
-          </View>
-        )}
-
-        {/* ── Popular Hotels ── */}
+        {/* ── Promoted Elite Stays ── */}
         {(popularHotels.length > 0 || hotelsLoading) && (
           <View style={s.section}>
-            <SectionHead title="Popular hotels" subtitle="Top-rated stays" onViewAll={() => router.push("/browse/hotels" as any)} />
-            {hotelPromotions?.[0] && (
-              <PromoBanner
-                promo={hotelPromotions[0]}
-                onPress={() => router.push((hotelPromotions[0].ctaRoute ?? "/browse/hotels") as any)}
-              />
-            )}
-            {hotelsLoading ? <CarouselSkeleton /> : (
+            <SectionHead
+              title="Promoted Elite Stays"
+              subtitle={detectedCity ? `Top-rated stays near ${detectedCity}` : "Top-rated luxury accommodations"}
+              onViewAll={() => router.push("/browse/hotels" as any)}
+            />
+            {hotelsLoading ? <EliteCardSkeleton /> : (
               <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                data={popularHotels}
+                data={popularHotels.slice(0, 6)}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={s.carousel}
                 ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
                 renderItem={({ item }) => (
-                  <ListingCard
-                    item={item} width={240} photoUrl={photo(item)} onPress={() => navToListing(item.id)}
-                    badgeLabel={item.starRating != null && item.starRating >= 4 ? "TOP RATED" : undefined}
+                  <EliteCard
+                    item={item}
+                    badgeLabel="PROMOTED"
                     badgeColor={K.colors.darkGreen}
+                    photoUrl={photo(item)}
+                    onPress={() => navToListing(item.id)}
+                    promotion={hotelPromo}
                   />
                 )}
               />
@@ -1035,10 +1266,14 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Popular Apartments ── */}
+        {/* ── Apartment Deals ── */}
         {popularApts.length > 0 && (
           <View style={s.section}>
-            <SectionHead title="Apartments" subtitle="Comfortable long-term stays" onViewAll={() => router.push("/browse/apartments" as any)} />
+            <SectionHead
+              title="Apartment Deals"
+              subtitle={detectedCity ? `Deals near ${detectedCity}` : "Save big on your next stay"}
+              onViewAll={() => router.push("/browse/apartments" as any)}
+            />
             {aptPromotions?.[0] && (
               <PromoBanner
                 promo={aptPromotions[0]}
@@ -1052,17 +1287,34 @@ export default function HomeScreen() {
               keyExtractor={(item) => item.id}
               contentContainerStyle={s.carousel}
               ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
-              renderItem={({ item }) => (
-                <ListingCard item={item} width={240} photoUrl={photo(item)} onPress={() => navToListing(item.id)} />
-              )}
+              renderItem={({ item }) => {
+                const pct = aptPromo?.discountType === "percentage"
+                  ? `${aptPromo.discountValue}% OFF`
+                  : aptPromo ? "SALE" : "SALE";
+                return (
+                  <ListingCard
+                    item={item}
+                    width={240}
+                    badgeLabel={pct}
+                    badgeColor="#dc2626"
+                    photoUrl={photo(item)}
+                    onPress={() => navToListing(item.id)}
+                    promotion={aptPromo}
+                  />
+                );
+              }}
             />
           </View>
         )}
 
-        {/* ── Popular Car Rentals ── */}
+        {/* ── Limited Car Offers ── */}
         {popularCars.length > 0 && (
           <View style={s.section}>
-            <SectionHead title="Car rentals" subtitle="Drive in style" onViewAll={() => router.push("/browse/cars" as any)} />
+            <SectionHead
+              title="Limited Car Offers"
+              subtitle={detectedCity ? `Car deals near ${detectedCity}` : "Exclusive deals on wheels"}
+              onViewAll={() => router.push("/browse/cars" as any)}
+            />
             {carPromotions?.[0] && (
               <PromoBanner
                 promo={carPromotions[0]}
@@ -1072,62 +1324,215 @@ export default function HomeScreen() {
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
-              data={popularCars}
+              data={popularCars.slice(0, 5)}
               keyExtractor={(item) => item.id}
               contentContainerStyle={s.carousel}
               ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
-              renderItem={({ item }) => (
-                <ListingCard item={item} width={240} photoUrl={photo(item)} onPress={() => navToListing(item.id)} />
-              )}
+              renderItem={({ item }) => {
+                const badge = carPromo?.discountType === "percentage"
+                  ? `${carPromo.discountValue}% OFF`
+                  : carPromo ? "DEAL" : "DEAL";
+                return (
+                  <ListingCard
+                    item={item}
+                    width={240}
+                    badgeLabel={badge}
+                    badgeColor="#dc2626"
+                    photoUrl={photo(item)}
+                    onPress={() => navToListing(item.id)}
+                    promotion={carPromo}
+                  />
+                );
+              }}
             />
           </View>
         )}
 
-        {/* ── Loyalty Section ── */}
+        {/* ── Popular Hotels ── */}
+        {(popularHotels.length > 0 || hotelsLoading) && (
+          <View style={s.section}>
+            <SectionHead
+              title="Popular Hotels"
+              subtitle={detectedCity ? `Recommended hotels near ${detectedCity}` : "Top-rated stays near you"}
+              onViewAll={() => router.push("/browse/hotels" as any)}
+            />
+            {hotelsLoading ? <EliteCardSkeleton /> : (
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={popularHotels}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={s.carousel}
+                ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
+                renderItem={({ item }) => (
+                  <EliteCard
+                    item={item}
+                    badgeLabel={item.starRating != null && item.starRating >= 4 ? "TOP RATED" : undefined}
+                    badgeColor={K.colors.accent}
+                    photoUrl={photo(item)}
+                    onPress={() => navToListing(item.id)}
+                    promotion={hotelPromo}
+                  />
+                )}
+              />
+            )}
+          </View>
+        )}
+
+        {/* ── Best Apartments ── */}
+        {(popularApts.length > 0 || aptsLoading) && (
+          <View style={s.section}>
+            <SectionHead
+              title="Best Apartments"
+              subtitle={detectedCity ? `Apartments near ${detectedCity}` : "Comfortable long-term stays"}
+              onViewAll={() => router.push("/browse/apartments" as any)}
+            />
+            {aptsLoading ? <EliteCardSkeleton /> : (
+              <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                data={popularApts}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={s.carousel}
+                ItemSeparatorComponent={() => <View style={{ width: 14 }} />}
+                renderItem={({ item }) => (
+                  <EliteCard
+                    item={item}
+                    photoUrl={photo(item)}
+                    onPress={() => navToListing(item.id)}
+                    promotion={aptPromo}
+                  />
+                )}
+              />
+            )}
+          </View>
+        )}
+
+        {/* ── Premium Fleet ── */}
+        {popularCars.length > 0 && (
+          <View style={s.section}>
+            <SectionHead
+              title="Premium Fleet"
+              subtitle={detectedCity ? `Cars available near ${detectedCity}` : "Drive in style"}
+              onViewAll={() => router.push("/browse/cars" as any)}
+            />
+            <View style={{ paddingHorizontal: K.spacing.screen, gap: 12 }}>
+              {popularCars.slice(0, 5).map(item => (
+                <CompactCarCard
+                  key={item.id}
+                  item={item}
+                  photoUrl={photo(item)}
+                  onPress={() => navToListing(item.id)}
+                  promotion={carPromo}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* ── Flash Sale Banner ── */}
+        {promotions && promotions.length > 0 && (
+          <View style={{ paddingHorizontal: K.spacing.screen, marginTop: K.spacing.section }}>
+            <FlashSaleBanner
+              promotion={promotions[0]}
+              onPress={() => {
+                const p = promotions[0];
+                const route = p.ctaRoute ?? (
+                  p.activity === "hotel" ? "/browse/hotels" :
+                  p.activity === "apartment" ? "/browse/apartments" :
+                  p.activity === "car" ? "/browse/cars" : "/search"
+                );
+                router.push(route as any);
+              }}
+            />
+          </View>
+        )}
+
+        {/* ── Kainook Elite ── */}
         <View style={s.section}>
           <View style={{ paddingHorizontal: K.spacing.screen }}>
-            {user && loyalty ? (
-              <TouchableOpacity style={ly.card} onPress={() => router.push("/loyalty" as any)} activeOpacity={0.88}>
-                <View style={{ flex: 1 }}>
-                  <Text style={ly.eyebrow}>KAINOOK REWARDS</Text>
-                  <Text style={[ly.tier, { color: tierColor }]}>{loyaltyTier || "Member"}</Text>
-                  <Text style={ly.points}>{loyaltyPoints.toLocaleString()} pts</Text>
-                  {loyalty.nextTierPoints && loyalty.nextTier ? (
-                    <>
-                      <View style={ly.progressBg}>
-                        <View
-                          style={[ly.progressFill, {
-                            width: `${Math.min(100, Math.round((loyaltyPoints / loyalty.nextTierPoints) * 100))}%`,
-                            backgroundColor: tierColor,
-                          }]}
-                        />
+            {user && loyalty ? (() => {
+              const fg         = tierPalette?.fg         ?? K.colors.goldDark;
+              const fgMuted    = tierPalette?.fgMuted    ?? "rgba(176,125,14,0.60)";
+              const btnBg      = tierPalette?.btnBg      ?? K.colors.goldDark;
+              const cardBg     = tierPalette?.bg         ?? K.colors.goldTint;
+              const shimTop    = tierPalette?.shimmerTop ?? "rgba(255,230,80,0.20)";
+              const shimBot    = tierPalette?.shimmerBot ?? "rgba(120,60,0,0.14)";
+              const borderCol  = tierPalette ? "transparent" : K.colors.gold;
+              const remaining  = nextTierTarget != null ? Math.max(0, nextTierTarget - loyaltyPoints) : null;
+              const pct = nextTierTarget && nextTierTarget > 0
+                ? Math.min(100, Math.round((loyaltyPoints / nextTierTarget) * 100))
+                : 0;
+              return (
+                <TouchableOpacity
+                  style={[ly.card, { backgroundColor: cardBg, borderColor: borderCol }]}
+                  onPress={() => router.push("/loyalty" as any)}
+                  activeOpacity={0.88}
+                >
+                  {/* ── Shimmer layers (fake gradient) ── */}
+                  <View style={[ly.shimTop, { backgroundColor: shimTop }]} />
+                  <View style={[ly.shimBot, { backgroundColor: shimBot }]} />
+
+                  {/* ── Top row: brand + star ── */}
+                  <View style={ly.topRow}>
+                    <View>
+                      <Text style={[ly.brandName, { color: fg }]}>Kainook Elite</Text>
+                      <Text style={[ly.tierLabel, { color: fgMuted }]}>
+                        {loyaltyTier ? loyaltyTier.toUpperCase() + " MEMBER" : "MEMBER"}
+                      </Text>
+                    </View>
+                    <View style={[ly.starCircle, { borderColor: fg, backgroundColor: "rgba(0,0,0,0.08)" }]}>
+                      <Ionicons name="star" size={24} color={fg} />
+                    </View>
+                  </View>
+
+                  {/* ── Points ── */}
+                  <Text style={[ly.ptsLabel, { color: fgMuted }]}>TOTAL POINTS</Text>
+                  <View style={ly.ptsRow}>
+                    <Text style={[ly.ptsNumber, { color: fg }]}>{loyaltyPoints.toLocaleString()}</Text>
+                    <Text style={[ly.ptsSuffix, { color: fg }]}> pts</Text>
+                  </View>
+
+                  {/* ── Progress bar ── */}
+                  {remaining != null && nextTierName ? (
+                    <View style={ly.progressSection}>
+                      <View style={[ly.progressBg, { backgroundColor: "rgba(0,0,0,0.15)" }]}>
+                        <View style={[ly.progressFill, { width: `${pct}%`, backgroundColor: btnBg }]} />
                       </View>
-                      <Text style={ly.progressLabel}>{(loyalty.nextTierPoints - loyaltyPoints).toLocaleString()} pts to {loyalty.nextTier}</Text>
-                    </>
+                      <Text style={[ly.progressLabel, { color: fgMuted }]}>
+                        -{remaining.toLocaleString()} pts to {nextTierName}
+                      </Text>
+                    </View>
                   ) : null}
-                </View>
-                <View style={ly.iconWrap}>
-                  <Text style={{ fontSize: 42 }}>🏆</Text>
-                </View>
-              </TouchableOpacity>
-            ) : (
+
+                  {/* ── Bottom: View Benefits button ── */}
+                  <View style={ly.bottomRow}>
+                    <View style={{ flex: 1 }} />
+                    <TouchableOpacity
+                      style={[ly.benefitsBtn, { backgroundColor: btnBg }]}
+                      onPress={() => router.push("/loyalty" as any)}
+                    >
+                      <Text style={[ly.benefitsBtnText, { color: cardBg }]}>View Benefits</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              );
+            })() : (
               <TouchableOpacity
                 style={ly.joinCard}
                 onPress={() => router.push((user ? "/loyalty" : "/auth/login") as any)}
                 activeOpacity={0.88}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={[ly.eyebrow, { color: K.colors.accentLight }]}>KAINOOK REWARDS</Text>
-                  <Text style={[ly.tier, { color: "#fff" }]}>Earn points on every stay</Text>
-                  <Text style={[ly.points, { color: "rgba(255,255,255,0.75)", fontSize: 13, marginBottom: 14 }]}>
-                    Unlock perks, upgrades, and exclusive discounts
-                  </Text>
+                  <Text style={ly.joinBrandName}>Kainook Elite</Text>
+                  <Text style={ly.joinSub}>Earn points on every booking</Text>
+                  <Text style={ly.joinDesc}>Unlock perks, upgrades, and exclusive discounts</Text>
                   <View style={ly.joinBtn}>
                     <Text style={ly.joinBtnText}>Join now →</Text>
                   </View>
                 </View>
-                <View style={ly.iconWrap}>
-                  <Text style={{ fontSize: 42 }}>⭐</Text>
+                <View style={[ly.starCircle, { borderColor: "rgba(255,255,255,0.35)", marginLeft: 16 }]}>
+                  <Ionicons name="star" size={22} color="rgba(255,255,255,0.80)" />
                 </View>
               </TouchableOpacity>
             )}
@@ -1136,8 +1541,8 @@ export default function HomeScreen() {
 
         {/* ── Upcoming Trips ── */}
         {recentBookings && recentBookings.length > 0 && (
-          <View style={s.section}>
-            <SectionHead title="Upcoming trips" onViewAll={() => router.push("/bookings" as any)} />
+          <View style={[s.section, { marginBottom: 0 }]}>
+            <SectionHead title="Upcoming Trips" onViewAll={() => router.push("/bookings" as any)} />
             <FlatList
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -1173,7 +1578,6 @@ export default function HomeScreen() {
           </View>
         )}
 
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -1184,7 +1588,7 @@ export default function HomeScreen() {
 const s = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: K.colors.darkGreen },
   scroll: { flex: 1, backgroundColor: K.colors.bgApp },
-  scrollContent: { paddingBottom: 20 },
+  scrollContent: { paddingBottom: 32 },
 
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
@@ -1194,11 +1598,27 @@ const s = StyleSheet.create({
   headerLeft: { flex: 1 },
   greeting: { fontSize: K.font.xl, fontWeight: "800", color: "#fff", letterSpacing: -0.3 },
   subGreeting: { fontSize: K.font.sm, color: K.colors.textLightMuted, marginTop: 3 },
-  notifBtn: {
-    width: 42, height: 42, borderRadius: K.radius.full,
+  headerIcons: { flexDirection: "row", alignItems: "center", gap: 10 },
+  iconBtn: {
+    width: 40, height: 40, borderRadius: K.radius.full,
     backgroundColor: K.colors.glassBg, borderWidth: 1, borderColor: K.colors.glassBorder,
     alignItems: "center", justifyContent: "center",
+    position: "relative",
   },
+  notifBadge: {
+    position: "absolute", top: 2, right: 2,
+    minWidth: 15, height: 15, borderRadius: K.radius.full,
+    backgroundColor: K.colors.error, alignItems: "center", justifyContent: "center",
+    paddingHorizontal: 3, borderWidth: 1.5, borderColor: "rgba(0,0,0,0.3)",
+  },
+  notifBadgeText: { color: "#fff", fontSize: 8, fontWeight: "800" },
+  avatarBtn: { marginLeft: 4 },
+  avatarCircle: {
+    width: 40, height: 40, borderRadius: K.radius.full,
+    backgroundColor: K.colors.accentDim, borderWidth: 1.5, borderColor: K.colors.accentLight,
+    alignItems: "center", justifyContent: "center",
+  },
+  avatarText: { fontSize: 15, fontWeight: "800", color: K.colors.accentLight },
 
   searchCardWrap: { backgroundColor: K.colors.darkGreen, paddingHorizontal: K.spacing.screen, paddingBottom: 22 },
   searchCard: { backgroundColor: "#fff", borderRadius: K.radius.xl, overflow: "hidden", ...K.shadow.md },
@@ -1222,22 +1642,18 @@ const s = StyleSheet.create({
   },
   searchBtnText: { color: "#fff", fontSize: K.font.base, fontWeight: "700", letterSpacing: 0.2 },
 
-  chipsScroll: { paddingHorizontal: K.spacing.screen, paddingVertical: 14, gap: 8 },
-  searchChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: K.colors.bgCard, borderRadius: K.radius.full, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: K.colors.border },
-  searchChipText: { fontSize: 12, fontWeight: "600", color: K.colors.textMid },
-
   section: { marginTop: K.spacing.section },
   carousel: { paddingHorizontal: K.spacing.screen, paddingBottom: 4 },
 
   catScroll: { paddingHorizontal: K.spacing.screen, paddingBottom: 4, gap: 12 },
-  catCard: {
-    alignItems: "center", backgroundColor: K.colors.bgCard, borderRadius: K.radius.xl,
-    paddingVertical: 18, paddingHorizontal: 18, borderWidth: 1, borderColor: K.colors.border,
-    minWidth: 104, ...K.shadow.xs,
+  catPill: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: K.colors.bgCard, borderRadius: K.radius.full,
+    paddingVertical: 10, paddingHorizontal: 18,
+    borderWidth: 1, borderColor: K.colors.border, ...K.shadow.xs,
   },
-  catIconWrap: { width: 52, height: 52, borderRadius: K.radius.full, backgroundColor: K.colors.bgTint, alignItems: "center", justifyContent: "center", marginBottom: 10 },
-  catLabel: { fontSize: 12, fontWeight: "700", color: K.colors.textDark, marginBottom: 2 },
-  catCount: { fontSize: 11, color: K.colors.textMuted },
+  catPillEmoji: { fontSize: 18 },
+  catPillLabel: { fontSize: 13, fontWeight: "700", color: K.colors.textDark },
 });
 
 // ── Voucher Styles ────────────────────────────────────────────────────────────
@@ -1260,22 +1676,55 @@ const vc = StyleSheet.create({
 // ── Loyalty Styles ────────────────────────────────────────────────────────────
 
 const ly = StyleSheet.create({
+  // ── Member card (tier-colored) ──────────────────────────────────────────────
   card: {
-    backgroundColor: K.colors.goldTint, borderRadius: K.radius.xl, padding: 22,
-    flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: K.colors.gold, ...K.shadow.sm,
+    borderRadius: K.radius.xl, padding: 20,
+    borderWidth: 1.5, ...K.shadow.md,
+    overflow: "hidden",
   },
+  // Fake gradient: lighter overlay at top, darker at bottom
+  shimTop: {
+    position: "absolute", top: 0, left: 0, right: 0, height: "52%",
+    borderTopLeftRadius: K.radius.xl, borderTopRightRadius: K.radius.xl,
+  },
+  shimBot: {
+    position: "absolute", bottom: 0, left: 0, right: 0, height: "40%",
+    borderBottomLeftRadius: K.radius.xl, borderBottomRightRadius: K.radius.xl,
+  },
+  topRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 18 },
+  brandName: { fontSize: K.font.xl, fontWeight: "800", letterSpacing: -0.3, marginBottom: 3 },
+  tierLabel: { fontSize: 11, fontWeight: "700", letterSpacing: 1.0, textTransform: "uppercase" },
+  starCircle: {
+    width: 52, height: 52, borderRadius: 26,
+    borderWidth: 1.5, alignItems: "center", justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  ptsLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 4 },
+  ptsRow: { flexDirection: "row", alignItems: "baseline", marginBottom: 14 },
+  ptsNumber: { fontSize: 36, fontWeight: "900", letterSpacing: -1 },
+  ptsSuffix: { fontSize: 16, fontWeight: "700" },
+  progressSection: { marginBottom: 16 },
+  progressBg: { height: 5, borderRadius: 3, overflow: "hidden", marginBottom: 5 },
+  progressFill: { height: "100%", borderRadius: 3 },
+  progressLabel: { fontSize: 11, fontWeight: "600" },
+  bottomRow: { flexDirection: "row", alignItems: "center" },
+  benefitsBtn: {
+    borderRadius: K.radius.full, paddingHorizontal: 20, paddingVertical: 10,
+  },
+  benefitsBtnText: { fontSize: 13, fontWeight: "700" },
+
+  // ── Join card (not logged in / no loyalty) ──────────────────────────────────
   joinCard: {
-    backgroundColor: K.colors.darkGreen, borderRadius: K.radius.xl, padding: 22,
+    backgroundColor: K.colors.darkGreen, borderRadius: K.radius.xl, padding: 20,
     flexDirection: "row", alignItems: "center", ...K.shadow.brand,
   },
-  eyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 1.2, color: K.colors.goldDark, textTransform: "uppercase", marginBottom: 6 },
-  tier: { fontSize: K.font.xl, fontWeight: "800", marginBottom: 4 },
-  points: { fontSize: K.font.xxl, fontWeight: "800", color: K.colors.gold, marginBottom: 12 },
-  progressBg: { height: 6, backgroundColor: K.colors.border, borderRadius: 3, overflow: "hidden", marginBottom: 6 },
-  progressFill: { height: "100%", borderRadius: 3 },
-  progressLabel: { fontSize: 11, color: K.colors.textMuted },
-  iconWrap: { width: 70, alignItems: "center", justifyContent: "center" },
-  joinBtn: { backgroundColor: "#fff", borderRadius: K.radius.full, paddingHorizontal: 18, paddingVertical: 9, alignSelf: "flex-start" },
+  joinBrandName: { fontSize: K.font.xl, fontWeight: "800", color: "#fff", marginBottom: 4 },
+  joinSub: { fontSize: 13, fontWeight: "700", color: K.colors.accentLight, marginBottom: 6 },
+  joinDesc: { fontSize: 12, color: "rgba(255,255,255,0.65)", lineHeight: 17, marginBottom: 16 },
+  joinBtn: {
+    backgroundColor: "#fff", borderRadius: K.radius.full,
+    paddingHorizontal: 18, paddingVertical: 9, alignSelf: "flex-start",
+  },
   joinBtnText: { fontSize: 13, fontWeight: "700", color: K.colors.darkGreen },
 });
 
