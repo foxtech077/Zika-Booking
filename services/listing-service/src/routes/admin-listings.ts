@@ -8,6 +8,7 @@ import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
 import { fireNotification } from "../lib/notifications.js";
 import { patchListingSchema } from "./listings.js";
+import { triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
 
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
@@ -2630,6 +2631,8 @@ app.patch("/admin/listings/:id", {
         return sendError(reply, 409, "INVALID_STATUS", `Cannot cancel a booking with status: ${booking.status}. Only pending_payment or confirmed bookings can be cancelled.`);
       }
 
+      const refundAmount = booking.status === "confirmed" ? Number(booking.totalAmount) : 0;
+
       await prisma.booking.update({
         where: { id },
         data: {
@@ -2637,9 +2640,16 @@ app.patch("/admin/listings/:id", {
           cancelledAt:        new Date(),
           cancelledBy:        "admin",
           cancellationReason: reason,
-          refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
+          refundAmount,
         },
       });
+
+      if (refundAmount > 0) {
+        const idempotencyKey = generateRefundIdempotencyKey(id, "admin_cancel");
+        triggerPaymentRefund(id, refundAmount, reason || "Cancelled by admin", idempotencyKey).catch((err) => {
+          req.log.error({ err }, "Background refund trigger failed");
+        });
+      }
 
       await prisma.bookingStatusLog.create({
         data: {

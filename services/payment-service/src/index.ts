@@ -10,6 +10,8 @@ import { adminPaymentRoutes } from "./routes/admin-payments.js";
 import { merchantRoutes } from "./routes/merchants.js";
 import { payoutRoutes } from "./routes/payouts.js";
 import { startPayoutJob } from "./services/payout.service.js";
+import { startRefundNotificationRetryJob } from "./services/refund.service.js";
+import { prisma } from "./lib/prisma.js";
 
 const PORT = Number(process.env["PORT"] ?? 3004);
 const HOST = process.env["HOST"] ?? "0.0.0.0";
@@ -139,12 +141,20 @@ async function build() {
 
 async function main() {
   const app = await build();
+  let payoutJobTimer: NodeJS.Timeout | undefined;
+  let refundRetryJobTimer: NodeJS.Timeout | undefined;
 
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     app.log.info(`[Payment Service] ${signal} received. Shutting down gracefully…`);
-    await app.close();
-    process.exit(0);
+    try {
+      if (payoutJobTimer) clearInterval(payoutJobTimer);
+      if (refundRetryJobTimer) clearInterval(refundRetryJobTimer);
+      await app.close();
+      await prisma.$disconnect();
+    } finally {
+      process.exit(0);
+    }
   };
 
   process.on("SIGINT", () => void shutdown("SIGINT"));
@@ -155,9 +165,10 @@ async function main() {
     console.log(`[Payment Service] listening on ${HOST}:${PORT}`);
 
     // Start the background payout processor (every 15 minutes)
-    const payoutJobTimer = startPayoutJob(15 * 60 * 1000);
-    process.on("SIGINT", () => clearInterval(payoutJobTimer));
-    process.on("SIGTERM", () => clearInterval(payoutJobTimer));
+    payoutJobTimer = startPayoutJob(15 * 60 * 1000);
+
+    // Start the background refund retry processor (every 15 minutes)
+    refundRetryJobTimer = startRefundNotificationRetryJob(15 * 60 * 1000);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
+import { RefundStatus, PayoutStatus } from "../generated/index.js";
 
 export interface SchedulePayoutParams {
   bookingId: string;
@@ -163,6 +164,26 @@ async function processSinglePayout(payout: any): Promise<void> {
   if (claimed.count === 0) return;
 
   try {
+    // JIT Protection: Check if a successful refund exists for this booking
+    const successfulRefund = await prisma.refund.findFirst({
+      where: {
+        bookingId: payout.bookingId,
+        status: RefundStatus.succeeded,
+      },
+    });
+
+    if (successfulRefund) {
+      console.log(`[payout-job] Payout ${payout.id}: booking ${payout.bookingId} has a successful refund — aborting and cancelling payout`);
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: {
+          status: PayoutStatus.cancelled,
+          failureReason: `Booking has a successful refund (Refund ID: ${successfulRefund.id})`,
+          updatedAt: new Date(),
+        },
+      });
+      return;
+    }
     if (!merchant.isVerified) {
       console.log(`[payout-job] Payout ${payout.id}: merchant not yet verified — reverting to scheduled`);
       await prisma.payout.update({

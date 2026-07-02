@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
-import { sendSuccess, sendError } from "../lib/errors.js";
+import { sendSuccess, sendError, BookingNotFoundError, isPrismaUniqueViolation } from "../lib/errors.js";
 import { requireProvider, requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
 import { randomUUID } from "crypto";
@@ -8,7 +8,7 @@ import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../l
 import { fireNotification } from "../lib/notifications.js";
 import { ipDetect } from "../middleware/ipDetect.js";
 import { getPricing } from "../services/pricing.services.js";
-import { getPaymentProvider } from "../services/payment.services.js";
+import { getPaymentProvider, triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
 import { calculateBilling } from "../services/billing.service.js";
 import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
@@ -441,7 +441,89 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
+  // ── PATCH /bookings/internal/:id/refund ─────────────────────────────────────
+  app.patch("/bookings/internal/:id/refund", {
+    schema: {
+      tags: ["Bookings"],
+      summary: "Internal: record refund details (service-to-service only)",
+      params: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+      body: {
+        type: "object",
+        required: ["refundId", "refundAmount", "provider", "refundedAt"],
+        properties: {
+          refundId: { type: "string" },
+          refundAmount: { type: "number" },
+          provider: { type: "string" },
+          refundedAt: { type: "string" },
+        },
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!validateServiceToken(req, reply)) return;
+
+    const { id } = req.params;
+    const { refundId, refundAmount, provider, refundedAt } = req.body as {
+      refundId: string;
+      refundAmount: number;
+      provider: string;
+      refundedAt: string;
+    };
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 1. Fetch booking inside the transaction
+        const booking = await tx.booking.findUnique({ where: { id } });
+        if (!booking) {
+          throw new BookingNotFoundError();
+        }
+
+        // 2. Insert event (will fail with unique constraint P2002 if duplicate refundId occurs)
+        await tx.bookingRefundEvent.create({
+          data: {
+            bookingId: id,
+            refundId,
+          },
+        });
+
+        // 3. Atomically increment refundAmount
+        await tx.booking.update({
+          where: { id },
+          data: {
+            refundAmount: {
+              increment: refundAmount,
+            },
+          },
+        });
+
+        // 4. Insert status log
+        const auditReason = `Refund completed\n\nProvider: ${provider.toUpperCase()}\nRefund ID: ${refundId}\nAmount: ${booking.currency} ${refundAmount}\nProcessed At: ${new Date(refundedAt).toISOString()}`;
+        await tx.bookingStatusLog.create({
+          data: {
+            bookingId: id,
+            fromStatus: booking.status,
+            toStatus: booking.status,
+            actorType: "system",
+            reason: auditReason,
+          },
+        });
+      });
+
+      return sendSuccess(reply, 200, { message: "Booking refund recorded successfully." });
+    } catch (err) {
+      if (err instanceof BookingNotFoundError) {
+        return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      }
+      if (isPrismaUniqueViolation(err, "refund_id")) {
+        return sendSuccess(reply, 200, { message: "Booking refund already recorded (idempotent)." });
+      }
+      req.log.error({ err }, "Failed to update internal booking refund status");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating the booking refund status.");
+    }
+  });  // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
   app.post(
     "/bookings/initiate",
     {
@@ -1691,6 +1773,14 @@ export async function bookingRoutes(app: FastifyInstance) {
           app.log.error({ err }, "Background payout cancellation notification failed");
         });
 
+        // Trigger refund on payment-service if there is a refund amount
+        if (refundAmount > 0) {
+          const idempotencyKey = generateRefundIdempotencyKey(id, "guest_cancel");
+          triggerPaymentRefund(id, refundAmount, reason || "Cancelled by guest", idempotencyKey).catch((err) => {
+            app.log.error({ err }, "Background refund trigger failed");
+          });
+        }
+
         await prisma.bookingStatusLog.create({
           data: {
             bookingId: id,
@@ -1847,6 +1937,14 @@ export async function bookingRoutes(app: FastifyInstance) {
         notifyPayoutCancellation(id).catch((err) => {
           app.log.error({ err }, "Background payout cancellation notification failed");
         });
+
+        const refundAmount = Number(booking.totalAmount);
+        if (refundAmount > 0) {
+          const idempotencyKey = generateRefundIdempotencyKey(id, "provider_cancel");
+          triggerPaymentRefund(id, refundAmount, reasonText ?? reasonCode ?? "Cancelled by provider", idempotencyKey).catch((err) => {
+            app.log.error({ err }, "Background refund trigger failed");
+          });
+        }
 
         await prisma.bookingStatusLog.create({
           data: {
