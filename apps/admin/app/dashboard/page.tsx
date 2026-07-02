@@ -34,8 +34,8 @@ export default function DashboardPage() {
       const endpoint = isSuperAdmin
         ? "/admin/dashboard/super-admin/summary"
         : isAdmin
-        ? "/admin/dashboard/admin/summary"
-        : "/admin/dashboard/country-manager/summary";
+          ? "/admin/dashboard/admin/summary"
+          : "/admin/dashboard/country-manager/summary";
       return api.get(endpoint).then((r) => r.data?.data ?? r.data);
     },
     enabled: queriesEnabled,
@@ -54,8 +54,8 @@ export default function DashboardPage() {
       const endpoint = isSuperAdmin
         ? "/admin/dashboard/super-admin/pending-actions"
         : isAdmin
-        ? "/admin/dashboard/admin/pending-actions"
-        : "/admin/dashboard/country-manager/pending-actions";
+          ? "/admin/dashboard/admin/pending-actions"
+          : "/admin/dashboard/country-manager/pending-actions";
       return api.get(endpoint).then((r) => r.data?.data ?? r.data);
     },
     enabled: queriesEnabled,
@@ -74,8 +74,8 @@ export default function DashboardPage() {
       const endpoint = isSuperAdmin
         ? "/admin/dashboard/super-admin/recent-activity?limit=15"
         : isAdmin
-        ? "/admin/dashboard/admin/recent-activity?limit=15"
-        : "/admin/dashboard/country-manager/recent-activity?limit=15";
+          ? "/admin/dashboard/admin/recent-activity?limit=15"
+          : "/admin/dashboard/country-manager/recent-activity?limit=15";
       return api.get(endpoint).then((r) => r.data?.data ?? r.data);
     },
     enabled: queriesEnabled,
@@ -104,7 +104,7 @@ export default function DashboardPage() {
           </div>
           <h2 className="text-lg font-semibold text-slate-900 mb-2">Access Restricted</h2>
           <p className="text-sm text-slate-600 mb-4">
-            The Dashboard is restricted to accounts with Admin or Manager privileges. 
+            The Dashboard is restricted to accounts with Admin or Manager privileges.
           </p>
           <p className="text-xs text-slate-500">
             Please use the navigation menu to access listing management, bookings, or user details assigned to your role.
@@ -226,8 +226,8 @@ export default function DashboardPage() {
           isSuperAdmin
             ? "Super Admin Dashboard"
             : isAdmin
-            ? "Admin Dashboard"
-            : "Country Manager Dashboard"
+              ? "Admin Dashboard"
+              : "Country Manager Dashboard"
         }
         description={`Overview · ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}`}
         action={
@@ -277,7 +277,7 @@ export default function DashboardPage() {
 
       {/* Main content row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Pending Actions & Tasks */}
         <Card padding="none" className="lg:col-span-1 flex flex-col">
           <div className="p-5 border-b border-border flex justify-between items-center">
@@ -292,9 +292,8 @@ export default function DashboardPage() {
                 <AlertCircle className="h-3.5 w-3.5" /> Error
               </span>
             ) : (
-              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                totalPendingCount > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
-              }`}>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${totalPendingCount > 0 ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
+                }`}>
                 {totalPendingCount} items
               </span>
             )}
@@ -438,10 +437,9 @@ export default function DashboardPage() {
 
                 return (
                   <div key={item.id} className="flex gap-4 px-5 py-3.5 hover:bg-slate-50/40 transition-colors">
-                    <div className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${
-                      item.type === "refund" ? "bg-rose-500" : item.type === "moderation" ? "bg-amber-500" : "bg-purple-500"
-                    }`} />
-                    
+                    <div className={`mt-1.5 h-2 w-2 rounded-full flex-shrink-0 ${item.type === "refund" ? "bg-rose-500" : item.type === "moderation" ? "bg-amber-500" : "bg-purple-500"
+                      }`} />
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-4">
                         <p className="text-sm font-semibold text-slate-900 truncate">
@@ -451,12 +449,12 @@ export default function DashboardPage() {
                           {formatRelativeTime(item.timestamp)}
                         </span>
                       </div>
-                      
+
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className={`text-[10px] uppercase tracking-wider font-semibold px-2 py-0.25 rounded border ${badgeStyle}`}>
                           {item.type}
                         </span>
-                        
+
                         <span className="text-xs text-slate-500">
                           by <span className="font-medium text-slate-700 cursor-help" title={item.actor && item.actor !== "system" ? `User ID: ${item.actor}` : undefined}>{displayName}</span>
                         </span>
