@@ -340,6 +340,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         select: {
           id: true,
           status: true,
+          completedAt: true, 
           totalAmount: true,
           currency: true,
           reference: true,
@@ -2060,30 +2061,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           return sendError(reply, 403, "FORBIDDEN", "This booking is not for your listing.");
 
         if (booking.status === "checked_in") {
-          // Idempotent: already checked in, trigger internal schedule just in case it wasn't triggered
-          const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
-          const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
-
-          const scheduleRes = await fetch(`${PAYMENT_SERVICE_URL}/internal/payouts/schedule`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-service-key": INTERNAL_SERVICE_KEY,
-            },
-            body: JSON.stringify({
-              bookingId: id,
-              checkedInAt,
-            }),
-          });
-
-          if (!scheduleRes.ok) {
-            const errText = await scheduleRes.text().catch(() => "");
-            req.log.error(`[check-in] Failed to trigger internal schedule (already checked_in): status ${scheduleRes.status}, response: ${errText}`);
-            return sendError(reply, 502, "PAYOUT_SCHEDULING_FAILED", `Failed to schedule payout internally. Detail: ${errText}`);
-          }
-
+          // Idempotent: already checked in, return success
           return sendSuccess(reply, 200, {
-            message: "Booking is already checked in. Payout scheduling verified.",
+            message: "Booking is already checked in.",
           });
         }
 
@@ -2115,34 +2095,116 @@ export async function bookingRoutes(app: FastifyInstance) {
           });
         });
 
-        // Call payment-service POST /internal/payouts/schedule
-        const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
-        const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
-
-        const scheduleRes = await fetch(`${PAYMENT_SERVICE_URL}/internal/payouts/schedule`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-service-key": INTERNAL_SERVICE_KEY,
-          },
-          body: JSON.stringify({
-            bookingId: id,
-            checkedInAt,
-          }),
-        });
-
-        if (!scheduleRes.ok) {
-          const errText = await scheduleRes.text().catch(() => "");
-          req.log.error(`[check-in] Failed to schedule payout internally: status ${scheduleRes.status}, response: ${errText}`);
-          return sendError(reply, 502, "PAYOUT_SCHEDULING_FAILED", `Failed to schedule payout internally. Detail: ${errText}`);
-        }
-
         return sendSuccess(reply, 200, {
-          message: "Booking status updated to checked_in and payout scheduled.",
+          message: "Booking status updated to checked_in.",
         });
       } catch (err) {
         req.log.error({ err }, "Failed to check in booking");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while checking in the booking.");
+      }
+    }
+  );
+
+  // ── POST /provider/bookings/:id/check-out — provider check-out ─────────────────
+  app.post(
+    "/provider/bookings/:id/check-out",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "Provider checks out a guest (idempotent)",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        body: {
+          type: "object",
+          properties: {
+            checkedOutAt: { type: "string", format: "date-time" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  message: { type: "string" },
+                },
+                required: ["message"],
+              },
+            },
+          },
+          403: errSchema,
+          404: errSchema,
+          409: errSchema,
+        },
+      },
+      preHandler: [requireProviderRole],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const providerId = (req as ProviderRequest).providerId;
+      const { id } = req.params as { id: string };
+      const body = req.body as { checkedOutAt?: string } | undefined;
+      const checkedOutAt = body?.checkedOutAt ?? new Date().toISOString();
+
+      try {
+        const booking = await prisma.booking.findUnique({
+          where: { id },
+          include: { listing: true },
+        });
+
+        if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+        if (booking.listing.providerId !== providerId)
+          return sendError(reply, 403, "FORBIDDEN", "This booking is not for your listing.");
+
+        if (booking.status === "completed") {
+          // Idempotent: already completed/checked out
+          return sendSuccess(reply, 200, {
+            message: "Booking is already checked out.",
+          });
+        }
+
+        if (booking.status !== "checked_in") {
+          return reply.status(409).send({
+            success: false,
+            error: {
+              code: "INVALID_STATUS",
+              message: `Only checked_in bookings can transition to completed. Current status: ${booking.status}`,
+            },
+          });
+        }
+
+        // Update status to completed and save actual checkout timestamp
+        await prisma.$transaction(async (tx) => {
+          await tx.booking.update({
+            where: { id },
+            data: {
+              status: "completed",
+              completedAt: new Date(checkedOutAt),
+            },
+          });
+
+          await tx.bookingStatusLog.create({
+            data: {
+              bookingId: id,
+              fromStatus: "checked_in",
+              toStatus: "completed",
+              actorType: "provider",
+              changedBy: providerId,
+            },
+          });
+        });
+
+        return sendSuccess(reply, 200, {
+          message: "Booking status updated to completed.",
+        });
+      } catch (err) {
+        req.log.error({ err }, "Failed to check out booking");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while checking out the booking.");
       }
     }
   );

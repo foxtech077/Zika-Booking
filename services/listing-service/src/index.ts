@@ -21,7 +21,9 @@ import { bookingDocumentRoutes } from "./routes/booking-documents.js";
 import { loyaltyRoutes } from "./routes/loyalty.js";
 import { locationRoutes } from "./routes/location.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { profilePhotoRoutes } from "./routes/profile-photos.js";
 import { startVoucherExpiryWarner } from "./lib/voucherExpiryWarner.js";
+import { startBookingCompletionScheduler } from "./lib/bookingCompletionScheduler.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
@@ -316,6 +318,7 @@ app.all("/admin/payouts/*", async (req, reply) => {
   await app.register(loyaltyRoutes);
   await app.register(locationRoutes);
   await app.register(notificationRoutes);
+  await app.register(profilePhotoRoutes);
 
   return app;
 }
@@ -328,6 +331,7 @@ async function main() {
     startIcalPoller();
     startCommissionScheduler();
     startVoucherExpiryWarner();
+    startBookingCompletionScheduler();
   } catch (err) {
     app.log.error(err);
     process.exit(1);
