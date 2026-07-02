@@ -107,7 +107,7 @@ export function TopBar() {
             onClick={() => setMenuOpen((o) => !o)}
             className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-2xl bg-white/10 hover:bg-white/20 transition-all border border-white/10"
           >
-            <Avatar name={name} size="sm" />
+            <Avatar name={name} src={user?.photoUrl} size="sm" />
             <div className="text-left hidden sm:block">
               <p className="text-sm font-semibold text-white leading-none">{name}</p>
               <p className="text-[11px] text-green-200/80 mt-0.5 truncate max-w-[120px]">

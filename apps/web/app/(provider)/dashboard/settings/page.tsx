@@ -72,7 +72,10 @@ export default function SettingsPage() {
     staleTime: 60_000,
   });
 
-  // Populate form once profile loads
+  // Populate form once profile loads.
+  // Only set previewUrl from remote data when we don't already have a local
+  // preview (blob or freshly-uploaded CDN URL) — this prevents the query
+  // refetch from racing with and overwriting a just-uploaded photo.
   useEffect(() => {
     const source = profile ?? user;
     if (!source) return;
@@ -81,7 +84,7 @@ export default function SettingsPage() {
       lastName:     (source.lastname  ?? source.lastName)   || "",
       businessName: source.businessName                     || "",
     });
-    if (source.photoUrl) setPreviewUrl(source.photoUrl);
+    setPreviewUrl((prev) => prev ?? source.photoUrl ?? null);
   }, [profile?.id ?? user?.id]);
 
   const displayName =
@@ -110,7 +113,7 @@ export default function SettingsPage() {
           photoUrl: updated.photoUrl ?? user?.photoUrl,
         });
       // Invalidate profile query to refetch latest data
-      queryClient.invalidateQueries(["provider-settings-profile"]);
+      queryClient.invalidateQueries({ queryKey: ["provider-settings-profile"] });
 
       }
       setProfileFeedback({ type: "success", text: "Profile saved successfully." });
@@ -123,34 +126,55 @@ export default function SettingsPage() {
   // ── Avatar: presign → S3 PUT → POST /auth/profile ─────────────────────────
   const handleAvatarFile = async (file: File) => {
     if (!["image/jpeg","image/png","image/webp"].includes(file.type)) {
-        setPhotoFeedback({ type: "error", text: "Please select a JPEG, PNG, or WEBP image." });
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        setPhotoFeedback({ type: "error", text: "Image must be under 5 MB." });
-        return;
-      }
+      setPhotoFeedback({ type: "error", text: "Please select a JPEG, PNG, or WEBP image." });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoFeedback({ type: "error", text: "Image must be under 5 MB." });
+      return;
+    }
 
     setPhotoUploading(true);
     setPhotoFeedback(null);
-    setPreviewUrl(URL.createObjectURL(file)); // optimistic preview
+    const blobPreview = URL.createObjectURL(file);
+    setPreviewUrl(blobPreview); // optimistic preview
 
     try {
+      // Step 1: get presigned URL + CDN URL from backend
+      console.log("[Avatar Upload] Step 1: requesting presigned URL...");
       const presignRes = await listingApi.post("/profile/photos/presign", { contentType: file.type });
-      const { uploadUrl, cdnUrl } = presignRes.data?.data ?? presignRes.data;
+      console.log("[Avatar Upload] presign response:", presignRes.data);
 
+      const presignData = presignRes.data?.data ?? presignRes.data;
+      const { uploadUrl, cdnUrl } = presignData;
+      console.log("[Avatar Upload] uploadUrl:", uploadUrl);
+      console.log("[Avatar Upload] cdnUrl:", cdnUrl);
+
+      if (!uploadUrl || !cdnUrl) {
+        throw new Error("Backend did not return uploadUrl or cdnUrl from presign endpoint.");
+      }
+
+      // Step 2: upload file directly to S3
+      console.log("[Avatar Upload] Step 2: uploading to S3...");
       await uploadToS3(uploadUrl, file);
-      await api.post("/auth/profile", { photoUrl: cdnUrl });
-        // Update global auth store so top bar avatar reflects new photo
-        updateUser({ photoUrl: cdnUrl });
-        // Invalidate profile query to refresh data
-        queryClient.invalidateQueries(["provider-settings-profile"]);
+      console.log("[Avatar Upload] S3 upload complete.");
 
+      // Step 3: save cdnUrl to user profile on backend
+      console.log("[Avatar Upload] Step 3: saving photoUrl to profile...");
+      const saveRes = await api.post("/auth/profile", { photoUrl: cdnUrl });
+      console.log("[Avatar Upload] save response:", saveRes.data);
+
+      // Step 4: update local state
+      updateUser({ photoUrl: cdnUrl });
+      queryClient.invalidateQueries({ queryKey: ["provider-settings-profile"] });
       setPreviewUrl(cdnUrl);
       setPhotoFeedback({ type: "success", text: "Profile photo updated." });
-    } catch {
+      console.log("[Avatar Upload] Done. cdnUrl set as preview:", cdnUrl);
+    } catch (err) {
+      console.error("[Avatar Upload] FAILED:", err);
       setPhotoFeedback({ type: "error", text: "Photo upload failed. Please try again." });
-      setPreviewUrl(profile?.photoUrl ?? null);
+      // Keep the blob preview so user still sees their selected image locally
+      // (do not revert to old photoUrl — the image is uploaded to S3 even if save fails)
     } finally {
       setPhotoUploading(false);
     }

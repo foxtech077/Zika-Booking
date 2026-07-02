@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { cn, getInitials } from "@/lib/utils";
 
 interface AvatarProps {
@@ -35,13 +38,20 @@ function getColor(name: string): string {
 export function Avatar({ name, src, size = "md", className }: AvatarProps) {
   const initials = getInitials(name);
   const colorClass = getColor(name);
+  const [imgError, setImgError] = useState(false);
 
-  if (src) {
+  // Reset error state whenever src changes (e.g. new upload)
+  useEffect(() => {
+    setImgError(false);
+  }, [src]);
+
+  if (src && !imgError) {
     return (
       <img
         src={src}
         alt={name}
         className={cn("rounded-full object-cover", SIZES[size], className)}
+        onError={() => setImgError(true)}
       />
     );
   }

@@ -128,7 +128,7 @@ function normalizeFeed(raw: unknown, listing: Listing): IcalFeed {
   return {
     id,
     listingId: listing.id,
-    listingName: listing.name ?? listing.id,
+    listingName: resolveListingName(listing as unknown as Record<string, unknown>),
     name: readString(item.name ?? item.feedName ?? item.title, "External Calendar"),
     platform: readString(item.platform ?? item.source, "custom").toLowerCase(),
     feedUrl: readString(item.feedUrl ?? item.url ?? item.icalUrl),
@@ -191,10 +191,36 @@ function normalizeChannelStatus(raw: unknown, listingId: string): ChannelStatus 
   };
 }
 
+function resolveListingName(listing: Listing | Record<string, unknown>): string {
+  const raw = listing as Record<string, unknown>;
+  // Try every common field name the backend might use
+  const candidates = [
+    raw.name,
+    raw.title,
+    raw.hotelName,
+    raw.propertyName,
+    raw.listingName,
+    raw.listing_name,
+    raw.hotel_name,
+    raw.property_name,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return typeof raw.id === "string" ? raw.id : "Unnamed Listing";
+}
+
 async function fetchListings() {
   try {
-    const response = await listingApi.get("/listings", { params: { status: "active", limit: 50 } });
-    return unwrapList<Listing>(response.data, ["listings", "items", "results"]);
+    const response = await listingApi.get("/listings", { params: { limit: 50 } });
+    const raw = unwrapList<Record<string, unknown>>(response.data, ["listings", "items", "results"]);
+    // Normalise into Listing shape, resolving whichever name field the backend returns
+    const mapped = raw.map((item) => ({
+      ...(item as unknown as Listing),
+      name: resolveListingName(item),
+    })) as Listing[];
+    // Filter to only include active or approved listings (hotels in seed data are 'approved')
+    return mapped.filter((l) => l.status === "active" || l.status === "approved");
   } catch {
     return [];
   }
@@ -373,7 +399,7 @@ export default function ChannelPage() {
   });
 
   const listingOptions = useMemo(
-    () => [{ value: "all", label: "All listings" }, ...listings.map((listing) => ({ value: listing.id, label: listing.name ?? listing.id }))],
+    () => [{ value: "all", label: "All listings" }, ...listings.map((listing) => ({ value: listing.id, label: resolveListingName(listing as unknown as Record<string, unknown>) }))],
     [listings]
   );
 
@@ -647,7 +673,7 @@ export default function ChannelPage() {
                   setGeneratedLink("");
                   setExportError("");
                 }}
-                options={listings.map((listing) => ({ value: listing.id, label: listing.name ?? listing.id }))}
+                options={listings.map((listing) => ({ value: listing.id, label: resolveListingName(listing as unknown as Record<string, unknown>) }))}
                 placeholder="Select listing"
               />
 
@@ -787,7 +813,7 @@ export default function ChannelPage() {
                 label="Listing / Property"
                 value={form.listingId}
                 onChange={(event) => setForm((current) => ({ ...current, listingId: event.target.value }))}
-                options={listings.map((listing) => ({ value: listing.id, label: listing.name ?? listing.id }))}
+                options={listings.map((listing) => ({ value: listing.id, label: resolveListingName(listing as unknown as Record<string, unknown>) }))}
                 placeholder="Select listing"
               />
               <Input label="Feed Nickname" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Airbnb Main Calendar" />

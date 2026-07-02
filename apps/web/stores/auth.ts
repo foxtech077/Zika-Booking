@@ -9,6 +9,7 @@ export interface AuthUser {
   lastName: string;
   email: string;
   status: string;
+  photoUrl?: string | null;
   userType: string;
   businessName?: string | null;
   country?: string | null;
