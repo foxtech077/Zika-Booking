@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
+import { RefundStatus, PayoutStatus } from "../generated/index.js";
 
 export interface SchedulePayoutParams {
   bookingId: string;
@@ -136,7 +137,12 @@ export async function processEligiblePayouts(): Promise<void> {
   const now = new Date();
 
   const eligible = await prisma.payout.findMany({
-    where: { status: "scheduled", scheduledAt: { lte: now } },
+    where: {
+      OR: [
+        { status: "pending" },
+        { status: "scheduled", scheduledAt: { lte: now } }
+      ]
+    },
     include: { merchant: true },
   });
 
@@ -155,20 +161,40 @@ async function processSinglePayout(payout: any): Promise<void> {
     return;
   }
 
-  // Optimistic lock — only proceed if we win the race from "scheduled"
+  // Optimistic lock — only proceed if we win the race from its original state (pending or scheduled)
   const claimed = await prisma.payout.updateMany({
-    where: { id: payout.id, status: "scheduled" },
+    where: { id: payout.id, status: payout.status },
     data: { status: "processing", updatedAt: new Date() },
   });
   if (claimed.count === 0) return;
 
   try {
-    if (!merchant.isVerified) {
-      console.log(`[payout-job] Payout ${payout.id}: merchant not yet verified — reverting to scheduled`);
+    // JIT Protection: Check if a successful refund exists for this booking
+    const successfulRefund = await prisma.refund.findFirst({
+      where: {
+        bookingId: payout.bookingId,
+        status: RefundStatus.succeeded,
+      },
+    });
+
+    if (successfulRefund) {
+      console.log(`[payout-job] Payout ${payout.id}: booking ${payout.bookingId} has a successful refund — aborting and cancelling payout`);
       await prisma.payout.update({
         where: { id: payout.id },
         data: {
-          status: "scheduled",
+          status: PayoutStatus.cancelled,
+          failureReason: `Booking has a successful refund (Refund ID: ${successfulRefund.id})`,
+          updatedAt: new Date(),
+        },
+      });
+      return;
+    }
+    if (!merchant.isVerified) {
+      console.log(`[payout-job] Payout ${payout.id}: merchant not yet verified — reverting to ${payout.status}`);
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: {
+          status: payout.status,
           failureReason: "Merchant is not verified",
           updatedAt: new Date(),
         },
@@ -190,14 +216,14 @@ async function processSinglePayout(payout: any): Promise<void> {
         signal: controller.signal,
       });
     } catch (fetchErr: any) {
-      // Network/timeout error is transient: reset status back to scheduled so it is retried automatically
+      // Network/timeout error is transient: reset status back to payout.status so it is retried automatically
       const isTimeout = fetchErr.name === "AbortError";
       const errMsg = isTimeout ? "Request timed out after 10s" : fetchErr.message;
       console.error(`[payout-job] Transient network error fetching status for payout ${payout.id}:`, errMsg);
       await prisma.payout.update({
         where: { id: payout.id },
         data: {
-          status: "scheduled",
+          status: payout.status,
           failureReason: `Transient error: ${errMsg}`,
           updatedAt: new Date(),
         },
@@ -217,12 +243,12 @@ async function processSinglePayout(payout: any): Promise<void> {
         });
         return;
       }
-      // Server error (e.g. 500, 503) is transient: reset to scheduled for auto-retry
+      // Server error (e.g. 500, 503) is transient: reset to payout.status for auto-retry
       console.error(`[payout-job] Transient server error from listing-service for payout ${payout.id}: status ${res.status}`);
       await prisma.payout.update({
         where: { id: payout.id },
         data: {
-          status: "scheduled",
+          status: payout.status,
           failureReason: `Transient HTTP status: ${res.status}`,
           updatedAt: new Date(),
         },
@@ -254,19 +280,63 @@ async function processSinglePayout(payout: any): Promise<void> {
     }
 
     const isLegacy = payout.createdAt < new Date("2026-06-27T12:00:00.000Z");
-    const allowedStatuses = isLegacy ? ["checked_in", "completed", "confirmed"] : ["checked_in", "completed"];
+    const allowedStatuses = isLegacy ? ["checked_in", "completed", "confirmed"] : ["completed"];
 
     if (allowedStatuses.includes(booking.status)) {
+      if (booking.status === "completed") {
+        if (!booking.completedAt) {
+          console.warn(`[payout-job] Payout ${payout.id}: booking ${payout.bookingId} status is completed but completedAt is missing. Reverting to ${payout.status}`);
+          await prisma.payout.update({
+            where: { id: payout.id },
+            data: { status: payout.status, failureReason: "completedAt missing", updatedAt: new Date() },
+          });
+          return;
+        }
+
+        const completedTime = Date.parse(booking.completedAt);
+        if (isNaN(completedTime)) {
+          console.warn(`[payout-job] Payout ${payout.id}: booking ${payout.bookingId} status is completed but completedAt is an invalid date string. Reverting to ${payout.status}`);
+          await prisma.payout.update({
+            where: { id: payout.id },
+            data: { status: payout.status, failureReason: "completedAt invalid format", updatedAt: new Date() },
+          });
+          return;
+        }
+
+        if (completedTime > Date.now()) {
+          console.warn(`[payout-job] Payout ${payout.id}: booking ${payout.bookingId} status is completed but completedAt (${booking.completedAt}) is in the future. Reverting to ${payout.status}`);
+          await prisma.payout.update({
+            where: { id: payout.id },
+            data: { status: payout.status, failureReason: "completedAt in future", updatedAt: new Date() },
+          });
+          return;
+        }
+
+        // Verify that 24 hours have elapsed since completedAt (booking completion time)
+        const delayMs = 24 * 60 * 60 * 1000;
+        if (completedTime + delayMs > Date.now()) {
+          console.log(`[payout-job] Payout ${payout.id}: booking ${payout.bookingId} is completed, but the 24-hour waiting period has not elapsed yet. Reverting to ${payout.status}`);
+          await prisma.payout.update({
+            where: { id: payout.id },
+            data: { status: payout.status, updatedAt: new Date() },
+          });
+          return;
+        }
+      }
       // Proceed to payout
-    } else if (booking.status === "confirmed") {
-      console.log(`[payout-job] Payout ${payout.id}: booking ${payout.bookingId} is still confirmed (not legacy and not checked_in) — leaving scheduled`);
+    } else if (["confirmed", "checked_in"].includes(booking.status)) {
+      console.log(`[payout-job] Payout ${payout.id}: booking ${payout.bookingId} is in status '${booking.status}' (not completed) — leaving ${payout.status}`);
       await prisma.payout.update({
         where: { id: payout.id },
-        data: { status: "scheduled", updatedAt: new Date() },
+        data: { status: payout.status, updatedAt: new Date() },
       });
       return;
     } else {
-      console.warn(`[payout-job] Unexpected booking status '${booking.status}' for payout ${payout.id} (booking: ${payout.bookingId}). Logging without changing payout state.`);
+      console.warn(`[payout-job] Unexpected booking status '${booking.status}' for payout ${payout.id} (booking: ${payout.bookingId}). Reverting to ${payout.status}.`);
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: { status: payout.status, updatedAt: new Date() },
+      });
       return;
     }
 
