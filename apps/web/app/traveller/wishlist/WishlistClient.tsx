@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { listingApi } from "@/lib/listing-api";
+import { fetchFavourites, type FavouriteListing } from "@/services/traveller";
 import { useAuthStore } from "@/stores/auth";
 import { useFavourites } from "@/hooks/useFavourites";
 import ListingCard from "../components/ListingCard";
@@ -17,51 +17,35 @@ const TABS: { key: Category | "all"; label: string }[] = [
   { key: "car", label: "Cars" },
 ];
 
-function mapListing(item: any): PublicListingDetail | null {
-  // The API may return { listingId, listing: {...} } or a flat listing object
-  const raw = item.listing ?? item;
-  if (!raw?.id && !raw?.listingId) return null;
-  const town = raw.town || raw.city || "";
-  const country = raw.country || raw.countryCode || "";
+// Maps the GET /guests/me/favourites response shape — { listingId, savedAt, listing: {...} }
+// (services/listing-service/src/routes/search.ts) — into the display card's PublicListingDetail.
+function mapListing(item: FavouriteListing): PublicListingDetail {
+  const l = item.listing;
   return {
-    // Prefer the explicit listingId field over the record's own id to avoid
-    // using the favourite-record UUID when the API returns { id, listingId, listing }
-    id: item.listingId ?? raw.id,
-    providerId: raw.providerId,
-    category: raw.category || raw.listingType || "hotel",
-    name: raw.name || raw.title || "Untitled",
-    pricePerNight: Number(raw.pricePerNight || raw.nightlyRate || raw.pricePerDay || raw.dailyRate || 0),
-    currency: raw.currency || "KES",
-    minStayNights: raw.minStayNights || 1,
-    checkinTime: raw.checkinTime || "",
-    checkoutTime: raw.checkoutTime || "",
-    cancellationPolicy: raw.cancellationPolicy || "flexible",
-    address: raw.address || (town ? `${town}, ${country}` : ""),
-    lat: raw.lat || 0,
-    lng: raw.lng || 0,
-    town,
-    country,
-    starRating: raw.starRating,
-    maxGuests: raw.maxGuests,
-    bedrooms: raw.bedrooms,
-    bathrooms: raw.bathrooms,
-    carMake: raw.carMake,
-    carModel: raw.carModel,
-    carYear: raw.carYear,
-    transmission: raw.transmission,
-    fuelType: raw.fuelType,
-    seats: raw.seats,
-    mileagePolicy: raw.mileagePolicy,
-    primaryPhotoUrl: raw.primaryPhotoUrl || raw.photos?.[0]?.cdnUrl || null,
-    photos: raw.photos || (raw.primaryPhotoUrl ? [{ id: "ph", cdnUrl: raw.primaryPhotoUrl, position: 1 }] : []),
-    amenities: raw.amenities || [],
-    customAmenities: raw.customAmenities || [],
-    description: raw.description || "",
-    distanceKm: raw.distanceKm ?? undefined,
+    id: item.listingId,
+    providerId: "",
+    category: (l.category || "hotel") as "hotel" | "apartment" | "car",
+    name: l.title || "Untitled",
+    pricePerNight: l.nightlyRate ?? 0,
+    currency: l.currency || "KES",
+    minStayNights: 1,
+    checkinTime: "",
+    checkoutTime: "",
+    cancellationPolicy: "flexible",
+    address: l.city ?? "",
+    lat: 0,
+    lng: 0,
+    town: l.city ?? "",
+    country: l.countryCode ?? "",
+    primaryPhotoUrl: l.primaryPhotoUrl,
+    photos: l.primaryPhotoUrl ? [{ id: "ph", cdnUrl: l.primaryPhotoUrl, position: 1 }] : [],
+    amenities: [],
+    customAmenities: [],
+    description: "",
     isFavourited: true,
-    isAccredited: raw.isAccredited ?? false,
-    longStayDiscountEnabled: raw.longStayDiscountEnabled ?? false,
-    instantBooking: raw.instantBooking ?? raw.instant_booking ?? false,
+    isAccredited: false,
+    longStayDiscountEnabled: false,
+    instantBooking: false,
   };
 }
 
@@ -89,8 +73,11 @@ export default function WishlistClient() {
 
   const [listings, setListings] = useState<PublicListingDetail[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Category | "all">("all");
+  const [cursor, setCursor] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   // Redirect unauthenticated users after hydration
   useEffect(() => {
@@ -101,32 +88,23 @@ export default function WishlistClient() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    fetchWishlist();
+    fetchWishlist(0, true);
   }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function fetchWishlist() {
-    setLoading(true);
-    setError(null);
+  async function fetchWishlist(cursorValue: number, reset: boolean) {
+    if (reset) { setLoading(true); setError(null); } else { setLoadingMore(true); }
     try {
-      const res = await listingApi.get<any>("/guests/me/favourites");
-      if (res.data.success) {
-        const raw = res.data.data ?? [];
-        console.log("[Wishlist] API data:", raw);
-        const data: any[] = Array.isArray(raw) ? raw : (raw?.favourites ?? []);
-        const mapped = data.map(mapListing).filter((l): l is PublicListingDetail => l !== null);
-        console.log("[Wishlist] Favourite IDs:", mapped.map((l) => l.id));
-        setListings(mapped);
-        console.log("[Favourites] Wishlist loaded | Count:", mapped.length);
-      } else {
-        console.warn("[Wishlist] API returned success: false", res.data);
-        setListings([]);
-      }
+      const res = await fetchFavourites(cursorValue);
+      const mapped = res.favourites.map(mapListing);
+      setListings((prev) => (reset ? mapped : [...prev, ...mapped]));
+      setNextCursor(res.nextCursor);
+      setCursor(cursorValue + res.favourites.length);
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.message ?? "Failed to load wishlist.";
-      console.error("[Favourites] Wishlist fetch failed:", msg);
       setError(msg);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }
 
@@ -249,7 +227,7 @@ export default function WishlistClient() {
         {error && !loading && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-between text-red-700 text-sm font-medium">
             <span>{error}</span>
-            <button type="button" onClick={fetchWishlist} className="ml-4 underline hover:no-underline shrink-0">
+            <button type="button" onClick={() => fetchWishlist(0, true)} className="ml-4 underline hover:no-underline shrink-0">
               Retry
             </button>
           </div>
@@ -294,6 +272,19 @@ export default function WishlistClient() {
                 onToggleFavourite={handleToggleFavourite}
               />
             ))}
+          </div>
+        )}
+
+        {!loading && nextCursor && (
+          <div className="mt-8 text-center">
+            <button
+              type="button"
+              onClick={() => fetchWishlist(cursor, false)}
+              disabled={loadingMore}
+              className="px-6 py-2.5 border-2 border-[#1D8D2B] text-[#1D8D2B] text-sm font-bold rounded-full hover:bg-[#0c2614] hover:text-white transition disabled:opacity-50"
+            >
+              {loadingMore ? "Loading…" : "Load More"}
+            </button>
           </div>
         )}
       </main>

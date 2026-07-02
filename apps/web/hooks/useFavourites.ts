@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
-import { listingApi } from "@/lib/listing-api";
+import { fetchFavourites, addFavourite, removeFavourite } from "@/services/traveller";
 import { useAuthStore } from "@/stores/auth";
 
 interface FavouritesHook {
@@ -16,28 +16,13 @@ export function useFavourites(): FavouritesHook {
   const [loading, setLoading] = useState(false);
   const fetchedRef = useRef(false);
 
-  async function fetchFavourites() {
+  async function loadFavourites() {
     setLoading(true);
     try {
-      const res = await listingApi.get<any>("/guests/me/favourites");
-      if (res.data.success) {
-        const raw = res.data.data ?? [];
-        const favourites: any[] = Array.isArray(raw) ? raw : (raw?.favourites ?? []);
-        console.log("[Favourites] Raw response:", raw);
-        console.log("[Favourites] Parsed favourites:", favourites);
-        const favouriteIdsList = favourites
-          .map((item: any) => (item.listingId ?? item.id) as string)
-          .filter(Boolean);
-        console.log("[Favourites] Favourite IDs:", favouriteIdsList);
-        const ids = new Set<string>(favouriteIdsList);
-        setFavouriteIds(ids);
-        console.log("[Favourites] Fetched | Count:", ids.size);
-      }
-    } catch (err: any) {
-      console.error(
-        "[Favourites] Fetch failed:",
-        err?.response?.data?.error?.message ?? err?.message
-      );
+      const res = await fetchFavourites();
+      setFavouriteIds(new Set(res.favourites.map((f) => f.listingId)));
+    } catch {
+      // leave favourites empty — heart icons just show as unfavourited
     } finally {
       setLoading(false);
     }
@@ -46,7 +31,7 @@ export function useFavourites(): FavouritesHook {
   useEffect(() => {
     if (isAuthenticated && !fetchedRef.current) {
       fetchedRef.current = true;
-      fetchFavourites();
+      loadFavourites();
     }
     if (!isAuthenticated) {
       fetchedRef.current = false;
@@ -61,15 +46,9 @@ export function useFavourites(): FavouritesHook {
 
   const toggleFavourite = useCallback(
     async (listingId: string): Promise<"ok" | "auth_required"> => {
-      if (!isAuthenticated) {
-        console.log("[Favourites] Auth required | Listing ID:", listingId);
-        return "auth_required";
-      }
+      if (!isAuthenticated) return "auth_required";
 
       const wasFavourited = favouriteIds.has(listingId);
-      const newCount = wasFavourited
-        ? favouriteIds.size - 1
-        : favouriteIds.size + 1;
 
       // Optimistic update
       setFavouriteIds((prev) => {
@@ -80,31 +59,10 @@ export function useFavourites(): FavouritesHook {
       });
 
       try {
-        if (wasFavourited) {
-          await listingApi.delete(`/guests/me/favourites/${listingId}`);
-          console.log(
-            "[Favourites] Listing ID:", listingId,
-            "| Action: remove | API status: success | Current favourites count:", newCount
-          );
-        } else {
-          console.log("[Favourites] Saving:", listingId);
-          const saveRes = await listingApi.post("/guests/me/favourites", { listingId });
-          console.log("[Favourites] Save response:", saveRes.data);
-          console.log(
-            "[Favourites] Listing ID:", listingId,
-            "| Action: add | API status: success | Current favourites count:", newCount
-          );
-        }
+        if (wasFavourited) await removeFavourite(listingId);
+        else await addFavourite(listingId);
         return "ok";
-      } catch (err: any) {
-        const errMsg =
-          err?.response?.data?.error?.message ?? err?.message ?? "Unknown error";
-        console.error(
-          "[Favourites] Listing ID:", listingId,
-          "| Action:", wasFavourited ? "remove" : "add",
-          "| API status: failed |", errMsg
-        );
-
+      } catch {
         // Rollback optimistic update
         setFavouriteIds((prev) => {
           const next = new Set(prev);

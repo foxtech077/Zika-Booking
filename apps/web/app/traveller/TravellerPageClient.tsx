@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";           // auth-service: POST /auth/logout only
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
-import { fetchFavourites, fetchRecentlyViewed } from "@/services/traveller";
+import { fetchRecentlyViewed, importRecentlyViewedItems, fetchBatchListingSummary } from "@/services/traveller";
 import ListingImage from "./components/ListingImage";
 import { TravellerWorkspaceNav } from "./components/TravellerWorkspaceNav";
 import { MessageProviderButton } from "./components/MessageProviderButton";
@@ -13,6 +13,8 @@ import { PublicReviewsSection } from "./components/PublicReviewsSection";
 import { GiveReviewEntry } from "./components/GiveReviewEntry";
 import { useAuthStore } from "@/stores/auth";
 import { useFavourites } from "@/hooks/useFavourites";
+import { useLocation } from "@/hooks/useLocation";
+import DestinationDropdown, { type DestinationSuggestion } from "./components/DestinationDropdown";
 import ListingCard from "./components/ListingCard";
 import { ActivityPromoBanner, PersonalVoucherBanner } from "./components/PromoBanner";
 import { isPromotionValid } from "./utils/promo-utils";
@@ -203,6 +205,43 @@ function StyledDateInput({
   );
 }
 
+// ── Anonymous "recently viewed" tracking ────────────────────────────────────
+// Guests without a session can't call POST /guests/me/recently-viewed (it requires
+// auth), so their view history is tracked locally and imported into the backend
+// via POST /guests/me/recently-viewed/import the first time they log in.
+const LOCAL_RECENTLY_VIEWED_KEY = "zika:recently_viewed";
+const LOCAL_RECENTLY_VIEWED_MAX = 20;
+
+interface LocalRecentlyViewedItem {
+  listingId: string;
+  viewedAt: string;
+}
+
+function readLocalRecentlyViewed(): LocalRecentlyViewedItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LOCAL_RECENTLY_VIEWED_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function recordLocalRecentlyViewed(listingId: string) {
+  if (typeof window === "undefined") return;
+  const next = [
+    { listingId, viewedAt: new Date().toISOString() },
+    ...readLocalRecentlyViewed().filter((i) => i.listingId !== listingId),
+  ].slice(0, LOCAL_RECENTLY_VIEWED_MAX);
+  localStorage.setItem(LOCAL_RECENTLY_VIEWED_KEY, JSON.stringify(next));
+}
+
+function clearLocalRecentlyViewed() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LOCAL_RECENTLY_VIEWED_KEY);
+}
+
 export default function TravellerDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -215,9 +254,11 @@ export default function TravellerDashboard() {
 
   const { isFavourited, toggleFavourite } = useFavourites();
   const [showFavAuthPrompt, setShowFavAuthPrompt] = useState(false);
+  // Detected via GET /location — used as the default browse anchor instead of a
+  // hardcoded city when the visitor hasn't typed a destination.
+  const detectedLocation = useLocation();
 
   const [recentlyViewed, setRecentlyViewed] = useState<PublicListingDetail[]>([]);
-  const [favouritedIds, setFavouritedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<"home" | "search" | "bookings">("home");
 
   // Search Context
@@ -237,10 +278,10 @@ export default function TravellerDashboard() {
   const [searchRooms, setSearchRooms] = useState(1);
   const [showGuestPicker, setShowGuestPicker] = useState(false);
   const [searching, setSearching] = useState(false);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [apiSuggestions, setApiSuggestions] = useState<string[]>([]);
-  const [nominatimResults, setNominatimResults] = useState<Array<{ display_name: string; lat: string; lon: string }>>([]);
-  const nominatimTimer = useRef<NodeJS.Timeout | null>(null);
+  // Resolved coordinates for `searchDestination` — only set once the visitor picks a
+  // suggestion from the dropdown (or a curated quick-destination tile). The backend's
+  // /search requires numeric lat/lng, so raw free text is never sent on its own.
+  const [selectedDestination, setSelectedDestination] = useState<DestinationSuggestion | null>(null);
 
   // Filters state — prices are in KES (Kenyan Shillings)
   // Default 0 / 500000 = "no filter" — only pass to API when user changes
@@ -473,46 +514,69 @@ export default function TravellerDashboard() {
     }
   }, [_hasHydrated, user?.userType]);
 
-  // Load recently-viewed and favourites from backend on mount (when authenticated)
+  function mapRecentSummary(v: {
+    id: string; title: string; category: string; city: string | null;
+    nightlyRate: number | null; currency: string | null; primaryPhotoUrl: string | null;
+  }): PublicListingDetail {
+    return {
+      id: v.id,
+      providerId: "",
+      category: v.category as "hotel" | "apartment" | "car",
+      name: v.title,
+      pricePerNight: v.nightlyRate ?? 0,
+      currency: v.currency ?? "KES",
+      primaryPhotoUrl: v.primaryPhotoUrl ?? null,
+      photos: [],
+      amenities: [],
+      customAmenities: [],
+      description: "",
+      address: v.city ?? "",
+      lat: 0,
+      lng: 0,
+      town: v.city ?? "",
+      country: "",
+      minStayNights: 1,
+      checkinTime: "",
+      checkoutTime: "",
+      cancellationPolicy: "flexible" as const,
+      isFavourited: false,
+      isAccredited: false,
+      longStayDiscountEnabled: false,
+      instantBooking: false,
+    };
+  }
+
+  // Load recently-viewed listings on mount.
+  //  - Authenticated: import any locally-tracked anonymous history into the backend
+  //    (once), then hydrate from GET /guests/me/recently-viewed.
+  //  - Anonymous: hydrate display cards from localStorage IDs via POST /listings/batch-summary
+  //    (the only recently-viewed read available without auth).
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("zika:recently_viewed");
+    if (!_hasHydrated) return;
+
+    if (isAuthenticated) {
+      (async () => {
+        const local = readLocalRecentlyViewed();
+        if (local.length > 0) {
+          await importRecentlyViewedItems(local).catch(() => {});
+          clearLocalRecentlyViewed();
+        }
+        try {
+          const items = await fetchRecentlyViewed();
+          setRecentlyViewed(items.slice(0, 4).map((v) => mapRecentSummary(v.listing)));
+        } catch {
+          setRecentlyViewed([]);
+        }
+      })();
+      return;
     }
-    if (!isAuthenticated) return;
-    fetchRecentlyViewed().then((items) => {
-      setRecentlyViewed(
-        items.slice(0, 4).map((v) => ({
-          id: v.listing.id,
-          providerId: "",
-          category: v.listing.category as "hotel" | "apartment" | "car",
-          name: v.listing.title,
-          pricePerNight: v.listing.nightlyRate ?? 0,
-          currency: v.listing.currency ?? "KES",
-          primaryPhotoUrl: v.listing.primaryPhotoUrl ?? null,
-          photos: [],
-          amenities: [],
-          customAmenities: [],
-          description: "",
-          address: v.listing.city ?? "",
-          lat: 0,
-          lng: 0,
-          town: v.listing.city ?? "",
-          country: "",
-          minStayNights: 1,
-          checkinTime: "",
-          checkoutTime: "",
-          cancellationPolicy: "flexible" as const,
-          isFavourited: false,
-          isAccredited: false,
-          longStayDiscountEnabled: false,
-          instantBooking: false,
-        }))
-      );
-    }).catch(() => {});
-    fetchFavourites().then((res) => {
-      setFavouritedIds(new Set(res.favourites.map((f) => f.listingId)));
-    }).catch(() => {});
-  }, [isAuthenticated]);
+
+    const local = readLocalRecentlyViewed();
+    if (local.length === 0) { setRecentlyViewed([]); return; }
+    fetchBatchListingSummary(local.slice(0, 4).map((i) => i.listingId))
+      .then((summaries) => setRecentlyViewed(summaries.map(mapRecentSummary)))
+      .catch(() => setRecentlyViewed([]));
+  }, [_hasHydrated, isAuthenticated]);
 
 
   function mapSearchResult(l: any): PublicListingDetail {
@@ -563,8 +627,12 @@ export default function TravellerDashboard() {
     setFeaturedCategory(cat);
     fetchActivePromotion(cat);
     try {
+      // Use the visitor's detected location (GET /location) as the browse anchor
+      // when available; fall back to Nairobi for anonymous/undetected visitors.
+      const lat = detectedLocation.lat ?? -1.2921;
+      const lng = detectedLocation.lng ?? 36.8219;
       const res = await listingApi.get<any>("/search", {
-        params: { category: cat, limit: 8, lat: -1.2921, lng: 36.8219, radius_km: 5000 },
+        params: { category: cat, limit: 8, lat, lng, radius_km: 5000 },
       });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
@@ -631,14 +699,6 @@ export default function TravellerDashboard() {
     });
   }
 
-  function handleFavToggle(listingId: string, isFavourited: boolean) {
-    setFavouritedIds((prev) => {
-      const next = new Set(prev);
-      if (isFavourited) next.add(listingId);
-      else next.delete(listingId);
-      return next;
-    });
-  }
 
   // 2. Lock Countdown Handler
   useEffect(() => {
@@ -832,27 +892,38 @@ export default function TravellerDashboard() {
     return () => clearTimeout(handler);
   }, [priceMin, priceMax, selectedRating, selectedCancellation, sortBy, showInstantOnly, selectedAmenities, activeTab]);
 
-  // Autocomplete suggestions — populated from search results after a successful search (no extra API call)
-  useEffect(() => {
-    if (listings.length === 0) return;
-    const uniqueSet = new Set<string>();
-    listings.forEach((l) => {
-      if (l.town) uniqueSet.add(`${l.town}, ${l.country}`);
-      if (l.name) uniqueSet.add(l.name);
-    });
-    setApiSuggestions(Array.from(uniqueSet).filter(Boolean));
-  }, [listings]);
 
   // 3. Search action calling backend list search endpoint `/search`
-  async function handleSearch(e?: React.FormEvent, overrideCategory?: "hotel" | "apartment" | "car", destinationOverride?: string) {
+  // Curated destination tiles (Amalfi Coast, Kyoto, ...) carry their own known-good
+  // coordinates, so picking one is a resolved destination just like a dropdown pick —
+  // no runtime geocoding needed.
+  function handleQuickDestination(destination: DestinationSuggestion, category: "hotel" | "apartment" | "car") {
+    setSearchDestination(destination.displayName);
+    setSelectedDestination(destination);
+    handleSearch(undefined, category, destination);
+  }
+
+  async function handleSearch(e?: React.FormEvent, overrideCategory?: "hotel" | "apartment" | "car", destinationOverride?: DestinationSuggestion) {
     if (e) e.preventDefault();
 
     const activeCategory = overrideCategory || searchCategory;
+    const trimmedDestination = searchDestination.trim();
 
     // Manual form submit requires a destination.
     // Programmatic calls (tab / nav clicks, where e is undefined) use a default location.
-    if (e && !searchDestination.trim()) {
+    if (e && !trimmedDestination) {
       alert("Please enter a destination to search.");
+      return;
+    }
+
+    // The backend requires numeric lat/lng — a destination must be resolved (dropdown
+    // selection or a curated quick-destination) before a text search can run. Raw text
+    // that was never resolved to coordinates is never sent to the backend.
+    const resolvedDestination: DestinationSuggestion | null =
+      destinationOverride ??
+      (trimmedDestination && selectedDestination?.displayName === trimmedDestination ? selectedDestination : null);
+    if (trimmedDestination && !resolvedDestination) {
+      setSearchError("Please select a destination from the list.");
       return;
     }
 
@@ -884,61 +955,24 @@ export default function TravellerDashboard() {
     // Clear stale listings immediately so the grid never shows results from a previous search
     setListings([]);
 
-    // Priority: explicit override (popular destination click) → user input → default
-    const queryText = destinationOverride?.trim() || searchDestination.trim() || "Nairobi, Kenya";
-    // Flag: is this a real user-typed text search (not a programmatic global browse)?
-    const isTextSearch = !!(destinationOverride?.trim() || searchDestination.trim());
+    // Coordinates always come from a resolved destination — never from re-geocoding
+    // raw text at submit time. Empty destination = global browse (detected location).
+    const isTextSearch = !!resolvedDestination;
+    const queryText = resolvedDestination?.displayName ?? "";
 
     try {
-      // Geocode destination → lat/lng via Nominatim (free, no API key).
-      // NOTE: geocoding is used ONLY to seed the lat/lng the API requires.
-      // It is NOT the primary matching mechanism — the `q` param and the
-      // client-side text filter handle actual text relevance.
-      let lat: number | undefined;
-      let lng: number | undefined;
-
-      const destinationLower = queryText.toLowerCase();
-
-      // Fast-path for common cities — avoids a network round-trip
-      if (destinationLower.includes("mombasa")) {
-        lat = -3.9820; lng = 39.7260;
-      } else if (destinationLower.includes("nairobi") || destinationLower.includes("kenya")) {
-        lat = -1.2921; lng = 36.8219;
-      } else if (destinationLower.includes("paris")) {
-        lat = 48.8566; lng = 2.3522;
-      }
-
-      if (queryText && lat === undefined) {
-        try {
-          const geoRes = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(queryText)}&format=json&limit=1`,
-            { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
-          );
-          const geoData = await geoRes.json();
-          if (geoData && geoData.length > 0) {
-            lat = parseFloat(geoData[0].lat);
-            lng = parseFloat(geoData[0].lon);
-          }
-        } catch {
-          // Geocoding failed — fall through to default coords
-        }
-      }
-
-      // Final fallback — always send valid coords to the backend
-      if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) {
-        lat = -1.2921;
-        lng = 36.8219;
-      }
+      const lat = resolvedDestination ? resolvedDestination.lat : (detectedLocation.lat ?? -1.2921);
+      const lng = resolvedDestination ? resolvedDestination.lng : (detectedLocation.lng ?? 36.8219);
 
       // Build search params.
       // For ALL text searches (hotel name, apartment name, car name, city, country, etc.):
       //   - Use radius_km = 20 000 (global) so results are NOT constrained by geography.
       //   - Pass `q` and `name` so the backend's full-text index can match on listing names.
       // For programmatic global browse (no user text): also use 20 000 km radius.
-      const isGlobalBrowse = !e && !searchDestination.trim() && !destinationOverride;
       const params: Record<string, any> = {
         category: activeCategory,
-        limit: 100, // Fetch a large batch so the client-side filter has enough candidates
+        limit: 50, // Backend caps limit at 50 (services/listing-service/src/routes/search.ts)
+        cursor: 0,
         lat,
         lng,
         // Always use global radius — text searches must not be geographically constrained.
@@ -946,14 +980,16 @@ export default function TravellerDashboard() {
       };
 
       // Pass the user's raw search term as both `q` (standard) and `name` (some backends).
-      // This is the primary mechanism for finding listings by name, town, or country.
+      // Neither is read by the backend (search.ts has no text-matching param) — actual
+      // relevance filtering happens client-side below via the text filter.
       if (isTextSearch) {
         params.q = queryText;
         params.name = queryText;
       }
 
-      if (searchGuests > 1) params.guests = searchGuests;
-      if (searchRooms > 1) params.rooms = searchRooms;
+      // `guests` is accepted by the backend but never applied to the query — the
+      // supported capacity filter is `max_guests_min` (hotel/apartment only).
+      if (searchGuests > 1 && activeCategory !== "car") params.max_guests_min = searchGuests;
       if (priceMin > 0) params.price_min = priceMin;
       if (priceMax < 499999) params.price_max = priceMax;
       if (selectedRating) params.rating_min = selectedRating;
@@ -1000,13 +1036,18 @@ export default function TravellerDashboard() {
 
       // Client-side text filter — the definitive gate that ensures ONLY matching listings
       // are rendered, regardless of what the geo-radius API returned.
-      // Fields matched (any field containing the term wins):
-      //   Hotels / Apartments: name, town, country, address, description
-      //   Cars:                name, town, country, address, description, carMake, carModel
+      // Matches when either:
+      //   - the listing's ISO country code equals the resolved destination's country code
+      //     (fixes country-name searches like "India" — Listing.country stores a 2-letter
+      //     code, e.g. "IN", so a raw substring check against the word "India" never matches)
+      //   - any of name/town/country/address/description (+ carMake/carModel for cars)
+      //     contains the search term as a substring
       let displayListings = mapped;
       if (isTextSearch) {
         const term = queryText.toLowerCase().trim();
+        const destCountryCode = resolvedDestination?.countryCode ?? null;
         displayListings = mapped.filter((listing) => {
+          if (destCountryCode && listing.country && listing.country.toUpperCase() === destCountryCode) return true;
           const fields: (string | undefined | null)[] = [
             listing.name,
             listing.town,
@@ -1044,29 +1085,23 @@ export default function TravellerDashboard() {
   async function loadMoreListings() {
     if (loadingMore) return;
     setLoadingMore(true);
-    const nextOffset = searchOffset + 20;
+    const nextOffset = searchOffset + 50;
     const activeQuery = searchDestination.trim();
+    // Reuse the destination resolved by the active search — Load More never
+    // re-geocodes raw text, it only continues the same query.
+    const activeDestination = activeQuery && selectedDestination?.displayName === activeQuery ? selectedDestination : null;
     try {
-      const destinationLower = activeQuery.toLowerCase();
-      let lat = -1.2921, lng = 36.8219;
-      if (destinationLower.includes("mombasa")) { lat = -3.982; lng = 39.726; }
-      else if (destinationLower.includes("paris")) { lat = 48.8566; lng = 2.3522; }
-      else if (activeQuery) {
-        try {
-          const g = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(activeQuery)}&format=json&limit=1`, { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } });
-          const gd = await g.json();
-          if (gd?.[0]) { lat = parseFloat(gd[0].lat); lng = parseFloat(gd[0].lon); }
-        } catch { }
-      }
+      const lat = activeDestination ? activeDestination.lat : (detectedLocation.lat ?? -1.2921);
+      const lng = activeDestination ? activeDestination.lng : (detectedLocation.lng ?? 36.8219);
       // Always use global radius and pass the search term so Load More stays
       // scoped to the active query — never falls back to the full inventory.
-      const params: Record<string, any> = { category: searchCategory, limit: 100, offset: nextOffset, lat, lng, radius_km: 20000 };
+      // Pagination uses `cursor` (an offset), matching the backend's contract exactly.
+      const params: Record<string, any> = { category: searchCategory, limit: 50, cursor: nextOffset, lat, lng, radius_km: 20000 };
       if (activeQuery) {
         params.q = activeQuery;
         params.name = activeQuery;
       }
-      if (searchGuests > 1) params.guests = searchGuests;
-      if (searchRooms > 1) params.rooms = searchRooms;
+      if (searchGuests > 1 && searchCategory !== "car") params.max_guests_min = searchGuests;
       if (priceMin > 0) params.price_min = priceMin;
       if (priceMax < 499999) params.price_max = priceMax;
       if (selectedRating) params.rating_min = selectedRating;
@@ -1095,8 +1130,10 @@ export default function TravellerDashboard() {
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
       const mapped = results.map(mapSearchResult);
       // Apply the same client-side text filter so appended pages are also accurate
+      const destCountryCode = activeDestination?.countryCode ?? null;
       const filtered = activeQuery
         ? mapped.filter((listing) => {
+            if (destCountryCode && listing.country && listing.country.toUpperCase() === destCountryCode) return true;
             const term = activeQuery.toLowerCase();
             const fields: (string | undefined | null)[] = [
               listing.name, listing.town, listing.country, listing.address, listing.description,
@@ -1186,7 +1223,11 @@ export default function TravellerDashboard() {
         };
         setDetailListing(details);
         addToRecentlyViewed(details);
-        listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
+        if (isAuthenticated) {
+          listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
+        } else {
+          recordLocalRecentlyViewed(id);
+        }
         fetchActivePromotion(details.category);
         // Fetch wallet + applicable vouchers as soon as the listing opens so the
         // dropdown is populated in the details step (before the booking lock).
@@ -1209,7 +1250,10 @@ export default function TravellerDashboard() {
     }
   }
 
-  // 4b. Availability check — GET /{id}/availability
+  // 4b. Availability check — GET /listings/:id/availability
+  // Backend accepts a `month` (YYYY-MM) query param and returns the booked/blocked
+  // ranges for that month plus the following two months as { unavailableRanges: [{start,end}] }.
+  // It does NOT accept start/end params directly — overlap must be computed client-side.
   async function checkAvailability(listingId: string, category: string) {
     const start = category === "car" ? detailPickupDate : detailCheckIn;
     const end = category === "car" ? detailReturnDate : detailCheckOut;
@@ -1217,15 +1261,21 @@ export default function TravellerDashboard() {
 
     setAvailabilityStatus("checking");
     try {
+      const month = start.slice(0, 7); // YYYY-MM
       const res = await listingApi.get<any>(`/listings/${listingId}/availability`, {
-        params: { start, end },
+        params: { month },
       });
       if (res.data.success) {
         const d = res.data.data ?? {};
-        const blocked: string[] = d.blockedDates ?? [];
-        const held: any[] = d.bookings ?? d.locks ?? [];
-        const available = blocked.length === 0 && held.length === 0;
-        setAvailabilityStatus(available ? "available" : "unavailable");
+        const unavailableRanges: { start: string; end: string }[] = d.unavailableRanges ?? [];
+        const selectedStart = new Date(start).getTime();
+        const selectedEnd = new Date(end).getTime();
+        const overlaps = unavailableRanges.some((r) => {
+          const rangeStart = new Date(r.start).getTime();
+          const rangeEnd = new Date(r.end).getTime();
+          return selectedStart < rangeEnd && selectedEnd > rangeStart;
+        });
+        setAvailabilityStatus(overlaps ? "unavailable" : "available");
       } else {
         setAvailabilityStatus("unavailable");
       }
@@ -2949,64 +2999,33 @@ export default function TravellerDashboard() {
 
                     {/* Destination */}
                     <div className="relative flex-[2] min-w-0">
-                      <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200">
-                        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Where to?</p>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Destination"
-                            value={searchDestination}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setSearchDestination(val);
-                              setShowSuggestions(true);
-                              if (nominatimTimer.current) clearTimeout(nominatimTimer.current);
-                              if (val.length >= 2) {
-                                nominatimTimer.current = setTimeout(async () => {
-                                  try {
-                                    const r = await fetch(
-                                      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&addressdetails=0`,
-                                      { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
-                                    );
-                                    const data = await r.json();
-                                    setNominatimResults(Array.isArray(data) ? data : []);
-                                  } catch { setNominatimResults([]); }
-                                }, 320);
-                              } else {
-                                setNominatimResults([]);
-                              }
-                            }}
-                            onFocus={() => setShowSuggestions(true)}
-                            onBlur={() => setTimeout(() => { setShowSuggestions(false); setNominatimResults([]); }, 220)}
-                            className="w-full bg-transparent border-none outline-none text-sm font-semibold text-slate-800 placeholder-slate-400"
-                          />
-                        </div>
-                      </div>
-                      {/* Autocomplete dropdown */}
-                      {showSuggestions && (nominatimResults.length > 0 || apiSuggestions.filter(s => s.toLowerCase().includes(searchDestination.toLowerCase())).length > 0) && (
-                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200/80 rounded-2xl shadow-2xl z-50 overflow-hidden max-h-56 overflow-y-auto">
-                          {nominatimResults.length > 0 ? nominatimResults.map((r, i) => (
-                            <button key={i} type="button"
-                              onMouseDown={() => { setSearchDestination(r.display_name.split(",").slice(0, 2).join(",").trim()); setShowSuggestions(false); setNominatimResults([]); }}
-                              className="w-full px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-[#0c2614] hover:text-white transition-colors text-left flex items-center gap-2"
-                            >
-                              <svg className="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                              <span className="truncate">{r.display_name.split(",").slice(0, 3).join(", ")}</span>
-                            </button>
-                          )) : apiSuggestions.filter(s => s.toLowerCase().includes(searchDestination.toLowerCase())).map((s, i) => (
-                            <button key={i} type="button" onMouseDown={() => { setSearchDestination(s); setShowSuggestions(false); }}
-                              className="w-full px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-[#0c2614] hover:text-white transition-colors text-left flex items-center gap-2">
-                              <svg className="w-3.5 h-3.5 shrink-0 opacity-60" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                              <span className="truncate">{s}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      <DestinationDropdown
+                        value={searchDestination}
+                        onQueryChange={(v) => {
+                          setSearchDestination(v);
+                          setSearchError(null);
+                          if (selectedDestination && selectedDestination.displayName !== v) {
+                            setSelectedDestination(null);
+                          }
+                        }}
+                        onSelect={(s) => {
+                          setSearchDestination(s.displayName);
+                          setSelectedDestination(s);
+                          setSearchError(null);
+                        }}
+                        required
+                        placeholder="Destination"
+                        label="Where to?"
+                        fieldClassName="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200"
+                        inputClassName="w-full bg-transparent border-none outline-none text-sm font-semibold text-slate-800 placeholder-slate-400"
+                        wrapperClassName="flex-1 min-w-0"
+                        icon={
+                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                        }
+                      />
                     </div>
 
                     {/* Date fields */}
@@ -3164,7 +3183,7 @@ export default function TravellerDashboard() {
                 {/* Large left */}
                 <button
                   type="button"
-                  onClick={() => { setSearchDestination("Amalfi Coast, Italy"); handleSearch(undefined, "hotel", "Amalfi Coast, Italy"); }}
+                  onClick={() => handleQuickDestination({ displayName: "Amalfi Coast, Italy", lat: 40.6333, lng: 14.6029, countryCode: "IT", city: "Amalfi" }, "hotel")}
                   className="group relative rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all duration-300"
                   style={{ minHeight: "420px" }}
                 >
@@ -3183,13 +3202,13 @@ export default function TravellerDashboard() {
                 {/* Right column — 2 stacked */}
                 <div className="grid grid-rows-2 gap-4">
                   {[
-                    { name: "Kyoto", country: "Japan", img: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600&q=85", props: "80+" },
-                    { name: "Santorini", country: "Greece", img: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=85", props: "95+" },
+                    { name: "Kyoto", country: "Japan", countryCode: "JP", lat: 35.0116, lng: 135.7681, img: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=600&q=85", props: "80+" },
+                    { name: "Santorini", country: "Greece", countryCode: "GR", lat: 36.3932, lng: 25.4615, img: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&q=85", props: "95+" },
                   ].map((dest) => (
                     <button
                       key={dest.name}
                       type="button"
-                      onClick={() => { setSearchDestination(`${dest.name}, ${dest.country}`); handleSearch(undefined, "hotel", `${dest.name}, ${dest.country}`); }}
+                      onClick={() => handleQuickDestination({ displayName: `${dest.name}, ${dest.country}`, lat: dest.lat, lng: dest.lng, countryCode: dest.countryCode, city: dest.name }, "hotel")}
                       className="group relative rounded-2xl overflow-hidden cursor-pointer shadow-md hover:shadow-xl transition-all duration-300"
                       style={{ minHeight: "198px" }}
                     >
@@ -3373,14 +3392,14 @@ export default function TravellerDashboard() {
                     </div>
                   ))}
                 </div>
-                <div className="text-center">
+                {/* <div className="text-center">
                   <button
                     onClick={() => { if (!user) { window.location.href = "/auth/login"; } }}
                     className="bg-white hover:bg-green-50 text-[#0c2614] font-semibold px-8 py-3 rounded-full text-sm transition shadow-lg"
                   >
                     Join Kainook Privilege
                   </button>
-                </div>
+                </div> */}
               </div>
             </section>
 

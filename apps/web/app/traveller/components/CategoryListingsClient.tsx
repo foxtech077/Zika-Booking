@@ -5,11 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { listingApi } from "@/lib/listing-api";
 import { useAuthStore } from "@/stores/auth";
 import { useFavourites } from "@/hooks/useFavourites";
+import { useLocation } from "@/hooks/useLocation";
+import DestinationDropdown, { type DestinationSuggestion } from "./DestinationDropdown";
 import dynamic from "next/dynamic";
 import ListingCard from "./ListingCard";
 import type { PublicListingDetail } from "@/types";
 import { ActivityPromoBanner } from "./PromoBanner";
 import { isPromotionValid, type ActivePromotion } from "../utils/promo-utils";
+import { AMENITY_OPTIONS as CANONICAL_AMENITY_OPTIONS } from "@/app/(provider)/dashboard/listings/[id]/edit/_forms/shared/amenities";
 
 /* ── lazy-loaded map ──────────────────────────────────────────── */
 const MapView = dynamic(() => import("./MapView"), { ssr: false });
@@ -50,18 +53,12 @@ const CAT_HREF: Record<"hotel" | "apartment" | "car", string> = {
   car: "/traveller/cars",
 };
 
-const AMENITY_OPTIONS = [
-  { key: "wifi", label: "Wi-Fi" },
-  { key: "pool", label: "Pool" },
-  { key: "ac", label: "Air Conditioning" },
-  { key: "kitchen", label: "Kitchen" },
-  { key: "gym", label: "Gym" },
-  { key: "parking", label: "Parking" },
-  { key: "tv", label: "Smart TV" },
-  { key: "washer", label: "Washer" },
-  { key: "fireplace", label: "Fireplace" },
-  { key: "balcony", label: "Balcony" },
-];
+// Reuse the canonical amenity vocabulary providers select from when creating a listing
+// (services/listing-service stores ListingAmenity.amenityKey using these exact values —
+// the previous local list used keys like "gym"/"tv"/"washer" that never matched real data).
+const AMENITY_OPTIONS = CANONICAL_AMENITY_OPTIONS.filter((o) =>
+  ["wifi", "smart_tv", "kitchen", "pool", "fitness_centre", "ac", "parking", "laundry", "breakfast", "pet_friendly"].includes(o.value)
+).map((o) => ({ key: o.value, label: o.label }));
 
 const CAR_CATEGORIES = [
   "Economy", "Compact", "SUV", "Minivan", "Pickup", "Luxury", "Electric", "Convertible",
@@ -75,32 +72,20 @@ const SORT_OPTIONS = [
   { value: "distance_asc", label: "Distance" },
 ];
 
+// The backend's `sort` enum only supports recommended/price_asc/price_desc/distance/newest
+// (services/listing-service/src/routes/search.ts) — "Highest Rated" has no server-side
+// equivalent and is applied client-side after fetch instead.
+const SORT_MAP: Record<string, string> = {
+  recommended: "recommended",
+  price_asc: "price_asc",
+  price_desc: "price_desc",
+  distance_asc: "distance",
+  rating_desc: "recommended",
+};
+
 /* ── helpers ─────────────────────────────────────────────────── */
 function today() {
   return new Date().toISOString().slice(0, 10);
-}
-
-async function geocodeDestination(q: string): Promise<{ lat: number; lng: number }> {
-  const lower = q.toLowerCase();
-  if (lower.includes("nairobi") || lower.includes("kenya")) return { lat: -1.2921, lng: 36.8219 };
-  if (lower.includes("mombasa")) return { lat: -3.982, lng: 39.726 };
-  if (lower.includes("dubai")) return { lat: 25.2048, lng: 55.2708 };
-  if (lower.includes("cape town")) return { lat: -33.9249, lng: 18.4241 };
-  if (lower.includes("zanzibar")) return { lat: -6.1659, lng: 39.2026 };
-  if (lower.includes("kampala")) return { lat: 0.3476, lng: 32.5825 };
-  if (lower.includes("kigali")) return { lat: -1.9441, lng: 30.0619 };
-  if (lower.includes("dar es salaam")) return { lat: -6.7924, lng: 39.2083 };
-  if (lower.includes("lagos")) return { lat: 6.5244, lng: 3.3792 };
-  if (lower.includes("accra")) return { lat: 5.6037, lng: -0.1870 };
-  try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
-      { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
-    );
-    const d = await r.json();
-    if (d?.[0]) return { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
-  } catch { /* fall through */ }
-  return { lat: -1.2921, lng: 36.8219 };
 }
 
 function mapListing(l: any): PublicListingDetail {
@@ -271,16 +256,15 @@ function StyledDateInput({
 /* ══════════════════════════════════════════════════════════════
    FILTER PANEL — shared for sidebar + mobile drawer
 ══════════════════════════════════════════════════════════════ */
+// NOTE: smoking/pets/instant-book/min-stay/fuel-type/airport-pickup/delivery-available
+// filters were removed — the /search endpoint neither filters on nor returns those
+// fields (services/listing-service/src/routes/search.ts), so the controls were dead
+// weight that silently did nothing. See final report for backend follow-up.
 interface FilterState {
   priceMax: number;
   rating: number | null;
   amenities: string[];
   cancellation: string;
-  instantOnly: boolean;
-  smokingAllowed: boolean;
-  petsAllowed: boolean;
-  minStay: number | null;
-  // hotels only
   // apartments
   bedrooms: number | null;
   bathrooms: number | null;
@@ -288,11 +272,8 @@ interface FilterState {
   // cars
   carCategory: string;
   transmission: string;
-  fuelType: string;
   seats: number | null;
   minDriverAge: number | null;
-  airportPickup: boolean;
-  deliveryAvailable: boolean;
 }
 
 const DEFAULT_FILTERS: FilterState = {
@@ -300,20 +281,13 @@ const DEFAULT_FILTERS: FilterState = {
   rating: null,
   amenities: [],
   cancellation: "",
-  instantOnly: false,
-  smokingAllowed: false,
-  petsAllowed: false,
-  minStay: null,
   bedrooms: null,
   bathrooms: null,
   longStayDiscount: false,
   carCategory: "",
   transmission: "",
-  fuelType: "",
   seats: null,
   minDriverAge: null,
-  airportPickup: false,
-  deliveryAvailable: false,
 };
 
 function countActiveFilters(f: FilterState) {
@@ -322,20 +296,13 @@ function countActiveFilters(f: FilterState) {
   if (f.rating) n++;
   if (f.amenities.length) n++;
   if (f.cancellation) n++;
-  if (f.instantOnly) n++;
-  if (f.smokingAllowed) n++;
-  if (f.petsAllowed) n++;
-  if (f.minStay) n++;
   if (f.bedrooms) n++;
   if (f.bathrooms) n++;
   if (f.longStayDiscount) n++;
   if (f.carCategory) n++;
   if (f.transmission) n++;
-  if (f.fuelType) n++;
   if (f.seats) n++;
   if (f.minDriverAge) n++;
-  if (f.airportPickup) n++;
-  if (f.deliveryAvailable) n++;
   return n;
 }
 
@@ -492,25 +459,6 @@ function FilterPanel({
         </div>
       )}
 
-      {/* Hotel / Apartment: Min Stay */}
-      {!isCar && (
-        <div className="space-y-2">
-          <FilterLabel>Minimum Stay</FilterLabel>
-          <select
-            value={filters.minStay ?? ""}
-            onChange={(e) => onChange({ minStay: e.target.value ? Number(e.target.value) : null })}
-            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium text-slate-700 bg-white focus:outline-none focus:border-[#1D8D2B] transition"
-          >
-            <option value="">Any</option>
-            <option value="1">1+ night</option>
-            <option value="3">3+ nights</option>
-            <option value="7">7+ nights</option>
-            <option value="14">14+ nights</option>
-            <option value="30">30+ nights</option>
-          </select>
-        </div>
-      )}
-
       {/* Car: Category */}
       {isCar && (
         <div className="space-y-2">
@@ -547,24 +495,6 @@ function FilterPanel({
               >
                 {t}
               </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Car: Fuel Type */}
-      {isCar && (
-        <div className="space-y-2">
-          <FilterLabel>Fuel Type</FilterLabel>
-          <div className="flex flex-wrap gap-2">
-            {["petrol", "diesel", "hybrid", "electric"].map((f) => (
-              <Chip
-                key={f}
-                active={filters.fuelType === f}
-                onClick={() => onChange({ fuelType: filters.fuelType === f ? "" : f })}
-              >
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-              </Chip>
             ))}
           </div>
         </div>
@@ -610,20 +540,6 @@ function FilterPanel({
         </div>
       )}
 
-      {/* Hotel / Apartment: Smoking & Pets */}
-      {!isCar && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between py-1">
-            <p className="text-xs font-semibold text-slate-700">Smoking Allowed</p>
-            <Toggle on={filters.smokingAllowed} onToggle={() => onChange({ smokingAllowed: !filters.smokingAllowed })} />
-          </div>
-          <div className="flex items-center justify-between py-1">
-            <p className="text-xs font-semibold text-slate-700">Pets Allowed</p>
-            <Toggle on={filters.petsAllowed} onToggle={() => onChange({ petsAllowed: !filters.petsAllowed })} />
-          </div>
-        </div>
-      )}
-
       {/* Apartment: Long-stay discount */}
       {isApt && (
         <div className="flex items-center justify-between py-1">
@@ -637,35 +553,6 @@ function FilterPanel({
           />
         </div>
       )}
-
-      {/* Car: Airport Pickup & Delivery */}
-      {isCar && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between py-1">
-            <p className="text-xs font-semibold text-slate-700">Airport Pickup</p>
-            <Toggle
-              on={filters.airportPickup}
-              onToggle={() => onChange({ airportPickup: !filters.airportPickup })}
-            />
-          </div>
-          <div className="flex items-center justify-between py-1">
-            <p className="text-xs font-semibold text-slate-700">Delivery Available</p>
-            <Toggle
-              on={filters.deliveryAvailable}
-              onToggle={() => onChange({ deliveryAvailable: !filters.deliveryAvailable })}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Instant Book */}
-      <div className="flex items-center justify-between py-1">
-        <div>
-          <p className="text-xs font-semibold text-slate-700">⚡ Instant Book</p>
-          <p className="text-[10px] text-slate-400">No approval needed</p>
-        </div>
-        <Toggle on={filters.instantOnly} onToggle={() => onChange({ instantOnly: !filters.instantOnly })} />
-      </div>
 
       {/* Action buttons */}
       <button
@@ -700,10 +587,18 @@ export default function CategoryListingsClient({ category }: Props) {
   const sp = useSearchParams();
   const { user, clearSession, isAuthenticated } = useAuthStore();
   const { isFavourited, toggleFavourite } = useFavourites();
+  // Detected via GET /location — anchors browsing (no typed destination) near the visitor.
+  const detectedLocation = useLocation();
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   /* ── search bar state (read initial values from URL) ──────── */
-  const [destination, setDestination] = useState(sp.get("q") || "");
+  const initialDestination = sp.get("q") || "";
+  const [destination, setDestination] = useState(initialDestination);
+  // Resolved coordinates for `destination` — only set once the visitor picks a
+  // suggestion from the dropdown (see DestinationDropdown). The backend's /search
+  // requires numeric lat/lng, so raw free text is never sent on its own.
+  const [selectedDestination, setSelectedDestination] = useState<DestinationSuggestion | null>(null);
+  const [destinationError, setDestinationError] = useState<string | null>(null);
   const [checkIn, setCheckIn] = useState(sp.get("checkin") || "");
   const [checkOut, setCheckOut] = useState(sp.get("checkout") || "");
   const [pickupDate, setPickupDate] = useState(sp.get("pickup") || "");
@@ -717,9 +612,7 @@ export default function CategoryListingsClient({ category }: Props) {
     rating: sp.get("rating") ? Number(sp.get("rating")) : null,
     amenities: sp.get("amenities") ? sp.get("amenities")!.split(",") : [],
     cancellation: sp.get("cancellation") || "",
-    instantOnly: sp.get("instant") === "1",
     transmission: sp.get("transmission") || "",
-    fuelType: sp.get("fuel") || "",
     carCategory: sp.get("car_category") || "",
     seats: sp.get("seats") ? Number(sp.get("seats")) : null,
     minDriverAge: sp.get("min_age") ? Number(sp.get("min_age")) : null,
@@ -745,11 +638,6 @@ export default function CategoryListingsClient({ category }: Props) {
   const [showMap, setShowMap] = useState(false);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
-  /* ── destination autocomplete ─────────────────────────────── */
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   /* ── refs ─────────────────────────────────────────────────── */
   const filterDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialFetch = useRef(false);
@@ -769,9 +657,7 @@ export default function CategoryListingsClient({ category }: Props) {
     if (filters.rating) params.set("rating", String(filters.rating));
     if (filters.amenities.length) params.set("amenities", filters.amenities.join(","));
     if (filters.cancellation) params.set("cancellation", filters.cancellation);
-    if (filters.instantOnly) params.set("instant", "1");
     if (filters.transmission) params.set("transmission", filters.transmission);
-    if (filters.fuelType) params.set("fuel", filters.fuelType);
     if (filters.carCategory) params.set("car_category", filters.carCategory);
     if (filters.seats) params.set("seats", String(filters.seats));
     if (filters.minDriverAge) params.set("min_age", String(filters.minDriverAge));
@@ -799,58 +685,58 @@ export default function CategoryListingsClient({ category }: Props) {
 
     // Use destOverride when provided (e.g. Load More must stay scoped to the active query)
     const dest = typeof destOverride === "string" ? destOverride : destination.trim();
-    const isGlobal = !dest;
 
-    // When a text search is active:
-    //   - Use a global radius (20 000 km) so name/hotel/car searches return matches from anywhere,
-    //     not just within a fixed radius around a geocoded point.
-    //   - Geocoding is only used to seed the lat/lng the API requires; it is NOT the primary
-    //     matching mechanism — the `q` param and client-side filter handle text relevance.
-    // When browsing (no text): use a default Nairobi anchor with global radius.
-    const { lat, lng } = dest
-      ? await geocodeDestination(dest)
-      : { lat: -1.2921, lng: 36.8219 };
+    // Coordinates only ever come from a resolved destination (dropdown selection or the
+    // one-time URL resolve above) — never from re-geocoding raw text at fetch time.
+    // When browsing (no text): anchor on the visitor's detected location (GET /location)
+    // when available, so "nearest" sorting is meaningful; fall back to Nairobi otherwise.
+    if (dest && (!selectedDestination || selectedDestination.displayName !== dest)) {
+      setDestinationError("Please select a destination from the list.");
+      setLoading(false);
+      setLoadingMore(false);
+      return;
+    }
+    const lat = dest ? selectedDestination!.lat : (detectedLocation.lat ?? -1.2921);
+    const lng = dest ? selectedDestination!.lng : (detectedLocation.lng ?? 36.8219);
+    const destCountryCode = dest ? selectedDestination!.countryCode : null;
 
-    // Always fetch a large batch so the client-side text filter has enough candidates.
-    const effectiveLimit = dest ? 100 : PAGE_SIZE;
+    // Backend caps `limit` at 50 (services/listing-service/src/routes/search.ts) —
+    // requesting more just gets silently truncated, so match it exactly.
+    const effectiveLimit = dest ? 50 : PAGE_SIZE;
 
     const params: Record<string, any> = {
       category,
       limit: effectiveLimit,
-      offset: newOffset,
+      cursor: newOffset,
       lat,
       lng,
       // Use global radius for ALL text searches so results are not constrained by geography.
       // Browse (no text) uses global radius too for a full category inventory view.
       radius_km: 20000,
-      sort_by: sortBy,
+      sort: SORT_MAP[sortBy] ?? "recommended",
     };
 
-    // Always pass the user's text as `q` — backend may use it for full-text matching.
-    // This is the primary mechanism for name/hotel/apartment/car searches.
+    // Always pass the user's text as `q` — the backend has no text-matching param
+    // (ignored server-side); actual relevance filtering happens client-side below.
     if (dest) {
       params.q = dest;
-      params.name = dest; // some backends also accept `name`
+      params.name = dest;
     }
 
-    if (guests > 1) params.guests = guests;
+    // `guests` is accepted by the backend schema but never applied to the query —
+    // the supported capacity filter is `max_guests_min` (hotel/apartment only).
+    if (guests > 1 && !isCar) params.max_guests_min = guests;
     if (filters.priceMax < 500000) params.price_max = filters.priceMax;
-    if (filters.rating) params.rating_min = filters.rating;
-    if (filters.amenities.length) params.amenities = filters.amenities.join(",");
+    if (filters.amenities.length) params.amenity_ids = filters.amenities.join(",");
     if (filters.cancellation) params.cancellation_policy = filters.cancellation;
-    if (filters.instantOnly) params.instant_booking = true;
-    if (filters.minStay) params.min_stay = filters.minStay;
 
     if (!isCar) {
       if (checkIn) params.check_in = checkIn;
       if (checkOut) params.check_out = checkOut;
-      if (filters.smokingAllowed) params.smoking_allowed = true;
-      if (filters.petsAllowed) params.pets_allowed = true;
     }
 
     if (category === "apartment") {
-      if (filters.bedrooms) params.bedrooms = filters.bedrooms;
-      if (filters.bathrooms) params.bathrooms = filters.bathrooms;
+      if (filters.bedrooms) params.bedrooms_min = filters.bedrooms;
       if (filters.longStayDiscount) params.long_stay_discount = true;
     }
 
@@ -859,33 +745,30 @@ export default function CategoryListingsClient({ category }: Props) {
       if (returnDate) params.return_datetime = returnDate;
       if (filters.carCategory) params.car_category = filters.carCategory.toLowerCase();
       if (filters.transmission) params.transmission = filters.transmission;
-      if (filters.fuelType) params.fuel_type = filters.fuelType;
-      if (filters.seats) params.min_seats = filters.seats;
-      if (filters.minDriverAge) params.min_driver_age = filters.minDriverAge;
-      if (filters.airportPickup) params.airport_pickup = true;
-      if (filters.deliveryAvailable) params.delivery_available = true;
+      if (filters.seats) params.seats_min = filters.seats;
+      if (filters.minDriverAge) params.driver_age = filters.minDriverAge;
     }
-
-    console.log("[Search] Request payload:", params);
 
     try {
       const res = await listingApi.get<any>("/search", { params });
       const data = res.data?.data ?? {};
       const results: any[] = data.results ?? (Array.isArray(data) ? data : []);
 
-      console.log("[Search] API response count:", results.length, "| server totalCount:", data.totalCount ?? data.availableCount);
-
       const mapped = results.map(mapListing);
 
       // Client-side text filter — the definitive gate that ensures ONLY matching listings
       // are rendered, regardless of what the geo-radius API returned.
-      // Fields matched (any field containing the search term wins):
-      //   Hotels / Apartments: name, town, country, address, description
-      //   Cars:                name, town, country, address, description, carMake, carModel
+      // Matches when either:
+      //   - the listing's ISO country code equals the selected destination's country code
+      //     (fixes country-name searches like "India" — Listing.country stores a 2-letter
+      //     code, e.g. "IN", so a raw substring check against the word "India" never matches)
+      //   - any of name/town/country/address/description (+ carMake/carModel for cars)
+      //     contains the search term as a substring
       let displayListings = mapped;
       if (dest) {
         const term = dest.toLowerCase().trim();
         displayListings = mapped.filter((listing) => {
+          if (destCountryCode && listing.country && listing.country.toUpperCase() === destCountryCode) return true;
           const fields: (string | undefined | null)[] = [
             listing.name,
             listing.town,
@@ -900,7 +783,19 @@ export default function CategoryListingsClient({ category }: Props) {
         });
       }
 
-      console.log("[Search] Final rendered count after client filter:", displayListings.length);
+      // Client-side rating & bathroom filters — the backend accepts `rating_min` but
+      // never applies it to the query, and has no bathroom filter at all. Both fields
+      // ARE present on the /search response, so filter on them here instead.
+      if (filters.rating) {
+        displayListings = displayListings.filter((l) => (l.starRating ?? 0) >= filters.rating!);
+      }
+      if (category === "apartment" && filters.bathrooms) {
+        displayListings = displayListings.filter((l) => (l.bathrooms ?? 0) >= filters.bathrooms!);
+      }
+      // Client-side rating sort — the backend's `sort` enum has no rating option.
+      if (sortBy === "rating_desc") {
+        displayListings = [...displayListings].sort((a, b) => (b.starRating ?? 0) - (a.starRating ?? 0));
+      }
 
       // When a text search is active, report the filtered count as the total so the
       // heading and Load More logic reflect exactly what the user sees.
@@ -965,9 +860,46 @@ export default function CategoryListingsClient({ category }: Props) {
   useEffect(() => {
     if (initialFetch.current) return;
     initialFetch.current = true;
-    fetchListings(0, false);
     fetchPromotion();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!initialDestination) {
+      fetchListings(0, false);
+      return;
+    }
+    // A destination arrived via the URL (e.g. a shared link) — DestinationDropdown
+    // only resolves coordinates when the visitor actively picks a suggestion, so
+    // resolve this one exactly once here before the first fetch.
+    let cancelled = false;
+    fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(initialDestination)}&format=json&limit=1&addressdetails=1`,
+      { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } },
+    )
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        const r0 = Array.isArray(data) ? data[0] : null;
+        if (r0) {
+          const resolved: DestinationSuggestion = {
+            displayName: r0.display_name,
+            lat: parseFloat(r0.lat),
+            lng: parseFloat(r0.lon),
+            countryCode: r0.address?.country_code ? String(r0.address.country_code).toUpperCase() : null,
+            city: r0.address?.city ?? r0.address?.town ?? r0.address?.village ?? null,
+          };
+          setSelectedDestination(resolved);
+          fetchListings(0, false, resolved.displayName);
+        } else {
+          setDestinationError(`Could not find "${initialDestination}". Showing all ${meta.plural} instead.`);
+          setDestination("");
+          fetchListings(0, false, "");
+        }
+      })
+      .catch(() => {
+        setDestination("");
+        fetchListings(0, false, "");
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Reload promotions and listings when category prop changes
   useEffect(() => {
@@ -990,23 +922,22 @@ export default function CategoryListingsClient({ category }: Props) {
   }, [sortBy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ─────────────────────────────────────────────────────────── */
-  /* Destination autocomplete via Nominatim                      */
+  /* Destination autocomplete — see DestinationDropdown           */
   /* ─────────────────────────────────────────────────────────── */
-  function handleDestinationChange(v: string) {
+  function handleDestinationQueryChange(v: string) {
     setDestination(v);
-    if (suggestTimer.current) clearTimeout(suggestTimer.current);
-    if (v.length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
-    suggestTimer.current = setTimeout(async () => {
-      try {
-        const r = await fetch(
-          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(v)}&format=json&limit=5&addressdetails=0`,
-          { headers: { "Accept-Language": "en", "User-Agent": "Kainook/1.0" } }
-        );
-        const d = await r.json();
-        setSuggestions(d.map((x: any) => x.display_name).slice(0, 5));
-        setShowSuggestions(true);
-      } catch { setSuggestions([]); }
-    }, 350);
+    setDestinationError(null);
+    // Typing invalidates any previously selected coordinates — they no longer
+    // correspond to the text on screen.
+    if (selectedDestination && selectedDestination.displayName !== v) {
+      setSelectedDestination(null);
+    }
+  }
+
+  function handleDestinationSelect(s: DestinationSuggestion) {
+    setDestination(s.displayName);
+    setSelectedDestination(s);
+    setDestinationError(null);
   }
 
   /* ─────────────────────────────────────────────────────────── */
@@ -1014,11 +945,15 @@ export default function CategoryListingsClient({ category }: Props) {
   /* ─────────────────────────────────────────────────────────── */
   function handleSearch(e?: React.FormEvent) {
     e?.preventDefault();
-    setShowSuggestions(false);
+    const trimmed = destination.trim();
+    // The backend requires numeric lat/lng — a destination must be picked from the
+    // dropdown (which resolves coordinates) before a text search can run.
+    if (trimmed && (!selectedDestination || selectedDestination.displayName !== trimmed)) {
+      setDestinationError("Please select a destination from the list.");
+      return;
+    }
     router.replace(buildUrl(), { scroll: false });
-    // Pass current destination explicitly so the search is always scoped to the
-    // user's typed term (not a stale closure value).
-    fetchListings(0, false, destination.trim() || undefined);
+    fetchListings(0, false, trimmed || undefined);
     setShowFiltersDrawer(false);
   }
 
@@ -1027,8 +962,8 @@ export default function CategoryListingsClient({ category }: Props) {
   /* ─────────────────────────────────────────────────────────── */
   function handleClearSearch() {
     setDestination("");
-    setSuggestions([]);
-    setShowSuggestions(false);
+    setSelectedDestination(null);
+    setDestinationError(null);
     router.replace(buildUrl(), { scroll: false });
     // Reload default category inventory (no text filter)
     fetchListings(0, false, "");
@@ -1169,53 +1104,37 @@ export default function CategoryListingsClient({ category }: Props) {
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {/* Destination */}
-            <div className="relative lg:col-span-2">
-              <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                {isCar ? "Pickup Location" : "Destination"}
-              </label>
-              <div className="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 gap-2 hover:border-slate-400 focus-within:border-[#1D8D2B] transition-colors">
-                <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  value={destination}
-                  onChange={(e) => handleDestinationChange(e.target.value)}
-                  onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-                  placeholder={isCar ? "City, airport, address…" : "City, country or property…"}
-                  className="flex-1 bg-transparent border-none outline-none text-xs font-medium text-slate-800 placeholder-slate-400 min-w-0"
-                />
-                {destination && (
-                  <button
-                    type="button"
-                    onClick={handleClearSearch}
-                    className="text-slate-300 hover:text-slate-500"
-                    title="Clear search"
-                  >
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-              {/* Autocomplete dropdown */}
-              {showSuggestions && suggestions.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 bg-white border border-slate-200 rounded-xl shadow-xl mt-1 overflow-hidden">
-                  {suggestions.map((s, i) => (
+            <div className="lg:col-span-2">
+              <DestinationDropdown
+                label={isCar ? "Pickup Location" : "Destination"}
+                value={destination}
+                onQueryChange={handleDestinationQueryChange}
+                onSelect={handleDestinationSelect}
+                placeholder={isCar ? "City, airport, address…" : "City, country or property…"}
+                fieldClassName="relative flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 gap-2 hover:border-slate-400 focus-within:border-[#1D8D2B] transition-colors"
+                inputClassName="flex-1 bg-transparent border-none outline-none text-xs font-medium text-slate-800 placeholder-slate-400 min-w-0"
+                icon={
+                  <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                }
+                rightAdornment={
+                  destination && (
                     <button
-                      key={i}
                       type="button"
-                      onMouseDown={() => {
-                        setDestination(s);
-                        setShowSuggestions(false);
-                      }}
-                      className="w-full px-4 py-2.5 text-left text-xs text-slate-700 hover:bg-slate-50 border-b border-slate-100 last:border-0 truncate"
+                      onClick={handleClearSearch}
+                      className="text-slate-300 hover:text-slate-500"
+                      title="Clear search"
                     >
-                      📍 {s}
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
                     </button>
-                  ))}
-                </div>
+                  )
+                }
+              />
+              {destinationError && (
+                <p className="mt-1 text-[11px] font-medium text-red-500">{destinationError}</p>
               )}
             </div>
 
@@ -1480,7 +1399,7 @@ export default function CategoryListingsClient({ category }: Props) {
                     <div className="text-center mt-10">
                       <button
                         type="button"
-                        onClick={() => fetchListings(offset + PAGE_SIZE, true, destination.trim() || undefined)}
+                        onClick={() => fetchListings(offset + (destination.trim() ? 50 : PAGE_SIZE), true, destination.trim() || undefined)}
                         disabled={loadingMore}
                         className="inline-flex items-center gap-2 px-8 py-3 border border-[#0c2614] text-[#0c2614] font-semibold text-sm rounded-full hover:bg-[#0c2614] hover:text-white transition disabled:opacity-50"
                       >

@@ -319,6 +319,26 @@ export async function importRecentlyViewedItems(
   await listingApi.post("/guests/me/recently-viewed/import", { items });
 }
 
+// ── Location ─────────────────────────────────────────────────────────────────
+
+export interface DetectedLocation {
+  ip: string;
+  city: string | null;
+  region: string | null;
+  country: string | null;
+  countryCode: string | null;
+  lat: number | null;
+  lng: number | null;
+  timezone: string | null;
+  currency: string | null;
+  isLocalhost: boolean;
+}
+
+export async function fetchLocation(): Promise<DetectedLocation> {
+  const response: AxiosResponse<ApiPayload<DetectedLocation>> = await listingApi.get("/location");
+  return unwrapData(response.data);
+}
+
 // ── Batch Summary ─────────────────────────────────────────────────────────────
 
 export interface BatchListingSummary {
