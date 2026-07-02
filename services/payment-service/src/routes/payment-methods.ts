@@ -66,7 +66,7 @@ function formatMethod(m: {
 export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── GET /guests/me/payment-methods ───────────────────────────────────────
-  app.get("/payments/guests/me/payment-methods", { preHandler: [requireUser], schema: {
+  app.get("/guests/me/payment-methods", { preHandler: [requireUser], schema: {
     tags: ["Payment Methods"],
     summary: "List saved payment methods",
   }, }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -98,7 +98,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── POST /guests/me/payment-methods/stripe/setup ─────────────────────────
   app.post(
-    "/payments/guests/me/payment-methods/stripe/setup", { preHandler: [requireUser], schema: {
+    "/guests/me/payment-methods/stripe/setup", { preHandler: [requireUser], schema: {
       tags: ["Payment Methods"],
       summary: "Create Stripe SetupIntent",
     }, }, async (req: FastifyRequest, reply: FastifyReply) => {
@@ -169,7 +169,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── POST /guests/me/payment-methods/stripe/confirm ───────────────────────
-  app.post("/payments/guests/me/payment-methods/stripe/confirm", { preHandler: [requireUser], schema: {
+  app.post("/guests/me/payment-methods/stripe/confirm", { preHandler: [requireUser], schema: {
     tags: ["Payment Methods"],
     summary: "Save Stripe payment method",
     body: {
@@ -296,7 +296,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── POST /guests/me/payment-methods/tara ─────────────────────────────────
-  app.post("/payments/guests/me/payment-methods/tara", { preHandler: [requireUser], schema: {
+  app.post("/guests/me/payment-methods/tara", { preHandler: [requireUser], schema: {
     tags: ["Payment Methods"],
     summary: "Add Tara mobile money account",
     body: {
@@ -410,7 +410,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
 
   // ── PATCH /guests/me/payment-methods/:id ─────────────────────────────────
   app.patch(
-    "/payments/guests/me/payment-methods/:id",
+    "/guests/me/payment-methods/:id",
     { preHandler: [requireUser], schema: {
       tags: ["Payment Methods"],
       summary: "Update payment method",
@@ -480,7 +480,7 @@ export async function paymentMethodRoutes(app: FastifyInstance) {
   );
 
   // ── DELETE /guests/me/payment-methods/:id ────────────────────────────────
-  app.delete("/payments/guests/me/payment-methods/:id", { preHandler: [requireUser], schema: {
+  app.delete("/guests/me/payment-methods/:id", { preHandler: [requireUser], schema: {
     tags: ["Payment Methods"],
     summary: "Delete payment method",
     params: {
