@@ -19,6 +19,7 @@ import { isPromotionValid } from "./utils/promo-utils";
 import PhotoGallery from "./components/PhotoGallery";
 import GalleryLightbox from "./components/GalleryLightbox";
 import ReservationCard from "./components/ReservationCard";
+import { ReservationDetailModal } from "./components/ReservationDetailModal";
 import MapView from "./components/MapView";
 import type { PublicListingDetail } from "@/types";
 
@@ -398,6 +399,7 @@ export default function TravellerDashboard() {
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [reservationStatusFilter, setReservationStatusFilter] = useState<string>("all");
+  const [selectedReservation, setSelectedReservation] = useState<Booking | null>(null);
 
   // Mobile UI state
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -1652,6 +1654,23 @@ export default function TravellerDashboard() {
       console.log("[fetchGuestBookings] raw response:", res.data);
       const raw: any[] = res.data?.data?.bookings ?? res.data?.data ?? (Array.isArray(res.data) ? res.data : []);
       console.log("[fetchGuestBookings] raw bookings array:", raw);
+
+      // Fetch each booking's detail in parallel to get listing.id.
+      // The booking list returns a static S3 CDN URL (may be inaccessible for private buckets).
+      // The booking detail returns listing.id, which lets ListingImage call
+      // /listings/:id/public → withSignedPhotos → presigned URL that always works.
+      const detailResults = await Promise.allSettled(
+        raw.map((b: any) => listingApi.get<any>(`/guests/me/bookings/${b.id}`))
+      );
+      const listingIdMap: Record<string, string> = {};
+      detailResults.forEach((result, i) => {
+        if (result.status === "fulfilled") {
+          const detail = result.value.data?.data ?? result.value.data;
+          const lid = detail?.listing?.id;
+          if (lid) listingIdMap[raw[i].id] = lid;
+        }
+      });
+
       setBookingsList(
         raw.map((b: any) => {
           const mapped = {
@@ -1670,6 +1689,7 @@ export default function TravellerDashboard() {
             returnDatetime: b.returnDatetime ?? b.return_datetime ?? null,
             totalAmount: b.totalAmount ?? b.total_amount ?? 0,
             nightsOrDays: b.nightsOrDays ?? b.nights_or_days ?? 1,
+            listingId: listingIdMap[b.id],
             canCancel: b.status === "confirmed",
           };
           return mapped;
@@ -4071,8 +4091,8 @@ export default function TravellerDashboard() {
                       booking={b}
                       onCancel={handleCancelBooking}
                       cancellingId={cancellingId}
+                      onViewDetails={() => setSelectedReservation(b)}
                     />
-
                   </div>
                 ))}
               </div>
@@ -4080,6 +4100,16 @@ export default function TravellerDashboard() {
           </div>
         ) : null}
       </main>
+
+      {/* ── Reservation detail modal ── */}
+      {selectedReservation && (
+        <ReservationDetailModal
+          booking={selectedReservation}
+          onClose={() => setSelectedReservation(null)}
+          onCancel={(id) => handleCancelBooking(id).finally(() => setSelectedReservation(null))}
+          cancellingId={cancellingId}
+        />
+      )}
 
       {/* ── Mobile navigation drawer ── */}
       {mobileNavOpen && (

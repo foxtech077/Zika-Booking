@@ -7,7 +7,7 @@ interface Booking {
   id: string;
   reference: string;
   status: string;
-  listingId: string;
+  listingId?: string;
   listingTitle: string;
   listingCategory: string;
   checkIn?: string | null;
@@ -25,6 +25,7 @@ interface Props {
   booking: Booking;
   onCancel: (id: string) => void;
   cancellingId: string | null;
+  onViewDetails?: () => void;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -56,7 +57,7 @@ function fmt(dateStr?: string | null) {
   return new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-export default function ReservationCard({ booking, onCancel, cancellingId }: Props) {
+export default function ReservationCard({ booking, onCancel, cancellingId, onViewDetails }: Props) {
   const isCancelling = cancellingId === booking.id;
   const statusStyle = STATUS_STYLES[booking.status] ?? "bg-slate-100 text-slate-600 border-slate-200";
   const statusLabel = STATUS_LABEL[booking.status] ?? booking.status;
@@ -130,9 +131,20 @@ export default function ReservationCard({ booking, onCancel, cancellingId }: Pro
               {booking.currency} {booking.totalAmount.toLocaleString()}
             </p>
             <div className="flex items-center gap-2">
+              {booking.status === "pending_payment" && (
+                <span className="text-[10px] text-amber-600 font-medium">Payment required</span>
+              )}
+              {onViewDetails && (
+                <button
+                  onClick={onViewDetails}
+                  className="text-[11px] font-semibold px-3 py-1 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 transition"
+                >
+                  View Details
+                </button>
+              )}
               {(booking.status === "completed") && (
                 <Link
-                  href={`/traveller/reviews?bookingId=${encodeURIComponent(booking.id)}&listingId=${encodeURIComponent(booking.listingId)}&listingName=${encodeURIComponent(booking.listingTitle ?? "")}`}
+                  href={`/traveller/reviews?bookingId=${encodeURIComponent(booking.id)}&listingId=${encodeURIComponent(booking.listingId ?? "")}&listingName=${encodeURIComponent(booking.listingTitle ?? "")}`}
                   className="text-[11px] font-semibold px-3 py-1 rounded-lg border border-amber-200 text-amber-700 hover:bg-amber-50 transition"
                 >
                   Leave Review
@@ -146,9 +158,6 @@ export default function ReservationCard({ booking, onCancel, cancellingId }: Pro
                 >
                   {isCancelling ? "Cancelling…" : "Cancel"}
                 </button>
-              )}
-              {booking.status === "pending_payment" && (
-                <span className="text-[10px] text-amber-600 font-medium">Payment required</span>
               )}
             </div>
           </div>

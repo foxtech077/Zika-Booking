@@ -145,7 +145,7 @@ export function TravellerHeader({
               height={32}
               className="rounded-xl object-cover"
             />
-            <span className="text-xl font-serif font-bold text-[#0c2614] tracking-tight">Kainook</span>
+            {/* <span className="text-xl font-serif font-bold text-[#0c2614] tracking-tight">Kainook</span> */}
           </button>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 font-mono text-xs tracking-wider text-[#0c2614]">
@@ -180,7 +180,7 @@ export function TravellerHeader({
                 height={36}
                 className="rounded-xl object-cover"
               />
-              <span className="text-xl font-serif font-bold tracking-tight text-[#0c2614]">Kainook</span>
+              {/* <span className="text-xl font-serif font-bold tracking-tight text-[#0c2614]">Kainook</span> */}
             </Link>
 
             <nav className="hidden items-center gap-8 md:flex">
