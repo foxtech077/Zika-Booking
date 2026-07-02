@@ -18,6 +18,7 @@ import {
   User,
 } from "lucide-react";
 import { api } from "@/lib/api";
+import { listingApi } from "@/lib/listing-api";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -91,7 +92,7 @@ function unwrapList(payload: unknown): unknown[] {
   const data = root?.data as Record<string, unknown> | undefined;
   for (const source of [data, root]) {
     if (!source) continue;
-    for (const key of ["reviews", "items", "results", "data"]) {
+    for (const key of ["reviews", "listings", "items", "results", "data"]) {
       const value = source[key];
       if (Array.isArray(value)) return value;
     }
@@ -172,21 +173,84 @@ function dateMatchesRange(dateValue: string, range: DateRange) {
   return reviewDate >= start;
 }
 
-async function fetchReviews(listingId: string, page: number) {
-  try {
-    const params = { page: String(page), limit: String(LIMIT) };
-    const response = listingId === "all"
-      ? await api.get("/reviews/me", { params })
-      : await api.get(`/listings/${listingId}/reviews`, { params });
+function getStatsFromResponse(
+  rawResponse: any,
+  reviewsList: ProviderReview[],
+  listingId: string
+): ReviewStats {
+  const data = rawResponse?.data ?? rawResponse ?? {};
+  const total = Number(data.total ?? data.totalReviews ?? reviewsList.length);
+  const average = Number(data.averageRating ?? 0);
+  
+  // Initialize breakdown
+  const breakdown: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  
+  if (listingId === "all" && Array.isArray(data.distribution)) {
+    data.distribution.forEach((d: any) => {
+      const r = Number(d.rating);
+      if (r >= 1 && r <= 5) {
+        breakdown[r] = Number(d.count ?? d._count?.rating ?? 0);
+      }
+    });
+  } else {
+    // If not "all", or no distribution returned, count from current list
+    reviewsList.forEach((r) => {
+      breakdown[r.rating] = (breakdown[r.rating] ?? 0) + 1;
+    });
+  }
 
-    return unwrapList(response.data).map(normalizeReview);
+  const pendingReplies = reviewsList.filter((review) => !review.reply).length;
+
+  return {
+    total,
+    average,
+    fiveStar: breakdown[5] ?? 0,
+    pendingReplies,
+    breakdown,
+  };
+}
+
+async function fetchReviews(
+  listingId: string,
+  page: number,
+  ratingFilter: string,
+  replyFilter: string,
+  listingsList: Array<{ id: string; name: string }>
+) {
+  try {
+    const selectedListing = listingsList.find((l) => l.id === listingId);
+    if (listingId === "all") {
+      const params: Record<string, string> = {
+        offset: String((page - 1) * LIMIT),
+        limit: String(LIMIT),
+      };
+      if (ratingFilter !== "all") {
+        params.rating = ratingFilter;
+      }
+      if (replyFilter !== "all") {
+        params.replied = replyFilter === "replied" ? "yes" : "no";
+      }
+      const response = await listingApi.get("/provider/reviews", { params });
+      const reviews = unwrapList(response.data).map((r) => normalizeReview(r));
+      const stats = getStatsFromResponse(response.data, reviews, listingId);
+      return { reviews, stats };
+    } else {
+      const params = { page: String(page), limit: String(LIMIT) };
+      const response = await listingApi.get(`/listings/${listingId}/reviews`, { params });
+      const reviews = unwrapList(response.data).map((r) => normalizeReview(r, listingId, selectedListing?.name));
+      const stats = getStatsFromResponse(response.data, reviews, listingId);
+      return { reviews, stats };
+    }
   } catch {
-    return [];
+    return {
+      reviews: [],
+      stats: { total: 0, average: 0, fiveStar: 0, pendingReplies: 0, breakdown: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } },
+    };
   }
 }
 
 async function submitReply(reviewId: string, reply: string) {
-  return api.post(`/reviews/${reviewId}/reply`, { reply });
+  return listingApi.post(`/reviews/${reviewId}/reply`, { reply });
 }
 
 function RatingStars({ rating, size = "sm" }: { rating: number; size?: "sm" | "md" }) {
@@ -288,15 +352,38 @@ export default function ReviewsPage() {
   const [editingReplyId, setEditingReplyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const { data: listingsList = [] } = useQuery({
+    queryKey: ["provider-listings-for-reviews"],
+    queryFn: async () => {
+      try {
+        const response = await listingApi.get("/listings", { params: { limit: 100 } });
+        const raw = unwrapList(response.data) as any[];
+        return raw.map((item) => ({
+          id: item.id,
+          name: item.name ?? item.title ?? "Listing",
+        }));
+      } catch {
+        return [];
+      }
+    },
+  });
+
   const {
-    data: reviews = [],
+    data: queryData = {
+      reviews: [],
+      stats: { total: 0, average: 0, fiveStar: 0, pendingReplies: 0, breakdown: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } },
+    },
     isLoading,
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: ["provider-reviews-page", listingId, page],
-    queryFn: () => fetchReviews(listingId, page),
+    queryKey: ["provider-reviews-page", listingId, page, ratingFilter, replyFilter, listingsList.length],
+    queryFn: () => fetchReviews(listingId, page, ratingFilter, replyFilter, listingsList),
+    enabled: listingsList.length > 0 || listingId === "all",
   });
+
+  const reviews = queryData.reviews;
+  const stats = queryData.stats;
 
   const replyMutation = useMutation({
     mutationFn: ({ reviewId, reply }: { reviewId: string; reply: string }) => submitReply(reviewId, reply),
@@ -309,21 +396,22 @@ export default function ReviewsPage() {
   });
 
   const listingOptions = useMemo(() => {
-    const listings = new Map<string, string>();
-    reviews.forEach((review) => {
-      if (review.listingId) listings.set(review.listingId, review.listingName);
-    });
     return [
       { value: "all", label: "All listings" },
-      ...Array.from(listings.entries()).map(([value, label]) => ({ value, label })),
+      ...listingsList.map((l) => ({ value: l.id, label: l.name })),
     ];
-  }, [reviews]);
+  }, [listingsList]);
 
   const filteredReviews = useMemo(() => {
     const text = search.trim().toLowerCase();
     return reviews
-      .filter((review) => ratingFilter === "all" || review.rating === Number(ratingFilter))
-      .filter((review) => replyFilter === "all" || (replyFilter === "replied" ? !!review.reply : !review.reply))
+      .filter((review) => {
+        if (listingId !== "all") {
+          if (ratingFilter !== "all" && review.rating !== Number(ratingFilter)) return false;
+          if (replyFilter !== "all" && (replyFilter === "replied" ? !review.reply : !!review.reply)) return false;
+        }
+        return true;
+      })
       .filter((review) => dateMatchesRange(review.createdAt, dateRange))
       .filter((review) => {
         if (!text) return true;
@@ -334,10 +422,9 @@ export default function ReviewsPage() {
         if (sort === "lowest") return a.rating - b.rating;
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
-  }, [dateRange, ratingFilter, replyFilter, reviews, search, sort]);
+  }, [reviews, listingId, ratingFilter, replyFilter, dateRange, search, sort]);
 
-  const stats = useMemo(() => calculateStats(reviews), [reviews]);
-  const totalPages = Math.max(1, Math.ceil(Math.max(reviews.length, filteredReviews.length) / LIMIT));
+  const totalPages = Math.max(1, Math.ceil(stats.total / LIMIT));
   const hasFilters = search || ratingFilter !== "all" || replyFilter !== "all" || dateRange !== "all";
 
   const handleReplyChange = (reviewId: string, value: string) => {
@@ -593,7 +680,7 @@ export default function ReviewsPage() {
             </Button>
             <Button
               variant="outline"
-              disabled={filteredReviews.length < LIMIT}
+              disabled={page >= totalPages}
               onClick={() => setPage((current) => current + 1)}
             >
               Next
