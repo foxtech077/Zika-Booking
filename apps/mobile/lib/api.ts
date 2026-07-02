@@ -19,6 +19,9 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().accessToken;
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  const fullUrl = `${config.baseURL ?? BASE_URL}${config.url ?? ""}`;
+  console.log(`[AUTH-API] ▶ ${(config.method ?? "GET").toUpperCase()} ${fullUrl}`);
+  if (config.data) console.log("[AUTH-API] Request body:", JSON.stringify(config.data, null, 2));
   return config;
 });
 
@@ -35,8 +38,19 @@ function isAccountRevoked(error: unknown): boolean {
 // On 403 with account-revocation codes, clear auth immediately.
 let refreshing: Promise<void> | null = null;
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const fullUrl = `${res.config.baseURL ?? BASE_URL}${res.config.url ?? ""}`;
+    console.log(`[AUTH-API] ✅ ${res.status} ${fullUrl}`);
+    return res;
+  },
   async (error) => {
+    const config = error.config ?? {};
+    const fullUrl = `${config.baseURL ?? BASE_URL}${config.url ?? ""}`;
+    console.log(`[AUTH-API] ❌ ERROR on ${(config.method ?? "GET").toUpperCase()} ${fullUrl}`);
+    console.log("[AUTH-API] HTTP status:", error?.response?.status);
+    console.log("[AUTH-API] Response body:", JSON.stringify(error?.response?.data, null, 2));
+    console.log("[AUTH-API] Error message:", error?.message);
+
     if (isAccountRevoked(error)) {
       await useAuthStore.getState().clearAuth();
       return Promise.reject(error);

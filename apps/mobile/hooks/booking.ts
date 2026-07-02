@@ -110,7 +110,7 @@ export function useCancelBooking(bookingId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (reason?: string) => {
-      await listingApi.post(`/bookings/${bookingId}/cancel`, reason ? { reason } : {});
+      await listingApi.post(`/bookings/${bookingId}/cancel`, { reasonCode: reason ?? "guest_cancelled" });
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: BOOKING_QK.detail(bookingId) });

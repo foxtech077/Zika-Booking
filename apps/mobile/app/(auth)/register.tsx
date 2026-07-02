@@ -15,7 +15,7 @@ import {
   FlatList,
   ImageBackground,
 } from "react-native";
-import { Link, router } from "expo-router";
+import { Link, router, useLocalSearchParams } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { registerSchema } from "@zika/validators";
@@ -51,7 +51,10 @@ export default function RegisterScreen() {
   const setAuth          = useAuthStore((s) => s.setAuth);
   const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
 
-  const [userType, setUserType] = useState<"guest" | "provider">("guest");
+  const params = useLocalSearchParams<{ userType?: string }>();
+  const [userType, setUserType] = useState<"guest" | "provider">(
+    params.userType === "provider" ? "provider" : "guest"
+  );
   const [form, setForm] = useState({
     firstName:       "",
     lastName:        "",

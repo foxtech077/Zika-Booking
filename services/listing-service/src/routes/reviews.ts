@@ -4,6 +4,7 @@ import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { fireNotification } from "../lib/notifications.js";
+import { sendListingAutoSuspendedEmail } from "../lib/email.js";
 
 export async function reviewRoutes(app: FastifyInstance) {
   // ── POST /reviews — guest submits a review ────────────────────────────
@@ -185,6 +186,17 @@ export async function reviewRoutes(app: FastifyInstance) {
             body:  `Your listing "${listing.name ?? listing.id}" has been suspended due to consecutive negative reviews. Our team will review it within 48 hours.`,
             data:  { listingId: listing.id },
           });
+            fetchProviderEmail(listing.providerId)
+            .then((email) => {
+              if (email) {
+                sendListingAutoSuspendedEmail(
+                  email,
+                  listing.name ?? listing.id,
+                  "Received consecutive negative reviews (rating below 3.0)."
+                ).catch(() => null);
+              }
+            })
+            .catch(() => null);
           // TODO: Cancel active reservations, void payments.
         } else {
           await prisma.listing.update({
@@ -202,6 +214,23 @@ export async function reviewRoutes(app: FastifyInstance) {
     }
   });
 
+async function fetchProviderEmail(providerId: string): Promise<string | null> {
+  const AUTH_SERVICE_URL = process.env["AUTH_SERVICE_URL"] ?? "http://localhost:3001";
+  try {
+    const res = await fetch(`${AUTH_SERVICE_URL}/internal/users/emails`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIds: [providerId] }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { emails?: string[] };
+    return json.emails?.[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+  
   // ── GET /listings/:id/reviews — public paginated reviews ─────────────
   app.get("/listings/:id/reviews", {
     schema: {

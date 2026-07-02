@@ -47,6 +47,16 @@ interface BookingDetail {
   children?: number;
 }
 
+interface Promotion {
+  id: string;
+  title: string;
+  description?: string;
+  discountPercent?: number | null;
+  discountAmount?: number | null;
+  activity?: string | null;
+  expiresAt?: string | null;
+}
+
 interface SavedPaymentMethod {
   id: string;
   type: string;
@@ -280,8 +290,20 @@ export default function PaymentScreen() {
       const res = await paymentApi.get<{ success: boolean; data: { paymentMethods: SavedPaymentMethod[] } }>("/guests/me/payment-methods");
       return res.data.data.paymentMethods ?? [];
     },
-    retry: 1,
+    retry: false,
     enabled: !!bookingId,
+  });
+
+  // ── Fetch active promotion for this booking's listing type ───────────────
+  const { data: activePromotion } = useQuery<Promotion | null>({
+    queryKey: ["promotions-active", booking?.listingType],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: Promotion[] }>(`/promotions/active?activity=${booking!.listingType}`);
+      return res.data.data?.[0] ?? null;
+    },
+    enabled: !!booking?.listingType,
+    staleTime: 5 * 60_000,
+    retry: false,
   });
 
   // ── Clear diagnostic log on mount (fresh session) ────────────────────────
@@ -1130,6 +1152,26 @@ export default function PaymentScreen() {
               {formatCurrency(booking.totalAmount, booking.currency)}
             </Text>
           </View>
+          {activePromotion && (
+            <>
+              <View style={styles.summaryDivider} />
+              <View style={styles.promoRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.promoLabel}>Promotion Applied</Text>
+                  <Text style={styles.promoTitle} numberOfLines={1}>{activePromotion.title}</Text>
+                </View>
+                {(activePromotion.discountPercent != null || activePromotion.discountAmount != null) && (
+                  <View style={styles.promoBadge}>
+                    <Text style={styles.promoBadgeText}>
+                      {activePromotion.discountPercent != null
+                        ? `-${activePromotion.discountPercent}%`
+                        : `-${activePromotion.discountAmount}`}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </>
+          )}
         </View>
 
         {/* ── Payment method selector ───────────────────────────────────── */}
@@ -1451,6 +1493,11 @@ const styles = StyleSheet.create({
   summaryDivider: { height: 1, backgroundColor: "#e5e7eb", marginVertical: 12 },
   summaryTotalLabel: { fontSize: 16, fontWeight: "600", color: "#111827" },
   summaryTotalAmount: { fontSize: 22, fontWeight: "800", color: "#16a34a" },
+  promoRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  promoLabel: { fontSize: 11, color: "#b45309", fontWeight: "600", marginBottom: 2 },
+  promoTitle: { fontSize: 13, fontWeight: "700", color: "#92400e" },
+  promoBadge: { backgroundColor: "#dc2626", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  promoBadgeText: { color: "#fff", fontSize: 12, fontWeight: "800" },
 
   // Section label
   sectionLabel: {
