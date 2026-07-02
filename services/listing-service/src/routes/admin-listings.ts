@@ -8,6 +8,7 @@ import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
 import { fireNotification } from "../lib/notifications.js";
 import { patchListingSchema } from "./listings.js";
+import { sendListingReinstatedWithWarningEmail } from "../lib/email.js";
 
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
@@ -56,6 +57,22 @@ function checkAdminRole(req: FastifyRequest, reply: FastifyReply, requiredRoles?
     return false;
   }
   return true;
+}
+
+async function fetchProviderEmail(providerId: string): Promise<string | null> {
+  const AUTH_SERVICE_URL = process.env["AUTH_SERVICE_URL"] ?? "http://localhost:3001";
+  try {
+    const res = await fetch(`${AUTH_SERVICE_URL}/internal/users/emails`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIds: [providerId] }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { emails?: string[] };
+    return json.emails?.[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Shared schema building-blocks ─────────────────────────────────────────────
@@ -1734,15 +1751,20 @@ export async function adminListingRoutes(app: FastifyInstance) {
           id: { type: "string", description: "Listing ID" },
         },
       },
-      body: {
+            body: {
         type: "object",
         properties: {
           reason: {
             type: "string",
             description: "Optional note explaining the reinstatement",
           },
+          warning: {
+            type: "boolean",
+            description: "Whether to issue a warning with reactivation",
+          },
         },
       },
+
       response: {
         200: ok({ type: "object", properties: { message: { type: "string" } } }),
         404: ErrorResponse,
@@ -1777,11 +1799,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
         throw error;
       }
-      const { reason } = req.body as { reason?: string };
-
+     const { reason, warning } = req.body as { reason?: string; warning?: boolean };
       const listing = await prisma.listing.findUnique({ where: { id } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-      if (listing.status !== "suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
+      if (listing.status !== "suspended" && listing.status !== "auto_suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
 
       const restoreStatus = (listing.category === "apartment" || listing.category === "car") ? "active" : "approved";
 
@@ -1817,7 +1838,18 @@ export async function adminListingRoutes(app: FastifyInstance) {
         }),
       ]);
 
-      sendListingReinstatedEmail(listing.providerId, listing.name ?? id).catch(() => null);
+            fetchProviderEmail(listing.providerId)
+        .then((email) => {
+          if (email) {
+            if (warning) {
+              sendListingReinstatedWithWarningEmail(email, listing.name ?? id, reason).catch(() => null);
+            } else {
+              sendListingReinstatedEmail(email, listing.name ?? id).catch(() => null);
+            }
+          }
+        })
+        .catch(() => null);
+
       return sendSuccess(reply, 200, { message: "Listing reinstated and live again." });
     } catch (err: any) {
       return sendError(reply, 400, "REINSTATE_LISTING_FAILED", "Failed to reinstate listing. Please try again.");

@@ -114,6 +114,47 @@ export async function sendListingReinstatedEmail(to: string, listingName: string
     html: emailLayout(`<h2 style="color:#15803d;margin-top:0">Listing reinstated</h2><p>Good news! Your listing <strong>${listingName}</strong> has been reinstated and is now live on Kainook again.</p><p><a href="${WEB_BASE}/listings" style="color:#16a34a">View your listings</a></p>`),
   });
 }
+// 1. Suspension Notice Email for Auto-Suspension
+export async function sendListingAutoSuspendedEmail(
+  to: string,
+  listingName: string,
+  reason: string,
+): Promise<void> {
+  await sendWithRetry({
+    to,
+    from: FROM,
+    subject: `Alert: Your listing "${listingName}" has been automatically suspended`,
+    html: emailLayout(`
+      <h2 style="color:#dc2626;margin-top:0">Listing Automatically Suspended</h2>
+      <p>Your listing <strong>${listingName}</strong> has been automatically suspended by the system.</p>
+      <p><strong>Reason:</strong> ${reason}</p>
+      <p>Our moderation team is currently reviewing your listing. You will receive an update on the outcome within 48 hours. No action is required from you at this time.</p>
+      <p>If you have any questions, please reach out to <a href="mailto:support@Kainook.com" style="color:#16a34a">support@Kainook.com</a>.</p>
+    `),
+  });
+}
+
+// 2. Reactivation with Warning Email
+export async function sendListingReinstatedWithWarningEmail(
+  to: string,
+  listingName: string,
+  warningReason?: string,
+): Promise<void> {
+  const reasonText = warningReason ? `<p><strong>Warning Details:</strong> ${warningReason}</p>` : "";
+  await sendWithRetry({
+    to,
+    from: FROM,
+    subject: `Important: Your listing "${listingName}" has been reinstated with a warning`,
+    html: emailLayout(`
+      <h2 style="color:#f97316;margin-top:0">Listing Reinstated with Warning</h2>
+      <p>Your listing <strong>${listingName}</strong> has been reinstated and is now live on Kainook again.</p>
+      <p>Please note that a warning has been issued regarding your listing:</p>
+      ${reasonText}
+      <p>Please review platform guidelines to ensure your listing remains compliant and avoid future suspensions.</p>
+      <p><a href="${WEB_BASE}/listings" style="color:#16a34a">View your listings</a></p>
+    `),
+  });
+}
 
 export async function sendStarRatingUpdatedEmail(
   to: string,

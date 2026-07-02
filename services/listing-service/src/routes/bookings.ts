@@ -512,13 +512,35 @@ export async function bookingRoutes(app: FastifyInstance) {
         );
 
         // STEP 2: promotion logic (HERE, NOT in billing service)
-        const promotionRate = 0;
-
-        // STEP 3: compute base amount
-        const units = 1; // optional preview logic (or skip here)
+        let units = 1;
+        if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
+          units = Math.ceil((new Date(body.returnDatetime).getTime() - new Date(body.pickupDatetime).getTime()) / 86_400_000);
+        } else if (body.checkIn && body.checkOut) {
+          units = Math.ceil((new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / 86_400_000);
+        }
         const baseAmount = baseRate * units;
 
-        const promotionDiscount = baseAmount * promotionRate;
+        const now = new Date();
+        const activePromo = await (prisma as any).activityPromotion.findFirst({
+          where: {
+            activity: listing.category,
+            status: "active",
+            validFrom: { lte: now },
+            validUntil: { gte: now },
+            applyToBooking: true,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        let promotionDiscount = 0;
+        if (activePromo) {
+          if (activePromo.discountType === "percentage") {
+            promotionDiscount = baseAmount * (Number(activePromo.discountValue) / 100);
+          } else if (activePromo.discountType === "fixed") {
+            promotionDiscount = Number(activePromo.discountValue);
+          }
+        }
+        promotionDiscount = Number(promotionDiscount.toFixed(2));
 
 
 
@@ -992,6 +1014,29 @@ export async function bookingRoutes(app: FastifyInstance) {
           commissionRate,
         });
 
+        // 1b. PROMOTION LOGIC
+        const now = new Date();
+        const activePromo = await (prisma as any).activityPromotion.findFirst({
+          where: {
+            activity: listing.category,
+            status: "active",
+            validFrom: { lte: now },
+            validUntil: { gte: now },
+            applyToBooking: true,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        let promotionDiscount = 0;
+        if (activePromo) {
+          if (activePromo.discountType === "percentage") {
+            promotionDiscount = baseBilling.baseAmount * (Number(activePromo.discountValue) / 100);
+          } else if (activePromo.discountType === "fixed") {
+            promotionDiscount = Number(activePromo.discountValue);
+          }
+        }
+        promotionDiscount = Number(promotionDiscount.toFixed(2));
+
         let voucherDiscount = 0;
         let appliedVoucher: { id: string; code: string } | null = null;
 
@@ -1009,8 +1054,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           if (!voucher.isActive) {
             return sendError(reply, 400, "INVALID_VOUCHER", "Voucher is not active.");
           }
-
-          const now = new Date();
 
           if (now < voucher.validFrom || now > voucher.validUntil) {
             return sendError(
@@ -1069,8 +1112,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           returnDatetime: body.returnDatetime,
           rate,
           deliveryFee: Number(listing.deliveryFee ?? 0),
-          promotionDiscount: 0,
-          voucherAmount: voucherDiscount + pointsDiscount, // apply points as additional discount
+          promotionDiscount,
+          voucherAmount: voucherDiscount,
+          pointsDiscount,
           taxRate: getTaxRate(listing.country),
           commissionRate,
         });
@@ -1083,7 +1127,8 @@ export async function bookingRoutes(app: FastifyInstance) {
         const commissionAmount = finalBilling.commissionAmount;
         const providerPayout = finalBilling.providerPayout;
         const deliveryFee = finalBilling.deliveryFee;
-        const discountAmount = finalBilling.promotionDiscount + voucherDiscount;
+        const discountAmount = finalBilling.discount;
+        const appliedVoucherDiscount = voucherDiscount >= promotionDiscount ? voucherDiscount : 0;
 
 
         // 5. BOOKING
@@ -1143,7 +1188,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             cancellationPolicy: listing.cancellationPolicy ?? "moderate",
 
             voucherCode: appliedVoucher?.code,
-            voucherDiscount,
+            voucherDiscount: appliedVoucherDiscount,
 
             redeemPoints,
             pointsDiscount,
@@ -2323,8 +2368,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           returnDatetime: booking.returnDatetime?.toISOString(),
           rate: booking.nightlyRate ? Number(booking.nightlyRate) : (booking.dailyRate ? Number(booking.dailyRate) : 0),
           deliveryFee: Number(booking.deliveryFee),
-          promotionDiscount: Number(booking.discountAmount) - Number(booking.voucherDiscount),
+          promotionDiscount: Math.max(0, Number(booking.discountAmount) - Number(booking.voucherDiscount) - Number(booking.pointsDiscount)),
           voucherAmount: Number(booking.voucherDiscount),
+          pointsDiscount: Number(booking.pointsDiscount),
           taxRate: getTaxRate(booking.listing.country),
           commissionRate: rate,
         });
