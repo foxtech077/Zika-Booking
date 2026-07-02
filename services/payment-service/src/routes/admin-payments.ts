@@ -2,6 +2,8 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { requireAdmin } from "../middleware/auth.js";
 import { sendError } from "../lib/errors.js";
+import { PaymentStatus, RefundStatus } from "../generated/index.js";
+import { notifyBookingServiceOfRefund, queueFailedRefundNotification, calculateAlreadyRefunded } from "../services/refund.service.js";
 
 export async function adminPaymentRoutes(app: FastifyInstance) {
   // ── GET /admin/payments ─────────────────────────────────────────────────────
@@ -102,15 +104,15 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
       if (!refund) {
         return sendError(reply, 404, "REFUND_NOT_FOUND", "Refund not found.");
       }
-      if (refund.status !== "pending") {
-        return sendError(reply, 400, "REFUND_NOT_PENDING", "Refund is not pending.");
+      if (refund.status !== RefundStatus.pending && refund.status !== RefundStatus.submitted) {
+        return sendError(reply, 400, "REFUND_NOT_PROCESSABLE", "Refund is not processable (must be pending or submitted).");
       }
-
+ 
       if (action === "deny") {
         const updated = await prisma.refund.update({
           where: { id },
           data: {
-            status: "failed",
+            status: RefundStatus.failed,
             failureReason: reason || "Denied by admin",
             updatedAt: new Date(),
           },
@@ -118,27 +120,58 @@ export async function adminPaymentRoutes(app: FastifyInstance) {
         reply.send({ success: true, data: updated });
         return;
       }
-
+ 
       // "approve" action
       // In a real system, call Stripe API to execute refund here.
       const updated = await prisma.refund.update({
         where: { id },
         data: {
-          status: "succeeded",
+          status: RefundStatus.succeeded,
           refundedAt: new Date(),
           updatedAt: new Date(),
         },
       });
-      
-      // Update the payment status to refunded
+
+      const payment = await prisma.payment.findUnique({ where: { id: refund.paymentId } });
+      const provider = payment?.paymentProvider ?? "unknown";
+
+      // Calculate total refunded amount to determine full or partial refund
+      const totalRefunded = await calculateAlreadyRefunded(refund.paymentId);
+      const isFullyRefunded = payment ? (totalRefunded >= Number(payment.amount)) : false;
+
+      // Update the payment status to refunded or partially_refunded
       await prisma.payment.update({
         where: { id: refund.paymentId },
-        data: { status: "refunded" }
+        data: { status: isFullyRefunded ? PaymentStatus.refunded : PaymentStatus.partially_refunded }
       });
+
+      const refundedAtDate = updated.refundedAt ?? new Date();
+      try {
+        await notifyBookingServiceOfRefund(refund.bookingId, {
+          refundId: refund.id,
+          refundAmount: Number(refund.amount),
+          provider,
+          refundedAt: refundedAtDate,
+        });
+      } catch (notifyErr) {
+        const notifyMessage = notifyErr instanceof Error ? notifyErr.message : String(notifyErr);
+        req.log.error(
+          notifyErr,
+          `[admin-payments] Failed to notify booking service of refund for booking ${refund.bookingId}. Message: ${notifyMessage}. Queuing retry...`
+        );
+        await queueFailedRefundNotification(
+          refund.bookingId,
+          refund.id,
+          Number(refund.amount),
+          provider,
+          refundedAtDate
+        );
+      }
 
       reply.send({ success: true, data: updated });
     } catch (err) {
-      return sendError(reply, 400, "PROCESS_REFUND_FAILED", (err as Error).message);
+      const message = err instanceof Error ? err.message : String(err);
+      return sendError(reply, 400, "PROCESS_REFUND_FAILED", message);
     }
   });
 }
