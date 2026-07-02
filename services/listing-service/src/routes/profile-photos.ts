@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import {
   createPresignedUploadUrl,
+  createPresignedDownloadUrl,
   cdnUrl,
   isValidPhotoType,
   fileExtFromContentType,
@@ -16,10 +17,11 @@ export async function profilePhotoRoutes(app: FastifyInstance) {
         tags: ["Profile Photos"],
         summary: "Get a presigned S3 URL to upload a profile photo",
         description:
-          "Returns a short-lived presigned PUT URL and the final CDN URL for a profile photo. " +
-          "Steps: (1) call this endpoint to get uploadUrl + cdnUrl, " +
-          "(2) PUT the image binary directly to uploadUrl with the matching Content-Type header, " +
-          "(3) PATCH /api/auth/profile/:id with { photoUrl: cdnUrl } to save the URL.",
+          "Returns a presigned PUT URL, a permanent cdnUrl (save this to the profile), and a short-lived previewUrl (use this to display the image immediately after upload). " +
+          "Steps: (1) call this endpoint, " +
+          "(2) PUT the image binary to uploadUrl with the matching Content-Type header, " +
+          "(3) display using previewUrl right away, " +
+          "(4) PATCH /api/auth/profile/:id with { photoUrl: cdnUrl } to persist the URL.",
         security: [{ bearerAuth: [] }],
         body: {
           type: "object",
@@ -40,8 +42,9 @@ export async function profilePhotoRoutes(app: FastifyInstance) {
               data: {
                 type: "object",
                 properties: {
-                  uploadUrl: { type: "string", description: "Presigned S3 PUT URL — valid for 5 minutes" },
-                  cdnUrl:    { type: "string", description: "Permanent CDN URL to save as your photoUrl after upload" },
+                  uploadUrl:  { type: "string", description: "Presigned S3 PUT URL — valid for 5 minutes" },
+                  cdnUrl:     { type: "string", description: "Permanent raw URL — save this as photoUrl via PATCH /auth/profile/:id" },
+                  previewUrl: { type: "string", description: "Presigned S3 GET URL — use this to display the image immediately after upload (valid 15 minutes)" },
                 },
               },
             },
@@ -65,11 +68,15 @@ export async function profilePhotoRoutes(app: FastifyInstance) {
 
       const ext    = fileExtFromContentType(contentType);
       const s3Key  = `profiles/${userId}/${Date.now()}.${ext}`;
-      const uploadUrl = await createPresignedUploadUrl(s3Key, contentType, 300);
+      const [uploadUrl, previewUrl] = await Promise.all([
+        createPresignedUploadUrl(s3Key, contentType, 300),
+        createPresignedDownloadUrl(s3Key, 900),
+      ]);
 
       return sendSuccess(reply, 200, {
         uploadUrl,
         cdnUrl: cdnUrl(s3Key),
+        previewUrl,
       });
     },
   );

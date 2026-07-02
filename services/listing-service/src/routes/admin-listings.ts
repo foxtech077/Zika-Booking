@@ -3001,6 +3001,97 @@ export async function adminListingRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── POST /admin/conversations/:id/messages — support agent reply ──────────
+  app.post("/admin/conversations/:id/messages", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Conversations"],
+      summary: "Send a support message in a conversation",
+      description: "Allows support, admin, and super_admin roles to post a message into any conversation as a support agent. senderType is always set to support_agent.",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Conversation ID" },
+        },
+      },
+      body: {
+        type: "object",
+        required: ["body"],
+        properties: {
+          body: { type: "string", minLength: 1, maxLength: 2000, description: "Message text" },
+        },
+      },
+      response: {
+        201: ok({
+          type: "object",
+          properties: {
+            id:          { type: "string" },
+            senderId:    { type: "string" },
+            senderType:  { type: "string" },
+            body:        { type: "string" },
+            isFiltered:  { type: "boolean" },
+            createdAt:   { type: "string", format: "date-time" },
+          },
+        }),
+        400: ErrorResponse,
+        403: ErrorResponse,
+        404: ErrorResponse,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const SUPPORT_ROLES = new Set(["super_admin", "admin", "support"]);
+    if (!checkAdminRole(req, reply, SUPPORT_ROLES)) return;
+
+    const admin = req as AdminRequest;
+    const { id } = req.params as { id: string };
+    const { body: text } = req.body as { body: string };
+
+    const trimmed = text.trim();
+    if (!trimmed) return sendError(reply, 400, "VALIDATION_ERROR", "Message body cannot be empty.");
+
+    try {
+      const convo = await prisma.conversation.findUnique({ where: { id } });
+      if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
+      if (convo.status === "closed") return sendError(reply, 400, "CONVERSATION_CLOSED", "This conversation is closed.");
+
+      const message = await prisma.message.create({
+        data: {
+          conversationId: id,
+          senderId:   admin.adminId,
+          senderType: "support_agent",
+          body:       trimmed,
+          isFiltered: false,
+        },
+      });
+
+      await prisma.conversation.update({ where: { id }, data: { updatedAt: new Date() } });
+
+      // Notify both parties (fire-and-forget)
+      for (const recipientId of [convo.guestId, convo.providerId]) {
+        fireNotification(recipientId, {
+          type:  "new_message",
+          title: "Support Message",
+          body:  trimmed.slice(0, 100),
+          data:  { conversationId: id },
+        });
+      }
+
+      return sendSuccess(reply, 201, {
+        id:         message.id,
+        senderId:   message.senderId,
+        senderType: message.senderType,
+        body:       message.body,
+        isFiltered: message.isFiltered,
+        createdAt:  message.createdAt.toISOString(),
+      });
+    } catch (err) {
+      req.log.error({ err }, "Failed to send support message");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while sending support message.");
+    }
+  });
+
   // ── GET /admin/ical-feeds ─────────────────────────────────────────────────
   app.get("/admin/ical-feeds", {
     preHandler: [requireAdmin],
