@@ -1,6 +1,6 @@
 import { initStripe } from "@stripe/stripe-react-native";
 
-const MERCHANT_IDENTIFIER = "merchant.com.zikabooking.app";
+const MERCHANT_IDENTIFIER = "merchant.com.kainook.app";
 
 export function getEnvStripePublishableKey(): string {
   return (process.env["EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY"] ?? "").trim();

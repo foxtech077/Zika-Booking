@@ -13,142 +13,109 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
-import { api } from "../lib/api";
 import { useAuthStore } from "../store/auth";
-import type { ApiResponse } from "@zika/types";
-
-interface ProfileForm {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  bio: string;
-}
+import { useUpdateProfile, useProfilePhoto, type UpdateProfilePayload } from "../hooks/profile";
+import { ProfileAvatar } from "../components/profile/ProfileAvatar";
+import { normalizeTier } from "../constants/loyaltyTiers";
+import { K } from "../constants/theme";
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const setAuth = useAuthStore((s) => s.setAuth);
-  const accessToken = useAuthStore((s) => s.accessToken);
+  const isProvider = user?.userType === "provider";
+  // Triggers a fetch here too (if the cached photo is stale/missing) rather
+  // than relying solely on the Profile tab having already populated it.
+  const { data: freshPhotoUrl } = useProfilePhoto();
 
-  const [form, setForm] = useState<ProfileForm>({
-    firstName: user?.firstName ?? "",
-    lastName: user?.lastName ?? "",
-    phone: (user as any)?.phone ?? "",
-    bio: (user as any)?.bio ?? "",
-  });
+  const [firstName, setFirstName] = useState(user?.firstName ?? "");
+  const [lastName, setLastName] = useState(user?.lastName ?? "");
+  const [businessName, setBusinessName] = useState(user?.businessName ?? "");
 
-  const set = (key: keyof ProfileForm) => (value: string) =>
-    setForm((prev) => ({ ...prev, [key]: value }));
+  const mutation = useUpdateProfile();
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const res = await api.patch<ApiResponse<{ user: any }>>("/auth/profile", {
-        firstName: form.firstName.trim(),
-        lastName: form.lastName.trim(),
-        phone: form.phone.trim() || undefined,
-        bio: form.bio.trim() || undefined,
-      });
-      if (!res.data.success) throw new Error("Update failed");
-      return res.data.data.user;
-    },
-    onSuccess: async (updated) => {
-      if (user && accessToken) {
-        await setAuth({ ...user, ...updated }, accessToken);
-      }
-      Alert.alert("Profile Updated", "Your changes have been saved.", [
-        { text: "OK", onPress: () => router.back() },
-      ]);
-    },
-    onError: (err: any) => {
-      const message =
-        err?.response?.data?.error?.message ??
-        err?.message ??
-        "Could not save your profile. Please try again.";
-      Alert.alert("Update Failed", message);
-    },
-  });
+  const trimmedFirst = firstName.trim();
+  const trimmedLast = lastName.trim();
+  const trimmedBusiness = businessName.trim();
+  const isValid = trimmedFirst.length > 0 && trimmedLast.length > 0;
 
-  const isValid = form.firstName.trim().length > 0 && form.lastName.trim().length > 0;
+  const hasChanges =
+    trimmedFirst !== (user?.firstName ?? "") ||
+    trimmedLast !== (user?.lastName ?? "") ||
+    (isProvider && trimmedBusiness !== (user?.businessName ?? ""));
+
+  function handleSave() {
+    // Only send fields that actually changed.
+    const patch: UpdateProfilePayload = {};
+    if (trimmedFirst !== (user?.firstName ?? "")) patch.firstName = trimmedFirst;
+    if (trimmedLast !== (user?.lastName ?? "")) patch.lastName = trimmedLast;
+    if (isProvider && trimmedBusiness !== (user?.businessName ?? "")) patch.businessName = trimmedBusiness || null;
+
+    if (Object.keys(patch).length === 0) {
+      router.back();
+      return;
+    }
+
+    mutation.mutate(patch, {
+      onSuccess: () => {
+        Alert.alert("Profile Updated", "Your changes have been saved.", [
+          { text: "OK", onPress: () => router.back() },
+        ]);
+      },
+      onError: (err: any) => {
+        const message =
+          err?.response?.data?.error?.message ??
+          err?.message ??
+          "Could not save your profile. Please try again.";
+        Alert.alert("Update Failed", message);
+      },
+    });
+  }
 
   return (
     <SafeAreaView style={s.safeArea} edges={["bottom"]}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        {/* Header */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={s.header}>
           <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="arrow-back" size={22} color="#111827" />
+            <Ionicons name="arrow-back" size={22} color={K.colors.textDark} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Edit Profile</Text>
           <View style={{ width: 36 }} />
         </View>
 
-        <ScrollView
-          contentContainerStyle={s.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Avatar placeholder */}
+        <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={s.avatarWrap}>
-            <View style={s.avatar}>
-              <Text style={s.avatarText}>
-                {(form.firstName[0] ?? user?.firstName?.[0] ?? "?").toUpperCase()}
-              </Text>
-            </View>
-            <Text style={s.avatarHint}>
-              {user?.email}
-            </Text>
+            <ProfileAvatar
+              photoUrl={freshPhotoUrl ?? user?.photoUrl}
+              firstName={firstName}
+              lastName={lastName}
+              tier={normalizeTier(user?.currentTier)}
+              size={84}
+            />
+            <Text style={s.avatarHint}>{user?.email}</Text>
           </View>
 
-          {/* Form */}
           <View style={s.card}>
-            <Field
-              label="First Name *"
-              value={form.firstName}
-              onChangeText={set("firstName")}
-              placeholder="Ada"
-              autoCapitalize="words"
-            />
-            <Field
-              label="Last Name *"
-              value={form.lastName}
-              onChangeText={set("lastName")}
-              placeholder="Okafor"
-              autoCapitalize="words"
-            />
-            <Field
-              label="Phone Number"
-              value={form.phone}
-              onChangeText={set("phone")}
-              placeholder="+254 700 000 000"
-              keyboardType="phone-pad"
-            />
-            <Field
-              label="Bio"
-              value={form.bio}
-              onChangeText={set("bio")}
-              placeholder="Tell hosts a little about yourself…"
-              multiline
-              numberOfLines={3}
-            />
+            <Field label="First Name *" value={firstName} onChangeText={setFirstName} placeholder="Ada" autoCapitalize="words" />
+            <Field label="Last Name *" value={lastName} onChangeText={setLastName} placeholder="Okafor" autoCapitalize="words" />
+            {isProvider && (
+              <Field
+                label="Business Name"
+                value={businessName}
+                onChangeText={setBusinessName}
+                placeholder="Ada's Getaways"
+                autoCapitalize="words"
+              />
+            )}
           </View>
 
-          {/* Save button */}
           <TouchableOpacity
-            style={[s.saveBtn, (!isValid || mutation.isPending) && s.saveBtnDisabled]}
-            onPress={() => mutation.mutate()}
-            disabled={!isValid || mutation.isPending}
+            style={[s.saveBtn, (!isValid || !hasChanges || mutation.isPending) && s.saveBtnDisabled]}
+            onPress={handleSave}
+            disabled={!isValid || !hasChanges || mutation.isPending}
             activeOpacity={0.85}
           >
-            {mutation.isPending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={s.saveBtnText}>Save Changes</Text>
-            )}
+            {mutation.isPending ? <ActivityIndicator color="#fff" size="small" /> : <Text style={s.saveBtnText}>Save Changes</Text>}
           </TouchableOpacity>
 
           <TouchableOpacity style={s.cancelBtn} onPress={() => router.back()} disabled={mutation.isPending}>
@@ -166,40 +133,30 @@ function Field({
   onChangeText,
   placeholder,
   autoCapitalize,
-  keyboardType,
-  multiline,
-  numberOfLines,
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
   placeholder?: string;
   autoCapitalize?: "none" | "sentences" | "words" | "characters";
-  keyboardType?: "default" | "phone-pad" | "email-address";
-  multiline?: boolean;
-  numberOfLines?: number;
 }) {
   return (
     <View style={s.fieldWrap}>
       <Text style={s.fieldLabel}>{label}</Text>
       <TextInput
-        style={[s.fieldInput, multiline && s.fieldTextarea]}
+        style={s.fieldInput}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor={K.colors.textMuted}
         autoCapitalize={autoCapitalize ?? "none"}
-        keyboardType={keyboardType ?? "default"}
-        multiline={multiline}
-        numberOfLines={numberOfLines}
-        textAlignVertical={multiline ? "top" : "center"}
       />
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#F9FAFB" },
+  safeArea: { flex: 1, backgroundColor: K.colors.bgApp },
 
   header: {
     flexDirection: "row",
@@ -207,41 +164,24 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
+    backgroundColor: K.colors.bgCard,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: K.colors.border,
   },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#F3F4F6",
-  },
-  headerTitle: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  backBtn: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: K.colors.bgSubtle },
+  headerTitle: { fontSize: 16, fontWeight: "700", color: K.colors.textDark },
 
   scroll: { padding: 16, paddingBottom: 40 },
 
   avatarWrap: { alignItems: "center", marginBottom: 24 },
-  avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: "#024622",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  avatarText: { fontSize: 34, fontWeight: "800", color: "#fff" },
-  avatarHint: { fontSize: 13, color: "#6B7280" },
+  avatarHint: { fontSize: 13, color: K.colors.textMuted, marginTop: 10 },
 
   card: {
-    backgroundColor: "#fff",
+    backgroundColor: K.colors.bgCard,
     borderRadius: 16,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: K.colors.border,
     marginBottom: 20,
   },
 
@@ -249,25 +189,24 @@ const s = StyleSheet.create({
   fieldLabel: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#374151",
+    color: K.colors.textMid,
     marginBottom: 6,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
   fieldInput: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: K.colors.border,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 11,
     fontSize: 14,
-    color: "#111827",
-    backgroundColor: "#F9FAFB",
+    color: K.colors.textDark,
+    backgroundColor: K.colors.bgSubtle,
   },
-  fieldTextarea: { minHeight: 80 },
 
   saveBtn: {
-    backgroundColor: "#024622",
+    backgroundColor: K.colors.darkGreen,
     borderRadius: 12,
     paddingVertical: 15,
     alignItems: "center",
@@ -278,10 +217,10 @@ const s = StyleSheet.create({
 
   cancelBtn: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: K.colors.border,
     borderRadius: 12,
     paddingVertical: 14,
     alignItems: "center",
   },
-  cancelBtnText: { color: "#374151", fontWeight: "600", fontSize: 15 },
+  cancelBtnText: { color: K.colors.textMid, fontWeight: "600", fontSize: 15 },
 });

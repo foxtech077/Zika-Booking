@@ -1,247 +1,477 @@
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from "react";
 import {
   View,
   Text,
   FlatList,
   TouchableOpacity,
-  RefreshControl,
   StyleSheet,
-  ActivityIndicator,
+  Animated,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api";
-import { K } from "../constants/theme";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  useNotifications,
+  useMarkNotificationRead,
+  useMarkAllNotificationsRead,
+  type AppNotification,
+} from "../hooks/notifications";
 import { useAuthStore } from "../store/auth";
+import { K } from "../constants/theme";
 
-interface Notification {
-  id: string;
-  type: string;
-  title: string;
-  body: string;
-  isRead: boolean;
-  createdAt: string;
-  data?: Record<string, string>;
+// ── Category helpers ──────────────────────────────────────────────────────────
+
+type Category = "booking" | "message" | "promotion" | "payment" | "reminder" | "loyalty" | "system";
+
+function getCategory(type: string): Category {
+  const t = type.toLowerCase();
+  if (t.includes("booking") || t === "new_booking" || t.includes("checkin") || t.includes("checkout") || t === "review_received" || t === "listing_approved") return "booking";
+  if (t.includes("message") || t.includes("chat") || t.includes("conversation")) return "message";
+  if (t.includes("promotion") || t.includes("promo") || t.includes("sale") || t.includes("offer") || t.includes("deal")) return "promotion";
+  if (t.includes("payment") || t.includes("refund") || t === "payment_received") return "payment";
+  if (t.includes("reminder") || t.includes("upcoming")) return "reminder";
+  if (t.includes("loyalty") || t.includes("reward") || t.includes("point") || t.includes("tier")) return "loyalty";
+  return "system";
 }
 
-const NOTIF_ICON: Record<string, string> = {
-  booking_confirmed: "✅",
-  booking_cancelled: "❌",
-  new_booking: "🎉",
-  payment_received: "💰",
-  review_received: "⭐",
-  listing_approved: "🏠",
-  system: "📢",
+const CATEGORY_CFG: Record<Category, { icon: string; color: string; bg: string }> = {
+  booking:   { icon: "calendar-sharp",    color: "#16a34a", bg: "#f0fdf4" },
+  message:   { icon: "chatbubble-sharp",  color: "#2563eb", bg: "#eff6ff" },
+  promotion: { icon: "flame-sharp",       color: "#ea580c", bg: "#fff7ed" },
+  payment:   { icon: "card-sharp",        color: "#7c3aed", bg: "#f5f3ff" },
+  reminder:  { icon: "time-sharp",        color: "#0891b2", bg: "#ecfeff" },
+  loyalty:   { icon: "trophy-sharp",      color: "#d97706", bg: "#fffbeb" },
+  system:    { icon: "information-circle",color: "#64748b", bg: "#f1f5f9" },
 };
 
-function timeAgo(iso: string) {
+function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const m = Math.floor(ms / 60_000);
   const h = Math.floor(ms / 3_600_000);
   const d = Math.floor(ms / 86_400_000);
-  if (m < 1) return "Just now";
+  if (m < 1)  return "Just now";
   if (m < 60) return `${m}m ago`;
   if (h < 24) return `${h}h ago`;
-  if (d < 7) return `${d}d ago`;
-  return new Date(iso).toLocaleDateString("en", { day: "numeric", month: "short" });
+  if (d === 1) return "Yesterday";
+  if (d < 7)  return `${d}d ago`;
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-function NotifRow({ item, onPress }: { item: Notification; onPress: () => void }) {
-  return (
-    <TouchableOpacity
-      style={[styles.notifRow, !item.isRead && styles.notifRowUnread]}
-      onPress={onPress}
-      activeOpacity={0.75}
-    >
-      {!item.isRead && <View style={styles.unreadDot} />}
-      <View style={styles.notifIcon}>
-        <Text style={styles.notifEmoji}>{NOTIF_ICON[item.type] ?? "🔔"}</Text>
-      </View>
-      <View style={styles.notifContent}>
-        <Text style={[styles.notifTitle, !item.isRead && styles.notifTitleBold]} numberOfLines={1}>
-          {item.title}
-        </Text>
-        <Text style={styles.notifBody} numberOfLines={2}>{item.body}</Text>
-        <Text style={styles.notifTime}>{timeAgo(item.createdAt)}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+// ── Shimmer skeleton ──────────────────────────────────────────────────────────
+
+function useShimmer() {
+  const opacity = useRef(new Animated.Value(0.4)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, { toValue: 0.85, duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.4,  duration: 700, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+  return opacity;
 }
 
-export default function NotificationsScreen() {
-  const qc = useQueryClient();
-
-  const { data, isLoading, isError, refetch, isRefetching } = useQuery<Notification[]>({
-    queryKey: ["notifications"],
-    queryFn: async () => {
-      const res = await api.get<{ data: Notification[] }>("/notifications");
-      return res.data.data;
-    },
-  });
-
-  const markAllRead = useMutation({
-    mutationFn: () => api.post("/notifications/mark-all-read", {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
-  });
-
-  const markRead = useMutation({
-    mutationFn: (id: string) => api.patch(`/notifications/${id}/read`, {}),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
-  });
-
-  function handlePress(item: Notification) {
-    if (!item.isRead) markRead.mutate(item.id);
-    if (item.data?.bookingId) {
-      const isProvider = useAuthStore.getState().user?.userType === "provider";
-      const route = isProvider ? `/provider/booking/${item.data.bookingId}` : `/booking/${item.data.bookingId}`;
-      router.push(route as any);
-    }
-    if (item.data?.listingId) router.push(`/listings/${item.data.listingId}` as any);
-  }
-
-  const unreadCount = (data ?? []).filter((n) => !n.isRead).length;
-
+function NotificationSkeleton() {
+  const opacity = useShimmer();
   return (
-    <View style={styles.container}>
-      <SafeAreaView edges={["top"]} style={styles.header}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-            <Text style={styles.backBtnText}>‹</Text>
-          </TouchableOpacity>
-          <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>Notifications</Text>
-            {unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-              </View>
-            )}
+    <View style={s.listContent}>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Animated.View key={i} style={[sk.card, { opacity }]}>
+          <View style={sk.icon} />
+          <View style={sk.body}>
+            <View style={sk.line1} />
+            <View style={sk.line2} />
+            <View style={sk.line3} />
           </View>
-          {unreadCount > 0 ? (
-            <TouchableOpacity onPress={() => markAllRead.mutate()} style={styles.markAllBtn}>
-              <Text style={styles.markAllText}>Mark all read</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={{ width: 80 }} />
-          )}
-        </View>
-      </SafeAreaView>
-
-      {isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={K.colors.accent} size="large" />
-        </View>
-      ) : isError ? (
-        <View style={styles.center}>
-          <Text style={styles.errorText}>Could not load notifications</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()}>
-            <Text style={styles.retryText}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={data}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={K.colors.accent} />}
-          ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyEmoji}>🔔</Text>
-              <Text style={styles.emptyTitle}>All caught up</Text>
-              <Text style={styles.emptySub}>No new notifications</Text>
-            </View>
-          }
-          renderItem={({ item }) => <NotifRow item={item} onPress={() => handlePress(item)} />}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListFooterComponent={() => <View style={{ height: 32 }} />}
-        />
-      )}
+        </Animated.View>
+      ))}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.colors.bgLight },
+// ── Notification card ─────────────────────────────────────────────────────────
 
-  header: { backgroundColor: K.colors.darkGreen, paddingBottom: 14 },
-  headerRow: {
+interface CardProps {
+  item: AppNotification;
+  onPress: (item: AppNotification) => void;
+}
+
+const NotificationCard = memo(function NotificationCard({ item, onPress }: CardProps) {
+  const cat = getCategory(item.type);
+  const cfg = CATEGORY_CFG[cat];
+
+  return (
+    <TouchableOpacity
+      style={c.card}
+      onPress={() => onPress(item)}
+      activeOpacity={0.78}
+    >
+      <View style={c.accentBar} />
+
+      <View style={[c.iconWrap, { backgroundColor: cfg.bg }]}>
+        <Ionicons name={cfg.icon as any} size={22} color={cfg.color} />
+      </View>
+
+      <View style={c.content}>
+        <View style={c.topRow}>
+          <Text style={c.title} numberOfLines={1}>{item.title}</Text>
+          <Text style={c.time}>{timeAgo(item.createdAt)}</Text>
+        </View>
+        <Text style={c.body} numberOfLines={2}>{item.body}</Text>
+      </View>
+
+      <View style={c.dot} />
+    </TouchableOpacity>
+  );
+});
+
+// ── Animated dismiss wrapper ──────────────────────────────────────────────────
+
+interface AnimatedCardProps {
+  item: AppNotification;
+  isDismissing: boolean;
+  onAnimationComplete: (id: string) => void;
+  onPress: (item: AppNotification) => void;
+}
+
+function AnimatedNotificationCard({ item, isDismissing, onAnimationComplete, onPress }: AnimatedCardProps) {
+  const opacity    = useRef(new Animated.Value(1)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!isDismissing) return;
+    Animated.parallel([
+      Animated.timing(opacity,    { toValue: 0,  duration: 280, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: -8, duration: 280, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) onAnimationComplete(item.id);
+    });
+  }, [isDismissing]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      <NotificationCard item={item} onPress={onPress} />
+    </Animated.View>
+  );
+}
+
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+function EmptyState() {
+  return (
+    <View style={s.emptyWrap}>
+      <View style={s.emptyIcon}>
+        <Ionicons name="checkmark-done-outline" size={44} color={K.colors.textMuted} />
+      </View>
+      <Text style={s.emptyTitle}>You're all caught up!</Text>
+      <Text style={s.emptySubtitle}>
+        We'll notify you about bookings, messages, promotions and important updates.
+      </Text>
+    </View>
+  );
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
+export default function NotificationsScreen() {
+  const user = useAuthStore((s) => s.user);
+  const isProvider = user?.userType === "provider";
+
+  const { data, isLoading, isError, refetch, isRefetching } = useNotifications();
+  const markRead    = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
+
+  // Local read-state overlay — reflects changes instantly without waiting for re-fetch
+  const [localReadIds, setLocalReadIds]     = useState<Set<string>>(new Set());
+  const [allLocallyRead, setAllLocallyRead] = useState(false);
+  // IDs currently playing their fade-out animation
+  const [dismissingIds, setDismissingIds]   = useState<Set<string>>(new Set());
+
+  // When background re-fetch resolves, API data is authoritative — clear local overrides
+  const prevDataRef = useRef(data);
+  useEffect(() => {
+    if (data && data !== prevDataRef.current) {
+      prevDataRef.current = data;
+      setLocalReadIds(new Set());
+      setAllLocallyRead(false);
+      // Keep dismissingIds so in-flight animations finish
+    }
+  }, [data]);
+
+  // Merge local read state into API data
+  const notifications = useMemo(() => {
+    const raw = Array.isArray(data) ? data : [];
+    return raw.map((n) => ({
+      ...n,
+      isRead: allLocallyRead || localReadIds.has(n.id) || n.isRead,
+    }));
+  }, [data, localReadIds, allLocallyRead]);
+
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.isRead).length,
+    [notifications]
+  );
+
+  // List shows only unread items + those mid-animation (so the fade-out can complete)
+  const visible = useMemo(
+    () => notifications.filter((n) => !n.isRead || dismissingIds.has(n.id)),
+    [notifications, dismissingIds]
+  );
+
+  const handleDismissComplete = useCallback((id: string) => {
+    setDismissingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const handlePress = useCallback((item: AppNotification) => {
+    // Always animate out and mark read on tap
+    setLocalReadIds((prev) => new Set(prev).add(item.id));
+    setDismissingIds((prev) => new Set(prev).add(item.id));
+    if (!item.isRead) markRead.mutate(item.id);
+
+    const { bookingId, conversationId, listingId } = item.data ?? {};
+    if (bookingId) {
+      router.push((isProvider ? `/provider/booking/${bookingId}` : `/booking/${bookingId}`) as any);
+    } else if (conversationId) {
+      router.push(`/conversation/${conversationId}` as any);
+    } else if (listingId) {
+      router.push(`/listing/${listingId}` as any);
+    }
+  }, [isProvider, markRead]);
+
+  function handleMarkAllRead() {
+    setAllLocallyRead(true);
+    setDismissingIds(new Set());
+    markAllRead.mutate();
+  }
+
+  return (
+    <SafeAreaView style={s.container} edges={["top"]}>
+      {/* ── Header ── */}
+      <View style={s.header}>
+        <TouchableOpacity style={s.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+          <Ionicons name="chevron-back" size={24} color={K.colors.textDark} />
+        </TouchableOpacity>
+
+        <View style={s.headerCenter}>
+          <Text style={s.headerTitle}>Notifications</Text>
+          {unreadCount > 0 && (
+            <View style={s.countBadge}>
+              <Text style={s.countBadgeText}>{unreadCount}</Text>
+            </View>
+          )}
+        </View>
+
+        {unreadCount > 0 ? (
+          <TouchableOpacity
+            style={s.markAllBtn}
+            onPress={handleMarkAllRead}
+            disabled={markAllRead.isPending}
+            activeOpacity={0.7}
+          >
+            <Text style={s.markAllText}>Mark all read</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 80 }} />
+        )}
+      </View>
+
+      {/* ── Content ── */}
+      {isLoading ? (
+        <NotificationSkeleton />
+      ) : isError ? (
+        <View style={s.emptyWrap}>
+          <View style={s.emptyIcon}>
+            <Ionicons name="cloud-offline-outline" size={44} color={K.colors.textMuted} />
+          </View>
+          <Text style={s.emptyTitle}>Could not load notifications</Text>
+          <TouchableOpacity style={s.retryBtn} onPress={() => refetch()} activeOpacity={0.8}>
+            <Text style={s.retryText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={visible}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <AnimatedNotificationCard
+              item={item}
+              isDismissing={dismissingIds.has(item.id)}
+              onAnimationComplete={handleDismissComplete}
+              onPress={handlePress}
+            />
+          )}
+          contentContainerStyle={s.listContent}
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          ListFooterComponent={<View style={{ height: 32 }} />}
+          ListEmptyComponent={<EmptyState />}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={refetch}
+              tintColor={K.colors.accent}
+            />
+          }
+        />
+      )}
+    </SafeAreaView>
+  );
+}
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: K.colors.bgApp },
+
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: K.spacing.screen,
+    paddingVertical: 12,
+    backgroundColor: K.colors.bgCard,
+    borderBottomWidth: 1,
+    borderBottomColor: K.colors.border,
+    gap: 10,
+    ...K.shadow.xs,
   },
-  backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  backBtnText: { fontSize: 28, color: "#fff", fontWeight: "300" },
-  headerCenter: { flexDirection: "row", alignItems: "center", gap: 8 },
-  headerTitle: { fontSize: K.font.xl, fontWeight: "800", color: "#fff" },
-  unreadBadge: {
+  backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+  headerCenter: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  headerTitle: {
+    fontSize: K.font.xl,
+    fontWeight: "800",
+    color: K.colors.textDark,
+    letterSpacing: -0.3,
+  },
+  countBadge: {
     backgroundColor: K.colors.accent,
     borderRadius: K.radius.full,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  unreadBadgeText: { color: "#fff", fontSize: 11, fontWeight: "700" },
-  markAllBtn: { paddingHorizontal: 4, paddingVertical: 6 },
-  markAllText: { color: K.colors.accentLight, fontSize: K.font.sm, fontWeight: "600" },
+  countBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  markAllBtn: { paddingHorizontal: 8, paddingVertical: 6, minWidth: 80, alignItems: "flex-end" },
+  markAllText: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.accent },
 
-  list: { padding: 16 },
+  listContent: { padding: K.spacing.screen },
 
-  notifRow: {
+  emptyWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 36,
+    paddingTop: 80,
+  },
+  emptyIcon: {
+    width: 96,
+    height: 96,
+    borderRadius: K.radius.full,
+    backgroundColor: K.colors.bgSubtle,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: K.font.xl,
+    fontWeight: "800",
+    color: K.colors.textDark,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: K.font.base,
+    color: K.colors.textMuted,
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  retryBtn: {
+    marginTop: 20,
+    backgroundColor: K.colors.accent,
+    borderRadius: K.radius.button,
+    paddingHorizontal: 32,
+    paddingVertical: 13,
+  },
+  retryText: { color: "#fff", fontWeight: "700", fontSize: K.font.base },
+});
+
+const c = StyleSheet.create({
+  card: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    backgroundColor: "#EDFFF5",
+    borderRadius: K.radius.lg,
+    padding: 14,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    overflow: "hidden",
+    position: "relative",
+    ...K.shadow.xs,
+  },
+  accentBar: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: K.colors.accent,
+    borderTopLeftRadius: K.radius.lg,
+    borderBottomLeftRadius: K.radius.lg,
+  },
+  iconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: K.radius.md,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  content: { flex: 1 },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 4,
+  },
+  title: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark, flex: 1, lineHeight: 20 },
+  time: { fontSize: 10, color: K.colors.textMuted, fontWeight: "600", marginTop: 2, flexShrink: 0 },
+  body: { fontSize: K.font.sm, color: K.colors.textMid, lineHeight: 19 },
+  dot: {
+    width: 9,
+    height: 9,
+    borderRadius: K.radius.full,
+    backgroundColor: K.colors.accent,
+    marginTop: 4,
+    flexShrink: 0,
+  },
+});
+
+const sk = StyleSheet.create({
+  card: {
     flexDirection: "row",
     alignItems: "flex-start",
     backgroundColor: K.colors.bgCard,
-    borderRadius: K.radius.xl,
+    borderRadius: K.radius.lg,
     padding: 14,
     gap: 12,
     borderWidth: 1,
     borderColor: K.colors.border,
-    ...K.shadow.sm,
-    position: "relative",
+    marginBottom: 8,
   },
-  notifRowUnread: {
-    backgroundColor: "#F0FFF8",
-    borderColor: "#A7F3D0",
-  },
-  unreadDot: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: K.colors.accent,
-  },
-  notifIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: K.radius.md,
-    backgroundColor: K.colors.bgLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: K.colors.border,
-  },
-  notifEmoji: { fontSize: 20 },
-  notifContent: { flex: 1 },
-  notifTitle: { fontSize: K.font.base, color: K.colors.textDark, marginBottom: 3 },
-  notifTitleBold: { fontWeight: "700" },
-  notifBody: { fontSize: K.font.sm, color: K.colors.textMuted, lineHeight: 20, marginBottom: 6 },
-  notifTime: { fontSize: 11, color: K.colors.textMuted },
-
-  separator: { height: 10 },
-
-  center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 16 },
-  errorText: { fontSize: K.font.base, color: K.colors.textMuted },
-  retryBtn: {
-    backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-  },
-  retryText: { color: "#fff", fontWeight: "700" },
-
-  emptyBox: { alignItems: "center", paddingTop: 80, gap: 8 },
-  emptyEmoji: { fontSize: 56 },
-  emptyTitle: { fontSize: K.font.xl, fontWeight: "800", color: K.colors.textDark },
-  emptySub: { fontSize: K.font.sm, color: K.colors.textMuted },
+  icon: { width: 46, height: 46, borderRadius: K.radius.md, backgroundColor: K.colors.border, flexShrink: 0 },
+  body: { flex: 1, gap: 8 },
+  line1: { height: 14, width: "60%", backgroundColor: K.colors.border, borderRadius: 4 },
+  line2: { height: 11, width: "85%", backgroundColor: K.colors.border, borderRadius: 4 },
+  line3: { height: 11, width: "40%", backgroundColor: K.colors.border, borderRadius: 4 },
 });
