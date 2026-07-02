@@ -20,6 +20,7 @@ import { formatRelativeTime, formatDate, slugToLabel, truncate } from "@/lib/uti
 import { useAuthStore } from "@/stores/auth";
 import type { ListingReviewTask, ListingDetail, AdminRole } from "@/types/admin";
 import { SYSTEM_COUNTRIES } from "@/lib/countries";
+import { useRouter } from "next/navigation";
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 const fetchQueue = (params: Record<string, string>) =>
@@ -154,6 +155,7 @@ function PhotoLightbox({
 
 // ── Main Page Component ────────────────────────────────────────────────────────
 export default function ModerationPage() {
+  const router = useRouter();
   const { token, user, _hasHydrated } = useAuthStore();
   const role = user?.role as AdminRole | undefined;
   const isCM = role === "country_manager";
@@ -504,15 +506,17 @@ export default function ModerationPage() {
           selectedTask && (
             <div className="flex flex-wrap gap-3 w-full justify-between items-center py-2 px-1">
               <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="bg-amber-50 hover:bg-amber-100/80 border-amber-200 text-amber-800 focus:ring-amber-500/20 whitespace-nowrap"
-                  leftIcon={<ShieldAlert className="h-4 w-4 text-amber-600" />}
-                  onClick={() => setEscalationModal(true)}
-                >
-                  Escalate Task
-                </Button>
+                {user?.role !== "super_admin" && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="bg-amber-50 hover:bg-amber-100/80 border-amber-200 text-amber-800 focus:ring-amber-500/20 whitespace-nowrap"
+                    leftIcon={<ShieldAlert className="h-4 w-4 text-amber-600" />}
+                    onClick={() => setEscalationModal(true)}
+                  >
+                    Escalate Task
+                  </Button>
+                )}
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button

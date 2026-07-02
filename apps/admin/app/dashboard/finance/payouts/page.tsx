@@ -16,18 +16,12 @@ import { ConfirmModal } from "@/components/modals/Modals";
 import { Input } from "@/components/ui/Input";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency } from "@/lib/utils";
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
 
-const COUNTRY_OPTIONS = [
-  { value: "MT", label: "MT" },
-  { value: "US", label: "US" },
-  { value: "GB", label: "GB" },
-  { value: "DE", label: "DE" },
-  { value: "FR", label: "FR" },
-  { value: "ES", label: "ES" },
-  { value: "IT", label: "IT" },
-  { value: "IN", label: "IN" },
-  { value: "CA", label: "CA" },
-];
+const COUNTRY_OPTIONS = SYSTEM_COUNTRIES.map((c) => ({
+  value: c.code,
+  label: `${c.flag} ${c.name} (${c.code})`,
+}));
 
 export interface Merchant {
   id: string;
@@ -189,16 +183,28 @@ export default function PayoutManagementPage() {
     {
       key: "ref",
       label: "Booking ID",
-      render: (p) => (
-        <div>
-          <span className="font-mono text-sm font-semibold text-primary">{p.bookingId}</span>
-          {p.merchant?.country && (
-            <span className="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded ml-2">
-              {p.merchant.country}
-            </span>
-          )}
-        </div>
-      ),
+      render: (p) => {
+        const countryCode = p.merchant?.country;
+        const countryObj = countryCode
+          ? SYSTEM_COUNTRIES.find((c) => c.code.toUpperCase() === countryCode.toUpperCase())
+          : null;
+        const countryLabel = countryObj
+          ? `${countryObj.flag} ${countryObj.name} (${countryObj.code})`
+          : (countryCode ?? "");
+        return (
+          <div>
+            <span className="font-mono text-sm font-semibold text-primary">{p.bookingId}</span>
+            {countryCode && (
+              <span 
+                className="text-[10px] bg-slate-100 text-slate-500 font-bold px-1.5 py-0.5 rounded ml-2"
+                title={countryLabel}
+              >
+                {countryLabel}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: "provider",

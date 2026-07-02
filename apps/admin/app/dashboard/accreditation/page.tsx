@@ -515,14 +515,16 @@ export default function AccreditationPage() {
           selectedTask && (
             <div className="flex gap-2 w-full justify-between items-center">
               <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  leftIcon={<ArrowUpRight className="h-4 w-4" />}
-                  onClick={() => setEscalationModal(true)}
-                >
-                  Escalate Task
-                </Button>
+                {user?.role !== "super_admin" && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<ArrowUpRight className="h-4 w-4" />}
+                    onClick={() => setEscalationModal(true)}
+                  >
+                    Escalate Task
+                  </Button>
+                )}
               </div>
               <div className="flex gap-2">
                 {selectedTask.assignedTo ? (

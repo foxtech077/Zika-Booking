@@ -128,6 +128,7 @@ export interface ListingReviewTask {
   listing: {
     id: string;
     name: string | null;
+    status: ListingStatus;
     country: string | null;
     town: string | null;
     claimedStarRating: number | null;

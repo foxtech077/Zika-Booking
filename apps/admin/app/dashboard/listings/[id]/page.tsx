@@ -355,16 +355,18 @@ export default function ListingReviewPage() {
               </Button>
             ) : null}
 
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setShowEscalate(true);
-                setActionError(null);
-              }}
-            >
-              Escalate Task
-            </Button>
+            {user?.role !== "super_admin" && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setShowEscalate(true);
+                  setActionError(null);
+                }}
+              >
+                Escalate Task
+              </Button>
+            )}
           </div>
         </div>
       )}

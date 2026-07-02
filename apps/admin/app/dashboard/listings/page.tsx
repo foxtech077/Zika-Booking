@@ -16,6 +16,10 @@ import { formatDate, formatRelativeTime, formatCurrency, cn } from "@/lib/utils"
 import type { Listing } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 import { SYSTEM_COUNTRIES, getCountryFlag } from "@/lib/countries";
+import countries from "i18n-iso-countries";
+import enLocale from "i18n-iso-countries/langs/en.json";
+
+countries.registerLocale(enLocale);
 
 function CategoryIcon({ category }: { category: string }) {
   if (category === "hotel") return <Hotel className="w-4 h-4 text-blue-500" />;
@@ -53,12 +57,18 @@ export default function ListingsPage() {
     return () => document.removeEventListener("click", handleOutsideClick);
   }, []);
 
-  const filteredCountries = SYSTEM_COUNTRIES.filter((c) => {
-    if (isCountryManager) {
-      return scopedCountries.some((sc) => sc.toUpperCase() === c.code.toUpperCase());
-    }
-    return true;
-  });
+  const filteredCountries = isCountryManager
+    ? scopedCountries.map((code) => {
+        const found = SYSTEM_COUNTRIES.find((sc) => sc.code.toUpperCase() === code.toUpperCase());
+        if (found) return found;
+        const name = countries.getName(code, "en") || code;
+        return {
+          code: code.toUpperCase(),
+          name,
+          flag: getCountryFlag(code),
+        };
+      })
+    : SYSTEM_COUNTRIES;
 
   const [selected, setSelected] = useState<Listing | null>(null);
   const [suspendModal, setSuspendModal] = useState<Listing | null>(null);
@@ -245,7 +255,6 @@ export default function ListingsPage() {
               value: status,
               onChange: (v) => { setStatus(v); setPage(1); },
               options: [
-                { value: "draft", label: "Draft" },
                 { value: "pending_review", label: "Pending Review" },
                 { value: "approved", label: "Approved" },
                 { value: "rejected", label: "Rejected" },
