@@ -5,11 +5,13 @@ import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, CreditCard, Heart, LogOut, Menu, MessageSquare, Star, User } from "lucide-react";
+import { Bell, ChevronDown, CreditCard, Heart, LogOut, Menu, MessageSquare, Star, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthStore } from "@/stores/auth";
 import { fetchUnreadConversationCount } from "@/services/traveller";
+import { useNotificationBadge } from "@/hooks/useNotifications";
+import { registerPushNotifications, unregisterPushNotifications } from "@/lib/push-notifications";
 
 const TRAVELLER_ROUTES = {
   destinations: "/traveller",
@@ -19,6 +21,7 @@ const TRAVELLER_ROUTES = {
   bookings: "/traveller?tab=bookings",
   wishlist: "/traveller/wishlist",
   messages: "/traveller/messages",
+  notifications: "/traveller/notifications",
   reviews: "/traveller/reviews",
   profile: "/traveller/profile",
   paymentMethods: "/traveller/payment-methods",
@@ -55,6 +58,7 @@ export function TravellerHeader({
     staleTime: 15_000,
     enabled: !!user,
   });
+  const { data: unreadNotifications = 0 } = useNotificationBadge();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -71,8 +75,17 @@ export function TravellerHeader({
     setMobileMenuOpen(false);
   }, [pathname, searchSignature]);
 
-  const handleLogout = () => {
+  // Register this device for push notifications once per authenticated session
+  // (POST /notifications/register-device is idempotent — upserts on userId+token).
+  useEffect(() => {
+    if (user) registerPushNotifications();
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLogout = async () => {
     setMenuOpen(false);
+    // Unregister the device before clearing the session — the DELETE call needs
+    // the current auth token to identify which registration to remove.
+    await unregisterPushNotifications();
     clearSession();
     router.replace("/auth/login");
   };
@@ -87,6 +100,7 @@ export function TravellerHeader({
   const isCarsActive = pathname === TRAVELLER_ROUTES.cars;
   const isBookingsActive = pathname === TRAVELLER_ROUTES.destinations && searchParams.get("tab") === "bookings";
   const isMessagesActive = pathname?.startsWith(TRAVELLER_ROUTES.messages);
+  const isNotificationsActive = pathname?.startsWith(TRAVELLER_ROUTES.notifications);
   const isReviewsActive = pathname?.startsWith(TRAVELLER_ROUTES.reviews);
   const isWishlistActive = pathname?.startsWith(TRAVELLER_ROUTES.wishlist);
   const isProfileActive = pathname?.startsWith(TRAVELLER_ROUTES.profile);
@@ -109,7 +123,7 @@ export function TravellerHeader({
     );
   }
 
-  function mobileNavBtn(label: string, href: string, isActive: boolean) {
+  function mobileNavBtn(label: string, href: string, isActive: boolean, badge?: number) {
     return (
       <Link
         key={label}
@@ -124,6 +138,16 @@ export function TravellerHeader({
         onClick={() => setMobileMenuOpen(false)}
       >
         {label}
+        {!!badge && (
+          <span
+            className={cn(
+              "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+              isActive ? "bg-white/20 text-white" : "bg-rose-100 text-rose-700",
+            )}
+          >
+            {badge > 99 ? "99+" : badge}
+          </span>
+        )}
       </Link>
     );
   }
@@ -246,6 +270,25 @@ export function TravellerHeader({
             {/* Authenticated */}
             {user && (
               <>
+                {/* Notifications */}
+                <Link
+                  href={TRAVELLER_ROUTES.notifications}
+                  aria-label="Open notifications"
+                  className={cn(
+                    "relative flex h-9 w-9 items-center justify-center rounded-full border transition-all",
+                    isNotificationsActive
+                      ? "border-[#0c2614] bg-[#0c2614] text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-[#1D8D2B] hover:text-[#0c2614]",
+                  )}
+                >
+                  <Bell className={cn("h-4 w-4", !isNotificationsActive && "text-[#1D8D2B]")} />
+                  {unreadNotifications > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white">
+                      {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                    </span>
+                  )}
+                </Link>
+
                 {/* Messages */}
                 <Link
                   href={TRAVELLER_ROUTES.messages}
@@ -409,7 +452,8 @@ export function TravellerHeader({
 
                 {user ? (
                   <div className="grid gap-2">
-                    {mobileNavBtn("Messages", TRAVELLER_ROUTES.messages, isMessagesActive)}
+                    {mobileNavBtn("Notifications", TRAVELLER_ROUTES.notifications, isNotificationsActive, unreadNotifications)}
+                    {mobileNavBtn("Messages", TRAVELLER_ROUTES.messages, isMessagesActive, unreadCount)}
                     {mobileNavBtn("Wishlist", TRAVELLER_ROUTES.wishlist, isWishlistActive)}
                     {mobileNavBtn("My Reviews", TRAVELLER_ROUTES.reviews, isReviewsActive)}
                     {mobileNavBtn("Profile", TRAVELLER_ROUTES.profile, isProfileActive)}

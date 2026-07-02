@@ -358,3 +358,67 @@ export async function fetchBatchListingSummary(ids: string[]): Promise<BatchList
     await listingApi.post("/listings/batch-summary", { ids });
   return unwrapData(response.data).listings ?? [];
 }
+
+// ── Notifications ──────────────────────────────────────────────────────────────
+// Backend: services/listing-service/src/routes/notifications.ts
+
+export type NotificationType =
+  | "booking_confirmed"
+  | "reservation_timer"
+  | "new_message"
+  | "voucher_assigned"
+  | "voucher_expiry"
+  | "tier_upgrade"
+  | "payout_sent"
+  | "listing_approved"
+  | "listing_rejected"
+  | "listing_auto_suspended"
+  | "commission_update"
+  | "sales_escalation"
+  | "messaging_suspended";
+
+export interface AppNotification {
+  id: string;
+  type: NotificationType | string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  data: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface NotificationsResponse {
+  notifications: AppNotification[];
+  nextCursor: string | null;
+}
+
+export async function fetchNotifications(cursor?: string, limit = 20): Promise<NotificationsResponse> {
+  const response: AxiosResponse<ApiPayload<NotificationsResponse>> = await listingApi.get("/notifications", {
+    params: { limit, ...(cursor ? { cursor } : {}) },
+  });
+  return unwrapData(response.data);
+}
+
+export async function fetchUnreadNotificationCount(): Promise<number> {
+  const response: AxiosResponse<ApiPayload<{ unreadCount: number }>> =
+    await listingApi.get("/notifications/unread-count");
+  return readNumber(unwrapData(response.data).unreadCount, 0);
+}
+
+export async function markNotificationRead(notificationId: string): Promise<void> {
+  await listingApi.patch(`/notifications/${notificationId}/read`);
+}
+
+export async function markAllNotificationsRead(): Promise<void> {
+  await listingApi.patch("/notifications/read-all");
+}
+
+export type DevicePlatform = "fcm" | "apns" | "web";
+
+export async function registerDeviceToken(token: string, platform: DevicePlatform): Promise<void> {
+  await listingApi.post("/notifications/register-device", { token, platform });
+}
+
+export async function unregisterDeviceToken(token: string): Promise<void> {
+  await listingApi.delete("/notifications/register-device", { data: { token } });
+}

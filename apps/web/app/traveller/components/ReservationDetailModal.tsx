@@ -144,8 +144,10 @@ export function ReservationDetailModal({ booking, onClose, onCancel, cancellingI
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto">
-          {/* Listing photo */}
-          <div className="h-48 shrink-0 bg-slate-100 sm:h-56">
+          {/* Listing photo — aspect-[4/3] matches the cover photo treatment used
+              elsewhere in the Traveller module (favourites, recently viewed) instead
+              of a short fixed height, which forced a heavy object-cover crop. */}
+          <div className="aspect-[4/3] w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-[16/9]">
             <ListingImage
               listingId={booking.listingId}
               alt={booking.listingTitle}
