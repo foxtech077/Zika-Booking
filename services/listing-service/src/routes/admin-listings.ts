@@ -8,7 +8,8 @@ import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
 import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
 import { fireNotification } from "../lib/notifications.js";
 import { patchListingSchema } from "./listings.js";
-
+import { triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
+import { sendListingReinstatedWithWarningEmail } from "../lib/email.js";
 import { ReviewTaskStatus, ListingStatus, ListingCategory } from "../generated/index.js";
 import {
   sendListingApprovedEmail,
@@ -56,6 +57,22 @@ function checkAdminRole(req: FastifyRequest, reply: FastifyReply, requiredRoles?
     return false;
   }
   return true;
+}
+
+async function fetchProviderEmail(providerId: string): Promise<string | null> {
+  const AUTH_SERVICE_URL = process.env["AUTH_SERVICE_URL"] ?? "http://localhost:3001";
+  try {
+    const res = await fetch(`${AUTH_SERVICE_URL}/internal/users/emails`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userIds: [providerId] }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { emails?: string[] };
+    return json.emails?.[0] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Shared schema building-blocks ─────────────────────────────────────────────
@@ -1734,15 +1751,20 @@ export async function adminListingRoutes(app: FastifyInstance) {
           id: { type: "string", description: "Listing ID" },
         },
       },
-      body: {
+            body: {
         type: "object",
         properties: {
           reason: {
             type: "string",
             description: "Optional note explaining the reinstatement",
           },
+          warning: {
+            type: "boolean",
+            description: "Whether to issue a warning with reactivation",
+          },
         },
       },
+
       response: {
         200: ok({ type: "object", properties: { message: { type: "string" } } }),
         404: ErrorResponse,
@@ -1777,11 +1799,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
 
         throw error;
       }
-      const { reason } = req.body as { reason?: string };
-
+     const { reason, warning } = req.body as { reason?: string; warning?: boolean };
       const listing = await prisma.listing.findUnique({ where: { id } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-      if (listing.status !== "suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
+      if (listing.status !== "suspended" && listing.status !== "auto_suspended") return sendError(reply, 409, "INVALID_STATUS", "Listing is not suspended.");
 
       const restoreStatus = (listing.category === "apartment" || listing.category === "car") ? "active" : "approved";
 
@@ -1817,7 +1838,18 @@ export async function adminListingRoutes(app: FastifyInstance) {
         }),
       ]);
 
-      sendListingReinstatedEmail(listing.providerId, listing.name ?? id).catch(() => null);
+            fetchProviderEmail(listing.providerId)
+        .then((email) => {
+          if (email) {
+            if (warning) {
+              sendListingReinstatedWithWarningEmail(email, listing.name ?? id, reason).catch(() => null);
+            } else {
+              sendListingReinstatedEmail(email, listing.name ?? id).catch(() => null);
+            }
+          }
+        })
+        .catch(() => null);
+
       return sendSuccess(reply, 200, { message: "Listing reinstated and live again." });
     } catch (err: any) {
       return sendError(reply, 400, "REINSTATE_LISTING_FAILED", "Failed to reinstate listing. Please try again.");
@@ -2725,6 +2757,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
         return sendError(reply, 409, "INVALID_STATUS", `Cannot cancel a booking with status: ${booking.status}. Only pending_payment or confirmed bookings can be cancelled.`);
       }
 
+      const refundAmount = booking.status === "confirmed" ? Number(booking.totalAmount) : 0;
+
       await prisma.booking.update({
         where: { id },
         data: {
@@ -2732,9 +2766,16 @@ export async function adminListingRoutes(app: FastifyInstance) {
           cancelledAt: new Date(),
           cancelledBy: "admin",
           cancellationReason: reason,
-          refundAmount: booking.status === "confirmed" ? booking.totalAmount : 0,
+          refundAmount,
         },
       });
+
+      if (refundAmount > 0) {
+        const idempotencyKey = generateRefundIdempotencyKey(id, "admin_cancel");
+        triggerPaymentRefund(id, refundAmount, reason || "Cancelled by admin", idempotencyKey).catch((err) => {
+          req.log.error({ err }, "Background refund trigger failed");
+        });
+      }
 
       await prisma.bookingStatusLog.create({
         data: {
@@ -2957,6 +2998,97 @@ export async function adminListingRoutes(app: FastifyInstance) {
       });
     } catch (err: any) {
       return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch conversation messages.");
+    }
+  });
+
+  // ── POST /admin/conversations/:id/messages — support agent reply ──────────
+  app.post("/admin/conversations/:id/messages", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Conversations"],
+      summary: "Send a support message in a conversation",
+      description: "Allows support, admin, and super_admin roles to post a message into any conversation as a support agent. senderType is always set to support_agent.",
+      security: [{ bearerAuth: [] }],
+      params: {
+        type: "object",
+        required: ["id"],
+        properties: {
+          id: { type: "string", description: "Conversation ID" },
+        },
+      },
+      body: {
+        type: "object",
+        required: ["body"],
+        properties: {
+          body: { type: "string", minLength: 1, maxLength: 2000, description: "Message text" },
+        },
+      },
+      response: {
+        201: ok({
+          type: "object",
+          properties: {
+            id:          { type: "string" },
+            senderId:    { type: "string" },
+            senderType:  { type: "string" },
+            body:        { type: "string" },
+            isFiltered:  { type: "boolean" },
+            createdAt:   { type: "string", format: "date-time" },
+          },
+        }),
+        400: ErrorResponse,
+        403: ErrorResponse,
+        404: ErrorResponse,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const SUPPORT_ROLES = new Set(["super_admin", "admin", "support"]);
+    if (!checkAdminRole(req, reply, SUPPORT_ROLES)) return;
+
+    const admin = req as AdminRequest;
+    const { id } = req.params as { id: string };
+    const { body: text } = req.body as { body: string };
+
+    const trimmed = text.trim();
+    if (!trimmed) return sendError(reply, 400, "VALIDATION_ERROR", "Message body cannot be empty.");
+
+    try {
+      const convo = await prisma.conversation.findUnique({ where: { id } });
+      if (!convo) return sendError(reply, 404, "NOT_FOUND", "Conversation not found.");
+      if (convo.status === "closed") return sendError(reply, 400, "CONVERSATION_CLOSED", "This conversation is closed.");
+
+      const message = await prisma.message.create({
+        data: {
+          conversationId: id,
+          senderId:   admin.adminId,
+          senderType: "support_agent",
+          body:       trimmed,
+          isFiltered: false,
+        },
+      });
+
+      await prisma.conversation.update({ where: { id }, data: { updatedAt: new Date() } });
+
+      // Notify both parties (fire-and-forget)
+      for (const recipientId of [convo.guestId, convo.providerId]) {
+        fireNotification(recipientId, {
+          type:  "new_message",
+          title: "Support Message",
+          body:  trimmed.slice(0, 100),
+          data:  { conversationId: id },
+        });
+      }
+
+      return sendSuccess(reply, 201, {
+        id:         message.id,
+        senderId:   message.senderId,
+        senderType: message.senderType,
+        body:       message.body,
+        isFiltered: message.isFiltered,
+        createdAt:  message.createdAt.toISOString(),
+      });
+    } catch (err) {
+      req.log.error({ err }, "Failed to send support message");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while sending support message.");
     }
   });
 

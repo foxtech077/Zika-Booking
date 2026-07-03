@@ -483,7 +483,7 @@ enum BookingStatus {
     providerPayout   Decimal @map("provider_payout") @db.Decimal(12, 2)
 
     cancellationPolicy String  @map("cancellation_policy") @db.VarChar(20)
-    refundAmount       Decimal? @map("refund_amount") @db.Decimal(12, 2)
+    refundAmount       Decimal @default(0) @map("refund_amount") @db.Decimal(12, 2)
 
     cancelledAt        DateTime? @map("cancelled_at")
     cancelledBy        String?   @map("cancelled_by") @db.VarChar(20)
@@ -523,6 +523,16 @@ enum BookingStatus {
     booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
     @@map("booking_status_log")
+    @@schema("listing")
+  }
+
+  model BookingRefundEvent {
+    id        String   @id @default(uuid())
+    bookingId String   @map("booking_id")
+    refundId  String   @unique @map("refund_id")
+    createdAt DateTime @default(now()) @map("created_at")
+
+    @@map("booking_refund_events")
     @@schema("listing")
   }
 

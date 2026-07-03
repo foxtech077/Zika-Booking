@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
-import { sendSuccess, sendError } from "../lib/errors.js";
+import { sendSuccess, sendError, BookingNotFoundError, isPrismaUniqueViolation } from "../lib/errors.js";
 import { requireProvider, requireProviderRole, type ProviderRequest } from "../middleware/auth.js";
 import { getRedis } from "../lib/redis.js";
 import { randomUUID } from "crypto";
@@ -8,7 +8,7 @@ import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "../l
 import { fireNotification } from "../lib/notifications.js";
 import { ipDetect } from "../middleware/ipDetect.js";
 import { getPricing } from "../services/pricing.services.js";
-import { getPaymentProvider } from "../services/payment.services.js";
+import { getPaymentProvider, triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
 import { calculateBilling } from "../services/billing.service.js";
 import { getTaxRate } from "../services/getTaxRate.services.js";
 import { VoucherDiscountType } from "../generated/index.js";
@@ -99,7 +99,8 @@ async function checkAvailability(
   });
 
   // 3. Reject if total matches exceed the available unit counts
-  if (bookingCount + icalBlockedCount >= unitCount) {
+  const effectiveUnitCount = Math.max(1, unitCount);
+  if (bookingCount + icalBlockedCount >= effectiveUnitCount) {
     return { 
       available: false, 
       reason: "Some of the selected dates within your stay are already booked or unavailable." 
@@ -340,6 +341,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         select: {
           id: true,
           status: true,
+          completedAt: true, 
           totalAmount: true,
           currency: true,
           reference: true,
@@ -441,7 +443,89 @@ export async function bookingRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
+  // ── PATCH /bookings/internal/:id/refund ─────────────────────────────────────
+  app.patch("/bookings/internal/:id/refund", {
+    schema: {
+      tags: ["Bookings"],
+      summary: "Internal: record refund details (service-to-service only)",
+      params: {
+        type: "object",
+        properties: { id: { type: "string" } },
+        required: ["id"],
+      },
+      body: {
+        type: "object",
+        required: ["refundId", "refundAmount", "provider", "refundedAt"],
+        properties: {
+          refundId: { type: "string" },
+          refundAmount: { type: "number" },
+          provider: { type: "string" },
+          refundedAt: { type: "string" },
+        },
+      },
+    },
+  }, async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!validateServiceToken(req, reply)) return;
+
+    const { id } = req.params;
+    const { refundId, refundAmount, provider, refundedAt } = req.body as {
+      refundId: string;
+      refundAmount: number;
+      provider: string;
+      refundedAt: string;
+    };
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 1. Fetch booking inside the transaction
+        const booking = await tx.booking.findUnique({ where: { id } });
+        if (!booking) {
+          throw new BookingNotFoundError();
+        }
+
+        // 2. Insert event (will fail with unique constraint P2002 if duplicate refundId occurs)
+        await tx.bookingRefundEvent.create({
+          data: {
+            bookingId: id,
+            refundId,
+          },
+        });
+
+        // 3. Atomically increment refundAmount
+        await tx.booking.update({
+          where: { id },
+          data: {
+            refundAmount: {
+              increment: refundAmount,
+            },
+          },
+        });
+
+        // 4. Insert status log
+        const auditReason = `Refund completed\n\nProvider: ${provider.toUpperCase()}\nRefund ID: ${refundId}\nAmount: ${booking.currency} ${refundAmount}\nProcessed At: ${new Date(refundedAt).toISOString()}`;
+        await tx.bookingStatusLog.create({
+          data: {
+            bookingId: id,
+            fromStatus: booking.status,
+            toStatus: booking.status,
+            actorType: "system",
+            reason: auditReason,
+          },
+        });
+      });
+
+      return sendSuccess(reply, 200, { message: "Booking refund recorded successfully." });
+    } catch (err) {
+      if (err instanceof BookingNotFoundError) {
+        return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+      }
+      if (isPrismaUniqueViolation(err, "refund_id")) {
+        return sendSuccess(reply, 200, { message: "Booking refund already recorded (idempotent)." });
+      }
+      req.log.error({ err }, "Failed to update internal booking refund status");
+      return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating the booking refund status.");
+    }
+  });  // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
   app.post(
     "/bookings/initiate",
     {
@@ -512,13 +596,35 @@ export async function bookingRoutes(app: FastifyInstance) {
         );
 
         // STEP 2: promotion logic (HERE, NOT in billing service)
-        const promotionRate = 0;
-
-        // STEP 3: compute base amount
-        const units = 1; // optional preview logic (or skip here)
+        let units = 1;
+        if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
+          units = Math.ceil((new Date(body.returnDatetime).getTime() - new Date(body.pickupDatetime).getTime()) / 86_400_000);
+        } else if (body.checkIn && body.checkOut) {
+          units = Math.ceil((new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / 86_400_000);
+        }
         const baseAmount = baseRate * units;
 
-        const promotionDiscount = baseAmount * promotionRate;
+        const now = new Date();
+        const activePromo = await (prisma as any).activityPromotion.findFirst({
+          where: {
+            activity: listing.category,
+            status: "active",
+            validFrom: { lte: now },
+            validUntil: { gte: now },
+            applyToBooking: true,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        let promotionDiscount = 0;
+        if (activePromo) {
+          if (activePromo.discountType === "percentage") {
+            promotionDiscount = baseAmount * (Number(activePromo.discountValue) / 100);
+          } else if (activePromo.discountType === "fixed") {
+            promotionDiscount = Number(activePromo.discountValue);
+          }
+        }
+        promotionDiscount = Number(promotionDiscount.toFixed(2));
 
 
 
@@ -571,7 +677,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         if (listing.category !== "car" && body.checkIn && body.checkOut) {
           const avail = await checkAvailability(
             listing.id,
-            listing.unitCount ?? 1,
+            Math.max(1, listing.unitCount ?? 1),
             new Date(body.checkIn),
             new Date(body.checkOut)
           );
@@ -590,7 +696,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
           const avail = await checkAvailability(
             listing.id,
-            listing.unitCount ?? 1,
+            Math.max(1, listing.unitCount ?? 1),
             new Date(body.pickupDatetime),
             new Date(body.returnDatetime)
           );
@@ -992,6 +1098,29 @@ export async function bookingRoutes(app: FastifyInstance) {
           commissionRate,
         });
 
+        // 1b. PROMOTION LOGIC
+        const now = new Date();
+        const activePromo = await (prisma as any).activityPromotion.findFirst({
+          where: {
+            activity: listing.category,
+            status: "active",
+            validFrom: { lte: now },
+            validUntil: { gte: now },
+            applyToBooking: true,
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        let promotionDiscount = 0;
+        if (activePromo) {
+          if (activePromo.discountType === "percentage") {
+            promotionDiscount = baseBilling.baseAmount * (Number(activePromo.discountValue) / 100);
+          } else if (activePromo.discountType === "fixed") {
+            promotionDiscount = Number(activePromo.discountValue);
+          }
+        }
+        promotionDiscount = Number(promotionDiscount.toFixed(2));
+
         let voucherDiscount = 0;
         let appliedVoucher: { id: string; code: string } | null = null;
 
@@ -1009,8 +1138,6 @@ export async function bookingRoutes(app: FastifyInstance) {
           if (!voucher.isActive) {
             return sendError(reply, 400, "INVALID_VOUCHER", "Voucher is not active.");
           }
-
-          const now = new Date();
 
           if (now < voucher.validFrom || now > voucher.validUntil) {
             return sendError(
@@ -1069,8 +1196,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           returnDatetime: body.returnDatetime,
           rate,
           deliveryFee: Number(listing.deliveryFee ?? 0),
-          promotionDiscount: 0,
-          voucherAmount: voucherDiscount + pointsDiscount, // apply points as additional discount
+          promotionDiscount,
+          voucherAmount: voucherDiscount,
+          pointsDiscount,
           taxRate: getTaxRate(listing.country),
           commissionRate,
         });
@@ -1083,7 +1211,8 @@ export async function bookingRoutes(app: FastifyInstance) {
         const commissionAmount = finalBilling.commissionAmount;
         const providerPayout = finalBilling.providerPayout;
         const deliveryFee = finalBilling.deliveryFee;
-        const discountAmount = finalBilling.promotionDiscount + voucherDiscount;
+        const discountAmount = finalBilling.discount;
+        const appliedVoucherDiscount = voucherDiscount >= promotionDiscount ? voucherDiscount : 0;
 
 
         // 5. BOOKING
@@ -1143,7 +1272,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             cancellationPolicy: listing.cancellationPolicy ?? "moderate",
 
             voucherCode: appliedVoucher?.code,
-            voucherDiscount,
+            voucherDiscount: appliedVoucherDiscount,
 
             redeemPoints,
             pointsDiscount,
@@ -1288,7 +1417,7 @@ export async function bookingRoutes(app: FastifyInstance) {
               const endDate = booking.checkOut ?? booking.returnDatetime;
               if (startDate && endDate) {
                 const listing = await tx.listing.findUnique({ where: { id: booking.listingId } });
-                const unitCount = listing?.unitCount ?? 1;
+                const unitCount = Math.max(1, listing?.unitCount ?? 1);
 
                 const conflicts = await tx.$queryRawUnsafe<{ id: string }[]>(`
                   SELECT id FROM listing.bookings
@@ -1691,6 +1820,14 @@ export async function bookingRoutes(app: FastifyInstance) {
           app.log.error({ err }, "Background payout cancellation notification failed");
         });
 
+        // Trigger refund on payment-service if there is a refund amount
+        if (refundAmount > 0) {
+          const idempotencyKey = generateRefundIdempotencyKey(id, "guest_cancel");
+          triggerPaymentRefund(id, refundAmount, reason || "Cancelled by guest", idempotencyKey).catch((err) => {
+            app.log.error({ err }, "Background refund trigger failed");
+          });
+        }
+
         await prisma.bookingStatusLog.create({
           data: {
             bookingId: id,
@@ -1848,6 +1985,14 @@ export async function bookingRoutes(app: FastifyInstance) {
           app.log.error({ err }, "Background payout cancellation notification failed");
         });
 
+        const refundAmount = Number(booking.totalAmount);
+        if (refundAmount > 0) {
+          const idempotencyKey = generateRefundIdempotencyKey(id, "provider_cancel");
+          triggerPaymentRefund(id, refundAmount, reasonText ?? reasonCode ?? "Cancelled by provider", idempotencyKey).catch((err) => {
+            app.log.error({ err }, "Background refund trigger failed");
+          });
+        }
+
         await prisma.bookingStatusLog.create({
           data: {
             bookingId: id,
@@ -1962,30 +2107,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           return sendError(reply, 403, "FORBIDDEN", "This booking is not for your listing.");
 
         if (booking.status === "checked_in") {
-          // Idempotent: already checked in, trigger internal schedule just in case it wasn't triggered
-          const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
-          const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
-
-          const scheduleRes = await fetch(`${PAYMENT_SERVICE_URL}/internal/payouts/schedule`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-service-key": INTERNAL_SERVICE_KEY,
-            },
-            body: JSON.stringify({
-              bookingId: id,
-              checkedInAt,
-            }),
-          });
-
-          if (!scheduleRes.ok) {
-            const errText = await scheduleRes.text().catch(() => "");
-            req.log.error(`[check-in] Failed to trigger internal schedule (already checked_in): status ${scheduleRes.status}, response: ${errText}`);
-            return sendError(reply, 502, "PAYOUT_SCHEDULING_FAILED", `Failed to schedule payout internally. Detail: ${errText}`);
-          }
-
+          // Idempotent: already checked in, return success
           return sendSuccess(reply, 200, {
-            message: "Booking is already checked in. Payout scheduling verified.",
+            message: "Booking is already checked in.",
           });
         }
 
@@ -2017,34 +2141,116 @@ export async function bookingRoutes(app: FastifyInstance) {
           });
         });
 
-        // Call payment-service POST /internal/payouts/schedule
-        const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3004";
-        const INTERNAL_SERVICE_KEY = process.env["INTERNAL_SERVICE_KEY"] ?? "";
-
-        const scheduleRes = await fetch(`${PAYMENT_SERVICE_URL}/internal/payouts/schedule`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-service-key": INTERNAL_SERVICE_KEY,
-          },
-          body: JSON.stringify({
-            bookingId: id,
-            checkedInAt,
-          }),
-        });
-
-        if (!scheduleRes.ok) {
-          const errText = await scheduleRes.text().catch(() => "");
-          req.log.error(`[check-in] Failed to schedule payout internally: status ${scheduleRes.status}, response: ${errText}`);
-          return sendError(reply, 502, "PAYOUT_SCHEDULING_FAILED", `Failed to schedule payout internally. Detail: ${errText}`);
-        }
-
         return sendSuccess(reply, 200, {
-          message: "Booking status updated to checked_in and payout scheduled.",
+          message: "Booking status updated to checked_in.",
         });
       } catch (err) {
         req.log.error({ err }, "Failed to check in booking");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while checking in the booking.");
+      }
+    }
+  );
+
+  // ── POST /provider/bookings/:id/check-out — provider check-out ─────────────────
+  app.post(
+    "/provider/bookings/:id/check-out",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "Provider checks out a guest (idempotent)",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          properties: { id: { type: "string" } },
+          required: ["id"],
+        },
+        body: {
+          type: "object",
+          properties: {
+            checkedOutAt: { type: "string", format: "date-time" },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  message: { type: "string" },
+                },
+                required: ["message"],
+              },
+            },
+          },
+          403: errSchema,
+          404: errSchema,
+          409: errSchema,
+        },
+      },
+      preHandler: [requireProviderRole],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const providerId = (req as ProviderRequest).providerId;
+      const { id } = req.params as { id: string };
+      const body = req.body as { checkedOutAt?: string } | undefined;
+      const checkedOutAt = body?.checkedOutAt ?? new Date().toISOString();
+
+      try {
+        const booking = await prisma.booking.findUnique({
+          where: { id },
+          include: { listing: true },
+        });
+
+        if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
+        if (booking.listing.providerId !== providerId)
+          return sendError(reply, 403, "FORBIDDEN", "This booking is not for your listing.");
+
+        if (booking.status === "completed") {
+          // Idempotent: already completed/checked out
+          return sendSuccess(reply, 200, {
+            message: "Booking is already checked out.",
+          });
+        }
+
+        if (booking.status !== "checked_in") {
+          return reply.status(409).send({
+            success: false,
+            error: {
+              code: "INVALID_STATUS",
+              message: `Only checked_in bookings can transition to completed. Current status: ${booking.status}`,
+            },
+          });
+        }
+
+        // Update status to completed and save actual checkout timestamp
+        await prisma.$transaction(async (tx) => {
+          await tx.booking.update({
+            where: { id },
+            data: {
+              status: "completed",
+              completedAt: new Date(checkedOutAt),
+            },
+          });
+
+          await tx.bookingStatusLog.create({
+            data: {
+              bookingId: id,
+              fromStatus: "checked_in",
+              toStatus: "completed",
+              actorType: "provider",
+              changedBy: providerId,
+            },
+          });
+        });
+
+        return sendSuccess(reply, 200, {
+          message: "Booking status updated to completed.",
+        });
+      } catch (err) {
+        req.log.error({ err }, "Failed to check out booking");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while checking out the booking.");
       }
     }
   );
@@ -2323,8 +2529,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           returnDatetime: booking.returnDatetime?.toISOString(),
           rate: booking.nightlyRate ? Number(booking.nightlyRate) : (booking.dailyRate ? Number(booking.dailyRate) : 0),
           deliveryFee: Number(booking.deliveryFee),
-          promotionDiscount: Number(booking.discountAmount) - Number(booking.voucherDiscount),
+          promotionDiscount: Math.max(0, Number(booking.discountAmount) - Number(booking.voucherDiscount) - Number(booking.pointsDiscount)),
           voucherAmount: Number(booking.voucherDiscount),
+          pointsDiscount: Number(booking.pointsDiscount),
           taxRate: getTaxRate(booking.listing.country),
           commissionRate: rate,
         });
