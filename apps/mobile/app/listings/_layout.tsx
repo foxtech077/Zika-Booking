@@ -11,6 +11,7 @@ export default function ListingsLayout() {
       <Stack.Screen name="[id]/index" options={{ title: "Edit Listing", headerShown: false }} />
       <Stack.Screen name="[id]/view" options={{ title: "Listing Details", headerShown: false }} />
       <Stack.Screen name="[id]/submit" options={{ title: "Review & Submit" }} />
+      <Stack.Screen name="[id]/success" options={{ title: "Submitted", headerShown: false }} />
     </Stack>
   );
 }

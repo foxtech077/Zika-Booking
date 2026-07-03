@@ -1,20 +1,21 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   View,
   Text,
   ScrollView,
-  Image,
   TouchableOpacity,
   Dimensions,
   ActivityIndicator,
   StyleSheet,
   FlatList,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { listingApi } from "../../../lib/listing-api";
+import { ListingImage } from "../../../components/ListingImage";
 import { K } from "../../../constants/theme";
 import { formatCurrency } from "../../../lib/currency";
 import { AMENITY_CATEGORIES, AMENITY_CONFIG } from "../../../constants/amenities";
@@ -118,6 +119,16 @@ export default function ViewListingScreen() {
     enabled: !!id,
   });
 
+  // Preload the whole gallery once the listing loads — a typical listing has a
+  // modest photo count, so prefetching all of them keeps swiping in either
+  // direction smooth instead of only ever preloading one neighbor ahead.
+  useEffect(() => {
+    const urls: string[] = Array.isArray(listing?.photos)
+      ? listing.photos.map((p: { cdnUrl: string }) => p.cdnUrl).filter(Boolean)
+      : [];
+    if (urls.length) ExpoImage.prefetch(urls, "memory-disk");
+  }, [listing?.id]);
+
   if (isLoading) {
     return <View style={vs.center}><ActivityIndicator size="large" color={K.colors.accent} /></View>;
   }
@@ -210,7 +221,7 @@ export default function ViewListingScreen() {
               onViewableItemsChanged={onViewableItemsChanged}
               viewabilityConfig={viewabilityConfig}
               renderItem={({ item }) => (
-                <Image source={{ uri: item.cdnUrl }} style={{ width: W, height: CAROUSEL_H }} resizeMode="cover" />
+                <ListingImage uri={item.cdnUrl} style={{ width: W, height: CAROUSEL_H }} resizeMode="cover" />
               )}
             />
           ) : (

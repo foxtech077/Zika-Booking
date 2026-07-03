@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1022728776661",
+    "project_id": "kainook-cd1d2",
+    "storage_bucket": "kainook-cd1d2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1022728776661:android:5dff10c7d1c3393eaf6b5c",
+        "android_client_info": {
+          "package_name": "com.kainook.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDVlyJDFbzO3L8_eLnYn73LYblkgotXX4k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
