@@ -20,11 +20,12 @@ const fetchMessages = (id: string) =>
 
 export default function MessagingPage() {
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [selected, setSelected] = useState<Conversation | null>(null);
 
-  const params = { q, ...(status ? { status } : {}), page: String(page), limit: "20" };
+  const params = { q, ...(status ? { status } : {}), page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-conversations", params],
     queryFn: () => fetchConversations(params),
@@ -32,6 +33,21 @@ export default function MessagingPage() {
 
   const conversations: Conversation[] = data?.conversations ?? [];
   const total: number = data?.total ?? 0;
+
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/conversations?${new URLSearchParams(params)}`;
+  const responseCount = data?.conversations?.length ?? 0;
+  const renderedRows = conversations.length;
+  console.log("MessagingPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-conversations", params],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
 
   const { data: threadData, isLoading: loadingThread } = useQuery({
     queryKey: ["admin-conversation-messages", selected?.id],
@@ -123,6 +139,8 @@ export default function MessagingPage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -132,7 +150,7 @@ export default function MessagingPage() {
           emptyTitle="No conversations found"
           emptyIcon={<MessageSquare className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Message thread drawer */}

@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { BadgeCheck, CheckCircle, XCircle, Hotel, Eye, X, ChevronLeft, ChevronRight, UserCheck, UserX, ArrowUpRight } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
+import { api } from "@/lib/api";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +13,6 @@ import { Textarea, Select } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal } from "@/components/modals/Modals";
 import { formatRelativeTime } from "@/lib/utils";
-import { api } from "@/lib/api";
 import type { ListingReviewTask, PlatformUser } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 
@@ -172,13 +172,22 @@ export default function AccreditationPage() {
   const qc = useQueryClient();
 
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [selectedTask, setSelectedTask] = useState<ListingReviewTask | null>(null);
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
+
+  useEffect(() => {
+    setShowAllPhotos(false);
+  }, [selectedTask?.listing?.id]);
+
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [starRating, setStarRating] = useState("3");
   const [adminNote, setAdminNote] = useState("");
   const [reasons, setReasons] = useState<string[]>([]);
   const [providerNote, setProviderNote] = useState("");
+  const [escalationModal, setEscalationModal] = useState(false);
+  const [escalationReason, setEscalationReason] = useState("");
   const [docViewer, setDocViewer] = useState<{ url: string; fileType: string; label: string } | null>(null);
   const [loadingDocId, setLoadingDocId] = useState<string | null>(null);
   const [photoLightbox, setPhotoLightbox] = useState<{ photos: any[]; index: number } | null>(null);
@@ -188,48 +197,43 @@ export default function AccreditationPage() {
   }, []);
 
   const prevPhoto = useCallback(() =>
-    setPhotoLightbox((s) => s && s.index > 0 ? { ...s, index: s.index - 1 } : s), []);
+    setPhotoLightbox((s) => {
+      if (!s) return s;
+      return s.index > 0 ? { ...s, index: s.index - 1 } : s;
+    }), []);
 
   const nextPhoto = useCallback(() =>
-    setPhotoLightbox((s) => s && s.index < s.photos.length - 1 ? { ...s, index: s.index + 1 } : s), []);
+    setPhotoLightbox((s) => {
+      if (!s) return s;
+      return s.index < s.photos.length - 1 ? { ...s, index: s.index + 1 } : s;
+    }), []);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  // const params = { page: String(page), limit: "20" };
+  // const params = { page: String(page), limit: String(limit) };
 
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [docUrl, setDocUrl] = useState<{ url: string; fileType: string } | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
 
-  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin" || (user?.role === "country_manager" && userCountryScope.length > 1);
   const countryOptions = userCountryScope.length > 0
     ? userCountryScope.map((c) => ({ value: c, label: c }))
     : [
-      "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
-    ].map((c) => ({ value: c, label: c }));
+        "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN"
+      ].map((c) => ({ value: c, label: c }));
 
-  const [country, setCountry] = useState(() => userCountryScope[0] ?? "");
+  const [country, setCountry] = useState("");
 
-  // Sync country selection after auth store hydration
-  useEffect(() => {
-    if (userCountryScope.length > 0 && !country) {
-      setCountry(userCountryScope[0] ?? "");
-    }
-  }, [userCountryScope, country]);
-
-  // For country managers, always send their first scoped country as the filter.
-  // Previously this was set to "" which caused the API to return all countries.
-  const effectiveCountry = isCountryManager ? (country || userCountryScope[0] || "") : country;
   const params = Object.fromEntries(
     Object.entries({
       page: String(page),
-      limit: "20",
-      country: effectiveCountry,
+      limit: String(limit),
+      country,
     }).filter(([, v]) => v !== "")
   );
   const { data, isLoading } = useQuery({
-    queryKey: ["accreditation-queue", params],
+    queryKey: ["accreditation-queue", page, limit, country],
     queryFn: () => fetchQueue(params),
     // Wait for auth store to rehydrate so userCountryScope/effectiveCountry are correct
     enabled: !!token && _hasHydrated,
@@ -238,7 +242,7 @@ export default function AccreditationPage() {
   const { data: providersData } = useQuery({
     queryKey: ["admin-providers-list"],
     queryFn: () =>
-      listingApi
+      api
         .get("/admin/users", { params: { userType: "provider", limit: "1000" } })
         .then((r) => r.data.data ?? r.data),
     enabled: !!token,
@@ -265,7 +269,22 @@ export default function AccreditationPage() {
       return inScope && (!selectedCountry || selectedCountry === listingCountry);
     })
     : rawTasks;
-  const total: number = isCountryManager ? tasks.length : (data?.total ?? 0);
+  const total: number = data?.total ?? tasks.length;
+
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/listings/review-queue?${new URLSearchParams(params)}`;
+  const responseCount = data?.tasks?.length ?? 0;
+  const renderedRows = tasks.length;
+  console.log("AccreditationPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["accreditation-queue", page, limit, country],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
 
   const { data: detail, isLoading: loadingDetail } = useQuery({
     queryKey: ["listing-review-detail", selectedTask?.listing?.id],
@@ -286,7 +305,7 @@ export default function AccreditationPage() {
   });
 
   const rejectMut = useMutation({
-    mutationFn: ({ id, reasons, providerNote, adminNote }: any) =>
+    mutationFn: ({ id, reasons, providerNote, adminNote }: { id: string; reasons: string[]; providerNote: string; adminNote: string }) =>
       listingApi.post(`/admin/listings/${id}/reject`, { reasons, providerNote, adminNote }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["accreditation-queue"] });
@@ -295,6 +314,37 @@ export default function AccreditationPage() {
       setReasons([]);
       setProviderNote("");
       setAdminNote("");
+    },
+  });
+
+  const assignMut = useMutation({
+    mutationFn: (taskId: string) => listingApi.patch(`/admin/listings/review-tasks/${taskId}/assign`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accreditation-queue"] });
+      if (selectedTask) {
+        setSelectedTask((t) => t ? { ...t, assignedTo: user?.id ?? "" } : null);
+      }
+    },
+  });
+
+  const unassignMut = useMutation({
+    mutationFn: (taskId: string) => listingApi.patch(`/admin/listings/review-tasks/${taskId}/unassign`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accreditation-queue"] });
+      if (selectedTask) {
+        setSelectedTask((t) => t ? { ...t, assignedTo: null } : null);
+      }
+    },
+  });
+
+  const escalateMut = useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason?: string }) =>
+      listingApi.patch(`/admin/listings/review-tasks/${taskId}/escalate`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["accreditation-queue"] });
+      setEscalationModal(false);
+      setEscalationReason("");
+      setSelectedTask(null);
     },
   });
 
@@ -361,6 +411,38 @@ export default function AccreditationPage() {
         </div>
       ),
     },
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      render: (t) => (
+        <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+          {t.assignedTo ? (
+            t.assignedTo === user?.id ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<UserX className="h-3.5 w-3.5" />}
+                onClick={() => unassignMut.mutate(t.id)}
+                loading={unassignMut.isPending}
+              >
+                Unassign
+              </Button>
+            ) : null
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<UserCheck className="h-3.5 w-3.5" />}
+              onClick={() => assignMut.mutate(t.id)}
+              loading={assignMut.isPending}
+            >
+              Assign Me
+            </Button>
+          )}
+        </div>
+      ),
+    },
   ];
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -390,22 +472,26 @@ export default function AccreditationPage() {
       />
 
       <Card padding="none">
-        {canShowCountryFilter && (
-          <FilterBar
-            filters={[
-              {
-                key: "country",
-                label: "All Countries",
-                value: country,
-                onChange: (v: string) => {
-                  setCountry(v);
-                  setPage(1);
-                },
-                options: countryOptions,
-              },
-            ]}
-          />
-        )}
+        <FilterBar
+          filters={
+            canShowCountryFilter
+              ? [
+                  {
+                    key: "country",
+                    label: "All Countries",
+                    value: country,
+                    onChange: (v: string) => {
+                      setCountry(v);
+                      setPage(1);
+                    },
+                    options: countryOptions,
+                  },
+                ]
+              : undefined
+          }
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
+        />
         <DataTable
           columns={columns}
           data={tasks}
@@ -415,7 +501,7 @@ export default function AccreditationPage() {
           emptyDescription="All hotel listings have been reviewed."
           emptyIcon={<BadgeCheck className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* ── Review detail drawer ─────────────────────────────────────────── */}
@@ -426,14 +512,53 @@ export default function AccreditationPage() {
         description={`${selectedTask?.listing.town}, ${selectedTask?.listing.country} · Submission #${selectedTask?.listing?.submissionCount ?? "?"}`}
         width="lg"
         footer={
-          <div className="flex gap-2">
-            <Button variant="danger" size="sm" onClick={() => setShowRejectModal(true)} leftIcon={<XCircle className="h-4 w-4" />}>
-              Reject
-            </Button>
-            <Button variant="primary" size="sm" onClick={() => setShowApproveModal(true)} leftIcon={<CheckCircle className="h-4 w-4" />}>
-              Approve & Publish
-            </Button>
-          </div>
+          selectedTask && (
+            <div className="flex gap-2 w-full justify-between items-center">
+              <div className="flex gap-2">
+                {user?.role !== "super_admin" && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<ArrowUpRight className="h-4 w-4" />}
+                    onClick={() => setEscalationModal(true)}
+                  >
+                    Escalate Task
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {selectedTask.assignedTo ? (
+                  selectedTask.assignedTo === user?.id ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      leftIcon={<UserX className="h-3.5 w-3.5" />}
+                      onClick={() => unassignMut.mutate(selectedTask.id)}
+                      loading={unassignMut.isPending}
+                    >
+                      Unassign
+                    </Button>
+                  ) : null
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<UserCheck className="h-3.5 w-3.5" />}
+                    onClick={() => assignMut.mutate(selectedTask.id)}
+                    loading={assignMut.isPending}
+                  >
+                    Assign Me
+                  </Button>
+                )}
+                <Button variant="danger" size="sm" onClick={() => setShowRejectModal(true)} leftIcon={<XCircle className="h-4 w-4" />}>
+                  Reject
+                </Button>
+                <Button variant="primary" size="sm" onClick={() => setShowApproveModal(true)} leftIcon={<CheckCircle className="h-4 w-4" />}>
+                  Approve & Publish
+                </Button>
+              </div>
+            </div>
+          )
         }
       >
         {loadingDetail ? (
@@ -512,21 +637,50 @@ export default function AccreditationPage() {
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
                   Listing Photos ({detail.photos.length})
                 </p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {detail.photos.map((p: any, i: number) => (
+                {!showAllPhotos ? (
+                  <div className="space-y-2">
                     <button
-                      key={p.id ?? i}
-                      onClick={() => openPhoto(detail.photos, i)}
-                      className="aspect-square bg-slate-100 rounded-lg overflow-hidden group relative focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      title={`View photo ${i + 1}`}
+                      onClick={() => {
+                        setShowAllPhotos(true);
+                        openPhoto(detail.photos, 0);
+                      }}
+                      className="w-full aspect-video bg-slate-100 rounded-xl overflow-hidden group relative border border-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      title="View gallery"
                     >
-                      <img src={p.cdnUrl} alt={`Photo ${i + 1}`} className="w-full h-full object-cover transition group-hover:scale-105 duration-200" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
-                        <Eye className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                      <img src={detail.photos[0].cdnUrl} alt="Cover Photo" className="w-full h-full object-cover transition group-hover:scale-105 duration-200" />
+                      <div className="absolute inset-0 bg-black/35 group-hover:bg-black/45 transition flex flex-col items-center justify-center gap-1">
+                        <Eye className="h-6 w-6 text-white drop-shadow" />
+                        <span className="text-white text-xs font-semibold drop-shadow">View Image Gallery ({detail.photos.length} photos)</span>
                       </div>
                     </button>
-                  ))}
-                </div>
+                    {detail.photos.length > 1 && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => setShowAllPhotos(true)}
+                      >
+                        Load All Photos ({detail.photos.length})
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {detail.photos.map((p: any, i: number) => (
+                      <button
+                        key={p.id ?? i}
+                        onClick={() => openPhoto(detail.photos, i)}
+                        className="aspect-square bg-slate-100 rounded-lg overflow-hidden group relative focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        title={`View photo ${i + 1}`}
+                      >
+                        <img src={p.cdnUrl} alt={`Photo ${i + 1}`} className="w-full h-full object-cover transition group-hover:scale-105 duration-200" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition flex items-center justify-center">
+                          <Eye className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition drop-shadow" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -572,13 +726,27 @@ export default function AccreditationPage() {
               </span>
             </div>
           )}
-          <Select
-            id="star-rating"
-            label="Verified Star Rating (admin-assigned)"
-            value={starRating}
-            onChange={(e) => setStarRating(e.target.value)}
-            options={[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `${n} Star${n > 1 ? "s" : ""}` }))}
-          />
+          <div>
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+              Verified Star Rating (admin-assigned)
+            </label>
+            <div className="flex gap-2">
+              {[1, 2, 3, 4, 5].map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStarRating(String(s))}
+                  className={`flex-1 py-2.5 rounded-xl border text-sm font-semibold transition-all duration-150 ${
+                    starRating === String(s)
+                      ? "bg-primary text-white border-primary shadow-sm shadow-primary/20 scale-[1.02]"
+                      : "border-slate-200 hover:border-slate-300 hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  {s}★
+                </button>
+              ))}
+            </div>
+          </div>
           <Textarea
             id="admin-note"
             label="Internal note (optional — logged in audit trail)"
@@ -640,6 +808,37 @@ export default function AccreditationPage() {
             required={reasons.includes("Other")}
           />
         </div>
+      </ActionModal>
+
+      {/* ── Escalation modal ────────────────────────────────────────────── */}
+      <ActionModal
+        open={escalationModal}
+        onClose={() => setEscalationModal(false)}
+        title="Escalate Review Task"
+        description="Flag this moderation task to senior admins for priority intervention."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setEscalationModal(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={escalateMut.isPending}
+              onClick={() => selectedTask && escalateMut.mutate({ taskId: selectedTask.id, reason: escalationReason })}
+            >
+              Escalate
+            </Button>
+          </>
+        }
+      >
+        <Textarea
+          id="esc-reason"
+          label="Escalation Reason"
+          placeholder="Explain why this task requires senior escalation..."
+          value={escalationReason}
+          onChange={(e) => setEscalationReason(e.target.value)}
+          rows={3}
+        />
       </ActionModal>
     </div>
   );

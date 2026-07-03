@@ -32,13 +32,14 @@ function StarDisplay({ rating }: { rating: number }) {
 export default function ReviewsPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [isHidden, setIsHidden] = useState("");
   const [rating, setRating] = useState("");
   const [hideModal, setHideModal] = useState<ListingReview | null>(null);
   const [hideReason, setHideReason] = useState("");
 
-  const params = { q, ...(isHidden ? { isHidden } : {}), ...(rating ? { rating } : {}), page: String(page), limit: "20" };
+  const params = { q, ...(isHidden ? { isHidden } : {}), ...(rating ? { rating } : {}), page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-reviews", params],
     queryFn: () => fetchReviews(params),
@@ -47,9 +48,24 @@ export default function ReviewsPage() {
   const reviews: ListingReview[] = data?.reviews ?? [];
   const total: number = data?.total ?? 0;
 
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/reviews?${new URLSearchParams(params)}`;
+  const responseCount = data?.reviews?.length ?? 0;
+  const renderedRows = reviews.length;
+  console.log("ReviewsPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-reviews", params],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const hideMut = useMutation({
     mutationFn: ({ id, hide, reason }: { id: string; hide: boolean; reason?: string }) =>
-      listingApi.patch(`/reviews/${id}/hide`, { hide, reason }),
+      listingApi.patch(`/reviews/${id}/hide`, { hidden: hide, reason }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-reviews"] });
       setHideModal(null);
@@ -64,7 +80,7 @@ export default function ReviewsPage() {
       width: "180px",
       render: (r) => (
         <div>
-          <p className="font-medium text-sm text-slate-900 truncate">{r.listing?.name ?? r.listingId}</p>
+          <p className="font-medium text-sm text-slate-900 truncate">{r.listingName ?? r.listing?.name ?? r.listingId}</p>
           <p className="text-xs text-slate-500">Guest: {r.guestId.slice(0, 8)}…</p>
         </div>
       ),
@@ -171,6 +187,8 @@ export default function ReviewsPage() {
               options: [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: `${n} Star${n > 1 ? "s" : ""}` })),
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -179,7 +197,7 @@ export default function ReviewsPage() {
           emptyTitle="No reviews found"
           emptyIcon={<Star className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Hide reason modal */}

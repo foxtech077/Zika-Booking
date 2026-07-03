@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listingApi } from "@/lib/listing-api";
 import { Button } from "@/components/ui/Button";
+import { useAuthStore } from "@/stores/auth";
+import type { ListingReviewTask } from "@/types/admin";
+import { formatDate } from "@/lib/utils";
 
 const REJECTION_REASONS = [
   "Insufficient documentation",
@@ -24,6 +27,7 @@ interface ListingDetail {
   unitCount: number | null;
   description: string | null;
   pricePerNight: number | null;
+  pricePerDay?: number | null;
   currency: string | null;
   address: string | null;
   town: string | null;
@@ -54,8 +58,9 @@ interface ListingDetail {
   mileageLimitKm: number | null;
   photos: { id: string; cdnUrl: string; position: number }[];
   documents: { id: string; documentType: string; fileType: string }[];
-  amenities: { amenityKey: string }[];
-  customAmenities: { label: string }[];
+  amenities?: Record<string, string[]> | { amenityKey: string }[] | null;
+  customAmenities?: { label: string }[] | any[] | null;
+  reviewTasks?: ListingReviewTask[];
 }
 
 export default function ListingReviewPage() {
@@ -87,7 +92,17 @@ export default function ListingReviewPage() {
   const [showSuspend, setShowSuspend] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
 
+  // Escalate state
+  const [showEscalate, setShowEscalate] = useState(false);
+  const [escalateReason, setEscateReason] = useState("");
+
+  // Reinstate state
+  const [showReinstate, setShowReinstate] = useState(false);
+  const [reinstateReason, setReinstateReason] = useState("");
+
   const [actionError, setActionError] = useState<string | null>(null);
+
+  const { token, user } = useAuthStore();
 
   const { data: listing, isLoading } = useQuery<ListingDetail>({
     queryKey: ["listing-review", id],
@@ -95,6 +110,24 @@ export default function ListingReviewPage() {
       const res = await listingApi.get<{ data: ListingDetail }>(`/admin/listings/${id}/review`);
       return res.data.data;
     },
+  });
+
+  const { data: reviewTasksData } = useQuery({
+    queryKey: ["listing-review-tasks", id],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: { tasks: any[] } }>(`/admin/listings/${id}/review-tasks`);
+      return res.data.data ?? res.data;
+    },
+    enabled: !!token,
+  });
+
+  const { data: moderationHistoryData } = useQuery({
+    queryKey: ["listing-moderation-history", id],
+    queryFn: async () => {
+      const res = await listingApi.get<{ data: { history: any[] } }>(`/admin/listings/${id}/moderation-history`);
+      return res.data.data ?? res.data;
+    },
+    enabled: !!token,
   });
 
   async function viewDocument(docId: string) {
@@ -140,10 +173,76 @@ export default function ListingReviewPage() {
   });
 
   const reinstateMutation = useMutation({
-    mutationFn: () => listingApi.post(`/admin/listings/${id}/reinstate`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["listing-review", id] }),
+    mutationFn: (reason?: string) => listingApi.post(`/admin/listings/${id}/reinstate`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["listing-review", id] });
+      setShowReinstate(false);
+      setReinstateReason("");
+    },
     onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Reinstatement failed."),
   });
+
+  const assignMutation = useMutation({
+    mutationFn: (taskId: string) => listingApi.patch(`/admin/listings/review-tasks/${taskId}/assign`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["listing-review", id] });
+    },
+    onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Assignment failed."),
+  });
+
+  const unassignMutation = useMutation({
+    mutationFn: (taskId: string) => listingApi.patch(`/admin/listings/review-tasks/${taskId}/unassign`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["listing-review", id] });
+    },
+    onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Unassignment failed."),
+  });
+
+  const escalateMutation = useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason?: string }) =>
+      listingApi.patch(`/admin/listings/review-tasks/${taskId}/escalate`, { reason }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["listing-review", id] });
+      setShowEscalate(false);
+      setEscateReason("");
+    },
+    onError: (e: any) => setActionError(e?.response?.data?.error?.message ?? "Escalation failed."),
+  });
+
+  const getSlaInfo = (deadlineStr: string, taskState: string) => {
+    if (taskState === "resolved") return { text: "Resolved", color: "active" };
+    const diffMs = new Date(deadlineStr).getTime() - Date.now();
+    const diffHours = diffMs / (1000 * 60 * 60);
+
+    if (diffMs < 0) {
+      return { text: `Breached (${Math.abs(Math.round(diffHours))}h overdue)`, color: "danger" };
+    }
+    if (diffHours < 4) {
+      const mins = Math.round((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      return { text: `Approaching (${Math.floor(diffHours)}h ${mins}m)`, color: "suspended" };
+    }
+    return { text: `${Math.round(diffHours)}h remaining`, color: "active" };
+  };
+
+  const activeTask = listing?.reviewTasks?.find(
+    (t) => t.status === "open" || t.status === "escalated"
+  );
+
+  const allAmenities: string[] = [];
+  if (listing?.amenities && typeof listing.amenities === "object" && !Array.isArray(listing.amenities)) {
+    Object.values(listing.amenities).forEach((list) => {
+      if (Array.isArray(list)) {
+        allAmenities.push(...list);
+      }
+    });
+  } else if (Array.isArray(listing?.amenities)) {
+    allAmenities.push(...listing.amenities.map((a: any) => typeof a === "string" ? a : a.amenityKey));
+  }
+
+  const allCustomAmenities: string[] = [];
+  if (Array.isArray(listing?.customAmenities)) {
+    allCustomAmenities.push(...listing.customAmenities.map((a: any) => typeof a === "string" ? a : a.label));
+  }
 
   if (isLoading) {
     return <div className="p-8 flex justify-center"><div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full" /></div>;
@@ -193,19 +292,91 @@ export default function ListingReviewPage() {
             <Button variant="danger" onClick={() => { setShowSuspend(true); setActionError(null); }}>Suspend listing</Button>
           )}
           {isSuspended && (
-            <Button onClick={() => reinstateMutation.mutate()} loading={reinstateMutation.isPending}>Reinstate listing</Button>
+            <Button onClick={() => { setShowReinstate(true); setReinstateReason(""); setActionError(null); }}>Reinstate listing</Button>
           )}
         </div>
       </div>
 
       {actionError && <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-5">{actionError}</p>}
 
+      {activeTask && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Active Review Task</span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${activeTask.status === "escalated"
+                  ? "bg-red-50 text-red-700 border-red-200"
+                  : "bg-blue-50 text-blue-700 border-blue-200"
+                }`}>
+                {activeTask.status}
+              </span>
+            </div>
+            <div className="text-sm text-slate-600 flex flex-wrap gap-x-4 gap-y-1">
+              <span>Task ID: <code className="font-mono text-xs text-slate-700">{activeTask.id}</code></span>
+              <span>Deadline: <span className="font-medium text-slate-800">{formatDate(activeTask.slaDeadline)}</span></span>
+              <span>
+                SLA Tracker:{" "}
+                <span className={`font-semibold ${getSlaInfo(activeTask.slaDeadline, activeTask.status).color === "danger"
+                    ? "text-red-600"
+                    : getSlaInfo(activeTask.slaDeadline, activeTask.status).color === "suspended"
+                      ? "text-amber-600"
+                      : "text-green-600"
+                  }`}>
+                  {getSlaInfo(activeTask.slaDeadline, activeTask.status).text}
+                </span>
+              </span>
+            </div>
+            <div className="text-sm text-slate-600">
+              Assignee:{" "}
+              <span className="font-medium text-slate-800">
+                {activeTask.assignedTo ? (activeTask.assignedTo === user?.id ? "You (Self-assigned)" : activeTask.assignedTo) : "Unassigned"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {!activeTask.assignedTo ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => assignMutation.mutate(activeTask.id)}
+                loading={assignMutation.isPending}
+              >
+                Assign Me
+              </Button>
+            ) : activeTask.assignedTo === user?.id ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => unassignMutation.mutate(activeTask.id)}
+                loading={unassignMutation.isPending}
+              >
+                Unassign
+              </Button>
+            ) : null}
+
+            {user?.role !== "super_admin" && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setShowEscalate(true);
+                  setActionError(null);
+                }}
+              >
+                Escalate Task
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* LEFT — Listing details */}
         <div className="space-y-5">
           {/* Basic info */}
           <Section title="Basic Information">
-            <Row label="Price" value={listing.pricePerNight ? `${listing.currency} ${listing.pricePerNight}/${listing.category === "car" ? "day" : "night"}` : "—"} />
+            <Row label="Price" value={(listing.pricePerNight ?? listing.pricePerDay) ? `${listing.currency} ${listing.pricePerNight ?? listing.pricePerDay}/${listing.category === "car" ? "day" : "night"}` : "—"} />
             <Row label="Cancellation policy" value={listing.cancellationPolicy ?? "—"} />
 
             {listing.category === "hotel" && (
@@ -251,8 +422,8 @@ export default function ListingReviewPage() {
           </Section>
 
           {/* Photos */}
-          <Section title={`Photos (${listing.photos.length})`}>
-            {listing.photos.length === 0 ? <p className="text-sm text-gray-400">No photos uploaded.</p> : (
+          <Section title={`Photos (${(listing.photos ?? []).length})`}>
+            {(!listing.photos || listing.photos.length === 0) ? <p className="text-sm text-gray-400">No photos uploaded.</p> : (
               <div className="grid grid-cols-3 gap-2">
                 {listing.photos.map((p, i) => (
                   <div key={p.id} className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden flex items-center justify-center border border-gray-200">
@@ -268,13 +439,19 @@ export default function ListingReviewPage() {
           {/* Amenities */}
           <Section title="Amenities">
             <div className="flex flex-wrap gap-1.5">
-              {listing.amenities.map((a) => (
-                <span key={a.amenityKey} className="bg-gray-100 text-gray-700 rounded-full px-3 py-1 text-xs">{a.amenityKey.replace(/_/g, " ")}</span>
+              {allAmenities.map((amenity) => (
+                <span key={amenity} className="bg-gray-100 text-gray-700 rounded-full px-3 py-1 text-xs capitalize">
+                  {amenity.replace(/_/g, " ")}
+                </span>
               ))}
-              {listing.customAmenities.map((a) => (
-                <span key={a.label} className="bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-xs">{a.label}</span>
+              {allCustomAmenities.map((label) => (
+                <span key={label} className="bg-blue-50 text-blue-700 rounded-full px-3 py-1 text-xs capitalize">
+                  {label}
+                </span>
               ))}
-              {!listing.amenities.length && !listing.customAmenities.length && <p className="text-sm text-gray-400">None listed.</p>}
+              {!allAmenities.length && !allCustomAmenities.length && (
+                <p className="text-sm text-gray-400">None listed.</p>
+              )}
             </div>
           </Section>
         </div>
@@ -286,7 +463,7 @@ export default function ListingReviewPage() {
               <p className="text-sm text-gray-400">Not required for {listing.category} listings.</p>
             ) : (
               <div className="space-y-2 mb-4">
-                {listing.documents.map((doc) => (
+                {(listing.documents ?? []).map((doc) => (
                   <button
                     key={doc.id}
                     onClick={() => viewDocument(doc.id)}
@@ -296,7 +473,7 @@ export default function ListingReviewPage() {
                     <span className="text-xs text-gray-400 uppercase">{doc.fileType}</span>
                   </button>
                 ))}
-                {listing.documents.length === 0 && <p className="text-sm text-gray-400">No documents uploaded.</p>}
+                {!(listing.documents ?? []).length && <p className="text-sm text-gray-400">No documents uploaded.</p>}
               </div>
             )}
 
@@ -313,6 +490,71 @@ export default function ListingReviewPage() {
                 <div className="p-2 flex justify-end">
                   <a href={docUrl.url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Open in new tab ↗</a>
                 </div>
+              </div>
+            )}
+          </Section>
+
+          {/* Review Task History */}
+          <Section title={`Review Task History (${reviewTasksData?.tasks?.length ?? 0})`}>
+            {(!reviewTasksData?.tasks || reviewTasksData.tasks.length === 0) ? (
+              <p className="text-sm text-gray-400">No review task history found.</p>
+            ) : (
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                {reviewTasksData.tasks.map((task: any) => (
+                  <div key={task.id} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50 space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-gray-700">Submission #{task.submissionNumber}</span>
+                      <span className={`px-2 py-0.5 rounded-full font-medium border ${
+                        task.status === "resolved" 
+                          ? "bg-green-50 text-green-700 border-green-200" 
+                          : "bg-blue-50 text-blue-700 border-blue-200"
+                      }`}>
+                        {task.status}
+                      </span>
+                    </div>
+                    <div className="text-gray-500 flex justify-between">
+                      <span>Assignee: {task.assignedTo || "Unassigned"}</span>
+                      <span>Created: {formatDate(task.createdAt)}</span>
+                    </div>
+                    {task.outcome && (
+                      <div className="text-gray-600 font-medium">Outcome: <span className="capitalize">{task.outcome}</span></div>
+                    )}
+                    {task.adminNote && (
+                      <div className="bg-white p-2 rounded border border-gray-100 mt-1 italic text-gray-600">
+                        Note: {task.adminNote}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Section>
+
+          {/* Moderation History */}
+          <Section title={`Moderation History (${moderationHistoryData?.history?.length ?? 0})`}>
+            {(!moderationHistoryData?.history || moderationHistoryData.history.length === 0) ? (
+              <p className="text-sm text-gray-400">No moderation audit trail found.</p>
+            ) : (
+              <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                {moderationHistoryData.history.map((log: any) => (
+                  <div key={log.id} className="p-3 rounded-lg border border-gray-100 bg-gray-50/50 space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-gray-800 capitalize">{log.action.replace(/_/g, " ")}</span>
+                      <span className="text-[10px] text-gray-400">{formatDate(log.createdAt)}</span>
+                    </div>
+                    <div className="text-gray-500">Actor Role: <span className="capitalize">{log.actorRole.replace(/_/g, " ")}</span></div>
+                    {log.metadata && Object.keys(log.metadata).length > 0 && (
+                      <div className="bg-white p-2 rounded border border-gray-100 mt-1 space-y-0.5 text-gray-600">
+                        {Object.entries(log.metadata).map(([key, val]: any) => (
+                          <div key={key} className="flex justify-between">
+                            <span className="text-gray-400 font-medium">{key}:</span>
+                            <span className="font-semibold max-w-[150px] truncate" title={String(val)}>{String(val)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </Section>
@@ -441,6 +683,42 @@ export default function ListingReviewPage() {
             <Button variant="secondary" onClick={() => setShowSuspend(false)}>Cancel</Button>
             <Button variant="danger" onClick={() => suspendMutation.mutate()} loading={suspendMutation.isPending} disabled={!suspendReason.trim()}>
               Suspend Listing
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Escalate modal ─────────────────────────────────────────────────── */}
+      {showEscalate && activeTask && (
+        <Modal title="Escalate Review Task" onClose={() => setShowEscalate(false)}>
+          <p className="text-sm text-gray-600 mb-4">Flag this review/moderation task to senior admins for priority intervention.</p>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
+            <textarea className={textarea} rows={3} value={escalateReason} onChange={(e) => setEscateReason(e.target.value)} maxLength={500} placeholder="Describe why this task requires senior escalation…" />
+          </div>
+          {actionError && <p className="text-sm text-red-600 mb-3">{actionError}</p>}
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setShowEscalate(false)}>Cancel</Button>
+            <Button variant="danger" onClick={() => escalateMutation.mutate({ taskId: activeTask.id, reason: escalateReason })} loading={escalateMutation.isPending}>
+              Escalate Task
+            </Button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Reinstate modal ───────────────────────────────────────────────── */}
+      {showReinstate && (
+        <Modal title="Reinstate Listing" onClose={() => setShowReinstate(false)}>
+          <p className="text-sm text-gray-600 mb-4">Please provide a reason for reinstating this listing. The host will be notified by email.</p>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
+            <textarea className={textarea} rows={3} value={reinstateReason} onChange={(e) => setReinstateReason(e.target.value)} maxLength={500} placeholder="Provide context for why this listing is being reinstated..." />
+          </div>
+          {actionError && <p className="text-sm text-red-600 mb-3">{actionError}</p>}
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => setShowReinstate(false)}>Cancel</Button>
+            <Button onClick={() => reinstateMutation.mutate(reinstateReason)} loading={reinstateMutation.isPending}>
+              Confirm Reinstatement
             </Button>
           </div>
         </Modal>

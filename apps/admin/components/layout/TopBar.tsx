@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { Bell, Search } from "lucide-react";
 import { useAuthStore } from "@/stores/auth";
 import { Avatar } from "@/components/ui/Avatar";
-import { slugToLabel } from "@/lib/utils";
+import { slugToLabel, getCountryNames } from "@/lib/utils";
 
 function getBreadcrumb(pathname: string): string[] {
   const parts = pathname.split("/").filter(Boolean);
@@ -49,9 +49,13 @@ export function TopBar() {
         {user && (
           <div className="flex items-center gap-2 pl-3 border-l border-border">
             <Avatar name={user.name} size="sm" />
-            <div className="hidden sm:block text-right">
+            <div className="hidden sm:block text-right max-w-[220px]">
               <p className="text-xs font-semibold text-slate-900 leading-none">{user.name}</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">{slugToLabel(user.role)}</p>
+              <p className="text-[10px] text-slate-500 mt-1 leading-tight break-words whitespace-normal">
+                {user.role === "country_manager"
+                  ? `Country Manager (${getCountryNames(user.countryScope)})`
+                  : slugToLabel(user.role)}
+              </p>
             </div>
           </div>
         )}

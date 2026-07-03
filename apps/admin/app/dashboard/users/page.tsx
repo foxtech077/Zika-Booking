@@ -14,6 +14,7 @@ import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 import type { PlatformUser } from "@/types/admin";
+// import { useAuthStore } from "@/stores/auth";
 
 const fetchUsers = (params: Record<string, string>) =>
   api.get("/admin/users", { params }).then((r) => r.data.data ?? r.data);
@@ -22,10 +23,14 @@ export default function UsersPage() {
   const { user, _hasHydrated } = useAuthStore();
   const isCountryManager = user?.role === "country_manager";
   const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
-  const limit = 20;
+
   const qc = useQueryClient();
 
+  // If this admin has a country scope, restrict the user list to those countries
+
+
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [userType, setUserType] = useState("");
@@ -33,7 +38,15 @@ export default function UsersPage() {
   const [confirm, setConfirm] = useState<{ action: "suspend" | "reinstate" | "ban"; user: PlatformUser } | null>(null);
   const [reason, setReason] = useState("");
 
-  const params = { q, status, userType, page: String(page), limit: "20" };
+  const params: Record<string, string> = {
+    q,
+    ...(status ? { status } : {}),
+    ...(userType ? { userType } : {}),
+    // Inject country filter when admin is country-scoped
+    ...(scopedCountries.length > 0 ? { country: scopedCountries.join(",") } : {}),
+    page: scopedCountries.length > 0 ? "1" : String(page),
+    limit: scopedCountries.length > 0 ? "1000" : String(limit),
+  };
   const { data, isLoading } = useQuery({
     queryKey: ["admin-users", page, limit, q, status, userType, scopedCountries.join(",")],
     queryFn: () => fetchUsers(params),
@@ -48,6 +61,21 @@ export default function UsersPage() {
     ? scopedUsers.slice((page - 1) * limit, page * limit)
     : scopedUsers;
   const total: number = scopedCountries.length > 0 ? scopedUsers.length : (data?.total ?? 0);
+
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/users?${new URLSearchParams(params)}`;
+  const responseCount = data?.users?.length ?? 0;
+  const renderedRows = users.length;
+  console.log("UsersPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-users", page, limit, q, status, userType, scopedCountries.join(",")],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
 
   const mutate = useMutation({
     mutationFn: ({ action, id }: { action: string; id: string }) => {
@@ -201,6 +229,8 @@ export default function UsersPage() {
               ],
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -211,7 +241,7 @@ export default function UsersPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<Users className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* User detail drawer */}

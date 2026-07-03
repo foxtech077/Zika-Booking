@@ -2,9 +2,19 @@
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, XCircle, Eye, Plus, Send } from "lucide-react";
+import {
+  CalendarDays,
+  XCircle,
+  Plus,
+  Send,
+  CheckCircle2,
+  AlertTriangle,
+  AlertCircle,
+  Clock
+} from "lucide-react";
 import Link from "next/link";
 import { listingApi } from "@/lib/listing-api";
+import { paymentApi } from "@/lib/payment-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -17,10 +27,19 @@ import type { Booking } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
+import { Avatar } from "@/components/ui/Avatar";
 
 const COUNTRY_OPTIONS = [
   "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN",
-].map((c) => ({ value: c, label: c }));
+].map((code) => {
+  const found = SYSTEM_COUNTRIES.find((sc) => sc.code === code);
+  return {
+    value: code,
+    label: found ? `${found.flag} ${found.name}` : code,
+  };
+});
 
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -32,58 +51,93 @@ export default function BookingsPage() {
   const qc = useQueryClient();
   const { token, user, _hasHydrated } = useAuthStore();
   const role = user?.role as AdminRole | undefined;
+  
   const isAdminOrSuperAdmin = user?.role === "super_admin" || user?.role === "admin";
-  const isCountryManager = user?.role === "country_manager";
+  const isCountryScoped = ["sales", "country_manager"].includes(user?.role || "");
   const canManualBook = canAccess(role, "manage_manual_booking");
-  // Only super_admin and admin see the country filter dropdown; country managers have a fixed scope
-  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin";
+  const canManageBookings = canAccess(role, "manage_bookings");
+  const userCountries = user?.countryScope ?? [];
 
-  // scopedCountries only applies to country_manager (not admin — admin sees all)
-  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  // scopedCountries only applies to country_manager / sales (not admin — admin sees all)
+  const scopedCountries = isCountryScoped ? userCountries : [];
+  const canShowCountryFilter = user?.role === "super_admin" || user?.role === "admin" || (isCountryScoped && scopedCountries.length > 1);
   const countryOptions = scopedCountries.length > 0
-    ? scopedCountries.map((c) => ({ value: c, label: c }))
+    ? scopedCountries.map((c) => {
+        const found = SYSTEM_COUNTRIES.find((sc) => sc.code === c);
+        return { value: c, label: found ? `${found.flag} ${found.name}` : c };
+      })
     : COUNTRY_OPTIONS;
+
+  const [activeTab, setActiveTab] = useState<"all" | "pending">("all");
+  const canViewPendingRequests = ["super_admin", "admin", "country_manager", "sales"].includes(role || "");
+  const showTabs = canViewPendingRequests;
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [listingType, setListingType] = useState("");
-  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
+  const [country, setCountry] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
-  // Sync country selection after auth store hydration
-  useEffect(() => {
-    if (scopedCountries.length > 0 && !country) {
-      setCountry(scopedCountries[0] ?? "");
-    }
-  }, [scopedCountries, country]);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [cancelModal, setCancelModal] = useState<Booking | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [resendModal, setResendModal] = useState<Booking | null>(null);
+  const [resendGateway, setResendGateway] = useState<"stripe" | "tara">("stripe");
+  const [resendError, setResendError] = useState("");
+  const [resendSuccess, setResendSuccess] = useState(false);
 
-  // For country managers, always enforce their scoped country
-  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
+  // Decline Request States
+  const [declineModalOpen, setDeclineModalOpen] = useState(false);
+  const [declineBooking, setDeclineBooking] = useState<any | null>(null);
+  const [declineReasonType, setDeclineReasonType] = useState<string>("");
+  const [declineReason, setDeclineReason] = useState("");
+
+  // Messaging States
+  const [messageText, setMessageText] = useState("");
+
+  // Action Status States
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActionError(null);
+    setActionSuccess(null);
+  }, [selected, activeTab]);
+
   const params = Object.fromEntries(
     Object.entries({
       q,
       status,
       listingType,
-      country: effectiveCountry,
+      country,
       page: String(page),
       limit: String(limit),
     }).filter(([, v]) => v !== "")
   );
+
+  // Query: Fetch all normal bookings
   const { data, isLoading } = useQuery({
     queryKey: ["admin-bookings", params],
     queryFn: () => fetchBookings(params),
-    // Wait for auth store to rehydrate so scopedCountries/effectiveCountry are correct
-    enabled: !!token && _hasHydrated,
+    enabled: !!token && _hasHydrated && activeTab === "all",
   });
 
   const bookings: Booking[] = data?.bookings ?? [];
   const total: number = data?.total ?? 0;
+
+  // Query: Fetch pending requests (only if user has permission)
+  const pendingParams = { page: String(page), limit: String(limit) };
+  const { data: pendingData, isLoading: isLoadingPending } = useQuery({
+    queryKey: ["admin-pending-booking-requests", pendingParams],
+    queryFn: () => listingApi.get(`/admin/booking-requests/pending`, { params: pendingParams }).then(r => r.data.data ?? r.data),
+    enabled: !!token && _hasHydrated && canViewPendingRequests,
+  });
+
+  const pendingRequests = pendingData?.requests ?? [];
+  const pendingTotal = pendingData?.total ?? 0;
 
   const filteredBookings = bookings.filter((b) => {
     if (!startDate && !endDate) return true;
@@ -106,12 +160,46 @@ export default function BookingsPage() {
     return true;
   });
 
+  // Client side filtering for pending requests list
+  const filteredPendingRequests = pendingRequests.filter((b: any) => {
+    if (q) {
+      const search = q.toLowerCase();
+      const matchRef = b.reference?.toLowerCase().includes(search);
+      const matchName = `${b.guestFirstName} ${b.guestLastName}`.toLowerCase().includes(search);
+      const matchListing = b.listing?.name?.toLowerCase().includes(search);
+      if (!matchRef && !matchName && !matchListing) return false;
+    }
+    if (country && b.listing?.country !== country) return false;
+    return true;
+  });
+
   const { data: detailData, isLoading: loadingDetail } = useQuery({
     queryKey: ["admin-booking-detail", selected?.id],
     queryFn: () => fetchBookingDetail(selected!.id),
     enabled: !!selected,
   });
 
+  // Check if current agent can act on the selected booking (country scope check)
+  const canAgentAct = !isCountryScoped || userCountries.includes(detailData?.listing?.country || "");
+
+  // Message thread queries
+  const { data: convData } = useQuery({
+    queryKey: ["admin-booking-conversation", selected?.id],
+    queryFn: () => listingApi.get(`/admin/conversations`, { params: { q: selected?.id || "" } }).then(r => r.data.data ?? r.data),
+    enabled: !!selected && activeTab === "pending",
+  });
+
+  const conversationId = convData?.conversations?.[0]?.id;
+
+  const { data: messagesData } = useQuery({
+    queryKey: ["admin-conversation-messages", conversationId],
+    queryFn: () => listingApi.get(`/admin/conversations/${conversationId}/messages`).then(r => r.data.data ?? r.data),
+    enabled: !!conversationId,
+  });
+
+  const messages = messagesData?.messages ?? [];
+
+  // Mutations
   const cancelMut = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       listingApi.post(`/admin/bookings/${id}/cancel`, { reason }),
@@ -125,10 +213,95 @@ export default function BookingsPage() {
 
   // Resend payment link for draft bookings
   const resendLinkMut = useMutation({
-    mutationFn: (id: string) => listingApi.post(`/admin/bookings/${id}/send-link`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin-bookings"] });
+    mutationFn: async ({ id, gateway }: { id: string; gateway: "stripe" | "tara" }) => {
+      setResendError("");
+      setResendSuccess(false);
+      const res = await paymentApi.post(`/${gateway}/payment-link`, { bookingId: id });
+      if (gateway === "tara") {
+        await paymentApi.get(`/tara/trigger/${id}`);
+      }
+      return res.data;
     },
+    onSuccess: () => {
+      setResendSuccess(true);
+      qc.invalidateQueries({ queryKey: ["admin-bookings"] });
+      qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
+      setResendError(msg);
+    }
+  });
+
+  // Approve request mutation
+  const approveRequestMut = useMutation({
+    mutationFn: (id: string) =>
+      listingApi.post(`/admin/booking-requests/${id}/approve`).then(r => r.data),
+    onSuccess: () => {
+      setActionSuccess("Booking request approved successfully.");
+      setActionError(null);
+      qc.invalidateQueries({ queryKey: ["admin-pending-booking-requests"] });
+      qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
+      setSelected(null);
+    },
+    onError: (err: any) => {
+      setActionError(err?.response?.data?.error?.message ?? "Approval failed.");
+      setActionSuccess(null);
+    }
+  });
+
+  // Decline request mutation
+  const declineRequestMut = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      listingApi.post(`/admin/booking-requests/${id}/decline`, { reason }).then(r => r.data),
+    onSuccess: () => {
+      setActionSuccess("Booking request declined successfully.");
+      setActionError(null);
+      qc.invalidateQueries({ queryKey: ["admin-pending-booking-requests"] });
+      qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
+      setSelected(null);
+      setDeclineModalOpen(false);
+      setDeclineBooking(null);
+      setDeclineReasonType("");
+      setDeclineReason("");
+    },
+    onError: (err: any) => {
+      setActionError(err?.response?.data?.error?.message ?? "Decline failed.");
+      setActionSuccess(null);
+    }
+  });
+
+  // Escalate to Host mutation
+  const escalateRequestMut = useMutation({
+    mutationFn: (id: string) =>
+      listingApi.post(`/admin/booking-requests/${id}/escalate`).then(r => r.data),
+    onSuccess: () => {
+      setActionSuccess("Reminder warning escalated to host.");
+      setActionError(null);
+      qc.invalidateQueries({ queryKey: ["admin-pending-booking-requests"] });
+      qc.invalidateQueries({ queryKey: ["admin-booking-detail"] });
+    },
+    onError: (err: any) => {
+      setActionError(err?.response?.data?.error?.message ?? "Escalation failed.");
+      setActionSuccess(null);
+    }
+  });
+
+  // Request More Info (Send message) mutation
+  const requestInfoMut = useMutation({
+    mutationFn: ({ id, message }: { id: string; message: string }) =>
+      listingApi.post(`/admin/booking-requests/${id}/request-info`, { message }).then(r => r.data),
+    onSuccess: () => {
+      setMessageText("");
+      setActionError(null);
+      qc.invalidateQueries({ queryKey: ["admin-booking-conversation", selected?.id] });
+      if (conversationId) {
+        qc.invalidateQueries({ queryKey: ["admin-conversation-messages", conversationId] });
+      }
+    },
+    onError: (err: any) => {
+      setActionError(err?.response?.data?.error?.message ?? "Failed to send message.");
+    }
   });
 
   const columns: Column<Booking>[] = [
@@ -202,7 +375,7 @@ export default function BookingsPage() {
       width: "80px",
       render: (b) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          {["pending_payment", "confirmed"].includes(b.status) && (
+          {["pending_payment", "confirmed"].includes(b.status) && (b.status === "pending_payment" || canManageBookings) && (
             <button
               onClick={() => setCancelModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
@@ -211,9 +384,9 @@ export default function BookingsPage() {
               <XCircle className="h-3.5 w-3.5" />
             </button>
           )}
-          {["pending_payment", "draft"].includes(b.status) && (
+          {b.status === "draft" && (
             <button
-              onClick={() => resendLinkMut.mutate(b.id)}
+              onClick={() => setResendModal(b)}
               className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
               title="Resend payment link"
             >
@@ -225,11 +398,99 @@ export default function BookingsPage() {
     },
   ];
 
+  // Tailored columns for Pending Requests list
+  const pendingColumns: Column<any>[] = [
+    {
+      key: "ref",
+      label: "Reference",
+      width: "160px",
+      render: (b) => (
+        <div>
+          <p className="font-mono font-medium text-sm text-primary">{b.reference}</p>
+          <span className="text-[10px] font-semibold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
+            Request to Book
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "guest",
+      label: "Guest",
+      render: (b) => (
+        <p className="font-medium text-sm text-slate-900">{b.guestFirstName} {b.guestLastName}</p>
+      ),
+    },
+    {
+      key: "listing",
+      label: "Listing",
+      render: (b) => (
+        <div>
+          <p className="text-sm text-slate-700 truncate">{b.listing?.name ?? b.listingId}</p>
+          {b.listing?.country && <p className="text-[10px] text-slate-400">Country: {b.listing.country}</p>}
+        </div>
+      ),
+    },
+    {
+      key: "amount",
+      label: "Amount",
+      align: "right",
+      render: (b) => (
+        <p className="font-semibold text-sm tabular text-right">{formatCurrency(Number(b.totalAmount), b.currency)}</p>
+      ),
+    },
+    {
+      key: "created",
+      label: "Waiting Time",
+      render: (b) => {
+        const hours = Math.floor((Date.now() - new Date(b.createdAt).getTime()) / (1000 * 60 * 60));
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs text-slate-500">{formatRelativeTime(b.createdAt)}</span>
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100 w-fit">
+              <Clock className="h-3 w-3" /> Waiting {hours}h
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      key: "actions",
+      label: "",
+      align: "right",
+      width: "160px",
+      render: (b) => (
+        <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <Button
+            size="sm"
+            variant="primary"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white border-none focus:ring-emerald-500/30"
+            loading={approveRequestMut.isPending && selected?.id === b.id}
+            onClick={() => approveRequestMut.mutate(b.id)}
+          >
+            Approve
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => {
+              setDeclineBooking(b);
+              setDeclineReasonType("");
+              setDeclineReason("");
+              setDeclineModalOpen(true);
+            }}
+          >
+            Decline
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-5 max-w-screen-2xl">
       <SectionHeader
         title="Bookings"
-        description={`${total.toLocaleString()} total bookings`}
+        description={`${activeTab === "pending" ? pendingTotal.toLocaleString() : total.toLocaleString()} total bookings`}
         action={
           canManualBook ? (
             <Link href="/dashboard/bookings/new">
@@ -241,13 +502,44 @@ export default function BookingsPage() {
         }
       />
 
-      <Card padding="none">
-        <FilterBar 
-        
+      {showTabs && (
+        <div className="flex border-b border-border bg-white rounded-t-xl px-4 pt-3 gap-2 overflow-x-auto">
+          {[
+            { key: "all", label: "All Bookings", count: total, color: "text-slate-500" },
+            { key: "pending", label: "Pending Requests", count: pendingTotal, color: "text-amber-500" },
+          ].map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => {
+                  setActiveTab(tab.key as any);
+                  setPage(1);
+                }}
+                className={`flex items-center gap-2 pb-3 px-3 text-xs font-semibold uppercase tracking-wider border-b-2 transition-all leading-none ${
+                  isActive
+                    ? "border-primary text-primary"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${
+                  isActive ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-500"
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <Card padding="none" className={showTabs ? "rounded-t-none border-t-0" : ""}>
+        <FilterBar
           search={q}
           onSearchChange={(v) => { setQ(v); setPage(1); }}
           searchPlaceholder="Search reference, email…"
-          filters={[
+          filters={activeTab === "all" ? [
             {
               key: "status",
               label: "All Statuses",
@@ -287,30 +579,43 @@ export default function BookingsPage() {
                 },
               ]
               : []),
+          ] : [
+            ...(canShowCountryFilter
+              ? [
+                {
+                  key: "country",
+                  label: "All Countries",
+                  value: country,
+                  onChange: (v: string) => {
+                    setCountry(v);
+                    setPage(1);
+                  },
+                  options: countryOptions,
+                },
+              ]
+              : []),
           ]}
         >
-          {canShowCountryFilter && (
+          {activeTab === "all" && canShowCountryFilter && (
             <div className="flex items-center gap-2">
-              <input
-                type="date"
+              <DatePicker
                 value={startDate}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
+                onChange={(val) => {
+                  setStartDate(val);
                   setPage(1);
                 }}
-                className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
-                aria-label="Start Date"
+                placeholder="Start Date"
+                className="w-40"
               />
               <span className="text-xs text-slate-400">to</span>
-              <input
-                type="date"
+              <DatePicker
                 value={endDate}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
+                onChange={(val) => {
+                  setEndDate(val);
                   setPage(1);
                 }}
-                className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
-                aria-label="End Date"
+                placeholder="End Date"
+                className="w-40"
               />
               {(startDate || endDate) && (
                 <button
@@ -328,16 +633,24 @@ export default function BookingsPage() {
             </div>
           )}
         </FilterBar>
+        
         <DataTable
-          columns={columns}
-          data={filteredBookings}
-          loading={isLoading}
+          columns={activeTab === "pending" ? pendingColumns : columns}
+          data={activeTab === "pending" ? filteredPendingRequests : filteredBookings}
+          loading={activeTab === "pending" ? isLoadingPending : isLoading}
           onRowClick={(b) => setSelected(b)}
-          emptyTitle="No bookings found"
-          emptyDescription="Try adjusting your search or filters."
-          emptyIcon={<CalendarDays className="h-10 w-10" />}
+          emptyTitle={activeTab === "pending" ? "No pending requests found" : "No bookings found"}
+          emptyDescription={activeTab === "pending" ? "There are no request-to-book bookings waiting for approval." : "Try adjusting your search or filters."}
+          emptyIcon={activeTab === "pending" ? <Clock className="h-10 w-10 text-slate-300" /> : <CalendarDays className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} onLimitChange={(newL) => { setLimit(newL); setPage(1); }} />
+        
+        <Pagination
+          page={page}
+          limit={limit}
+          total={activeTab === "pending" ? pendingTotal : total}
+          onPageChange={setPage}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
+        />
       </Card>
 
       {/* Detail drawer */}
@@ -348,7 +661,7 @@ export default function BookingsPage() {
         description={`${selected?.guestFirstName} ${selected?.guestLastName} · ${selected?.guestEmail}`}
         width="md"
         footer={
-          selected && ["pending_payment", "confirmed"].includes(selected.status) ? (
+          selected && ["pending_payment", "confirmed"].includes(selected.status) && activeTab !== "pending" && (selected.status === "pending_payment" || canManageBookings) ? (
             <Button
               variant="danger"
               size="sm"
@@ -368,6 +681,94 @@ export default function BookingsPage() {
           </div>
         ) : detailData ? (
           <div className="space-y-6">
+            
+            {/* Status alerts for Manual Booking Request actions */}
+            {actionError && (
+              <div className="p-3 text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-lg flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-rose-500 flex-shrink-0" />
+                <span>{actionError}</span>
+              </div>
+            )}
+            {actionSuccess && (
+              <div className="p-3 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                <span>{actionSuccess}</span>
+              </div>
+            )}
+
+            {/* Unresponsive Host Action Center (Request-to-book only) */}
+            {activeTab === "pending" && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3 shadow-sm">
+                {!canAgentAct ? (
+                  <div className="flex gap-2.5">
+                    <AlertCircle className="h-5 w-5 text-rose-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-sm font-semibold text-rose-800">Outside Assigned Country Scope</h4>
+                      <p className="text-xs text-rose-700 mt-0.5">
+                        This booking is located in <strong className="uppercase">{detailData.listing?.country}</strong>, which is outside your assigned country scope ({userCountries.join(", ")}). You are not authorized to act on this request.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2.5">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="text-sm font-semibold text-amber-800">Unresponsive Host Action Center</h4>
+                        <p className="text-xs text-amber-700 mt-0.5">
+                          This Request-to-Book booking has been pending host approval for over 2 hours. As an authorized administrator or agent, you can act on the host's behalf.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <Button
+                        variant="primary"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white border-none focus:ring-emerald-500/30"
+                        size="sm"
+                        loading={approveRequestMut.isPending}
+                        onClick={() => approveRequestMut.mutate(detailData.id)}
+                      >
+                        Approve Request
+                      </Button>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => {
+                          setDeclineBooking(detailData);
+                          setDeclineReasonType("");
+                          setDeclineReason("");
+                          setDeclineModalOpen(true);
+                        }}
+                      >
+                        Decline Request
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        loading={escalateRequestMut.isPending}
+                        onClick={() => escalateRequestMut.mutate(detailData.id)}
+                      >
+                        Escalate to Host
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => {
+                          const msgElement = document.getElementById("messaging-section");
+                          if (msgElement) {
+                            msgElement.scrollIntoView({ behavior: "smooth" });
+                          }
+                        }}
+                      >
+                        Request Info
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* Summary */}
             <div className="grid grid-cols-2 gap-3 text-sm">
               {[
@@ -429,6 +830,72 @@ export default function BookingsPage() {
                 </div>
               </div>
             )}
+
+            {/* Guest Messaging (Request More Info thread) */}
+            {activeTab === "pending" && (
+              <div id="messaging-section" className="border-t border-border pt-5 space-y-3">
+                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Guest Messaging (Request More Info)</h4>
+                
+                {/* Scrollable messages container */}
+                <div className="bg-slate-50 border border-border rounded-xl p-4 max-h-60 overflow-y-auto space-y-3 scrollbar-thin">
+                  {messages.map((msg: any) => {
+                    const isOutbound = msg.senderType === "admin";
+                    return (
+                      <div key={msg.id} className={`flex gap-2 ${isOutbound ? "flex-row-reverse" : ""}`}>
+                        <Avatar
+                          name={isOutbound ? "Admin" : msg.senderType === "guest" ? "Guest" : "Provider"}
+                          size="sm"
+                          className={isOutbound ? "bg-primary" : msg.senderType === "guest" ? "bg-blue-500" : "bg-emerald-500"}
+                        />
+                        <div className={`max-w-[75%] ${isOutbound ? "items-end flex flex-col" : ""}`}>
+                          <div
+                            className={`px-3 py-2 rounded-xl text-sm ${
+                              isOutbound
+                                ? "bg-primary text-white"
+                                : "bg-white border border-border text-slate-800"
+                            } ${msg.isFiltered ? "opacity-50 italic" : ""}`}
+                          >
+                            {msg.body}
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1 px-1 text-[10px] text-slate-400">
+                            <span>{isOutbound ? "Agent" : msg.senderType === "guest" ? "Guest" : "Provider"}</span>
+                            <span>·</span>
+                            <span>{formatRelativeTime(msg.createdAt)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {messages.length === 0 && (
+                    <p className="text-center text-xs text-slate-400 py-4">
+                      No conversation started yet. Type a message below to request more details from the guest.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <Textarea
+                    id="request-info-message"
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    placeholder={canAgentAct ? "Type message to guest..." : "Messaging disabled (outside country scope)"}
+                    rows={2}
+                    disabled={!canAgentAct}
+                    className="flex-1 min-h-[50px] resize-none py-1.5 px-3 text-sm"
+                  />
+                  <Button
+                    variant="primary"
+                    disabled={!messageText.trim() || !canAgentAct}
+                    loading={requestInfoMut.isPending}
+                    onClick={() => requestInfoMut.mutate({ id: detailData.id, message: messageText })}
+                    className="self-end"
+                  >
+                    Send
+                  </Button>
+                </div>
+              </div>
+            )}
+
           </div>
         ) : null}
       </SlideDrawer>
@@ -464,6 +931,185 @@ export default function BookingsPage() {
           required
           rows={3}
         />
+      </ActionModal>
+
+      {/* Decline Booking Request Modal */}
+      <ActionModal
+        open={declineModalOpen}
+        onClose={() => {
+          setDeclineModalOpen(false);
+          setDeclineBooking(null);
+          setDeclineReasonType("");
+          setDeclineReason("");
+        }}
+        title="Decline Booking Request"
+        description={`Decline booking request ${declineBooking?.reference}? The date locks will be released.`}
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setDeclineModalOpen(false)}
+              disabled={declineRequestMut.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={declineRequestMut.isPending}
+              disabled={!declineReasonType || (declineReasonType === "Other" && !declineReason.trim())}
+              onClick={() => {
+                const finalReason = declineReasonType === "Other" ? declineReason : declineReasonType;
+                declineBooking && declineRequestMut.mutate({ id: declineBooking.id, reason: finalReason });
+              }}
+            >
+              Confirm Decline
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 pt-2">
+          {actionError && (
+            <div className="p-3 text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-lg flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-rose-500 flex-shrink-0" />
+              <span>{actionError}</span>
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-700">Decline Reason</label>
+            <select
+              value={declineReasonType}
+              onChange={(e) => setDeclineReasonType(e.target.value)}
+              className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+            >
+              <option value="">Select a reason...</option>
+              <option value="Unavailable dates">Unavailable dates</option>
+              <option value="Property under maintenance">Property under maintenance</option>
+              <option value="Guest requirements not met">Guest requirements not met</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          {declineReasonType === "Other" && (
+            <Textarea
+              id="decline-custom-reason"
+              label="Describe reason"
+              value={declineReason}
+              onChange={(e) => setDeclineReason(e.target.value)}
+              placeholder="Explain why this request is being declined..."
+              required
+              rows={3}
+            />
+          )}
+        </div>
+      </ActionModal>
+
+      {/* Resend payment link modal */}
+      <ActionModal
+        open={!!resendModal}
+        onClose={() => {
+          setResendModal(null);
+          setResendError("");
+          setResendSuccess(false);
+        }}
+        title="Send/Resend Payment Link"
+        description={
+          resendSuccess
+            ? "Payment link has been successfully generated and sent to the guest."
+            : `Generate and email a secure payment link for booking ${resendModal?.reference}.`
+        }
+        size="sm"
+        footer={
+          resendSuccess ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setResendModal(null);
+                setResendSuccess(false);
+              }}
+            >
+              Close
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setResendModal(null)}
+                disabled={resendLinkMut.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={resendLinkMut.isPending}
+                onClick={() => resendModal && resendLinkMut.mutate({ id: resendModal.id, gateway: resendGateway })}
+                leftIcon={<Send className="h-4 w-4" />}
+              >
+                Send Link
+              </Button>
+            </>
+          )
+        }
+      >
+        {!resendSuccess && (
+          <div className="space-y-4 pt-2">
+            {resendError && (
+              <div className="p-3 text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-lg">
+                {resendError}
+              </div>
+            )}
+
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-slate-700">Guest Email</label>
+              <input
+                type="text"
+                disabled
+                value={resendModal?.guestEmail ?? ""}
+                className="w-full bg-slate-50 border border-slate-200 text-slate-500 rounded-lg px-3 py-2 text-sm cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-2">Select Payment Gateway</p>
+              <div className="grid grid-cols-2 gap-3">
+                {(["stripe", "tara"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setResendGateway(m)}
+                    className={`flex items-center gap-2.5 rounded-xl border-2 px-4 py-2.5 transition-all text-left ${
+                      resendGateway === m
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-slate-500 hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className={`h-4 w-4 rounded-full border flex items-center justify-center flex-shrink-0 ${
+                      resendGateway === m ? "border-primary" : "border-slate-300"
+                    }`}>
+                      {resendGateway === m && <div className="h-2 w-2 rounded-full bg-primary" />}
+                    </div>
+                    <span className="text-xs font-semibold capitalize">{m === "tara" ? "Tara" : "Stripe"}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {resendSuccess && (
+          <div className="py-4 text-center">
+            <div className="mx-auto w-12 h-12 bg-green-50 border border-green-200 text-green-600 rounded-full flex items-center justify-center mb-3">
+              <CheckCircle2 className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-semibold text-slate-800">Email Sent Successfully</p>
+            <p className="text-xs text-slate-500 mt-1">The guest has been sent the link for {resendGateway === "stripe" ? "Stripe" : "Tara"} payment.</p>
+          </div>
+        )}
       </ActionModal>
     </div>
   );

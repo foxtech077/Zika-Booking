@@ -32,6 +32,7 @@ export interface AuditLog {
   id: string;
   adminId: string;
   adminName?: string;
+  adminEmail?: string;
   role: string;
   action: string;
   targetType: string | null;
@@ -100,6 +101,7 @@ export interface Listing {
   country: string | null;
   town: string | null;
   pricePerNight: string | null;
+  pricePerDay?: string | null;
   currency: string | null;
   starRating: number | null;
   claimedStarRating: number | null;
@@ -126,6 +128,7 @@ export interface ListingReviewTask {
   listing: {
     id: string;
     name: string | null;
+    status: ListingStatus;
     country: string | null;
     town: string | null;
     claimedStarRating: number | null;
@@ -271,6 +274,13 @@ export interface Voucher {
   isActive: boolean;
   createdBy: string;
   createdAt: string;
+  title?: string;
+  activityScope?: string;
+  countryScope?: string;
+  usageLimitPerGuest?: number;
+  applicableTiers?: string[];
+  autoAssign?: boolean;
+  status?: string;
 }
 
 // ── Reviews ───────────────────────────────────────────────────────────────────
@@ -292,6 +302,7 @@ export interface ListingReview {
   createdAt: string;
   updatedAt: string;
   listing?: { name: string | null };
+  listingName?: string | null;
 }
 
 // ── Messaging ─────────────────────────────────────────────────────────────────
@@ -350,4 +361,24 @@ export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: { code: string; message: string };
+}
+
+// ── Activity Promotions ───────────────────────────────────────────────────────
+
+export interface Promotion {
+  id: string;
+  activity: "hotel" | "apartment" | "car";
+  labelText: string;
+  labelColour: string;
+  discountType: "percentage" | "fixed" | "label_only";
+  discountValue: number;
+  validFrom: string;
+  validUntil: string;
+  applyToBooking: boolean;
+  bannerTitle: string;
+  bannerSubtitle: string;
+  status: "scheduled" | "active" | "paused" | "expired" | "superseded";
+  countryScope: string;
+  createdAt: string;
+  createdBy: string;
 }

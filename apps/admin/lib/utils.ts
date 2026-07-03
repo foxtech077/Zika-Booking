@@ -73,6 +73,15 @@ export function capitalize(s?: string | null): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+import { COUNTRIES } from "./countries";
+
+export function getCountryNames(codes?: string[] | null): string {
+  if (!codes || codes.length === 0) return "No Countries";
+  return codes
+    .map(code => COUNTRIES.find(c => c.code.toUpperCase() === code.toUpperCase())?.name ?? code)
+    .join(", ");
+}
+
 export function slugToLabel(s?: string | null): string {
   if (!s) return "";
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -137,6 +146,11 @@ export const STATUS_COLORS: Record<string, string> = {
   sales:              "bg-green-100 text-green-700",
   support:            "bg-orange-100 text-orange-700",
   finance:            "bg-indigo-100 text-indigo-700",
+  // Promotion statuses
+  scheduled:          "bg-blue-100 text-blue-700",
+  paused:             "bg-amber-100 text-amber-700",
+  expired:            "bg-danger-light text-danger-dark",
+  superseded:         "bg-purple-100 text-purple-700",
 };
 
 export function getStatusColor(status: string): string {

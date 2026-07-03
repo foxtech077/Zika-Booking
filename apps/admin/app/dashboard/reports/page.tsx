@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Charts";
 import { formatNumber, formatCurrency, slugToLabel } from "@/lib/utils";
 import type { Booking } from "@/types/admin";
+import { canAccess } from "@/permissions/rbac";
+import { useAuthStore } from "@/stores/auth";
 
 const fetchAllBookings = () =>
   listingApi.get("/admin/bookings?limit=100").then((r) => r.data.data ?? r.data);
@@ -61,7 +63,9 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ReportsPage() {
-  const canViewFinancials = true;
+  const { user } = useAuthStore();
+  const canExportFinancialData = user?.role === "super_admin" || user?.role === "finance";
+
   const { data: bookingsData, isLoading } = useQuery({
     queryKey: ["reports-bookings"],
     queryFn: fetchAllBookings,
@@ -69,7 +73,7 @@ export default function ReportsPage() {
   const { data: usersData } = useQuery({
     queryKey: ["reports-users"],
     queryFn: fetchUsers,
-    enabled: canViewFinancials,
+    enabled: canAccess(user?.role, "view_reports"),
   });
 
   const bookings: Booking[] = bookingsData?.bookings ?? [];
@@ -113,14 +117,16 @@ export default function ReportsPage() {
         title="Reports"
         description="Platform analytics and performance metrics"
         action={
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={exportSummary}
-            leftIcon={<Download className="h-4 w-4" />}
-          >
-            Export Summary
-          </Button>
+          canExportFinancialData && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={exportSummary}
+              leftIcon={<Download className="h-4 w-4" />}
+            >
+              Export Summary
+            </Button>
+          )
         }
       />
 

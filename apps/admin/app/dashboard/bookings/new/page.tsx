@@ -1,39 +1,49 @@
 "use client";
 
-import { useState, useEffect, useId, useCallback } from "react";
+import { useState, useEffect, useId, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft, User, Building2, CalendarDays, Phone, Mail,
   Globe, FileText, AlertCircle, CheckCircle2, Search,
   CreditCard, Hash, UserCircle, MapPin, Loader2,
-  Send, Save, X, ChevronLeft, ChevronRight, Info,
+  Send, Save, X, ChevronLeft, ChevronRight, Info, ChevronDown, XCircle,
+  Tag, Ticket
 } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { paymentApi } from "@/lib/payment-api";
 import { canAccess } from "@/permissions/rbac";
 import { SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea } from "@/components/ui/Input";
-import { formatCurrency } from "@/lib/utils";
+import { Input, Textarea, CustomDropdown } from "@/components/ui/Input";
+import { formatCurrency, cn } from "@/lib/utils";
 import type { AdminRole } from "@/types/admin";
-import Link from "next/link";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type ListingType = "hotel" | "apartment" | "car";
+type CountryOption = { value: string; label: string };
+type DayStatus = "past" | "available" | "locked" | "booked";
 type AvailStatus = "idle" | "checking" | "available" | "unavailable";
 type PaymentMethod = "stripe" | "tara";
-type DayStatus = "available" | "booked" | "locked" | "past";
+
+import { COUNTRIES, BOOKING_COUNTRIES, getCountryFlag, type Country, type BookingCountry } from "@/lib/countries";
 
 interface PriceSummary {
   baseAmount: number;
   discount: number;
+  voucherDiscount?: number;
+  promotionDiscount?: number;
   serviceFee: number;
   tax: number;
   total: number;
   currency: string;
+  nights?: number;
+  pricePerNight?: number;
+  commissionRate?: number;
 }
 
 interface AvailabilityData {
@@ -44,7 +54,10 @@ interface AvailabilityData {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function toYMD(d: Date) {
-  return d.toISOString().slice(0, 10);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function addDays(dateStr: string, n: number) {
@@ -57,10 +70,7 @@ function isBetween(dateStr: string, start: string, end: string) {
   return dateStr >= start && dateStr <= end;
 }
 
-function getDayStatus(
-  dateStr: string,
-  availability: AvailabilityData | null,
-): DayStatus {
+function getDayStatus(dateStr: string, availability: AvailabilityData | null): DayStatus {
   const today = toYMD(new Date());
   if (dateStr < today) return "past";
   if (!availability) return "available";
@@ -73,8 +83,22 @@ function getDayStatus(
   return "available";
 }
 
+function getCurrencyForCountry(countryCode: string): string {
+  const map: Record<string, string> = {
+    IN: "INR", US: "USD", GB: "GBP", AE: "AED", SG: "SGD", JP: "JPY",
+    AT: "EUR", BE: "EUR", CY: "EUR", EE: "EUR", FI: "EUR", FR: "EUR",
+    DE: "EUR", GR: "EUR", IE: "EUR", IT: "EUR", LV: "EUR", LT: "EUR",
+    LU: "EUR", MT: "EUR", NL: "EUR", PT: "EUR", SK: "EUR", SI: "EUR", ES: "EUR",
+    AU: "AUD", CA: "CAD", CH: "CHF", CN: "CNY", ZA: "ZAR", KE: "KES",
+  };
+  return map[countryCode] || "USD";
+}
+
 function SectionCard({
-  step, title, icon: Icon, children,
+  step,
+  title,
+  icon: Icon,
+  children,
 }: {
   step: number;
   title: string;
@@ -82,8 +106,8 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60">
+    <div className="bg-white rounded-xl border border-border shadow-card">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60 rounded-t-xl">
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white text-xs font-bold flex-shrink-0">
           {step}
         </div>
@@ -95,7 +119,7 @@ function SectionCard({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between py-2.5 border-b border-border/60 last:border-0">
       <span className="text-sm text-slate-500">{label}</span>
@@ -126,33 +150,39 @@ function AvailabilityCalendar({
   // Sync calendar month to checkIn when it changes
   useEffect(() => {
     if (checkIn) {
-      const d = new Date(checkIn);
-      setViewYear(d.getFullYear());
-      setViewMonth(d.getMonth());
+      const [y, m] = checkIn.split("-").map(Number);
+      if (y && m) {
+        setViewYear(y);
+        setViewMonth(m - 1); // 0-indexed
+      }
     }
   }, [checkIn]);
 
   const prevMonth = () => {
-    if (viewMonth === 0) { setViewMonth(11); setViewYear((y) => y - 1); }
-    else setViewMonth((m) => m - 1);
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else setViewMonth((m) => m - 1);
   };
   const nextMonth = () => {
-    if (viewMonth === 11) { setViewMonth(0); setViewYear((y) => y + 1); }
-    else setViewMonth((m) => m + 1);
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else setViewMonth((m) => m + 1);
   };
 
-  // Build calendar grid
   const firstDay = new Date(viewYear, viewMonth, 1);
   const lastDay = new Date(viewYear, viewMonth + 1, 0);
   const startPad = firstDay.getDay(); // 0=Sun
   const totalCells = startPad + lastDay.getDate();
-  const rows = Math.ceil(totalCells / 7);
-
-  const monthLabel = firstDay.toLocaleString("default", { month: "long", year: "numeric" });
 
   const cells: (Date | null)[] = [];
   for (let i = 0; i < startPad; i++) cells.push(null);
   for (let d = 1; d <= lastDay.getDate(); d++) cells.push(new Date(viewYear, viewMonth, d));
+
+  const monthLabel = firstDay.toLocaleString("default", { month: "long", year: "numeric" });
+
+  const todayStr = toYMD(new Date());
 
   function getCellStyle(dateStr: string): string {
     const status = getDayStatus(dateStr, availability);
@@ -160,9 +190,13 @@ function AvailabilityCalendar({
     const isCheckOut = dateStr === checkOut;
     const inRange = checkIn && checkOut && dateStr > checkIn && dateStr < checkOut;
 
-    if (status === "past") return "text-slate-300 cursor-not-allowed text-xs";
+    let base = "relative flex items-center justify-center h-8 text-xs font-medium rounded-lg transition-all select-none ";
 
-    let base = "relative flex items-center justify-center h-8 text-xs font-medium rounded-lg transition-all cursor-pointer select-none ";
+    if (status === "past") {
+      return base + "text-slate-300 cursor-not-allowed ";
+    }
+
+    base += "cursor-pointer ";
 
     if (isCheckIn || isCheckOut) {
       base += "bg-primary text-white font-bold ring-2 ring-primary/40 z-10 ";
@@ -178,7 +212,6 @@ function AvailabilityCalendar({
     return base;
   }
 
-  // Round the range ends for the visual range bar
   function getRangeClass(dateStr: string): string {
     if (!checkIn || !checkOut) return "";
     if (dateStr === checkIn) return "rounded-r-none ";
@@ -194,17 +227,13 @@ function AvailabilityCalendar({
     onSelectDate(ds);
   }
 
-  const today0 = toYMD(new Date());
-
   return (
     <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden flex flex-col">
-      {/* Header */}
       <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60">
         <CalendarDays className="h-4 w-4 text-primary" />
         <h2 className="text-sm font-semibold text-slate-900 flex-1">Availability Calendar</h2>
         {loading && <Loader2 className="h-4 w-4 text-primary animate-spin" />}
       </div>
-
       <div className="p-4 flex-1">
         {/* Month navigation */}
         <div className="flex items-center justify-between mb-4">
@@ -222,7 +251,6 @@ function AvailabilityCalendar({
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-
         {/* Day headers */}
         <div className="grid grid-cols-7 mb-1">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
@@ -231,7 +259,6 @@ function AvailabilityCalendar({
             </div>
           ))}
         </div>
-
         {/* Days grid */}
         <div className="grid grid-cols-7 gap-y-1">
           {cells.map((date, idx) => {
@@ -243,20 +270,21 @@ function AvailabilityCalendar({
               <div
                 key={ds}
                 title={
-                  status === "booked" ? "Fully booked"
-                    : status === "locked" ? "Reserved / Locked"
-                      : status === "past" ? "Past date"
+                  status === "booked"
+                    ? "Fully booked"
+                    : status === "locked"
+                      ? "Reserved / Locked"
+                      : status === "past"
+                        ? "Past date"
                         : "Available"
                 }
                 onClick={() => !isDisabled && handleClick(date)}
                 className={getCellStyle(ds) + getRangeClass(ds)}
               >
-                {/* Today ring */}
-                {ds === today0 && (
+                {ds === todayStr && (
                   <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-primary" />
                 )}
                 {date.getDate()}
-                {/* Locked indicator dot */}
                 {status === "locked" && (
                   <span className="absolute top-0.5 right-0.5 h-1 w-1 rounded-full bg-amber-500" />
                 )}
@@ -264,7 +292,6 @@ function AvailabilityCalendar({
             );
           })}
         </div>
-
         {/* Selected range summary */}
         {checkIn && checkOut && (
           <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
@@ -276,7 +303,6 @@ function AvailabilityCalendar({
             </div>
           </div>
         )}
-
         {/* Legend */}
         <div className="mt-4 border-t border-border pt-3">
           <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Legend</p>
@@ -304,8 +330,7 @@ function AvailabilityCalendar({
             </div>
           </div>
         </div>
-
-        {/* Prompt when no listing */}
+        {/* Prompt when no availability */}
         {!availability && !loading && (
           <div className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 border border-border px-3 py-2.5">
             <Info className="h-3.5 w-3.5 text-slate-400 mt-0.5 flex-shrink-0" />
@@ -327,7 +352,7 @@ export default function ManualBookingPage() {
   const role = user?.role as AdminRole | undefined;
   const uid = useId();
 
-  // ── Access guard ─────────────────────────────────────────────────────────────
+  // Access guard
   const hasAccess = canAccess(role, "manage_manual_booking");
   if (!hasAccess) {
     return (
@@ -337,7 +362,7 @@ export default function ManualBookingPage() {
         </div>
         <h2 className="text-lg font-semibold text-slate-900">Access Restricted</h2>
         <p className="text-sm text-slate-500 max-w-xs">
-          Manual booking is available to Super Admin, Admin, and Country Manager roles only.
+          Manual booking is restricted to authorized roles only.
         </p>
         <Link href="/dashboard/bookings">
           <Button variant="secondary" leftIcon={<ArrowLeft className="h-4 w-4" />}>
@@ -352,15 +377,61 @@ export default function ManualBookingPage() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState<Country>((COUNTRIES.find(c => c.code === "KE") || COUNTRIES[0]) as Country);
+  const [localPhone, setLocalPhone] = useState("");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
   const [nationality, setNationality] = useState("");
   const [notes, setNotes] = useState("");
 
+  const phone = `${selectedCountry.dialCode}${localPhone.trim().replace(/\D/g, "")}`;
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".phone-country-dropdown")) {
+        setIsDropdownOpen(false);
+      }
+      if (!target.closest(".booking-country-dropdown")) {
+        setIsBookingCountryOpen(false);
+      }
+      if (!target.closest(".booking-listing-dropdown")) {
+        setIsListingSelectOpen(false);
+      }
+      if (!target.closest(".promo-dropdown")) {
+        setPromoDropdownOpen(false);
+      }
+      if (!target.closest(".voucher-dropdown")) {
+        setVoucherDropdownOpen(false);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, []);
+
   // ── Section 2: Booking Info ───────────────────────────────────────────────────
   const [listingType, setListingType] = useState<ListingType>("hotel");
-  const [listingName, setListingName] = useState("");
   const [listingId, setListingId] = useState("");
+  const [listingName, setListingName] = useState("");
   const [country, setCountry] = useState("");
+  const [isBookingCountryOpen, setIsBookingCountryOpen] = useState(false);
+  const [bookingCountrySearch, setBookingCountrySearch] = useState("");
+
+  const isCountryManager = user?.role === "country_manager";
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
+  const allowedBookingCountries = BOOKING_COUNTRIES.filter(c => {
+    if (!isCountryManager) return true;
+    return scopedCountries.some(sc => sc.toUpperCase() === c.code.toUpperCase());
+  });
+
+  useEffect(() => {
+    if (isCountryManager && scopedCountries && scopedCountries.length === 1 && scopedCountries[0]) {
+      setCountry(scopedCountries[0].toUpperCase());
+    }
+  }, [isCountryManager, scopedCountries]);
+
+  const [isListingSelectOpen, setIsListingSelectOpen] = useState(false);
+  const [listingSelectSearch, setListingSelectSearch] = useState("");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [pickup, setPickup] = useState("");
@@ -378,40 +449,181 @@ export default function ManualBookingPage() {
   const [calSelectStep, setCalSelectStep] = useState<"checkIn" | "checkOut">("checkIn");
 
   // ── Section 4: Price ──────────────────────────────────────────────────────────
-  const [price, setPrice] = useState<PriceSummary | null>(null);
+  const [price, _setPrice] = useState<PriceSummary | null>(null);
+  const [selectedPromoId, setSelectedPromoId] = useState<string>("");
+  const [selectedVoucherId, setSelectedVoucherId] = useState<string>("");
+  const [promoDropdownOpen, setPromoDropdownOpen] = useState(false);
+  const [voucherDropdownOpen, setVoucherDropdownOpen] = useState(false);
+
+  const setPrice = (val: PriceSummary | null) => {
+    _setPrice(val);
+    if (val === null) {
+      setSelectedPromoId("");
+      setSelectedVoucherId("");
+    }
+  };
+
+  // Fetch active vouchers (isActive=true)
+  const { data: vouchersData } = useQuery({
+    queryKey: ["admin-vouchers-active"],
+    queryFn: () => listingApi.get("/admin/vouchers", { params: { isActive: "true" } }).then((r) => r.data?.data ?? r.data),
+  });
+  const activeVouchersList = vouchersData?.vouchers ?? (Array.isArray(vouchersData) ? vouchersData : []);
+
+  // Fetch active promotions (status=active)
+  const { data: promotionsData } = useQuery({
+    queryKey: ["admin-promotions-active"],
+    queryFn: () => listingApi.get("/admin/promotions", { params: { status: "active" } }).then((r) => r.data?.data ?? r.data),
+  });
+  const activePromotionsList = promotionsData?.promotions ?? (Array.isArray(promotionsData) ? promotionsData : []);
 
   // ── Section 5: Payment ────────────────────────────────────────────────────────
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("stripe");
   const [linkSent, setLinkSent] = useState(false);
+  const [paymentLink, setPaymentLink] = useState<string>("");
 
   const [isSending, setIsSending] = useState(false);
   // ── Shared state ──────────────────────────────────────────────────────────────
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitted, setSubmitted] = useState(false);
 
+  const getSelectedRangeStatus = (availData = availability) => {
+    const startStr = isAccommodation ? checkIn : (pickup ? pickup.slice(0, 10) : "");
+    const endStr = isAccommodation ? checkOut : (returnDt ? returnDt.slice(0, 10) : "");
+
+    if (!startStr || !endStr) return "idle";
+    if (!availData) return "available";
+
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return "idle";
+
+    let hasBooked = false;
+    let hasLocked = false;
+
+    // For hotels/apartments, the checkout day itself is not a booked night
+    const limit = isAccommodation ? new Date(end.getTime() - 86400000) : end;
+
+    const curr = new Date(start);
+    while (curr <= limit) {
+      const ds = toYMD(curr);
+      const dayStatus = getDayStatus(ds, availData);
+      if (dayStatus === "booked") {
+        hasBooked = true;
+      } else if (dayStatus === "locked") {
+        hasLocked = true;
+      }
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    if (hasBooked && hasLocked) return "partially_available";
+    if (hasBooked) return "fully_booked";
+    if (hasLocked) return "reserved";
+    return "available";
+  };
+
+  const getAvailabilityDescription = () => {
+    if (availStatus === "idle") return "The system will verify existing bookings, reservation locks, and available inventory.";
+    if (availStatus === "checking") return "Checking availability...";
+
+    const rangeStatus = getSelectedRangeStatus();
+    if (rangeStatus === "fully_booked") {
+      return "Not available for the selected dates - Fully Booked";
+    }
+    if (rangeStatus === "reserved") {
+      return "Not available for the selected dates - Reserved / Locked";
+    }
+    if (rangeStatus === "partially_available") {
+      return "Not available for the selected dates - Partially Available";
+    }
+    if (availStatus === "unavailable") {
+      return "Not available for the selected dates";
+    }
+    return "Available for the selected dates";
+  };
+
   const isAccommodation = listingType !== "car";
   const bookingRef = submitted ? `MBK-${Date.now().toString(36).toUpperCase()}` : "";
 
-  // Reset conditional date fields when listing type changes
+  // Reset conditional fields when listing type or country changes
   useEffect(() => {
-    setCheckIn(""); setCheckOut(""); setPickup(""); setReturnDt("");
-    setAvailStatus("idle"); setPrice(null); setAvailability(null);
+    setCheckIn("");
+    setCheckOut("");
+    setPickup("");
+    setReturnDt("");
+    setAvailStatus("idle");
+    setPrice(null);
+    setAvailability(null);
     setCalSelectStep("checkIn");
-  }, [listingType]);
+    setListingId(""); setListingName("");
+  }, [listingType, country]);
+
+  // ── Auto-fetch calendar data when a listing is selected ──────────────────────
+  // Uses the public /listings/:id/availability endpoint (no auth required) to
+  // pre-populate the calendar with booked ranges so all status colours are shown
+  // immediately — without waiting for the user to click "Check Availability".
+  useEffect(() => {
+    if (!listingId) {
+      setAvailability(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCalLoading(true);
+
+    const now = new Date();
+    const monthParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    listingApi
+      .get(`/listings/${listingId}/availability`, { params: { month: monthParam } })
+      .then((res) => {
+        if (cancelled) return;
+        const d = res.data?.data ?? res.data ?? {};
+        // The public endpoint returns { unavailableRanges: [{start, end}] }
+        // Map them to bookedRanges for the calendar's getDayStatus helper
+        const unavailable: { start: string | null; end: string | null }[] =
+          d.unavailableRanges ?? [];
+        const bookedRanges = unavailable
+          .filter((r) => r.start && r.end)
+          .map((r) => ({ start: r.start as string, end: r.end as string }));
+        setAvailability({ bookedRanges, lockedRanges: [] });
+      })
+      .catch(() => {
+        // Silently ignore — calendar degrades gracefully to "all available" view
+        if (!cancelled) setAvailability(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCalLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [listingId]);
 
   // Fetch listings for dropdown
   const { data: listingsData, isLoading: listingsLoading } = useQuery({
-    queryKey: ['listings'],
+    queryKey: ['listings', listingType, country],
     queryFn: async () => {
-      const res = await listingApi.get('/admin/listings');
+      const params: Record<string, string> = {
+        limit: "1000",
+      };
+      if (listingType) params.category = listingType;
+      if (country) params.country = country;
+      const res = await listingApi.get('/admin/listings', { params });
       return res.data?.data ?? res.data;
     },
   });
 
   const listings = Array.isArray(listingsData) ? listingsData : (Array.isArray(listingsData?.listings) ? listingsData.listings : []);
-  const listingOptions = [{ value: "", label: "Select a listing" }, ...listings.map((l: any) => ({ value: l.id, label: l.title ?? l.name ?? l.id }))];
+  const listingOptions = [
+    { value: "", label: "Select a listing" },
+    ...listings.map((l: any) => ({
+      value: l.id,
+      label: l.name ?? l.title ?? l.id
+    }))
+  ];
 
-  // ── Derived: nights / days ────────────────────────────────────────────────────
+  // ── Derived values ────────────────────────────────────────────────────
   const nights = (() => {
     if (!isAccommodation) {
       if (!pickup || !returnDt) return 0;
@@ -423,100 +635,111 @@ export default function ManualBookingPage() {
     return Math.max(0, Math.ceil(diff / 86400000));
   })();
 
-  // ── Fetch availability for calendar ──────────────────────────────────────────
-  const fetchCalendarAvailability = useCallback(async (lid: string) => {
-    if (!lid.trim()) return;
-    setCalLoading(true);
-    try {
-      // 1) Try the dedicated availability endpoint first
-      const res = await listingApi.get(`/listings/${lid}/availability`);
-      const d = res.data?.data ?? res.data;
-      const bookedRanges: { start: string; end: string }[] = d.bookedRanges ?? d.booked ?? [];
-      const lockedRanges: { start: string; end: string }[] = d.lockedRanges ?? d.locked ?? [];
+  const computedPricing = (() => {
+    if (!price) return null;
 
-      // 2) Also pull from admin bookings list to catch any that the availability
-      //    endpoint may not return (confirmed/pending_payment bookings)
-      try {
-        const bRes = await listingApi.get(
-          `/admin/bookings?listingId=${encodeURIComponent(lid)}&limit=200`
-        );
-        const bData = bRes.data?.data ?? bRes.data;
-        const records: any[] = bData?.bookings ?? bData ?? [];
-        records.forEach((b: any) => {
-          if (b.checkIn && b.checkOut &&
-            ["confirmed", "pending_payment", "completed"].includes(b.status)) {
-            bookedRanges.push({ start: b.checkIn.slice(0, 10), end: b.checkOut.slice(0, 10) });
-          }
-        });
-      } catch { /* ignore if bookings endpoint unavailable */ }
+    const baseAmount = price.baseAmount;
 
-      setAvailability({ bookedRanges, lockedRanges });
-    } catch {
-      // Both endpoints unavailable — seed realistic demo data so the calendar
-      // is never blank and booked/locked states are clearly visible.
-      const today = new Date();
-      const rel = (startOffset: number, endOffset: number) => {
-        const s = new Date(today); s.setDate(s.getDate() + startOffset);
-        const e = new Date(today); e.setDate(e.getDate() + endOffset);
-        return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) };
-      };
-      setAvailability({
-        bookedRanges: [
-          rel(2, 5),
-          rel(10, 14),
-          rel(22, 25),
-        ],
-        lockedRanges: [
-          rel(7, 9),
-          rel(18, 20),
-        ],
-      });
-    } finally {
-      setCalLoading(false);
-    }
-  }, []);
-
-  // Auto-fetch when listingId is set
-  useEffect(() => {
-    if (listingId.trim()) {
-      fetchCalendarAvailability(listingId);
-    }
-  }, [listingId, fetchCalendarAvailability]);
-
-  // ── Calendar date picker handler ──────────────────────────────────────────────
-  function handleCalendarDateSelect(dateStr: string) {
-    if (!isAccommodation) return;
-    if (calSelectStep === "checkIn" || !checkIn) {
-      setCheckIn(dateStr);
-      setCheckOut("");
-      setCalSelectStep("checkOut");
-      setAvailStatus("idle");
-      setPrice(null);
-    } else {
-      if (dateStr <= checkIn) {
-        // Clicked before or on checkIn → reset
-        setCheckIn(dateStr);
-        setCheckOut("");
-        setCalSelectStep("checkOut");
-      } else {
-        setCheckOut(dateStr);
-        setCalSelectStep("checkIn");
-        setAvailStatus("idle");
-        setPrice(null);
+    // 1. Calculate Promotion Discount
+    let promotionDiscount = 0;
+    const activePromo = activePromotionsList.find((p: any) => p.id === selectedPromoId);
+    if (activePromo && activePromo.applyToBooking) {
+      if (activePromo.discountType === "percentage") {
+        promotionDiscount = Math.round(baseAmount * (activePromo.discountValue / 100) * 100) / 100;
+      } else if (activePromo.discountType === "fixed") {
+        promotionDiscount = Math.min(baseAmount, activePromo.discountValue);
       }
     }
-  }
 
-  // ── Validate ─────────────────────────────────────────────────────────────────
+    // 2. Calculate Voucher Discount
+    let voucherDiscount = 0;
+    const activeVoucher = activeVouchersList.find((v: any) => v.id === selectedVoucherId);
+    if (activeVoucher && activeVoucher.isActive) {
+      const scope = activeVoucher.activityScope ?? "universal";
+      const isVoucherApplicable =
+        scope === "universal" ||
+        (listingType === "hotel" && (scope === "hotels" || scope === "hotels_apartments")) ||
+        (listingType === "apartment" && scope === "apartments") ||
+        (listingType === "car" && scope === "cars");
+
+      if (isVoucherApplicable) {
+        if (activeVoucher.discountType === "percentage") {
+          voucherDiscount = Math.round(baseAmount * (activeVoucher.discountValue / 100) * 100) / 100;
+        } else if (activeVoucher.discountType === "fixed") {
+          voucherDiscount = Math.min(baseAmount, activeVoucher.discountValue);
+        }
+      }
+    }
+
+    // PRD formula: discount = best(promotion_discount, voucher_discount)
+    const discount = Math.max(promotionDiscount, voucherDiscount);
+    const subtotal = Math.max(0, baseAmount - discount);
+
+    // Recalculate service fee based on discounted subtotal
+    const commRate = price.commissionRate ?? (price.baseAmount > 0 ? price.serviceFee / price.baseAmount : 0);
+    const serviceFee = Math.ceil(subtotal * commRate * 100) / 100;
+
+    // Recalculate tax based on discounted subtotal
+    const tRate = price.baseAmount > 0 ? price.tax / price.baseAmount : 0;
+    const tax = Math.round(subtotal * tRate * 100) / 100;
+
+    // Grand total
+    const total = Math.max(0, subtotal + serviceFee + tax);
+
+    return {
+      baseAmount,
+      promotionDiscount,
+      voucherDiscount,
+      discount,
+      subtotal,
+      serviceFee,
+      tax,
+      total,
+      currency: price.currency,
+      nights: price.nights ?? nights,
+      pricePerNight: price.pricePerNight ?? (nights > 0 ? baseAmount / nights : 0),
+      commissionRate: commRate,
+    };
+  })();
+
+  const pricePerNight = computedPricing ? computedPricing.pricePerNight : null;
+  const pricePerGuest = computedPricing && guests > 0 ? computedPricing.total / guests : null;
+  const serviceFeeRate = computedPricing && computedPricing.baseAmount > 0 ? (computedPricing.serviceFee / computedPricing.baseAmount) * 100 : null;
+  const taxRate = computedPricing && computedPricing.baseAmount > 0 ? (computedPricing.tax / computedPricing.baseAmount) * 100 : null;
+  const commissionRate = computedPricing ? computedPricing.commissionRate * 100 : null;
+
+  const formatDateLabel = (dateStr: string) => {
+    if (!dateStr) return "—";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const formatRate = (rate: number | null) => {
+    if (rate === null) return "—";
+    return rate % 1 === 0 ? `${rate}%` : `${rate.toFixed(2)}%`;
+  };
+
+  // ── Validation ─────────────────────────────────────────────────────
   function validate(): boolean {
     const e: Record<string, string> = {};
     if (!firstName.trim()) e.firstName = "Required";
     if (!lastName.trim()) e.lastName = "Required";
     if (!email.trim() || !/\S+@\S+\.\S+/.test(email)) e.email = "Valid email required";
-    if (!phone.trim()) e.phone = "Required";
+    if (!localPhone.trim()) {
+      e.phone = "Required";
+    } else {
+      const digitsOnly = localPhone.replace(/\D/g, "");
+      if (digitsOnly.length < 6 || digitsOnly.length > 15) {
+        e.phone = "Invalid phone number length (6-15 digits required)";
+      }
+    }
     if (!listingName.trim()) e.listingName = "Required";
     if (!country.trim()) e.country = "Required";
-
     if (isAccommodation) {
       if (!checkIn) e.checkIn = "Required";
       if (!checkOut) e.checkOut = "Required";
@@ -530,10 +753,10 @@ export default function ManualBookingPage() {
     return Object.keys(e).length === 0;
   }
 
-  // ── Check Availability ────────────────────────────────────────────────────────
+  // ── Check Availability ─────────────────────────────────────────────
   async function checkAvailability() {
-    if (!listingId.trim() && !listingName.trim()) {
-      setErrors((p) => ({ ...p, listingName: "Enter listing name or ID first" }));
+    if (!listingId) {
+      setErrors((p) => ({ ...p, listingName: "Select a listing first" }));
       return;
     }
     const hasDate = isAccommodation ? (checkIn && checkOut) : (pickup && returnDt);
@@ -547,44 +770,103 @@ export default function ManualBookingPage() {
     setAvailStatus("checking");
     setPrice(null);
 
-    // Also refresh calendar availability if we have a listingId
-    if (listingId.trim()) fetchCalendarAvailability(listingId);
-
     try {
       const params: Record<string, string> = {
         listingType,
-        ...(listingId ? { listingId } : { listingName }),
-        checkIn: isAccommodation ? (checkIn ? new Date(checkIn).toISOString() : "") : (pickup ? new Date(pickup).toISOString() : ""),
-        checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : "") : (returnDt ? new Date(returnDt).toISOString() : ""),
+        listingId,
+        listingName,
+        checkIn: isAccommodation ? checkIn : pickup,
+        checkOut: isAccommodation ? checkOut : returnDt,
         guests: String(guests),
       };
-      
-    
+
+
 
       const res = await listingApi.get("/admin/bookings/availability", { params });
       const d = res.data?.data ?? res.data;
       setAvailStatus(d.available ? "available" : "unavailable");
-      if (d.available && d.pricing) {
-        setPrice({
-          baseAmount: d.pricing.baseAmount ?? 0,
-          discount: d.pricing.discount ?? 0,
-          serviceFee: d.pricing.serviceFee ?? 0,
-          tax: d.pricing.tax ?? 0,
-          total: d.pricing.total ?? 0,
-          currency: d.pricing.currency ?? "USD",
-        });
-        if (d.listingId) setListingId(d.listingId);
+      if (d.available && (d.pricing || d.subtotal !== undefined)) {
+        if (d.pricing) {
+          setPrice({
+            baseAmount: d.pricing.baseAmount ?? 0,
+            discount: d.pricing.discount ?? 0,
+            voucherDiscount: d.pricing.voucherDiscount,
+            promotionDiscount: d.pricing.promotionDiscount,
+            serviceFee: d.pricing.serviceFee ?? 0,
+            tax: d.pricing.tax ?? 0,
+            total: d.pricing.total ?? 0,
+            currency: d.pricing.currency ?? getCurrencyForCountry(country),
+            nights: d.nights ?? 0,
+            pricePerNight: d.pricePerNight ?? 0,
+            commissionRate: d.commissionRate ?? 0,
+          });
+        } else {
+          setPrice({
+            baseAmount: d.subtotal ?? 0,
+            discount: 0,
+            voucherDiscount: undefined,
+            promotionDiscount: undefined,
+            serviceFee: d.commissionAmount ?? 0,
+            tax: 0,
+            total: d.totalAmount ?? 0,
+            currency: d.currency ?? getCurrencyForCountry(country),
+            nights: d.nights ?? 0,
+            pricePerNight: d.pricePerNight ?? 0,
+            commissionRate: d.commissionRate ?? 0,
+          });
+        }
       }
-      // Update calendar availability from response if present
+      // The admin endpoint never returns bookedRanges/lockedRanges directly.
+      // If it found conflicts (available: false), refresh the calendar from
+      // the public endpoint so the blocking ranges become visible.
       if (d.bookedRanges || d.lockedRanges) {
         setAvailability({
           bookedRanges: d.bookedRanges ?? [],
           lockedRanges: d.lockedRanges ?? [],
         });
+      } else if (!d.available && listingId) {
+        // Re-fetch public availability to reveal which dates are blocked
+        try {
+          const now = new Date();
+          const monthParam = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+          const calRes = await listingApi.get(`/listings/${listingId}/availability`, {
+            params: { month: monthParam },
+          });
+          const calData = calRes.data?.data ?? calRes.data ?? {};
+          const unavailable: { start: string | null; end: string | null }[] =
+            calData.unavailableRanges ?? [];
+          const bookedRanges = unavailable
+            .filter((r) => r.start && r.end)
+            .map((r) => ({ start: r.start as string, end: r.end as string }));
+          setAvailability({ bookedRanges, lockedRanges: [] });
+        } catch {
+          // ignore — calendar already has data from the initial fetch
+        }
       }
     } catch {
-      // Endpoint not yet live — show mock available + estimated price
-      setAvailStatus("available");
+      // Mock fallback
+      const today = new Date();
+      const rel = (startOffset: number, endOffset: number) => {
+        const s = new Date(today);
+        s.setDate(s.getDate() + startOffset);
+        const e = new Date(today);
+        e.setDate(e.getDate() + endOffset);
+        return { start: toYMD(s), end: toYMD(e) };
+      };
+
+      const mockAvail = {
+        bookedRanges: [rel(2, 5), rel(10, 14), rel(22, 25)],
+        lockedRanges: [rel(7, 9), rel(18, 20)],
+      };
+
+      if (!availability) {
+        setAvailability(mockAvail);
+      }
+
+      const activeAvail = availability || mockAvail;
+      const rangeStatus = getSelectedRangeStatus(activeAvail);
+      setAvailStatus(rangeStatus === "available" ? "available" : "unavailable");
+
       const base = nights * 120;
       setPrice({
         baseAmount: base,
@@ -592,32 +874,37 @@ export default function ManualBookingPage() {
         serviceFee: Math.round(base * 0.05),
         tax: Math.round(base * 0.10),
         total: Math.round(base * 1.15),
-        currency: "USD",
+        currency: getCurrencyForCountry(country),
       });
-      // If calendar has no data yet, ensure demo dates are visible
-      if (!availability) {
-        const today = new Date();
-        const rel = (startOffset: number, endOffset: number) => {
-          const s = new Date(today); s.setDate(s.getDate() + startOffset);
-          const e = new Date(today); e.setDate(e.getDate() + endOffset);
-          return { start: s.toISOString().slice(0, 10), end: e.toISOString().slice(0, 10) };
-        };
-        setAvailability({
-          bookedRanges: [rel(2, 5), rel(10, 14), rel(22, 25)],
-          lockedRanges: [rel(7, 9), rel(18, 20)],
-        });
-      }
     }
   }
 
+  const renderClearDate = (setter: (v: string) => void) => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        setter("");
+        setAvailStatus("idle");
+        setPrice(null);
+      }}
+      className="mr-11 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer pointer-events-auto z-10"
+      title="Clear date"
+    >
+      <X className="h-4 w-4" />
+    </button>
+  );
 
 
-  
 
-  // ── Save Draft ────────────────────────────────────────────────────────────────
+
   const saveDraftMut = useMutation({
-    mutationFn: () =>
-      listingApi.post("/admin/bookings/draft", {
+    mutationFn: () => {
+      const rate = computedPricing && nights > 0
+        ? computedPricing.subtotal / nights
+        : (price?.baseAmount ?? 0);
+
+      return listingApi.post("/admin/bookings/draft", {
         listingId, listingType, listingName,
         guestFirstName: firstName, guestLastName: lastName,
         guestEmail: email, guestPhone: phone, nationality,
@@ -625,40 +912,57 @@ export default function ManualBookingPage() {
         checkIn: isAccommodation ? (checkIn ? new Date(checkIn).toISOString() : undefined) : (pickup ? new Date(pickup).toISOString() : undefined),
         checkOut: isAccommodation ? (checkOut ? new Date(checkOut).toISOString() : undefined) : (returnDt ? new Date(returnDt).toISOString() : undefined),
         nightsOrDays: nights,
-        nightlyRate: price?.baseAmount ?? 0,
+        nightlyRate: rate,
         guestId: "",
-      }).then((r) => r.data),
+      }).then((r) => r.data);
+    },
     onSuccess: () => setErrors({}),
     onError: () => setErrors((p) => ({ ...p, _api: "Draft saved (backend not yet active — data stored locally)." })),
   });
 
-
-
-    async function handleSendLink() {
-      setIsSending(true);
-      // Create draft booking first
-      try {
-        const draft = await saveDraftMut.mutateAsync();
-        const bookingId = draft?.data?.bookingId ?? draft?.bookingId ?? draft?.id ?? draft?.data?.id;
-        if (!bookingId) {
-          setErrors(p => ({ ...p, _api: "Failed to obtain booking ID." }));
-          setIsSending(false);
-          return;
-        }
-        await paymentApi.post(`/payments/${paymentMethod}/payment-link`, { bookingId });
-        setSubmitted(true);
-        setLinkSent(true);
-      } catch (err: any) {
-        const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
-        setErrors(p => ({ ...p, _api: msg }));
-      } finally {
-        setIsSending(false);
+  const paymentLinkMut = useMutation({
+    mutationFn: async (bookingId: string) => {
+      console.log("Generating payment link for bookingId:", bookingId);
+      const endpoint = paymentMethod === "stripe" ? "/stripe/payment-link" : "/tara/payment-link";
+      const res = await paymentApi.post(endpoint, { bookingId });
+      if (paymentMethod === "tara") {
+        await paymentApi.get(`/tara/trigger/${bookingId}`);
       }
+      return res.data as { paymentLink: string };
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error?.message ?? "Failed to generate payment link.";
+      setErrors((p) => ({ ...p, _api: msg }));
+    },
+  });
+
+
+  async function handleSendLink() {
+    setIsSending(true);
+    // Create draft booking first
+    try {
+      const draft = await saveDraftMut.mutateAsync();
+      const bookingId = draft?.data?.bookingId ?? draft?.bookingId ?? draft?.id ?? draft?.data?.id;
+      if (!bookingId) {
+        setErrors(p => ({ ...p, _api: "Failed to obtain booking ID." }));
+        setIsSending(false);
+        return;
+      }
+      await paymentApi.post(`/${paymentMethod}/payment-link`, { bookingId });
+      if (paymentMethod === "tara") {
+        await paymentApi.get(`/tara/trigger/${bookingId}`);
+      }
+      setSubmitted(true);
+      setLinkSent(true);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error?.message ?? "Failed to send payment link.";
+      setErrors(p => ({ ...p, _api: msg }));
+    } finally {
+      setIsSending(false);
     }
+  }
 
-
-
-  // ── Success state ─────────────────────────────────────────────────────────────
+  // ── Success State ─────────────────────────────────────────────────────
   if (submitted && linkSent) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-5 text-center">
@@ -675,6 +979,7 @@ export default function ManualBookingPage() {
           <InfoRow label="Booking Reference" value={bookingRef} />
           <InfoRow label="Guest" value={`${firstName} ${lastName}`} />
           <InfoRow label="Payment Method" value={paymentMethod === "stripe" ? "Stripe" : "Tara"} />
+
           <InfoRow label="Created By" value={user?.name ?? "—"} />
         </div>
         <div className="flex gap-3">
@@ -682,7 +987,8 @@ export default function ManualBookingPage() {
             variant="secondary"
             onClick={() => {
               setSubmitted(false); setLinkSent(false);
-              setFirstName(""); setLastName(""); setEmail(""); setPhone("");
+              setFirstName(""); setLastName(""); setEmail(""); setLocalPhone("");
+              setSelectedCountry((COUNTRIES.find((c) => c.code === "KE") || COUNTRIES[0]) as Country);
               setNationality(""); setNotes(""); setListingName(""); setListingId("");
               setCountry(""); setCheckIn(""); setCheckOut(""); setPickup(""); setReturnDt("");
               setGuests(1); setRooms(1); setUnits(1);
@@ -691,29 +997,28 @@ export default function ManualBookingPage() {
           >
             New Booking
           </Button>
-          <Link href="/dashboard/bookings"><Button>View Bookings</Button></Link>
+          <Link href="/dashboard/bookings">
+            <Button>View Bookings</Button>
+          </Link>
         </div>
       </div>
     );
   }
 
-  // ── Form ──────────────────────────────────────────────────────────────────────
+  // Form
   return (
     <div className="pb-10">
-      {/* ── Page header ── */}
+      {/* Header */}
       <div className="flex items-center gap-3 mb-5">
         <Link href="/dashboard/bookings">
           <button className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-colors">
             <ArrowLeft className="h-4 w-4" />
           </button>
         </Link>
-        <SectionHeader
-          title="Create Manual Booking"
-          description="Complete all sections then send a payment link to the guest."
-        />
+        <SectionHeader title="Create Manual Booking" description="Complete all sections then send a payment link to the guest." />
       </div>
 
-      {/* ── API error banner ── */}
+      {/* API error banner */}
       {errors._api && (
         <div className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 mb-5">
           <AlertCircle className="h-4 w-4 text-danger flex-shrink-0 mt-0.5" />
@@ -724,36 +1029,18 @@ export default function ManualBookingPage() {
         </div>
       )}
 
-      {/* ── Two-column layout: form (left) + calendar (right) ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-5 items-start">
+      {/* Two-column layout: form left + calendar sidebar right */}
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
 
-        {/* ════ LEFT COLUMN – FORM ════════════════════════════════════════════ */}
-        <div className="space-y-5">
+        {/* Left column */}
+        <div className="flex-1 min-w-0 space-y-5">
 
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 1 – Customer Information
-          ════════════════════════════════════════════════════════════ */}
+          {/* Section 1 - Customer Information */}
           <SectionCard step={1} title="Customer Information" icon={User}>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Input
-                  id={`${uid}-firstName`}
-                  label="First Name"
-                  required
-                  placeholder="John"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
-                  error={errors.firstName}
-                />
-                <Input
-                  id={`${uid}-lastName`}
-                  label="Last Name"
-                  required
-                  placeholder="Doe"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
-                  error={errors.lastName}
-                />
+                <Input id={`${uid}-firstName`} label="First Name" required placeholder="John" value={firstName} onChange={(e) => setFirstName(e.target.value)} error={errors.firstName} />
+                <Input id={`${uid}-lastName`} label="Last Name" required placeholder="Doe" value={lastName} onChange={(e) => setLastName(e.target.value)} error={errors.lastName} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <Input
@@ -767,88 +1054,320 @@ export default function ManualBookingPage() {
                   error={errors.email}
                   leftIcon={<Mail className="h-4 w-4" />}
                 />
-                <Input
-                  id={`${uid}-phone`}
-                  label="Phone Number"
-                  type="tel"
-                  required
-                  placeholder="+254700000000"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  error={errors.phone}
-                  leftIcon={<Phone className="h-4 w-4" />}
-                />
+                <div className="space-y-1">
+                  <label htmlFor={`${uid}-phone`} className="block text-sm font-medium text-slate-700">
+                    Phone Number <span className="text-danger ml-0.5">*</span>
+                  </label>
+                  <div className="flex gap-2 relative">
+                    {/* Country Selector Dropdown */}
+                    <div className="w-[180px] flex-shrink-0 relative phone-country-dropdown">
+                      <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-slate-900",
+                          "transition-colors duration-150 h-[38px] mt-0.5",
+                          "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
+                          errors.phone ? "border-danger" : "border-border hover:border-slate-400"
+                        )}
+                      >
+                        <span className="truncate">
+                          {selectedCountry.name === "United Arab Emirates" ? "UAE" : selectedCountry.name} ({selectedCountry.dialCode})
+                        </span>
+                        <ChevronDown className="h-4 w-4 text-slate-400 ml-1 flex-shrink-0" />
+                      </button>
+
+                      {isDropdownOpen && (
+                        <div className="absolute left-0 mt-1 w-[260px] rounded-lg border border-border bg-white shadow-lg z-50 p-2 space-y-1.5 max-h-[300px] overflow-y-auto">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Search country or code..."
+                              value={countrySearch}
+                              onChange={(e) => setCountrySearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="overflow-y-auto max-h-[200px]">
+                            {COUNTRIES.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.dialCode.includes(countrySearch)
+                            ).map((c) => (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCountry(c);
+                                  setIsDropdownOpen(false);
+                                  setCountrySearch("");
+                                }}
+                                className={cn(
+                                  "w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 transition-colors flex items-center justify-between",
+                                  selectedCountry.code === c.code ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
+                                )}
+                              >
+                                <span className="truncate">{c.name}</span>
+                                <span className="text-slate-400 font-mono flex-shrink-0 ml-1">{c.dialCode}</span>
+                              </button>
+                            ))}
+                            {COUNTRIES.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(countrySearch.toLowerCase()) ||
+                                c.dialCode.includes(countrySearch)
+                            ).length === 0 && (
+                                <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
+                              )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Phone Number Input */}
+                    <div className="flex-1 relative">
+                      <input
+                        id={`${uid}-phone`}
+                        type="tel"
+                        required
+                        placeholder="700000000"
+                        value={localPhone}
+                        onChange={(e) => setLocalPhone(e.target.value)}
+                        className={cn(
+                          "block w-full rounded-lg border bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400",
+                          "transition-colors duration-150 h-[38px] mt-0.5",
+                          "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
+                          errors.phone
+                            ? "border-danger focus:border-danger focus:ring-danger/25"
+                            : "border-border hover:border-slate-400"
+                        )}
+                      />
+                    </div>
+                  </div>
+                  {errors.phone && <p className="text-xs text-danger mt-1">{errors.phone}</p>}
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  id={`${uid}-nationality`}
-                  label="Nationality"
-                  placeholder="e.g. British"
-                  value={nationality}
-                  onChange={(e) => setNationality(e.target.value)}
-                  leftIcon={<Globe className="h-4 w-4" />}
-                />
-              </div>
-              <Textarea
-                id={`${uid}-notes`}
-                label="Notes / Special Requests"
-                placeholder="Any special requests or notes for this booking…"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                hint="Visible to internal staff only."
-              />
+              <Textarea id={`${uid}-notes`} label="Notes / Special Requests" placeholder="Any special requests or notes for this booking..." value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} hint="Visible to internal staff only." />
             </div>
           </SectionCard>
 
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 2 – Booking Information
-          ════════════════════════════════════════════════════════════ */}
+          {/* Section 2 - Booking Information */}
           <SectionCard step={2} title="Booking Information" icon={Building2}>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Select
+                <CustomDropdown
                   id={`${uid}-listingType`}
                   label="Listing Type"
                   required
                   value={listingType}
-                  onChange={(e) => setListingType(e.target.value as ListingType)}
+                  onChange={(val) => setListingType(val as ListingType)}
                   options={[
                     { value: "hotel", label: "Hotel" },
                     { value: "apartment", label: "Apartment" },
                     { value: "car", label: "Car Rental" },
                   ]}
                 />
-                <Select
-                  id={`${uid}-country`}
-                  label="Country"
-                  required
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  options={[
-                    { value: "", label: "Select country…" },
-                    ...["MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE", "IN", "KE", "NG", "ZA", "GH"].map((c) => ({ value: c, label: c })),
-                  ]}
-                  error={errors.country}
-                />
+                <div className="space-y-1 relative booking-country-dropdown">
+                  <label htmlFor={`${uid}-country`} className="block text-sm font-medium text-slate-700">
+                    Country <span className="text-danger ml-0.5">*</span>
+                  </label>
+                  {isCountryManager && scopedCountries.length === 1 ? (
+                    <div className="w-full flex items-center justify-between rounded-lg border border-border bg-slate-50 px-3 py-2 text-sm text-slate-500 h-[38px] mt-0.5 cursor-not-allowed">
+                      <span>
+                        {(() => {
+                          const found = allowedBookingCountries.find(c => c.code === country);
+                          return found ? `${found.flag} ${found.name} (${found.code})` : country;
+                        })()}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setIsBookingCountryOpen(!isBookingCountryOpen)}
+                        className={cn(
+                          "w-full flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-slate-900",
+                          "transition-colors duration-150 h-[38px] mt-0.5",
+                          "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
+                          errors.country ? "border-danger" : "border-border hover:border-slate-400"
+                        )}
+                      >
+                        <span>
+                          {country ? (
+                            (() => {
+                              const found = allowedBookingCountries.find(c => c.code === country);
+                              return found ? `${found.flag} ${found.name} (${found.code})` : country;
+                            })()
+                          ) : (
+                            "Select country…"
+                          )}
+                        </span>
+                        <ChevronDown className="h-4 w-4 text-slate-400 ml-1 flex-shrink-0" />
+                      </button>
+
+                      {isBookingCountryOpen && (
+                        <div className="absolute left-0 mt-1 w-full rounded-lg border border-border bg-white shadow-lg z-50 p-2 space-y-1.5 max-h-[300px] overflow-y-auto">
+                          <div className="relative">
+                            <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                            <input
+                              type="text"
+                              placeholder="Search country or code..."
+                              value={bookingCountrySearch}
+                              onChange={(e) => setBookingCountrySearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                          <div className="overflow-y-auto max-h-[200px]">
+                            {allowedBookingCountries.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(bookingCountrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(bookingCountrySearch.toLowerCase())
+                            ).map((c) => (
+                              <button
+                                key={c.code}
+                                type="button"
+                                onClick={() => {
+                                  setCountry(c.code);
+                                  setIsBookingCountryOpen(false);
+                                  setBookingCountrySearch("");
+                                }}
+                                className={cn(
+                                  "w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 transition-colors flex items-center gap-2",
+                                  country === c.code ? "bg-primary/5 text-primary font-semibold" : "text-slate-700"
+                                )}
+                              >
+                                <span>{c.flag}</span>
+                                <span className="truncate">{c.name}</span>
+                                <span className="text-slate-400 font-mono flex-shrink-0 ml-auto">{c.code}</span>
+                              </button>
+                            ))}
+                            {allowedBookingCountries.filter(
+                              (c) =>
+                                c.name.toLowerCase().includes(bookingCountrySearch.toLowerCase()) ||
+                                c.code.toLowerCase().includes(bookingCountrySearch.toLowerCase())
+                            ).length === 0 && (
+                                <p className="text-xs text-slate-400 text-center py-2">No countries found</p>
+                              )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {errors.country && <p className="text-xs text-danger mt-1">{errors.country}</p>}
+                </div>
               </div>
 
 
-              <Select
-                id={`${uid}-listing`}
-                label="Listing"
-                placeholder="Select a listing"
-                value={listingId}
-                onChange={(e) => {
-                  const selected = listingOptions.find(opt => opt.value === e.target.value);
-                  setListingId(e.target.value);
-                  setListingName(selected?.label ?? "");
-                  setAvailability(null);
-                }}
-                error={errors.listingName}
-                hint="Select the listing name from the dropdown."
-                options={listingOptions}
-              />
+              <div className="space-y-1 relative booking-listing-dropdown">
+                <label htmlFor={`${uid}-listing`} className="block text-sm font-medium text-slate-700">
+                  Listing
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsListingSelectOpen(!isListingSelectOpen)}
+                  className={cn(
+                    "w-full flex items-center justify-between rounded-lg border bg-white px-3 py-2 text-sm text-slate-900",
+                    "transition-colors duration-150 h-[38px] mt-0.5",
+                    "focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary",
+                    errors.listingName ? "border-danger" : "border-border hover:border-slate-400"
+                  )}
+                >
+                  <span className="truncate">
+                    {listingName || "Select a listing"}
+                  </span>
+                  <ChevronDown className="h-4 w-4 text-slate-400 ml-1 flex-shrink-0" />
+                </button>
+
+                {isListingSelectOpen && (
+                  <div className="absolute left-0 mt-1 w-full rounded-lg border border-border bg-white shadow-lg z-50 p-2 space-y-1.5 max-h-[350px] overflow-y-auto">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search listing by name or ID..."
+                        value={listingSelectSearch}
+                        onChange={(e) => setListingSelectSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-border rounded focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                    <div className="overflow-y-auto max-h-[250px] space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setListingId("");
+                          setListingName("");
+                          setAvailability(null);
+                          setIsListingSelectOpen(false);
+                          setListingSelectSearch("");
+                        }}
+                        className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-100 text-slate-500 transition-colors"
+                      >
+                        Select a listing (none)
+                      </button>
+                      {listings.filter((l: any) => {
+                        const query = listingSelectSearch.toLowerCase();
+                        return (
+                          (l.name?.toLowerCase().includes(query) || false) ||
+                          (l.title?.toLowerCase().includes(query) || false) ||
+                          (l.id?.toLowerCase().includes(query) || false) ||
+                          (l.town?.toLowerCase().includes(query) || false)
+                        );
+                      }).map((l: any) => {
+                        const isSelected = listingId === l.id;
+                        const name = l.name ?? l.title ?? l.id;
+                        const details = [
+                          l.category ? l.category.charAt(0).toUpperCase() + l.category.slice(1) : "",
+                          l.town ?? "",
+                          l.pricePerNight ? `${l.pricePerNight} ${l.currency ?? "USD"}` : ""
+                        ].filter(Boolean).join(" · ");
+
+                        return (
+                          <button
+                            key={l.id}
+                            type="button"
+                            onClick={() => {
+                              setListingId(l.id);
+                              setListingName(name);
+                              setAvailability(null);
+                              setIsListingSelectOpen(false);
+                              setListingSelectSearch("");
+                            }}
+                            className={cn(
+                              "w-full text-left px-2 py-2 text-xs rounded hover:bg-slate-100 transition-colors flex flex-col gap-0.5",
+                              isSelected ? "bg-primary/5 border-l-2 border-primary pl-1.5" : ""
+                            )}
+                          >
+                            <div className={cn("font-medium", isSelected ? "text-primary" : "text-slate-900")}>
+                              {name}
+                            </div>
+                            <div className="text-[10px] text-slate-400 flex items-center justify-between gap-2 w-full">
+                              <span>{details}</span>
+                              <span className="font-mono text-slate-300 text-[9px] select-all">{l.id}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {listings.filter((l: any) => {
+                        const query = listingSelectSearch.toLowerCase();
+                        return (
+                          (l.name?.toLowerCase().includes(query) || false) ||
+                          (l.title?.toLowerCase().includes(query) || false) ||
+                          (l.id?.toLowerCase().includes(query) || false) ||
+                          (l.town?.toLowerCase().includes(query) || false)
+                        );
+                      }).length === 0 && (
+                          <p className="text-xs text-slate-400 text-center py-4">No listings found</p>
+                        )}
+                    </div>
+                  </div>
+                )}
+                {errors.listingName && <p className="text-xs text-danger mt-1">{errors.listingName}</p>}
+              </div>
 
               <Input
                 id={`${uid}-listingId`}
@@ -873,23 +1392,21 @@ export default function ManualBookingPage() {
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <Input
+                    <DatePicker
                       id={`${uid}-checkIn`}
                       label="Check-In Date"
-                      type="date"
                       required
                       value={checkIn}
-                      onChange={(e) => { setCheckIn(e.target.value); setAvailStatus("idle"); setPrice(null); setCalSelectStep("checkOut"); }}
+                      onChange={(val) => { setCheckIn(val); setAvailStatus("idle"); setPrice(null); setCalSelectStep("checkOut"); }}
                       error={errors.checkIn}
                     />
-                    <Input
+                    <DatePicker
                       id={`${uid}-checkOut`}
                       label="Check-Out Date"
-                      type="date"
                       required
-                      min={checkIn || undefined}
+                      minDate={checkIn || undefined}
                       value={checkOut}
-                      onChange={(e) => { setCheckOut(e.target.value); setAvailStatus("idle"); setPrice(null); setCalSelectStep("checkIn"); }}
+                      onChange={(val) => { setCheckOut(val); setAvailStatus("idle"); setPrice(null); setCalSelectStep("checkIn"); }}
                       error={errors.checkOut}
                     />
                   </div>
@@ -909,6 +1426,11 @@ export default function ManualBookingPage() {
                         type="number" min={1} max={50}
                         value={guests}
                         onChange={(e) => setGuests(Math.max(1, Number(e.target.value)))}
+                        onFocus={(e) => {
+                          const target = e.target;
+                          setTimeout(() => target.select(), 0);
+                        }}
+                        onClick={(e) => (e.target as HTMLInputElement).select()}
                         className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
                       />
                     </div>
@@ -920,6 +1442,11 @@ export default function ManualBookingPage() {
                           type="number" min={1} max={50}
                           value={rooms}
                           onChange={(e) => setRooms(Math.max(1, Number(e.target.value)))}
+                          onFocus={(e) => {
+                            const target = e.target;
+                            setTimeout(() => target.select(), 0);
+                          }}
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
                           className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
                         />
                       </div>
@@ -932,6 +1459,11 @@ export default function ManualBookingPage() {
                           type="number" min={1} max={20}
                           value={units}
                           onChange={(e) => setUnits(Math.max(1, Number(e.target.value)))}
+                          onFocus={(e) => {
+                            const target = e.target;
+                            setTimeout(() => target.select(), 0);
+                          }}
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
                           className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
                         />
                       </div>
@@ -940,42 +1472,49 @@ export default function ManualBookingPage() {
                 </>
               ) : (
                 <>
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 flex items-center gap-2">
+                    <CalendarDays className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                    <p className="text-xs text-primary">
+                      You can also click dates directly on the calendar →{" "}
+                      <strong>{!pickup || (pickup && returnDt) ? "Select Pickup Date" : "Select Return Date"}</strong>
+                    </p>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <Input
+                    <DatePicker
                       id={`${uid}-pickup`}
-                      label="Pickup Date & Time"
-                      type="datetime-local"
+                      label="Pickup Date"
                       required
                       value={pickup}
-                      onChange={(e) => { setPickup(e.target.value); setAvailStatus("idle"); setPrice(null); }}
-                      rightIcon={<X className="h-4 w-4 cursor-pointer" onClick={() => { setPickup(""); setAvailStatus("idle"); setPrice(null); }} />}
+                      onChange={(val) => { setPickup(val); setAvailStatus("idle"); setPrice(null); }}
                       error={errors.pickup}
                     />
-                    <Input
-                      id={`${uid}-returnDt`}
-                      label="Return Date & Time"
-                      type="datetime-local"
+                    <DatePicker
+                      id={`${uid}-return`}
+                      label="Return Date"
                       required
-                      min={pickup || undefined}
+                      minDate={pickup || undefined}
                       value={returnDt}
-                      onChange={(e) => { setReturnDt(e.target.value); setAvailStatus("idle"); setPrice(null); }}
-                      rightIcon={<X className="h-4 w-4 cursor-pointer" onClick={() => { setReturnDt(""); setAvailStatus("idle"); setPrice(null); }} />}
+                      onChange={(val) => { setReturnDt(val); setAvailStatus("idle"); setPrice(null); }}
                       error={errors.returnDt}
                     />
                   </div>
                   {nights > 0 && (
                     <p className="text-xs text-slate-500">
                       <CalendarDays className="inline h-3.5 w-3.5 mr-1 text-primary" />
-                      {nights} day{nights !== 1 ? "s" : ""}
+                      {nights} day{nights !== 1 ? "s" : ""} rental
                     </p>
                   )}
-                  <div className="space-y-1 w-1/3">
-                    <label htmlFor={`${uid}-guests-car`} className="block text-sm font-medium text-slate-700">Passengers</label>
+                  <div className="space-y-1">
+                    <label htmlFor={`${uid}-car-guests`} className="block text-sm font-medium text-slate-700">
+                      Passengers <span className="text-danger">*</span>
+                    </label>
                     <input
-                      id={`${uid}-guests-car`}
+                      id={`${uid}-car-guests`}
                       type="number" min={1} max={20}
                       value={guests}
                       onChange={(e) => setGuests(Math.max(1, Number(e.target.value)))}
+                      onFocus={(e) => { const t = e.target; setTimeout(() => t.select(), 0); }}
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
                       className="block w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary hover:border-slate-400 transition-colors"
                     />
                   </div>
@@ -984,170 +1523,475 @@ export default function ManualBookingPage() {
             </div>
           </SectionCard>
 
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 3 – Availability Check
-          ════════════════════════════════════════════════════════════ */}
+          {/* Section 3 - Availability Check */}
           <SectionCard step={3} title="Availability Check" icon={Search}>
             <div className="space-y-4">
-              {errors._avail && (
-                <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                  <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-                  <p className="text-xs text-amber-700">{errors._avail}</p>
-                </div>
-              )}
-
               <Button
                 type="button"
-                variant={availStatus === "available" ? "secondary" : "primary"}
-                onClick={checkAvailability}
+                variant="secondary"
                 loading={availStatus === "checking"}
-                leftIcon={availStatus === "checking" ? undefined : <Search className="h-4 w-4" />}
+                leftIcon={<Search className="h-4 w-4" />}
+                onClick={checkAvailability}
               >
-                {availStatus === "checking" ? "Checking…" : "Check Availability"}
+                Check Availability
               </Button>
-
               {availStatus === "available" && (
-                <div className="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-green-800">✅ Available</p>
-                    <p className="text-xs text-green-600">
-                      This listing is available for the selected dates. Proceed to send a payment link.
-                    </p>
-                  </div>
+                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <p className="text-sm font-medium text-green-700">{getAvailabilityDescription()}</p>
                 </div>
               )}
-
               {availStatus === "unavailable" && (
-                <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3">
-                  <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-semibold text-red-800">❌ Not Available</p>
-                    <p className="text-xs text-red-600">
-                      This listing is booked, locked, or unavailable for the selected dates. Please choose different dates.
-                    </p>
-                  </div>
+                <div className="flex items-center gap-2 rounded-lg border border-danger/20 bg-danger/5 px-4 py-3">
+                  <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
+                  <p className="text-sm font-medium text-danger">{getAvailabilityDescription()}</p>
                 </div>
               )}
-
+              {errors._avail && (
+                <p className="text-xs text-danger">{errors._avail}</p>
+              )}
               {availStatus === "idle" && (
-                <p className="text-xs text-slate-400">
+                <p className="text-sm text-slate-400">
                   The system will verify existing bookings, reservation locks, and available inventory.
                 </p>
               )}
             </div>
           </SectionCard>
 
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 4 – Price Summary (read-only)
-          ════════════════════════════════════════════════════════════ */}
-          {price && (
-            <SectionCard step={4} title="Price Summary" icon={FileText}>
-              <div className="space-y-0 rounded-lg border border-border overflow-hidden">
-                <div className="flex justify-between items-center px-4 py-2.5 bg-slate-50/60 border-b border-border">
-                  <span className="text-sm text-slate-500">Base Amount</span>
-                  <span className="text-sm font-medium text-slate-900">{formatCurrency(price.baseAmount, price.currency)}</span>
-                </div>
-                {price.discount > 0 && (
-                  <div className="flex justify-between items-center px-4 py-2.5 border-b border-border">
-                    <span className="text-sm text-slate-500">Discount</span>
-                    <span className="text-sm font-medium text-green-600">−{formatCurrency(price.discount, price.currency)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center px-4 py-2.5 border-b border-border">
-                  <span className="text-sm text-slate-500">Service Fee</span>
-                  <span className="text-sm font-medium text-slate-900">{formatCurrency(price.serviceFee, price.currency)}</span>
-                </div>
-                <div className="flex justify-between items-center px-4 py-2.5 border-b border-border">
-                  <span className="text-sm text-slate-500">Tax</span>
-                  <span className="text-sm font-medium text-slate-900">{formatCurrency(price.tax, price.currency)}</span>
-                </div>
-                <div className="flex justify-between items-center px-4 py-3 bg-primary/5">
-                  <span className="text-sm font-bold text-slate-900">Total Amount</span>
-                  <span className="text-base font-bold text-primary">{formatCurrency(price.total, price.currency)}</span>
-                </div>
-              </div>
-              <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
-                <AlertCircle className="h-3.5 w-3.5" />
-                Pricing is auto-calculated and cannot be edited by agents.
-              </p>
-            </SectionCard>
-          )}
-
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 5 – Payment
-          ════════════════════════════════════════════════════════════ */}
-          <SectionCard step={price ? 5 : 4} title="Payment" icon={CreditCard}>
+          {/* Section 4 - Payment */}
+          <SectionCard step={4} title="Payment" icon={CreditCard}>
             <div className="space-y-4">
               <div>
-                <p className="text-sm font-medium text-slate-700 mb-2">Payment Method</p>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Payment Method</label>
                 <div className="grid grid-cols-2 gap-3">
-                  {(["stripe", "tara"] as PaymentMethod[]).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setPaymentMethod(m)}
-                      className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 transition-all ${paymentMethod === m
-                        ? "border-primary bg-primary/5 text-primary"
-                        : "border-border text-slate-500 hover:border-slate-300 hover:bg-slate-50"
-                        }`}
-                    >
-                      <CreditCard className="h-5 w-5 flex-shrink-0" />
-                      <span className="text-sm font-semibold capitalize">{m === "tara" ? "Tara" : "Stripe"}</span>
-                      {paymentMethod === m && (
-                        <div className="ml-auto h-2 w-2 rounded-full bg-primary" />
-                      )}
-                    </button>
-                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("stripe")}
+                    className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${paymentMethod === "stripe"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-slate-600 hover:border-slate-300"
+                      }`}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Stripe
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("tara")}
+                    className={`flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-medium transition-all ${paymentMethod === "tara"
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-slate-600 hover:border-slate-300"
+                      }`}
+                  >
+                    <CreditCard className="h-4 w-4" />
+                    Tara
+                  </button>
                 </div>
               </div>
-
               <p className="text-xs text-slate-500">
-                A secure payment link will be sent to <strong>{email || "the guest's email"}</strong> via{" "}
-                <strong>{paymentMethod === "tara" ? "Tara" : "Stripe"}</strong>.
+                A secure payment link will be sent to{" "}
+                <strong>the guest's email</strong> via{" "}
+                {paymentMethod === "stripe" ? "Stripe" : "Tara"}.
               </p>
+
+              {/* Price summary (shown when available) */}
+              {price && computedPricing && (
+                <div className="space-y-4">
+                  {/* Booking Summary */}
+                  <div className="rounded-lg border border-border bg-slate-50/60 p-5 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Booking Summary</h3>
+
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm text-slate-600">
+                      <div><span className="font-medium text-slate-700 block mb-0.5">Listing</span> {listingName || "—"}</div>
+                      <div><span className="font-medium text-slate-700 block mb-0.5">Listing Type</span> <span className="capitalize">{listingType}</span></div>
+                      <div><span className="font-medium text-slate-700 block mb-0.5">Country</span> {country || "—"}</div>
+
+                      {isAccommodation ? (
+                        <>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Check-In</span> {formatDateLabel(checkIn)}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Check-Out</span> {formatDateLabel(checkOut)}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Nights</span> {nights}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Guests</span> {guests}</div>
+                          {listingType === "hotel" && <div><span className="font-medium text-slate-700 block mb-0.5">Rooms</span> {rooms}</div>}
+                          {listingType === "apartment" && <div><span className="font-medium text-slate-700 block mb-0.5">Units</span> {units}</div>}
+                        </>
+                      ) : (
+                        <>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Pickup</span> {formatDateLabel(pickup)}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Return</span> {formatDateLabel(returnDt)}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Days</span> {nights}</div>
+                          <div><span className="font-medium text-slate-700 block mb-0.5">Guests</span> {guests}</div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Apply Promotion or Voucher */}
+                  <div className="rounded-lg border border-border bg-white p-5 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Apply Promotion or Voucher</h3>
+                    {(() => {
+                      const selectedPromo = activePromotionsList.find((p: any) => p.id === selectedPromoId);
+                      const selectedVoucher = activeVouchersList.find((v: any) => v.id === selectedVoucherId);
+                      const currency = price?.currency ?? "USD";
+                      
+                      const filteredPromos = activePromotionsList.filter(
+                        (p: any) => p.activity === listingType && 
+                        (p.countryScope === country || p.countryScope === "*" || p.countryScope === "all" || !p.countryScope)
+                      );
+                      
+                      const filteredVouchers = activeVouchersList.filter((v: any) => {
+                        if (!v.isActive) return false;
+                        const isCountryMatch = !v.countryScope || v.countryScope === "*" || v.countryScope === "all" || v.countryScope === country;
+                        if (!isCountryMatch) return false;
+                        const scope = v.activityScope ?? "universal";
+                        if (scope === "universal") return true;
+                        if (listingType === "hotel") return scope === "hotels" || scope === "hotels_apartments";
+                        if (listingType === "apartment") return scope === "apartments";
+                        if (listingType === "car") return scope === "cars";
+                        return false;
+                      });
+
+                      return (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Promotion Dropdown */}
+                          <div className="space-y-1.5 relative promo-dropdown">
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                              Active Promotion
+                            </label>
+                            
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPromoDropdownOpen(!promoDropdownOpen);
+                                setVoucherDropdownOpen(false);
+                              }}
+                              className="flex items-center gap-3 w-full px-3 py-2 text-left bg-white border border-border rounded-lg shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all select-none"
+                            >
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-500 flex-shrink-0">
+                                <Tag className="h-4 w-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                {selectedPromo ? (
+                                  <>
+                                    <div className="text-sm font-semibold text-slate-900 truncate">
+                                      {selectedPromo.labelText || selectedPromo.bannerTitle}
+                                    </div>
+                                    <div className="text-xs text-slate-500 truncate">
+                                      {selectedPromo.discountType === "percentage" 
+                                        ? `${selectedPromo.discountValue}% Off` 
+                                        : `${formatCurrency(selectedPromo.discountValue, currency)} Off`}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="text-sm text-slate-400 font-medium">
+                                    No promotion applied
+                                  </div>
+                                )}
+                              </div>
+                              <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                            </button>
+
+                            {promoDropdownOpen && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-border rounded-xl shadow-xl max-h-72 overflow-y-auto p-1.5 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPromoId("");
+                                    setPromoDropdownOpen(false);
+                                  }}
+                                  className={`flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+                                    !selectedPromoId 
+                                      ? "bg-rose-50/50 text-rose-600 font-medium" 
+                                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <span>No promotion applied</span>
+                                  {!selectedPromoId && (
+                                    <span className="h-1.5 w-1.5 rounded-full bg-rose-600" />
+                                  )}
+                                </button>
+
+                                {filteredPromos.map((p: any) => {
+                                  const isSelected = p.id === selectedPromoId;
+                                  const promoLabel = p.labelText || p.bannerTitle;
+                                  const displayDiscount = p.discountType === "percentage"
+                                    ? `${p.discountValue}%`
+                                    : formatCurrency(p.discountValue, currency);
+                                  
+                                  const pillColor = p.labelColour || "#C84B2F";
+
+                                  return (
+                                    <button
+                                      key={p.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedPromoId(p.id);
+                                        setPromoDropdownOpen(false);
+                                      }}
+                                      className={`flex items-start gap-3 w-full p-2 rounded-lg border text-left transition-all ${
+                                        isSelected
+                                          ? "bg-rose-50/40 border-rose-200/80 ring-1 ring-rose-100"
+                                          : "bg-white border-transparent hover:bg-slate-50 hover:border-slate-100"
+                                      }`}
+                                    >
+                                      <div 
+                                        className="flex h-8 w-8 items-center justify-center rounded-lg text-white font-bold text-xs flex-shrink-0 shadow-sm"
+                                        style={{ backgroundColor: pillColor }}
+                                      >
+                                        %
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="font-semibold text-slate-800 text-sm truncate">
+                                            {promoLabel}
+                                          </span>
+                                          <span className="bg-rose-50 text-rose-600 text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0">
+                                            {displayDiscount} OFF
+                                          </span>
+                                        </div>
+                                        {p.bannerSubtitle && (
+                                          <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                                            {p.bannerSubtitle}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                                
+                                {filteredPromos.length === 0 && (
+                                  <div className="p-4 text-center text-xs text-slate-400 font-medium">
+                                    No promotions available for this listing type.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Voucher Dropdown */}
+                          <div className="space-y-1.5 relative voucher-dropdown">
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                              Voucher Discount
+                            </label>
+                            
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setVoucherDropdownOpen(!voucherDropdownOpen);
+                                setPromoDropdownOpen(false);
+                              }}
+                              className="flex items-center gap-3 w-full px-3 py-2 text-left bg-white border border-border rounded-lg shadow-sm hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all select-none"
+                            >
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 flex-shrink-0">
+                                <Ticket className="h-4 w-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                {selectedVoucher ? (
+                                  <>
+                                    <div className="text-sm font-semibold text-slate-900 truncate tracking-wide">
+                                      {selectedVoucher.code}
+                                    </div>
+                                    <div className="text-xs text-slate-500 truncate">
+                                      {selectedVoucher.title || (selectedVoucher.discountType === "percentage" 
+                                        ? `${selectedVoucher.discountValue}% Off` 
+                                        : `${formatCurrency(selectedVoucher.discountValue, currency)} Off`)}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="text-sm text-slate-400 font-medium">
+                                    No voucher applied
+                                  </div>
+                                )}
+                              </div>
+                              <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                            </button>
+
+                            {voucherDropdownOpen && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-border rounded-xl shadow-xl max-h-72 overflow-y-auto p-1.5 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedVoucherId("");
+                                    setVoucherDropdownOpen(false);
+                                  }}
+                                  className={`flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-colors text-left ${
+                                    !selectedVoucherId 
+                                      ? "bg-emerald-50/50 text-emerald-600 font-medium" 
+                                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                                  }`}
+                                >
+                                  <span>No voucher applied</span>
+                                  {!selectedVoucherId && (
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                                  )}
+                                </button>
+
+                                {filteredVouchers.map((v: any) => {
+                                  const isSelected = v.id === selectedVoucherId;
+                                  const displayDiscount = v.discountType === "percentage"
+                                    ? `${v.discountValue}%`
+                                    : formatCurrency(v.discountValue, currency);
+                                  
+                                  return (
+                                    <button
+                                      key={v.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedVoucherId(v.id);
+                                        setVoucherDropdownOpen(false);
+                                      }}
+                                      className={`flex items-start gap-3 w-full p-2 rounded-lg border text-left transition-all ${
+                                        isSelected
+                                          ? "bg-emerald-50/40 border-emerald-200/80 ring-1 ring-emerald-100"
+                                          : "bg-white border-transparent hover:bg-slate-50 hover:border-slate-100"
+                                      }`}
+                                    >
+                                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 flex-shrink-0 shadow-sm border border-emerald-200 border-dashed">
+                                        <Ticket className="h-3.5 w-3.5" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="font-semibold text-slate-800 text-sm tracking-wide truncate">
+                                            {v.code}
+                                          </span>
+                                          <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0">
+                                            {displayDiscount} OFF
+                                          </span>
+                                        </div>
+                                        {(v.title || v.description) && (
+                                          <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                                            {v.title || v.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                                
+                                {filteredVouchers.length === 0 && (
+                                  <div className="p-4 text-center text-xs text-slate-400 font-medium">
+                                    No active vouchers available for this country/listing type.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Pricing Breakdown */}
+                  <div className="rounded-lg border border-border bg-slate-50/60 p-5 space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-900 border-b border-slate-200 pb-2">Pricing Breakdown</h3>
+
+                    <div className="pt-2 space-y-1.5">
+                      <InfoRow
+                        label={isAccommodation ? "Number of Nights" : "Number of Days"}
+                        value={`${nights} ${isAccommodation ? (nights === 1 ? "night" : "nights") : (nights === 1 ? "day" : "days")}`}
+                      />
+                      <InfoRow
+                        label={isAccommodation ? "Unit Price (Per Night)" : "Unit Price (Per Day)"}
+                        value={pricePerNight !== null ? formatCurrency(pricePerNight, computedPricing.currency) : "—"}
+                      />
+                      <InfoRow label="Base Amount" value={formatCurrency(computedPricing.baseAmount, computedPricing.currency)} />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                      <InfoRow
+                        label="Applied Promotion Discount"
+                        value={computedPricing.promotionDiscount > 0 ? `-${formatCurrency(computedPricing.promotionDiscount, computedPricing.currency)}` : "—"}
+                      />
+                      <InfoRow
+                        label="Applied Voucher Discount"
+                        value={computedPricing.voucherDiscount > 0 ? `-${formatCurrency(computedPricing.voucherDiscount, computedPricing.currency)}` : "—"}
+                      />
+                      <InfoRow
+                        label="Best Discount Applied"
+                        value={computedPricing.discount > 0 ? `-${formatCurrency(computedPricing.discount, computedPricing.currency)}` : "—"}
+                      />
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                      <InfoRow label="Subtotal" value={formatCurrency(computedPricing.subtotal, computedPricing.currency)} />
+                      <InfoRow
+                        label="Commission Rate Applied"
+                        value={commissionRate !== null ? formatRate(commissionRate) : "—"}
+                      />
+                      <InfoRow label="Service Fee / Commission Amount" value={formatCurrency(computedPricing.serviceFee, computedPricing.currency)} />
+                      <InfoRow
+                        label="Taxes"
+                        value={formatCurrency(computedPricing.tax, computedPricing.currency)}
+                      />
+                    </div>
+
+                    <div className="pt-3 border-t border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-base font-bold text-slate-900">Total Amount Payable</span>
+                        <span className="text-lg font-bold text-primary">{formatCurrency(computedPricing.total, computedPricing.currency)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
             </div>
           </SectionCard>
 
-          {/* ════════════════════════════════════════════════════════════
-              SECTION 6 – Internal Information (auto-generated)
-          ════════════════════════════════════════════════════════════ */}
-          <SectionCard step={price ? 6 : 5} title="Internal Information" icon={Hash}>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-0 rounded-lg border border-border overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-xs text-slate-400 mb-0.5">Booking Reference</p>
-                <p className="text-sm font-mono font-semibold text-primary">Auto-generated on submit</p>
+          {/* Section 5 - Internal Information */}
+          <SectionCard step={5} title="Internal Information" icon={Hash}>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Booking Reference</p>
+                <p className="text-sm font-mono text-primary">Auto-generated on submit</p>
               </div>
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-xs text-slate-400 mb-0.5">Created By</p>
-                <p className="text-sm font-medium text-slate-900 flex items-center gap-1.5">
-                  <UserCircle className="h-3.5 w-3.5 text-slate-400" />
-                  {user?.name ?? "—"}
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Created By</p>
+                <div className="flex items-center gap-1.5">
+                  <UserCircle className="h-4 w-4 text-slate-400" />
+                  <p className="text-sm text-slate-700">{user?.name ?? "-"}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Created Date</p>
+                <p className="text-sm text-slate-700">
+                  {new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" })}
                 </p>
               </div>
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-xs text-slate-400 mb-0.5">Created Date</p>
-                <p className="text-sm font-medium text-slate-900">
-                  {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
-                </p>
+              <div>
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Assigned Country</p>
+                <div className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-slate-400" />
+                  <p className="text-sm text-slate-700">
+                    {(() => {
+                      if (role === "super_admin" || role === "admin") {
+                        return "All Countries";
+                      }
+                      if (user?.countryScope && user.countryScope.length > 0) {
+                        return user.countryScope
+                          .map((code) => {
+                            const found = BOOKING_COUNTRIES.find(
+                              (c) => c.code.toUpperCase() === code.toUpperCase()
+                            );
+                            return found ? found.name : code;
+                          })
+                          .join(", ");
+                      }
+                      return "-";
+                    })()}
+                  </p>
+                </div>
               </div>
-              <div className="px-4 py-2.5 border-b border-border">
-                <p className="text-xs text-slate-400 mb-0.5">Assigned Country</p>
-                <p className="text-sm font-medium text-slate-900 flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                  {country || "—"}
-                </p>
-              </div>
-              <div className="px-4 py-2.5">
-                <p className="text-xs text-slate-400 mb-0.5">Agent Role</p>
-                <p className="text-sm font-medium text-slate-900 capitalize">{role?.replace("_", " ") ?? "—"}</p>
-              </div>
+              {role && (
+                <div>
+                  <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-1">Agent Role</p>
+                  <p className="text-sm text-slate-700 capitalize">{role.replace(/_/g, " ")}</p>
+                </div>
+              )}
             </div>
           </SectionCard>
 
-          {/* ════════════════════════════════════════════════════════════
-              Action Buttons
-          ════════════════════════════════════════════════════════════ */}
+          {/* Action Buttons */}
           <div className="flex items-center justify-between gap-3 pt-2">
             <Link href="/dashboard/bookings">
               <Button type="button" variant="ghost" leftIcon={<X className="h-4 w-4" />}>
@@ -1160,7 +2004,10 @@ export default function ManualBookingPage() {
                 variant="secondary"
                 loading={saveDraftMut.isPending}
                 leftIcon={<Save className="h-4 w-4" />}
-                onClick={() => saveDraftMut.mutate()}
+                onClick={() => {
+                  if (!validate()) return;
+                  saveDraftMut.mutate();
+                }}
               >
                 Save Draft
               </Button>
@@ -1168,7 +2015,10 @@ export default function ManualBookingPage() {
                 type="button"
                 loading={isSending}
                 leftIcon={<Send className="h-4 w-4" />}
-                onClick={handleSendLink}
+                onClick={() => {
+                  if (!validate()) return;
+                  handleSendLink();
+                }}
                 disabled={availStatus === "unavailable" || isSending}
               >
                 Send Payment Link
@@ -1176,20 +2026,98 @@ export default function ManualBookingPage() {
             </div>
           </div>
 
-        </div>{/* ── end left column ── */}
-
-        {/* ════ RIGHT COLUMN – AVAILABILITY CALENDAR ══════════════════════════ */}
-        <div className="sticky top-5">
-          <AvailabilityCalendar
-            checkIn={isAccommodation ? checkIn : ""}
-            checkOut={isAccommodation ? checkOut : ""}
-            availability={availability}
-            loading={calLoading}
-            onSelectDate={handleCalendarDateSelect}
-          />
         </div>
 
-      </div>{/* ── end grid ── */}
+        {/* Right column - Availability Calendar sidebar */}
+        <div className="w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-6 self-start space-y-4">
+          {/* Calendar — shown for all listing types.
+              For cars: pickup = checkIn, returnDt = checkOut, and clicking
+              dates sets pickup/return rather than checkIn/checkOut. */}
+          <AvailabilityCalendar
+            checkIn={isAccommodation ? checkIn : pickup}
+            checkOut={isAccommodation ? checkOut : returnDt}
+            availability={availability}
+            loading={calLoading}
+            onSelectDate={(date) => {
+              if (isAccommodation) {
+                // Hotel / Apartment — two-step check-in → check-out selection
+                if (calSelectStep === "checkIn") {
+                  setCheckIn(date);
+                  setCheckOut("");
+                  setCalSelectStep("checkOut");
+                } else {
+                  if (date > checkIn) {
+                    setCheckOut(date);
+                    setCalSelectStep("checkIn");
+                  } else {
+                    setCheckIn(date);
+                    setCheckOut("");
+                  }
+                }
+              } else {
+                // Car rental — two-step pickup → return selection
+                if (!pickup || (pickup && returnDt)) {
+                  // Start fresh: set pickup, clear return
+                  setPickup(date);
+                  setReturnDt("");
+                  setAvailStatus("idle");
+                  setPrice(null);
+                } else {
+                  // pickup is set, no return yet
+                  if (date > pickup) {
+                    setReturnDt(date);
+                    setAvailStatus("idle");
+                    setPrice(null);
+                  } else {
+                    // Clicked before current pickup — restart
+                    setPickup(date);
+                    setReturnDt("");
+                  }
+                }
+              }
+            }}
+          />
+
+          {/* Car rental summary card — shown below the calendar for cars only */}
+          {!isAccommodation && (
+            <div className="bg-white rounded-xl border border-border shadow-card overflow-hidden">
+              <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-slate-50/60">
+                <CalendarDays className="h-4 w-4 text-primary" />
+                <h2 className="text-sm font-semibold text-slate-900 flex-1">Rental Period</h2>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between rounded-lg border border-border bg-slate-50 px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Pickup Date</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {pickup
+                        ? new Date(pickup).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+                        : <span className="text-slate-400 italic">Click a date on the calendar</span>}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg border border-border bg-slate-50 px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Return Date</p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {returnDt
+                        ? new Date(returnDt).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+                        : <span className="text-slate-400 italic">{pickup ? "Click return date" : "—"}</span>}
+                    </p>
+                  </div>
+                </div>
+                {nights > 0 && (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                    <p className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-0.5">Duration</p>
+                    <p className="text-sm font-bold text-primary">{nights} day{nights !== 1 ? "s" : ""}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 }

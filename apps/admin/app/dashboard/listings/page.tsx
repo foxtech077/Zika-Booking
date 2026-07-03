@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home } from "lucide-react";
+import { Search, ChevronDown, Building2, ShieldOff, ShieldCheck, ChevronRight, Star, Hotel, Car, Home, Edit } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -11,9 +12,14 @@ import { Button } from "@/components/ui/Button";
 import { Select, Textarea } from "@/components/ui/Input";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
-import { formatDate, formatRelativeTime, formatCurrency } from "@/lib/utils";
+import { formatDate, formatRelativeTime, formatCurrency, cn } from "@/lib/utils";
 import type { Listing } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
+import { SYSTEM_COUNTRIES, getCountryFlag } from "@/lib/countries";
+import countries from "i18n-iso-countries";
+import enLocale from "i18n-iso-countries/langs/en.json";
+
+countries.registerLocale(enLocale);
 
 function CategoryIcon({ category }: { category: string }) {
   if (category === "hotel") return <Hotel className="w-4 h-4 text-blue-500" />;
@@ -26,35 +32,58 @@ const fetchListings = (params: Record<string, string>) =>
 
 export default function ListingsPage() {
   const { token, user, _hasHydrated } = useAuthStore();
+  const router = useRouter();
   const isCountryManager = user?.role === "country_manager";
-  const scopedCountries: string[] = isCountryManager ? (user?.countryScope ?? []) : [];
+  const scopedCountries = isCountryManager ? (user?.countryScope ?? []) : [];
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
   const [category, setCategory] = useState("");
-  const [country, setCountry] = useState(() => scopedCountries[0] ?? "");
+  const [country, setCountry] = useState("");
 
-  // Sync country selection after auth store hydration
+  const [isCountryOpen, setIsCountryOpen] = useState(false);
+  const [countrySearch, setCountrySearch] = useState("");
+
   useEffect(() => {
-    if (scopedCountries.length > 0 && !country) {
-      setCountry(scopedCountries[0] ?? "");
-    }
-  }, [scopedCountries, country]);
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".listings-country-dropdown")) {
+        setIsCountryOpen(false);
+      }
+    };
+    document.addEventListener("click", handleOutsideClick);
+    return () => document.removeEventListener("click", handleOutsideClick);
+  }, []);
+
+  const filteredCountries = isCountryManager
+    ? scopedCountries.map((code) => {
+        const found = SYSTEM_COUNTRIES.find((sc) => sc.code.toUpperCase() === code.toUpperCase());
+        if (found) return found;
+        const name = countries.getName(code, "en") || code;
+        return {
+          code: code.toUpperCase(),
+          name,
+          flag: getCountryFlag(code),
+        };
+      })
+    : SYSTEM_COUNTRIES;
+
   const [selected, setSelected] = useState<Listing | null>(null);
   const [suspendModal, setSuspendModal] = useState<Listing | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
   const [reinstateConfirm, setReinstateConfirm] = useState<Listing | null>(null);
+  const [reinstateReason, setReinstateReason] = useState("");
   const [starModal, setStarModal] = useState<Listing | null>(null);
   const [newStar, setNewStar] = useState("3");
   const [starReason, setStarReason] = useState("");
-
-  const effectiveCountry = isCountryManager ? (country || scopedCountries[0] || "") : country;
-  const params = { q, status, category, country: effectiveCountry, page: String(page), limit: "20" };
+ 
+  const params = { q, status, category, country, page: String(page), limit: String(limit) };
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-listings", page, "20", q, status, category, effectiveCountry],
+    queryKey: ["admin-listings", page, limit, q, status, category, country],
     queryFn: () => fetchListings(params),
-    enabled: !!token && _hasHydrated && (!isCountryManager || scopedCountries.length > 0),
+    enabled: !!token && _hasHydrated,
   });
 
   const rawListings: Listing[] = data?.listings ?? [];
@@ -66,6 +95,21 @@ export default function ListingsPage() {
     : rawListings;
   const total: number = data?.total ?? 0;
 
+  const offset = (page - 1) * limit;
+  const requestUrl = `/admin/listings?${new URLSearchParams(params)}`;
+  const responseCount = data?.listings?.length ?? 0;
+  const renderedRows = listings.length;
+  console.log("ListingsPage Pagination Debug:", {
+    page,
+    limit,
+    offset,
+    params,
+    queryKey: ["admin-listings", page, limit, q, status, category, country],
+    requestUrl,
+    responseCount,
+    renderedRows,
+  });
+
   const suspendMut = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       listingApi.post(`/admin/listings/${id}/suspend`, { reason }),
@@ -73,8 +117,9 @@ export default function ListingsPage() {
   });
 
   const reinstateMut = useMutation({
-    mutationFn: (id: string) => listingApi.post(`/admin/listings/${id}/reinstate`),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setReinstateConfirm(null); },
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      listingApi.post(`/admin/listings/${id}/reinstate`, { reason }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-listings"] }); setReinstateConfirm(null); setReinstateReason(""); },
   });
 
   const starMut = useMutation({
@@ -130,11 +175,15 @@ export default function ListingsPage() {
       key: "price",
       label: "Price",
       align: "right",
-      render: (l) => (
-        <span className="text-sm tabular">
-          {l.pricePerNight ? formatCurrency(Number(l.pricePerNight), l.currency ?? "USD") : "—"}
-        </span>
-      ),
+      render: (l) => {
+        const price = l.pricePerNight ?? l.pricePerDay;
+        const suffix = l.category === "car" ? "/day" : "/night";
+        return (
+          <span className="text-sm tabular">
+            {price ? `${formatCurrency(Number(price), l.currency ?? "USD")}${suffix}` : "—"}
+          </span>
+        );
+      },
     },
     {
       key: "approved",
@@ -145,9 +194,16 @@ export default function ListingsPage() {
       key: "actions",
       label: "",
       align: "right",
-      width: "100px",
+      width: "120px",
       render: (l) => (
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => router.push(`/dashboard/listings/${l.id}`)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-colors"
+            title="Edit / Review"
+          >
+            <Edit className="h-3.5 w-3.5" />
+          </button>
           {l.category === "hotel" && l.status === "approved" && (
             <button
               onClick={() => setStarModal(l)}
@@ -199,7 +255,6 @@ export default function ListingsPage() {
               value: status,
               onChange: (v) => { setStatus(v); setPage(1); },
               options: [
-                { value: "draft", label: "Draft" },
                 { value: "pending_review", label: "Pending Review" },
                 { value: "approved", label: "Approved" },
                 { value: "rejected", label: "Rejected" },
@@ -219,7 +274,19 @@ export default function ListingsPage() {
                 { value: "car", label: "Car" },
               ],
             },
+            {
+              key: "country",
+              label: "All Countries",
+              value: country,
+              onChange: (v) => { setCountry(v); setPage(1); },
+              options: filteredCountries.map((c) => ({
+                value: c.code,
+                label: `${c.flag} ${c.name}`,
+              })),
+            },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         />
         <DataTable
           columns={columns}
@@ -230,11 +297,29 @@ export default function ListingsPage() {
           emptyDescription="Try adjusting your search or filters."
           emptyIcon={<Building2 className="h-10 w-10" />}
         />
-        <Pagination page={page} limit={20} total={total} onPageChange={setPage} />
+        <Pagination page={page} limit={limit} total={total} onPageChange={setPage} />
       </Card>
 
       {/* Detail drawer */}
-      <SlideDrawer open={!!selected} onClose={() => setSelected(null)} title={selected?.name ?? "Listing"} width="sm">
+      <SlideDrawer
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected?.name ?? "Listing"}
+        width="sm"
+        footer={
+          selected && (
+            <div className="flex justify-end w-full">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => router.push(`/dashboard/listings/${selected.id}`)}
+              >
+                Edit / Review Details
+              </Button>
+            </div>
+          )
+        }
+      >
         {selected && (
           <div className="space-y-4">
             {selected.photos?.[0]?.cdnUrl && (
@@ -305,16 +390,27 @@ export default function ListingsPage() {
       </ActionModal>
 
       {/* Reinstate confirm */}
-      <ConfirmModal
+      <ActionModal
         open={!!reinstateConfirm}
-        onClose={() => setReinstateConfirm(null)}
-        onConfirm={() => reinstateConfirm && reinstateMut.mutate(reinstateConfirm.id)}
-        loading={reinstateMut.isPending}
+        onClose={() => { setReinstateConfirm(null); setReinstateReason(""); }}
         title="Reinstate listing"
-        description={`Restore "${reinstateConfirm?.name}" to live status?`}
-        variant="info"
-        confirmLabel="Reinstate"
-      />
+        description={`Provide a reason for reinstating "${reinstateConfirm?.name}"?`}
+        size="sm"
+        footer={
+          <div className="flex gap-2 justify-end">
+            <Button variant="secondary" onClick={() => { setReinstateConfirm(null); setReinstateReason(""); }}>Cancel</Button>
+            <Button loading={reinstateMut.isPending} onClick={() => reinstateConfirm && reinstateMut.mutate({ id: reinstateConfirm.id, reason: reinstateReason })}>Reinstate</Button>
+          </div>
+        }
+      >
+        <textarea
+          className="w-full text-sm border border-gray-300 rounded-lg p-2 resize-none mt-2"
+          value={reinstateReason}
+          onChange={(e) => setReinstateReason(e.target.value)}
+          placeholder="Optional reason for reinstatement…"
+          rows={3}
+        />
+      </ActionModal>
 
       {/* Star rating modal */}
       <ActionModal

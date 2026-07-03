@@ -1,31 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Percent, Plus, Trash2, Globe } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Textarea } from "@/components/ui/Input";
+import { Input, Select, Textarea, CustomDropdown } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { ConfirmModal, ActionModal } from "@/components/modals/Modals";
 import { DataTable, type Column } from "@/components/tables/DataTable";
 import { formatDate } from "@/lib/utils";
-import type { CommissionRate, CommissionRatesResponse } from "@/types/admin";
+import { canAccess } from "@/permissions/rbac";
+import type { CommissionRate, CommissionRatesResponse, AdminRole } from "@/types/admin";
 import { useAuthStore } from "@/stores/auth";
+
+import { SYSTEM_COUNTRIES } from "@/lib/countries";
 
 const fetchRates = () =>
   listingApi.get("/admin/commission-rates").then((r) => r.data.data ?? r.data);
 
-const COUNTRY_OPTIONS = [
-  "MT", "US", "GB", "DE", "FR", "ES", "IT", "AE", "AU", "CA", "JP", "SG", "NL", "BE", "SE",
-].map((c) => ({ value: c, label: c }));
+const COUNTRY_OPTIONS = SYSTEM_COUNTRIES.map((c) => ({
+  value: c.code,
+  label: `${c.flag} ${c.name} (${c.code})`,
+}));
 
 export default function CommissionPage() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
   const role = user?.role;
-  const isSuperAdmin = role === "super_admin";
+  const canManageCommission = role === "super_admin";
 
   const [addModal, setAddModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<CommissionRate | null>(null);
@@ -51,6 +55,16 @@ export default function CommissionPage() {
 
   const rates: CommissionRate[] = data?.rates ?? [];
   const defaultRate: number = (data as any)?.globalRate != null ? (data as any).globalRate * 100 : (data?.defaultRate ?? 5);
+
+  const filteredRates = useMemo(() => {
+    if (role === "super_admin" || role === "admin" || role === "finance" || role === "support") {
+      return rates;
+    }
+    if (role === "country_manager" || role === "sales") {
+      return rates.filter((r) => user?.countryScope?.includes(r.country));
+    }
+    return [];
+  }, [rates, role, user?.countryScope]);
 
   const upsertMut = useMutation({
     mutationFn: ({
@@ -125,12 +139,17 @@ export default function CommissionPage() {
     {
       key: "country",
       label: "Country",
-      render: (r) => (
-        <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-slate-400" />
-          <span className="font-medium text-slate-900">{r.country}</span>
-        </div>
-      ),
+      render: (r) => {
+        const found = SYSTEM_COUNTRIES.find((sc) => sc.code.toUpperCase() === r.country.toUpperCase());
+        return (
+          <div className="flex items-center gap-2">
+            <span className="text-base">{found?.flag ?? "🌐"}</span>
+            <span className="font-medium text-slate-900">
+              {found ? `${found.name} (${r.country})` : r.country}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: "rate",
@@ -162,13 +181,15 @@ export default function CommissionPage() {
       label: "",
       align: "right",
       render: (r) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); setDeleteConfirm(r); }}
-          className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
-          title="Remove override"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        canManageCommission ? (
+          <button
+            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(r); }}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors"
+            title="Remove override"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        ) : null
       ),
     },
   ];
@@ -179,14 +200,16 @@ export default function CommissionPage() {
         title="Commission Rates"
         description="Configure platform commission per country"
         action={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setAddModal(true)}
-            leftIcon={<Plus className="h-4 w-4" />}
-          >
-            Add Override
-          </Button>
+          canManageCommission && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setAddModal(true)}
+              leftIcon={<Plus className="h-4 w-4" />}
+            >
+              Add Override
+            </Button>
+          )
         }
       />
 
@@ -200,11 +223,11 @@ export default function CommissionPage() {
             <p className="text-sm font-medium text-slate-600">Global Default Rate</p>
             <p className="text-3xl font-bold text-primary">{defaultRate}%</p>
             <p className="text-xs text-slate-500 mt-0.5">
-              Applied to all countries without a custom override · {rates.length} override{rates.length !== 1 ? "s" : ""} configured
+              Applied to all countries without a custom override · {filteredRates.length} override{filteredRates.length !== 1 ? "s" : ""} configured
             </p>
           </div>
         </div>
-        {isSuperAdmin && (
+        {canManageCommission && (
           <Button
             variant="secondary"
             size="sm"
@@ -228,7 +251,7 @@ export default function CommissionPage() {
         </div>
         <DataTable
           columns={columns}
-          data={rates}
+          data={filteredRates}
           loading={isLoading}
           emptyTitle="No overrides configured"
           emptyDescription="All countries use the global default rate."
@@ -274,11 +297,11 @@ export default function CommissionPage() {
         }
       >
         <div className="space-y-4">
-          <Select
+          <CustomDropdown
             id="country"
             label="Country"
             value={newCountry}
-            onChange={(e) => setNewCountry(e.target.value)}
+            onChange={(val: any) => setNewCountry(val)}
             options={COUNTRY_OPTIONS}
             placeholder="Select country…"
             required
@@ -329,7 +352,7 @@ export default function CommissionPage() {
         </div>
       </ActionModal>
 
-      {/* Edit Global Commission Modal */}
+      {/* Edit Global Commission Modal */} 
       <ActionModal
         open={globalModal}
         onClose={() => {

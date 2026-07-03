@@ -29,7 +29,12 @@ export type Permission =
   | "view_settings"
   | "manage_settings"
   | "view_roles"
-  | "manage_roles";
+  | "manage_roles"
+  | "view_refunds"
+  | "view_promotions"
+  | "manage_promotions"
+  | "view_merchants"
+  | "manage_merchants";
 
 // Role → set of permissions
 const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
@@ -41,13 +46,16 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_finance", "manage_finance",
     "view_commission", "manage_commission",
     "view_vouchers", "manage_vouchers",
+    "view_promotions", "manage_promotions",
     "view_reviews", "manage_reviews",
     "view_messaging",
     "view_channel", "manage_channel",
     "view_audit",
     "view_reports",
+    "view_refunds",
     "view_settings", "manage_settings",
     "view_roles", "manage_roles",
+    "view_merchants", "manage_merchants",
   ],
   admin: [
     "view_dashboard", "view_users", "manage_users",
@@ -55,13 +63,16 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_listings", "manage_listings",
     "view_bookings", "manage_bookings", "manage_manual_booking",
     "view_finance",
-    "view_commission", "manage_commission",
+    "view_commission",
     "view_vouchers", "manage_vouchers",
+    "view_promotions", "manage_promotions",
     "view_reviews", "manage_reviews",
     "view_messaging",
     "view_channel", "manage_channel",
     "view_audit",
     "view_reports",
+    "view_refunds",
+    "view_merchants",
     // "view_settings" removed — global platform settings is super_admin only
     "view_roles",
   ],
@@ -75,26 +86,30 @@ const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     "view_messaging",
     "view_channel",
     "view_reports",
+    "view_commission",
+    "view_refunds",
   ],
   sales: [
     "view_dashboard",
     "view_bookings",
+    "manage_manual_booking",
+    "view_messaging",
+    "view_commission",
   ],
   support: [
     "view_dashboard",
-    "view_users",
-    "view_bookings", "manage_bookings",
-    "view_listings",
-    "view_reviews", "manage_reviews",
+    "view_bookings",
     "view_messaging",
+    "view_refunds",
+    "view_commission",
   ],
   finance: [
     "view_dashboard",
     "view_finance", "manage_finance",
-    "view_commission", "manage_commission",
-    "view_bookings",
-    "view_reports",
+    "view_commission",
     "view_audit",
+    "view_refunds",
+    "view_merchants", "manage_merchants",
   ],
 };
 
@@ -152,11 +167,11 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Users", href: "/dashboard/users", icon: "Users", permission: "view_users" },
       { label: "Accreditation", href: "/dashboard/accreditation", icon: "BadgeCheck", permission: "view_accreditation" },
+      { label: "Moderation Queue", href: "/dashboard/moderation", icon: "ShieldAlert", permission: "view_reviews" },
       { label: "Listings", href: "/dashboard/listings", icon: "Building2", permission: "view_listings" },
       { label: "Bookings", href: "/dashboard/bookings", icon: "CalendarDays", permission: "view_bookings" },
       { label: "Reviews", href: "/dashboard/reviews", icon: "Star", permission: "view_reviews" },
       { label: "Messaging", href: "/dashboard/messaging", icon: "MessageSquare", permission: "view_messaging" },
-      { label: "Channel Sync", href: "/dashboard/channel", icon: "Cable", permission: "view_channel" },
     ],
   },
   {
@@ -165,13 +180,16 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Payment Dashboard", href: "/dashboard/finance", icon: "LayoutDashboard", permission: "view_finance" },
       { label: "Booking Payments", href: "/dashboard/finance/payments", icon: "CreditCard", permission: "view_finance" },
       { label: "Payout Management", href: "/dashboard/finance/payouts", icon: "Coins", permission: "view_finance" },
-      { label: "Refund Management", href: "/dashboard/finance/refunds", icon: "RotateCcw", permission: "view_finance" },
+      { label: "Merchant Management", href: "/dashboard/finance/merchants", icon: "Store", permission: "view_merchants" },
       { label: "Commission Settings", href: "/dashboard/commission", icon: "Percent", permission: "view_commission" },
       { label: "Commission History", href: "/dashboard/commission/history", icon: "History", permission: "view_commission" },
       { label: "Financial Reports", href: "/dashboard/finance/reports", icon: "BarChart3", permission: "view_finance" },
+      { label: "Refund Management", href: "/dashboard/finance/refunds", icon: "RotateCcw", permission: "view_refunds" },
       { label: "Vouchers", href: "/dashboard/vouchers", icon: "Ticket", permission: "view_vouchers" },
+      { label: "Activity Promotions", href: "/dashboard/promotions", icon: "Tag", permission: "view_promotions" },
     ],
   },
+
   {
     group: "Administration",
     items: [

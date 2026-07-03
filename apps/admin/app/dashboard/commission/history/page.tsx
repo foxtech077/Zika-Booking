@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { History, Search, Download, Globe, Calendar, Info } from "lucide-react";
+import { History, Search, Globe, Calendar, Info, Download } from "lucide-react";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useMockFinanceStore, type CommissionHistoryEntry } from "@/lib/mock-finance-store";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/DatePicker";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "MT" },
@@ -27,6 +28,7 @@ export default function CommissionHistoryPage() {
 
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
   const [searchQuery, setSearchQuery] = useState("");
   const [countryFilter, setCountryFilter] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -39,10 +41,20 @@ export default function CommissionHistoryPage() {
   // Filter history entries based on search query, date, country scope, and role scope
   const filteredHistory = useMemo(() => {
     return commissionHistory.filter((entry) => {
-      // 1. Role Scope Filter for Country Manager
-      if (user?.role === "country_manager" && entry.country !== "Global") {
-        const hasScope = user.countryScope?.includes(entry.country);
+      // 1. Role Scope Filter
+      const role = user?.role;
+      if (role === "super_admin" || role === "finance" || role === "support") {
+        // Can view all
+      } else if (role === "country_manager" || role === "sales") {
+        // Can only view own countries
+        const hasScope = user?.countryScope?.includes(entry.country);
         if (!hasScope) return false;
+      } else if (role === "admin") {
+        // Can only view Global history
+        if (entry.country !== "Global") return false;
+      } else {
+        // Any other role cannot view anything
+        return false;
       }
 
       // 2. Country Dropdown Filter
@@ -66,34 +78,33 @@ export default function CommissionHistoryPage() {
   }, [commissionHistory, user, countryFilter, startDate, endDate, searchQuery]);
 
   // Paginate records
-  const limit = 10;
   const paginatedHistory = useMemo(() => {
     const start = (page - 1) * limit;
     return filteredHistory.slice(start, start + limit);
-  }, [filteredHistory, page]);
+  }, [filteredHistory, page, limit]);
 
-  // CSV Export Action
-  const handleExportCsv = () => {
-    const headers = ["ID", "Country", "Previous Rate (%)", "New Rate (%)", "Effective Date", "Changed By", "Change Reason", "Log Date"];
-    const rows = filteredHistory.map((h) => [
-      h.id,
+  const canExport = user?.role === "super_admin" || user?.role === "finance" || user?.role === "support";
+
+  const handleExport = () => {
+    const headers = ["Scope", "Previous Rate (%)", "New Rate (%)", "Effective Date", "Authorized By", "Reason", "Logged At"];
+    const rows = filteredHistory.map(h => [
       h.country,
       h.previousRate,
       h.newRate,
       h.effectiveDate,
       h.changedBy,
-      h.changeReason,
-      formatDate(h.createdAt),
+      `"${h.changeReason.replace(/"/g, '""')}"`,
+      h.createdAt
     ]);
-
-    const csvContent = [headers, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `commission-audit-trail-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "commission_history.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const columns: Column<CommissionHistoryEntry>[] = [
@@ -165,15 +176,16 @@ export default function CommissionHistoryPage() {
         title="Commission Audit History"
         description="Comprehensive log of default commission adjustments, country-specific rate overrides, and scheduled rule additions."
         action={
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleExportCsv}
-            disabled={filteredHistory.length === 0}
-            leftIcon={<Download className="h-4 w-4" />}
-          >
-            Export History (CSV)
-          </Button>
+          canExport && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleExport}
+              leftIcon={<Download className="h-4 w-4" />}
+            >
+              Export CSV
+            </Button>
+          )
         }
       />
 
@@ -192,22 +204,23 @@ export default function CommissionHistoryPage() {
               options: CM_OPTIONS,
             },
           ]}
+          limit={limit}
+          onLimitChange={(newL) => { setLimit(newL); setPage(1); }}
         >
           <div className="flex items-center gap-2">
-            <input
-              type="date"
+            <DatePicker
+              placeholder="From Date"
               value={startDate}
-              onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-              className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
-              aria-label="Start Effective Date"
+              onChange={(val) => { setStartDate(val); setPage(1); }}
+              className="w-40"
             />
             <span className="text-xs text-slate-400">to</span>
-            <input
-              type="date"
+            <DatePicker
+              placeholder="To Date"
               value={endDate}
-              onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-              className="py-1.5 px-3 text-sm bg-white border border-border rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary transition-colors h-[38px]"
-              aria-label="End Effective Date"
+              onChange={(val) => { setEndDate(val); setPage(1); }}
+              minDate={startDate || undefined}
+              className="w-40"
             />
             {(startDate || endDate) && (
               <button
@@ -237,19 +250,7 @@ export default function CommissionHistoryPage() {
         />
       </Card>
 
-      {/* Informational notice */}
-      <div className="bg-blue-50/50 border border-blue-100 rounded-lg p-3 text-xs text-blue-800 flex items-start gap-2">
-        <Info className="h-4.5 w-4.5 text-blue-600 flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="font-semibold">Missing API Dependencies Documented</p>
-          <p className="text-[11px] text-blue-700 mt-0.5 leading-snug">
-            This audit trail is backed by client local storage persistence. Production rollout requires introducing:
-            <code className="bg-blue-100/60 px-1 py-0.5 rounded text-[10px] ml-1 font-mono">
-              GET /admin/commission-rates/audit-trail
-            </code>
-          </p>
-        </div>
-      </div>
+
     </div>
   );
 }

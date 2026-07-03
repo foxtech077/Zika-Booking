@@ -8,9 +8,9 @@ import {
   Star, MessageSquare, Cable, DollarSign, Percent, Ticket,
   ShieldCheck, ClipboardList, BarChart3, Settings,
   ChevronLeft, ChevronRight, LogOut,
-  CreditCard, Coins, RotateCcw, History,
+  CreditCard, Coins, RotateCcw, History, Tag, Store, ShieldAlert,
 } from "lucide-react";
-import { cn, slugToLabel } from "@/lib/utils";
+import { cn, slugToLabel, getCountryNames } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess, NAV_GROUPS, type Permission } from "@/permissions/rbac";
 import type { AdminRole } from "@/types/admin";
@@ -21,7 +21,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, Users, BadgeCheck, Building2, CalendarDays,
   Star, MessageSquare, Cable, DollarSign, Percent, Ticket,
   ShieldCheck, ClipboardList, BarChart3, Settings,
-  CreditCard, Coins, RotateCcw, History,
+  CreditCard, Coins, RotateCcw, History, Tag, Store, ShieldAlert,
 };
 
 const ROLE_BADGE_COLORS: Record<AdminRole, string> = {
@@ -142,12 +142,19 @@ export function Sidebar() {
             <Avatar name={user.name} size="sm" />
             <div className="min-w-0">
               <p className="text-sm font-medium text-white truncate">{user.name}</p>
-              <span className={cn(
-                "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                ROLE_BADGE_COLORS[user.role] ?? "bg-slate-100 text-slate-600"
-              )}>
-                {slugToLabel(user.role)}
-              </span>
+              <div className="flex flex-col items-start gap-1">
+                <span className={cn(
+                  "inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  ROLE_BADGE_COLORS[user.role] ?? "bg-slate-100 text-slate-600"
+                )}>
+                  {slugToLabel(user.role)}
+                </span>
+                {user.role === "country_manager" && (
+                  <p className="text-[10px] text-white/50 leading-relaxed break-words whitespace-normal mt-0.5">
+                    {getCountryNames(user.countryScope)}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
