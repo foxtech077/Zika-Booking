@@ -30,15 +30,7 @@ export default function SubmitListingScreen() {
       await listingApi.post(endpoint);
     },
     onSuccess: () => {
-      if (isAutoActivate) {
-        router.replace("/(provider)/listings" as any);
-      } else {
-        Alert.alert(
-          "Submitted!",
-          "Your listing has been submitted for review. We'll notify you within 48 hours.",
-          [{ text: "OK", onPress: () => router.replace("/(provider)/listings" as any) }]
-        );
-      }
+      router.replace(`/listings/${id}/success` as any);
     },
     onError: (err: unknown) => {
       const errData = (err as any)?.response?.data?.error;

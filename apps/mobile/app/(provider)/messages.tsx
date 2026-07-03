@@ -11,6 +11,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useQueries } from "@tanstack/react-query";
 import { AppLayout } from "../../components/layout/AppLayout";
@@ -96,6 +97,17 @@ export default function ProviderMessagesScreen() {
     listing: (listingQueries[i]?.data ?? null) as ListingBasics | null,
     isLoadingListing: listingQueries[i]?.isLoading ?? false,
   }));
+
+  // Prefetch each conversation's listing photo as soon as it resolves, so cards
+  // that scroll into view render from cache instead of a cold network fetch.
+  const photoUrlsKey = listingQueries.map((q) => (q.data as ListingBasics | null)?.photoUrl ?? "").join("|");
+  useEffect(() => {
+    const urls = listingQueries
+      .map((q) => (q.data as ListingBasics | null)?.photoUrl)
+      .filter((u): u is string => !!u);
+    if (urls.length) ExpoImage.prefetch(urls, "memory-disk");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoUrlsKey]);
 
   const filtered = enriched.filter((c) => {
     if (activeChip === "hotels"     && c.listing?.category !== "hotel")     return false;

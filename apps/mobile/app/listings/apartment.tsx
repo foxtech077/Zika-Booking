@@ -361,19 +361,29 @@ export default function ApartmentListingScreen() {
     else handleExitWizard();
   }
 
-  async function pickAndUploadPhoto() {
+  async function pickAndUploadPhoto(source: "library" | "camera" = "library") {
     if (photos.length >= 30) {
       Alert.alert("Limit Reached", "Maximum 30 photos allowed.");
       return;
     }
     setUploadingPhoto(true);
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ["images"] as any,
-        quality: 0.85,
-        allowsMultipleSelection: true,
-        selectionLimit: 30 - photos.length,
-      });
+      let result;
+      if (source === "camera") {
+        const perm = await ImagePicker.requestCameraPermissionsAsync();
+        if (!perm.granted) {
+          Alert.alert("Camera Permission Needed", "Please allow camera access to take a photo.");
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"] as any, quality: 0.85 });
+      } else {
+        result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"] as any,
+          quality: 0.85,
+          allowsMultipleSelection: true,
+          selectionLimit: 30 - photos.length,
+        });
+      }
       if (result.canceled) return;
       const total = result.assets.length;
       for (let i = 0; i < total; i++) {
@@ -741,7 +751,8 @@ export default function ApartmentListingScreen() {
               photos={photos}
               uploading={uploadingPhoto}
               uploadProgress={uploadProgress ?? undefined}
-              onAdd={pickAndUploadPhoto}
+              onAdd={() => pickAndUploadPhoto("library")}
+              onCapture={() => pickAndUploadPhoto("camera")}
               onDelete={deletePhoto}
               onReorder={reorderPhoto}
               minPhotos={3}

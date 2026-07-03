@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   View,
   Text,
@@ -8,6 +9,7 @@ import {
   Dimensions,
   ActivityIndicator,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { router } from "expo-router";
 import { AppLayout } from "../../components/layout/AppLayout";
 import { useQuery } from "@tanstack/react-query";
@@ -64,6 +66,14 @@ interface ProviderReview {
   listingTitle?: string;
 }
 
+interface BookingLite {
+  status: string;
+  providerPayout: number;
+  checkIn: string | null;
+  pickupDatetime: string | null;
+  createdAt: string;
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtMoney(n: number) {
@@ -76,6 +86,25 @@ function momPct(cur: number, prev: number) {
   if (prev === 0) return { label: cur > 0 ? "+100.0%" : "0.0%", up: cur > 0 };
   const d = ((cur - prev) / prev) * 100;
   return { label: `${d >= 0 ? "+" : ""}${d.toFixed(1)}%`, up: d >= 0 };
+}
+
+const CANCELLED_STATUSES = new Set(["cancelled_by_guest", "cancelled_by_provider", "cancelled_by_system"]);
+
+async function fetchAllProviderBookings(): Promise<BookingLite[]> {
+  const pageSize = 50;
+  const maxPages = 6; // cap at 300 bookings so this stays cheap on mobile data
+  let offset = 0;
+  let all: BookingLite[] = [];
+  for (let i = 0; i < maxPages; i++) {
+    const res = await listingApi.get("/provider/bookings", { params: { offset, limit: pageSize } });
+    const d = res.data?.data ?? res.data;
+    const items: BookingLite[] = Array.isArray(d?.bookings) ? d.bookings : [];
+    all = all.concat(items);
+    const total = Number(d?.total ?? items.length);
+    offset += pageSize;
+    if (items.length === 0 || offset >= total) break;
+  }
+  return all;
 }
 
 
@@ -413,9 +442,29 @@ export default function ProviderHomeScreen() {
   const { data: listingsRaw } = useQuery<ProviderListing[]>({
     queryKey: ["providerDashListings"],
     queryFn: async () => {
-      const res = await listingApi.get("/provider/listings", { params: { limit: 3 } });
-      const d = res.data?.data ?? res.data;
-      return Array.isArray(d) ? d : (d?.listings ?? []);
+      const [listRes, summaryRes] = await Promise.all([
+        listingApi.get("/listings", { params: { limit: "50" } }),
+        listingApi.get("/provider/listings/summary"),
+      ]);
+      const ld = listRes.data?.data ?? listRes.data;
+      const sd = summaryRes.data?.data ?? summaryRes.data;
+      const rawListings: any[] = Array.isArray(ld?.listings) ? ld.listings : [];
+      const summaries: any[] = Array.isArray(sd?.listings) ? sd.listings : [];
+      const summaryById = new Map(summaries.map((sm) => [sm.id, sm]));
+      return rawListings.map((l) => {
+        const sum = summaryById.get(l.id);
+        return {
+          id: l.id,
+          name: l.name,
+          category: l.category,
+          status: l.status,
+          town: l.town,
+          country: l.country,
+          primaryPhotoUrl: l.photos?.[0]?.cdnUrl ?? null,
+          totalBookings: sum?.bookingCount,
+          averageRating: sum?.averageRating ?? null,
+        } as ProviderListing;
+      });
     },
     enabled: !!user,
   });
@@ -426,6 +475,38 @@ export default function ProviderHomeScreen() {
       const res = await listingApi.get("/provider/reviews", { params: { limit: 2 } });
       const d = res.data?.data ?? res.data;
       return Array.isArray(d) ? d : (d?.reviews ?? []);
+    },
+    enabled: !!user,
+  });
+
+  const { data: bookingsAll } = useQuery<BookingLite[]>({
+    queryKey: ["providerDashBookingsAll"],
+    queryFn: fetchAllProviderBookings,
+    enabled: !!user,
+  });
+
+  const { data: unitsData } = useQuery<{ totalUnits: number; listingsCounted: number }>({
+    queryKey: ["providerAvailableUnits"],
+    queryFn: async () => {
+      const res = await listingApi.get("/listings", { params: { limit: "50" } });
+      const d = res.data?.data ?? res.data;
+      const all: any[] = Array.isArray(d?.listings) ? d.listings : [];
+      const activeOnes = all.filter((l) => l.status === "active" || l.status === "approved");
+      let total = 0;
+      for (const l of activeOnes) {
+        if (l.category === "hotel") {
+          try {
+            const detail = await listingApi.get(`/listings/${l.id}`);
+            const dd = detail.data?.data ?? detail.data;
+            total += Math.max(1, Number(dd?.unitCount) || 1);
+          } catch {
+            total += 1;
+          }
+        } else {
+          total += 1;
+        }
+      }
+      return { totalUnits: total, listingsCounted: activeOnes.length };
     },
     enabled: !!user,
   });
@@ -441,6 +522,34 @@ export default function ProviderHomeScreen() {
     ? Math.min(99, Math.round((data.pendingBookingsCount / Math.max(data.activeListingsCount, 1)) * 100))
     : 0;
   const avgRating = reviewsData?.averageRating ?? null;
+
+  // Prefetch the "My Listings" thumbnails so the Listings tab opens with them already cached.
+  useEffect(() => {
+    const urls = listings.map((l) => l.primaryPhotoUrl).filter((u): u is string => !!u);
+    if (urls.length) ExpoImage.prefetch(urls, "memory-disk");
+  }, [listingsRaw]);
+
+  // Real pending payout: confirmed bookings whose check-in/pickup has already occurred
+  const now = new Date();
+  const pendingPayout = (bookingsAll ?? [])
+    .filter((b) => {
+      if (b.status !== "confirmed") return false;
+      const startStr = b.checkIn ?? b.pickupDatetime;
+      if (!startStr) return false;
+      const start = new Date(startStr);
+      return !Number.isNaN(start.getTime()) && start <= now;
+    })
+    .reduce((sum, b) => sum + (b.providerPayout ?? 0), 0);
+
+  // Cancellation rate over the last 90 days
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const recentBookingsWindow = (bookingsAll ?? []).filter((b) => {
+    const created = new Date(b.createdAt);
+    return !Number.isNaN(created.getTime()) && created >= ninetyDaysAgo;
+  });
+  const cancellationRate = recentBookingsWindow.length
+    ? (recentBookingsWindow.filter((b) => CANCELLED_STATUSES.has(b.status)).length / recentBookingsWindow.length) * 100
+    : 0;
 
   if (isLoading) {
     return (
@@ -480,9 +589,9 @@ export default function ProviderHomeScreen() {
       >
         {/* ── Metric Cards ── */}
         <View style={s.metricsRow}>
-          {/* Total Revenue */}
+          {/* Net Revenue */}
           <View style={[s.metricCard, { width: CARD_HALF }]}>
-            <Text style={s.metricLabel}>Total Revenue</Text>
+            <Text style={s.metricLabel}>Net Revenue</Text>
             <Text style={s.metricValue}>${fmtMoney(data?.totalEarnings ?? 0)}</Text>
             {mom && (
               <View style={s.metricTrend}>
@@ -490,6 +599,7 @@ export default function ProviderHomeScreen() {
                 <Text style={[s.metricTrendText, { color: mom.up ? "#16a34a" : "#dc2626" }]}>{mom.label}</Text>
               </View>
             )}
+            <Text style={s.metricSub}>After commission, lifetime</Text>
           </View>
 
           {/* Active Listings */}
@@ -500,6 +610,47 @@ export default function ProviderHomeScreen() {
               {(data?.activeListingsCount ?? 0) > 0 ? "Full capacity" : "No active listings"}
             </Text>
           </View>
+        </View>
+
+        {/* ── Rating & Cancellation ── */}
+        <View style={s.metricsRow}>
+          <View style={[s.metricCard, { width: CARD_HALF }]}>
+            <Text style={s.metricLabel}>Average Rating</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Ionicons name="star" size={18} color="#f59e0b" />
+              <Text style={s.metricValue}>{avgRating != null ? avgRating.toFixed(1) : "—"}</Text>
+            </View>
+            <Text style={s.metricSub}>
+              {reviewsData?.totalReviews ? `${reviewsData.totalReviews} reviews` : "No reviews yet"}
+            </Text>
+          </View>
+
+          <View style={[s.metricCard, { width: CARD_HALF }]}>
+            <Text style={s.metricLabel}>Cancellation Rate</Text>
+            <Text style={s.metricValue}>{cancellationRate.toFixed(1)}%</Text>
+            <Text style={s.metricSub}>Last 90 days</Text>
+          </View>
+        </View>
+
+        {/* ── Available Units & Upcoming Bookings ── */}
+        <View style={s.metricsRow}>
+          <View style={[s.metricCard, { width: CARD_HALF }]}>
+            <Text style={s.metricLabel}>Available Units</Text>
+            <Text style={s.metricValue}>{unitsData?.totalUnits ?? 0}</Text>
+            <Text style={s.metricSub}>
+              Across {unitsData?.listingsCounted ?? 0} active listing{unitsData?.listingsCounted === 1 ? "" : "s"}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={[s.metricCard, { width: CARD_HALF }]}
+            onPress={() => router.push("/(provider)/bookings" as any)}
+            activeOpacity={0.75}
+          >
+            <Text style={s.metricLabel}>Upcoming Bookings</Text>
+            <Text style={s.metricValue}>{data?.pendingBookingsCount ?? 0}</Text>
+            <Text style={s.metricSub}>Confirmed, not yet checked out</Text>
+          </TouchableOpacity>
         </View>
 
         {/* ── Revenue This Month (dark green card) ── */}
@@ -596,6 +747,35 @@ export default function ProviderHomeScreen() {
           </View>
         </View>
 
+        {/* ── Booking Statistics ── */}
+        <View style={s.section}>
+          <SectionHeader title="Booking Statistics" />
+          <View style={s.whiteCard}>
+            <View style={s.bstatsGrid}>
+              <View style={s.bstatCell}>
+                <Text style={s.bstatValue}>
+                  {(data?.pendingBookingsCount ?? 0) + (data?.completedBookingsCount ?? 0)}
+                </Text>
+                <Text style={s.bstatLabel}>Total Bookings</Text>
+              </View>
+              <View style={s.bstatCell}>
+                <Text style={s.bstatValue}>
+                  {monthlyRevenue.length ? monthlyRevenue[monthlyRevenue.length - 1]?.bookings ?? 0 : 0}
+                </Text>
+                <Text style={s.bstatLabel}>This Month</Text>
+              </View>
+              <View style={s.bstatCell}>
+                <Text style={s.bstatValue}>{data?.completedBookingsCount ?? 0}</Text>
+                <Text style={s.bstatLabel}>Completed</Text>
+              </View>
+              <View style={s.bstatCell}>
+                <Text style={s.bstatValue}>{data?.pendingBookingsCount ?? 0}</Text>
+                <Text style={s.bstatLabel}>Upcoming</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
         {/* ── Financial Overview (dark card) ── */}
         <View style={s.finCard}>
           <Text style={s.finLabel}>FINANCIAL OVERVIEW</Text>
@@ -606,13 +786,12 @@ export default function ProviderHomeScreen() {
             </View>
             <View style={s.finItem}>
               <Text style={s.finItemLabel}>Pending Payout</Text>
-              <Text style={s.finPending}>
-                ${fmtMoney((data?.pendingBookingsCount ?? 0) > 0 ? (data?.thisMonthEarnings ?? 0) * 0.2 : 0)}
-              </Text>
+              <Text style={s.finPending}>${fmtMoney(pendingPayout)}</Text>
             </View>
           </View>
 
           {/* Mini Line Chart */}
+          <Text style={s.finChartLabel}>Monthly Revenue</Text>
           <View style={s.finChartWrap}>
             {revenueValues.length > 1 ? (
               <SparkLine
@@ -772,6 +951,12 @@ const s = StyleSheet.create({
   section:  {},
   whiteCard:{ backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: "#E8EDE9", ...K.shadow.sm },
 
+  // Booking statistics grid
+  bstatsGrid: { flexDirection: "row", flexWrap: "wrap" },
+  bstatCell:  { width: "50%", alignItems: "center", paddingVertical: 12 },
+  bstatValue: { fontSize: 20, fontWeight: "900", color: "#0D1F0D", marginBottom: 4 },
+  bstatLabel: { fontSize: 11, color: "#7a8c82", fontWeight: "600" },
+
   // Empty states
   emptyBox:  { alignItems: "center", paddingVertical: 24, gap: 8 },
   emptyTitle:{ fontSize: 14, fontWeight: "700", color: "#2e4035" },
@@ -791,6 +976,7 @@ const s = StyleSheet.create({
   finItemLabel:  { fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: "600", marginBottom: 6 },
   finBalance:    { fontSize: 24, fontWeight: "900", color: "#fff", letterSpacing: -0.5 },
   finPending:    { fontSize: 24, fontWeight: "900", color: "rgba(255,255,255,0.45)", letterSpacing: -0.5 },
+  finChartLabel: { fontSize: 11, color: "rgba(255,255,255,0.5)", fontWeight: "600", marginTop: 6 },
   finChartWrap:  { marginVertical: 12, marginHorizontal: -4 },
   finBottom:     { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   finLifetimeLabel: { fontSize: 11, color: "rgba(255,255,255,0.5)", marginBottom: 4 },

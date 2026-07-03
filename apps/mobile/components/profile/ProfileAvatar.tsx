@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { View, Text, Animated, TouchableOpacity, StyleSheet } from "react-native";
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import type { LoyaltyTier } from "@zika/types";
 import { TierProfileRing } from "./TierProfileRing";
@@ -36,7 +37,6 @@ export function ProfileAvatar({
   uploadState = "idle",
   uploadProgress = 0,
 }: Props) {
-  const imageOpacity = useRef(new Animated.Value(0)).current;
   const successScale = useRef(new Animated.Value(1)).current;
   const [prevUploadState, setPrevUploadState] = useState(uploadState);
   const [imageFailed, setImageFailed] = useState(false);
@@ -64,7 +64,6 @@ export function ProfileAvatar({
       setDisplayUri(incoming);
       setImageFailed(false);
       refreshAttemptedRef.current = false;
-      imageOpacity.setValue(0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photoUrl]);
@@ -120,10 +119,12 @@ export function ProfileAvatar({
       <Wrapper onPress={onPress} activeOpacity={0.85} disabled={isUploading}>
         <TierProfileRing tier={tier} size={size}>
           {displayUri && !imageFailed ? (
-            <Animated.Image
+            <Image
               source={{ uri: displayUri }}
-              style={{ width: size, height: size, opacity: imageOpacity }}
-              onLoad={() => Animated.timing(imageOpacity, { toValue: 1, duration: 260, useNativeDriver: true }).start()}
+              style={{ width: size, height: size }}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              transition={260}
               onError={() => void handleImageError()}
             />
           ) : (

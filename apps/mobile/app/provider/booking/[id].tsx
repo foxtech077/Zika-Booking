@@ -4,7 +4,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
   StyleSheet,
   Share,
 } from "react-native";
@@ -14,6 +13,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { listingApi } from "../../../lib/listing-api";
 import { K } from "../../../constants/theme";
+import { BookingStatusBadge, bookingStatusCfg } from "../../../components/bookings/BookingStatusBadge";
+import { BookingSummaryCard } from "../../../components/bookings/BookingSummaryCard";
+import { BookingDetailSection, BookingDetailRow, BookingTimeline, type TimelineEvent } from "../../../components/bookings/BookingDetailSection";
+import { BookingActionRow } from "../../../components/bookings/BookingActionRow";
+import { BookingDetailSkeleton } from "../../../components/bookings/BookingLoadingSkeleton";
 
 // ── Types — mirrors the GET /provider/bookings list response ──────────────────
 
@@ -51,20 +55,7 @@ interface BookingListResponse {
   bookings: ProviderBooking[];
 }
 
-// ── Status config ─────────────────────────────────────────────────────────────
-
-const STATUS_CFG: Record<string, { label: string; bg: string; text: string; dot: string; icon: React.ComponentProps<typeof Feather>["name"] }> = {
-  confirmed:             { label: "Confirmed",  bg: "#D1FAE5", text: "#065F46", dot: "#059669", icon: "check-circle" },
-  active:                { label: "Active",     bg: "#DBEAFE", text: "#1D4ED8", dot: "#3B82F6", icon: "radio" },
-  pending_payment:       { label: "Pending",    bg: "#FEF3C7", text: "#92400E", dot: "#F59E0B", icon: "clock" },
-  completed:             { label: "Completed",  bg: "#F1F5F9", text: "#475569", dot: "#94A3B8", icon: "check-square" },
-  cancelled_by_guest:    { label: "Cancelled",  bg: "#FEE2E2", text: "#DC2626", dot: "#EF4444", icon: "x-circle" },
-  cancelled_by_provider: { label: "Cancelled",  bg: "#FEE2E2", text: "#DC2626", dot: "#EF4444", icon: "x-circle" },
-  cancelled_by_system:   { label: "Cancelled",  bg: "#FEE2E2", text: "#DC2626", dot: "#EF4444", icon: "x-circle" },
-  refunded:              { label: "Refunded",   bg: "#D1FAE5", text: "#065F46", dot: "#059669", icon: "rotate-ccw" },
-};
-
-const TABS_ALL = ["all", "upcoming", "active", "completed", "cancelled"];
+const TABS_ALL = ["all", "upcoming", "completed", "cancelled"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -96,75 +87,24 @@ function commissionRatePct(b: ProviderBooking): number {
   return Math.round((b.commissionAmount / b.totalAmount) * 100);
 }
 
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-function SectionCard({ title, icon, children }: {
-  title: string;
-  icon: React.ComponentProps<typeof Feather>["name"];
-  children: React.ReactNode;
-}) {
-  return (
-    <View style={s.card}>
-      <View style={s.cardHeader}>
-        <View style={s.cardIcon}>
-          <Feather name={icon} size={13} color={K.colors.accent} />
-        </View>
-        <Text style={s.cardTitle}>{title}</Text>
-      </View>
-      {children}
-    </View>
-  );
-}
-
-function Row({ label, value, green }: { label: string; value: string; green?: boolean }) {
-  return (
-    <View style={s.row}>
-      <Text style={s.rowLabel}>{label}</Text>
-      <Text style={[s.rowValue, green && s.rowValueGreen]}>{value}</Text>
-    </View>
-  );
-}
-
-function Timeline({ b }: { b: ProviderBooking }) {
-  const events = [
+function buildTimelineEvents(b: ProviderBooking): TimelineEvent[] {
+  return [
     { label: "Booking Created",   date: b.createdAt,   done: true },
     { label: "Payment Confirmed", date: b.confirmedAt, done: !!b.confirmedAt },
     {
       label: b.listingCategory === "car" ? "Vehicle Picked Up" : "Guest Checked In",
       date: undefined,
-      done: b.status === "active" || b.status === "completed",
+      done: b.status === "completed",
     },
     { label: "Stay Completed", date: undefined, done: b.status === "completed" },
   ];
-
-  return (
-    <View>
-      {events.map((ev, i) => (
-        <View key={ev.label} style={s.tlItem}>
-          <View style={s.tlLeft}>
-            <View style={[s.tlDot, ev.done && s.tlDotDone]} />
-            {i < events.length - 1 && <View style={[s.tlLine, ev.done && s.tlLineDone]} />}
-          </View>
-          <View style={s.tlRight}>
-            <Text style={[s.tlLabel, ev.done && s.tlLabelDone]}>{ev.label}</Text>
-            <Text style={s.tlDate}>{ev.date ? fmtFull(ev.date) : "Pending"}</Text>
-          </View>
-        </View>
-      ))}
-    </View>
-  );
 }
 
-// ── Skeleton ───────────────────────────────────────────────────────────────────
-
-function Skeleton() {
-  return (
-    <View style={{ flex: 1, backgroundColor: K.colors.bgLight, padding: 20 }}>
-      <View style={{ height: 24, width: "60%", backgroundColor: K.colors.border, borderRadius: 6, marginBottom: 16 }} />
-      {[80, 60, 100, 50, 90, 70].map((w, i) => (
-        <View key={i} style={{ height: 14, width: `${w}%`, backgroundColor: K.colors.border, borderRadius: 6, marginBottom: 12 }} />
-      ))}
-    </View>
+function showMessageStub() {
+  Alert.alert(
+    "Messaging Coming Soon",
+    "In-app guest messaging is not yet available. Please use the contact details provided at check-in to communicate with your guest.",
+    [{ text: "OK" }]
   );
 }
 
@@ -293,7 +233,7 @@ export default function ProviderBookingDetailScreen() {
       "  KAINOOK RESERVATION",
       "══════════════════════════",
       `Ref:    ${booking.reference}`,
-      `Status: ${STATUS_CFG[booking.status]?.label ?? booking.status}`,
+      `Status: ${bookingStatusCfg(booking.status).label}`,
       "",
       `Listing: ${booking.listingTitle}`,
       "",
@@ -314,7 +254,7 @@ export default function ProviderBookingDetailScreen() {
 
   // ── Loading / error ────────────────────────────────────────────────────────
 
-  if (isLoading) return <Skeleton />;
+  if (isLoading) return <BookingDetailSkeleton />;
 
   if (isError || !booking) {
     return (
@@ -334,12 +274,12 @@ export default function ProviderBookingDetailScreen() {
     );
   }
 
-  const sc = STATUS_CFG[booking.status] ?? STATUS_CFG.completed!;
   const isCar = booking.listingCategory === "car";
   const cancelled = isCancelled(booking.status);
   const canCancel = booking.status === "confirmed";
   const commPct = commissionRatePct(booking);
-  const isConfirmedOrActive = booking.status === "confirmed" || booking.status === "active";
+  const isConfirmed = booking.status === "confirmed";
+  const initial = booking.guestFirstName[0]?.toUpperCase() ?? "?";
 
   return (
     <View style={s.container}>
@@ -364,95 +304,72 @@ export default function ProviderBookingDetailScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Confirmation / status banner ─────────────────────────────── */}
-        {isConfirmedOrActive && (
-          <View style={[s.statusBanner, booking.status === "active" && s.statusBannerActive]}>
-            <Feather
-              name={booking.status === "active" ? "radio" : "check-circle"}
-              size={18}
-              color={booking.status === "active" ? "#1D4ED8" : "#059669"}
-            />
+        {/* ── Confirmation status banner ───────────────────────────────── */}
+        {isConfirmed && (
+          <View style={s.statusBanner}>
+            <Feather name="check-circle" size={18} color="#059669" />
             <View style={{ flex: 1 }}>
-              <Text style={[s.statusBannerTitle, booking.status === "active" && { color: "#1D4ED8" }]}>
-                {booking.status === "active" ? "Booking is Active" : "Booking Confirmed ✓"}
-              </Text>
-              <Text style={s.statusBannerSub}>
-                {booking.status === "active"
-                  ? "Guest is currently checked in."
-                  : "Guest payment has been processed successfully."}
-              </Text>
+              <Text style={s.statusBannerTitle}>Booking Confirmed ✓</Text>
+              <Text style={s.statusBannerSub}>Guest payment has been processed successfully.</Text>
             </View>
           </View>
         )}
 
-        {/* ── Status pill + commission banner ─────────────────────────── */}
-        <View style={s.pillRow}>
-          <View style={[s.statusPill, { backgroundColor: sc.bg }]}>
-            <Feather name={sc.icon} size={12} color={sc.text} />
-            <Text style={[s.statusPillText, { color: sc.text }]}>{sc.label}</Text>
+        {/* ── Guest header strip ────────────────────────────────────────── */}
+        <View style={s.guestHeaderRow}>
+          <View style={s.guestHeaderAvatar}>
+            <Text style={s.guestHeaderAvatarText}>{initial}</Text>
           </View>
-          <View style={s.commPill}>
-            <Feather name="info" size={11} color={K.colors.accent} />
-            <Text style={s.commPillText}>Net earnings shown (after {commPct}% fee)</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.guestHeaderName}>{guestDisplay(booking.guestFirstName, booking.guestLastName)}</Text>
+            <View style={s.guestHeaderBadgeRow}>
+              <BookingStatusBadge status={booking.status} size="sm" />
+              <Text style={s.guestHeaderIdText}>ID: {booking.reference}</Text>
+            </View>
           </View>
         </View>
 
-        {/* ── Listing ─────────────────────────────────────────────────── */}
-        <SectionCard title="Listing" icon="home">
-          <Text style={s.listingName}>{booking.listingTitle}</Text>
-          <View style={s.catPill}>
-            <Text style={s.catPillText}>
-              {isCar ? "Car Rental" : booking.listingCategory === "hotel" ? "Hotel" : "Apartment"}
-            </Text>
-          </View>
-        </SectionCard>
+        {/* ── Commission banner ───────────────────────────────────────── */}
+        <View style={s.commPill}>
+          <Feather name="info" size={11} color={K.colors.accent} />
+          <Text style={s.commPillText}>Net earnings shown (after {commPct}% fee)</Text>
+        </View>
 
-        {/* ── Booking dates ────────────────────────────────────────────── */}
-        <SectionCard title={isCar ? "Rental Period" : "Stay Details"} icon="calendar">
-          {isCar && booking.pickupDatetime && booking.returnDatetime ? (
-            <>
-              <Row label="Pickup"   value={fmtDateTime(booking.pickupDatetime)} />
-              <Row label="Return"   value={fmtDateTime(booking.returnDatetime)} />
-              <Row label="Duration" value={`${booking.nightsOrDays} ${booking.nightsOrDays === 1 ? "day" : "days"}`} />
-            </>
-          ) : booking.checkIn && booking.checkOut ? (
-            <>
-              <Row label="Check-in"  value={fmtDate(booking.checkIn)} />
-              <Row label="Check-out" value={fmtDate(booking.checkOut)} />
-              <Row label="Duration"  value={`${booking.nightsOrDays} ${booking.nightsOrDays === 1 ? "night" : "nights"}`} />
-              {booking.adults != null && (
-                <Row
-                  label="Guests"
-                  value={`${booking.adults} adult${booking.adults !== 1 ? "s" : ""}${booking.children ? `, ${booking.children} child${booking.children !== 1 ? "ren" : ""}` : ""}`}
-                />
-              )}
-            </>
-          ) : null}
-          {booking.specialRequests ? (
-            <View style={s.specialBox}>
-              <Text style={s.specialLabel}>Special Requests</Text>
-              <Text style={s.specialText}>{booking.specialRequests}</Text>
-            </View>
-          ) : null}
-        </SectionCard>
+        {/* ── Property + Stay/Rental summary ──────────────────────────── */}
+        <View style={s.summaryWrap}>
+          <BookingSummaryCard
+            booking={{
+              listingTitle: booking.listingTitle,
+              listingCategory: booking.listingCategory,
+              checkIn: booking.checkIn,
+              checkOut: booking.checkOut,
+              pickupDatetime: booking.pickupDatetime,
+              returnDatetime: booking.returnDatetime,
+              nightsOrDays: booking.nightsOrDays,
+              adults: booking.adults,
+              children: booking.children,
+              specialRequests: booking.specialRequests,
+            }}
+          />
+        </View>
 
         {/* ── Guest (privacy) ─────────────────────────────────────────── */}
-        <SectionCard title="Guest" icon="user">
+        <BookingDetailSection title="Guest" icon="user">
           <View style={s.guestRow}>
             <View style={s.guestAvatar}>
-              <Text style={s.guestAvatarText}>{booking.guestFirstName[0]?.toUpperCase()}</Text>
+              <Text style={s.guestAvatarText}>{initial}</Text>
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.guestName}>{guestDisplay(booking.guestFirstName, booking.guestLastName)}</Text>
               <Text style={s.guestPrivacy}>Contact is protected — use in-app messaging only.</Text>
             </View>
           </View>
-        </SectionCard>
+        </BookingDetailSection>
 
         {/* ── Payout breakdown ────────────────────────────────────────── */}
-        <SectionCard title="Payout Breakdown" icon="dollar-sign">
-          <Row label="Guest total paid"          value={`${booking.currency} ${booking.totalAmount.toLocaleString()}`} />
-          <Row label={`Kainook fee (${commPct}%)`} value={`− ${booking.currency} ${booking.commissionAmount.toLocaleString()}`} />
+        <BookingDetailSection title="Payout Breakdown" icon="dollar-sign">
+          <BookingDetailRow label="Guest total paid" value={`${booking.currency} ${booking.totalAmount.toLocaleString()}`} />
+          <BookingDetailRow label={`Kainook fee (${commPct}%)`} value={`− ${booking.currency} ${booking.commissionAmount.toLocaleString()}`} />
           <View style={s.payoutDivider} />
           <View style={s.payoutRow}>
             <View style={s.payoutLeft}>
@@ -462,23 +379,23 @@ export default function ProviderBookingDetailScreen() {
             <Text style={s.payoutValue}>{booking.currency} {booking.providerPayout.toLocaleString()}</Text>
           </View>
           <Text style={s.payoutNote}>Disbursed to your account T+24h after guest check-in.</Text>
-        </SectionCard>
+        </BookingDetailSection>
 
         {/* ── Cancellation policy ─────────────────────────────────────── */}
         {booking.cancellationPolicy && (
-          <SectionCard title="Cancellation Policy" icon="shield">
+          <BookingDetailSection title="Cancellation Policy" icon="shield">
             <Text style={s.policyText}>{booking.cancellationPolicy}</Text>
-          </SectionCard>
+          </BookingDetailSection>
         )}
 
         {/* ── Timeline ────────────────────────────────────────────────── */}
-        <SectionCard title="Timeline" icon="clock">
-          <Timeline b={booking} />
-        </SectionCard>
+        <BookingDetailSection title="Booking Timeline" icon="clock">
+          <BookingTimeline events={buildTimelineEvents(booking)} />
+        </BookingDetailSection>
 
         {/* ── Cancellation details ─────────────────────────────────────── */}
         {cancelled && (
-          <SectionCard title="Cancellation Details" icon="x-circle">
+          <BookingDetailSection title="Cancellation Details" icon="x-circle">
             <View style={s.cancelBox}>
               <Text style={s.cancelTitle}>
                 {booking.status === "cancelled_by_guest"    ? "Cancelled by guest"
@@ -493,59 +410,19 @@ export default function ProviderBookingDetailScreen() {
                 <Text style={s.cancelReason}>{booking.cancellationReason}</Text>
               ) : null}
             </View>
-          </SectionCard>
+          </BookingDetailSection>
         )}
 
         {/* ── Actions ─────────────────────────────────────────────────── */}
-        <View style={s.actions}>
-          {/* Message Guest — messaging not yet available */}
-          <TouchableOpacity
-            style={[s.msgBtn, s.msgBtnDisabled]}
-            activeOpacity={0.85}
-            onPress={() =>
-              Alert.alert(
-                "Messaging Coming Soon",
-                "In-app guest messaging is not yet available. Please use the contact details provided at check-in to communicate with your guest.",
-                [{ text: "OK" }]
-              )
-            }
-          >
-            <Feather name="message-circle" size={18} color="#fff" />
-            <Text style={s.msgBtnText}>Message Guest</Text>
-          </TouchableOpacity>
-
-          {/* Cancel — provider endpoint */}
-          {canCancel && !cancelled && (
-            <TouchableOpacity
-              style={[s.cancelBtn, cancelMutation.isPending && s.cancelBtnDisabled]}
-              onPress={handleCancel}
-              disabled={cancelMutation.isPending}
-              activeOpacity={0.85}
-            >
-              {cancelMutation.isPending ? (
-                <ActivityIndicator size="small" color={K.colors.error} />
-              ) : (
-                <>
-                  <Feather name="x-circle" size={16} color={K.colors.error} />
-                  <Text style={s.cancelBtnText}>Cancel Booking</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
-
-          {/* Non-clickable cancelled badge */}
-          {cancelled && (
-            <View style={s.cancelledBadge}>
-              <Feather name="x-circle" size={16} color="#DC2626" />
-              <Text style={s.cancelledBadgeText}>Booking Cancelled</Text>
-            </View>
-          )}
-
-          {/* Share */}
-          <TouchableOpacity style={s.shareBtn} onPress={handleShare} activeOpacity={0.85}>
-            <Feather name="share-2" size={15} color={K.colors.textMuted} />
-            <Text style={s.shareBtnText}>Share Reservation Details</Text>
-          </TouchableOpacity>
+        <View style={s.actionsWrap}>
+          <BookingActionRow
+            onMessage={showMessageStub}
+            canCancel={canCancel}
+            cancelled={cancelled}
+            isCancelling={cancelMutation.isPending}
+            onCancel={handleCancel}
+            onShare={handleShare}
+          />
         </View>
 
         <View style={{ height: 40 }} />
@@ -585,69 +462,43 @@ const s = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
 
-  // Status / commission row
+  // Status banner
   statusBanner: {
     flexDirection: "row", alignItems: "flex-start", gap: 12,
     backgroundColor: "#F0FDF4", borderRadius: K.radius.lg,
     borderWidth: 1.5, borderColor: "#6EE7B7",
     padding: 14, marginHorizontal: 16, marginTop: 16, marginBottom: 4,
   },
-  statusBannerActive: { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" },
   statusBannerTitle: { fontSize: K.font.base, fontWeight: "800", color: "#059669", marginBottom: 2 },
   statusBannerSub: { fontSize: K.font.xs, color: K.colors.textMuted },
 
-  pillRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, marginTop: 12, marginBottom: 4, flexWrap: "wrap" },
-  statusPill: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: K.radius.full, paddingHorizontal: 12, paddingVertical: 6 },
-  statusPillText: { fontSize: 12, fontWeight: "700" },
+  // Guest header strip (mockup-style: name + status + id, right under the top banner)
+  guestHeaderRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 16, marginTop: 16,
+  },
+  guestHeaderAvatar: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: K.colors.darkGreen, alignItems: "center", justifyContent: "center",
+  },
+  guestHeaderAvatarText: { fontSize: K.font.lg, fontWeight: "800", color: "#fff" },
+  guestHeaderName: { fontSize: K.font.xl, fontWeight: "900", color: K.colors.textDark, marginBottom: 4 },
+  guestHeaderBadgeRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  guestHeaderIdText: { fontSize: 11, color: K.colors.textMuted, fontWeight: "600" },
+
   commPill: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: K.colors.accentDim, borderRadius: K.radius.full,
     paddingHorizontal: 10, paddingVertical: 5,
     borderWidth: 1, borderColor: K.colors.accent + "40",
-    flex: 1,
+    marginHorizontal: 16, marginTop: 12,
+    alignSelf: "flex-start",
   },
-  commPillText: { fontSize: 10, color: K.colors.accent, fontWeight: "600", flex: 1 },
+  commPillText: { fontSize: 10, color: K.colors.accent, fontWeight: "600" },
 
-  // Section card
-  card: {
-    backgroundColor: K.colors.bgCard, borderRadius: K.radius.xl,
-    borderWidth: 1, borderColor: K.colors.border,
-    padding: 16, marginHorizontal: 16, marginTop: 12,
-    ...K.shadow.sm,
-  },
-  cardHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  cardIcon: {
-    width: 26, height: 26, borderRadius: K.radius.sm,
-    backgroundColor: K.colors.accentDim, alignItems: "center", justifyContent: "center",
-  },
-  cardTitle: { fontSize: 10, fontWeight: "800", color: K.colors.textMuted, textTransform: "uppercase", letterSpacing: 0.8 },
+  summaryWrap: { paddingHorizontal: 16, marginTop: 12 },
 
-  // Row
-  row: {
-    flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: K.colors.border,
-  },
-  rowLabel: { fontSize: K.font.sm, color: K.colors.textMuted, flex: 1 },
-  rowValue: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textDark, textAlign: "right" },
-  rowValueGreen: { color: K.colors.darkGreen, fontWeight: "800" },
-
-  // Listing
-  listingName: { fontSize: K.font.lg, fontWeight: "800", color: K.colors.textDark, marginBottom: 8 },
-  catPill: {
-    alignSelf: "flex-start", backgroundColor: K.colors.accentDim,
-    borderRadius: K.radius.full, paddingHorizontal: 10, paddingVertical: 4,
-  },
-  catPillText: { fontSize: 11, fontWeight: "700", color: K.colors.accent },
-
-  // Special requests
-  specialBox: {
-    backgroundColor: K.colors.bgLight, borderRadius: K.radius.md,
-    padding: 10, marginTop: 10, borderWidth: 1, borderColor: K.colors.border,
-  },
-  specialLabel: { fontSize: 11, fontWeight: "700", color: K.colors.textMuted, marginBottom: 4 },
-  specialText: { fontSize: K.font.sm, color: K.colors.textDark, lineHeight: 18 },
-
-  // Guest
+  // Guest section
   guestRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   guestAvatar: {
     width: 48, height: 48, borderRadius: 24,
@@ -673,21 +524,6 @@ const s = StyleSheet.create({
   // Policy
   policyText: { fontSize: K.font.sm, color: K.colors.textMid, textTransform: "capitalize", lineHeight: 20 },
 
-  // Timeline
-  tlItem: { flexDirection: "row", gap: 12, minHeight: 52 },
-  tlLeft: { alignItems: "center", width: 16 },
-  tlDot: {
-    width: 14, height: 14, borderRadius: 7,
-    backgroundColor: K.colors.border, borderWidth: 2, borderColor: K.colors.border, marginTop: 2,
-  },
-  tlDotDone: { backgroundColor: K.colors.accent, borderColor: K.colors.accent },
-  tlLine: { flex: 1, width: 2, backgroundColor: K.colors.border, marginVertical: 2 },
-  tlLineDone: { backgroundColor: K.colors.accent },
-  tlRight: { flex: 1, paddingBottom: 12 },
-  tlLabel: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textMuted },
-  tlLabelDone: { color: K.colors.textDark },
-  tlDate: { fontSize: 11, color: K.colors.textMuted, marginTop: 2 },
-
   // Cancellation
   cancelBox: {
     backgroundColor: "#FEF2F2", borderRadius: K.radius.md,
@@ -698,31 +534,5 @@ const s = StyleSheet.create({
   cancelReason: { fontSize: 12, color: "#7F1D1D" },
 
   // Actions
-  actions: { paddingHorizontal: 16, gap: 12, marginTop: 16 },
-  msgBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-    backgroundColor: K.colors.darkGreen, borderRadius: K.radius.lg,
-    paddingVertical: 16, ...K.shadow.md,
-  },
-  msgBtnDisabled: { opacity: 0.55 },
-  msgBtnText: { fontSize: K.font.base, fontWeight: "700", color: "#fff" },
-  cancelBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    borderWidth: 1.5, borderColor: "#FECACA", borderRadius: K.radius.lg,
-    paddingVertical: 14, backgroundColor: "#FEF2F2",
-  },
-  cancelBtnDisabled: { opacity: 0.55 },
-  cancelBtnText: { fontSize: K.font.base, fontWeight: "700", color: K.colors.error },
-  cancelledBadge: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    borderWidth: 1.5, borderColor: "#FECACA", borderRadius: K.radius.lg,
-    paddingVertical: 14, backgroundColor: "#FEF2F2",
-  },
-  cancelledBadgeText: { fontSize: K.font.base, fontWeight: "700", color: "#DC2626" },
-  shareBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    borderWidth: 1, borderColor: K.colors.border, borderRadius: K.radius.lg,
-    paddingVertical: 13, backgroundColor: K.colors.bgCard,
-  },
-  shareBtnText: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textMuted },
+  actionsWrap: { paddingHorizontal: 16, marginTop: 16 },
 });

@@ -28,6 +28,7 @@ import {
 const LOGO = require("../../assets/logo.png");
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import { ListingImage } from "../../components/ListingImage";
 import { K } from "../../constants/theme";
 import { ALL_COUNTRIES, CountryData } from "../../constants/countries";
 import {
@@ -76,12 +77,12 @@ export function FormField({
       <TextInput
         style={[
           fs.input,
-          multiline && { height: inputHeight, textAlignVertical: "top", paddingTop: 12 },
+          multiline && { height: inputHeight, textAlignVertical: "top", paddingTop: 14 },
           !!error && fs.inputError,
         ]}
         multiline={multiline}
         numberOfLines={numberOfLines}
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor="#A3A39C"
         {...inputProps}
       />
       {!!error && <Text style={fs.errorText}>{error}</Text>}
@@ -104,7 +105,7 @@ export function SectionHeader({
     <View style={fs.sectionHeader}>
       {icon && (
         <View style={fs.sectionIconWrap}>
-          <Feather name={icon} size={18} color={K.colors.accent} />
+          <Feather name={icon} size={18} color={K.colors.darkGreen} />
         </View>
       )}
       <View style={{ flex: 1 }}>
@@ -121,7 +122,7 @@ export function InfoBanner({ message, variant = "info" }: { message: string; var
   const colors = {
     info: { bg: "#EFF6FF", border: "#BFDBFE", text: "#1D4ED8", icon: "info" as const },
     warning: { bg: "#FFFBEB", border: "#FDE68A", text: "#92400E", icon: "alert-triangle" as const },
-    success: { bg: "#F0FDF4", border: "#6EE7B7", text: "#065F46", icon: "check-circle" as const },
+    success: { bg: K.colors.bgTint, border: "#9be3bf", text: K.colors.darkGreen, icon: "check-circle" as const },
   }[variant];
   return (
     <View style={[fs.infoBanner, { backgroundColor: colors.bg, borderColor: colors.border }]}>
@@ -352,7 +353,7 @@ export function CountryPickerButton({
         ) : (
           <Text style={fs.countryBtnPlaceholder}>Select a country…</Text>
         )}
-        <Feather name="chevron-down" size={18} color="#9CA3AF" />
+        <Feather name="chevron-down" size={18} color="#A3A39C" />
       </TouchableOpacity>
       {!!error && <Text style={fs.errorText}>{error}</Text>}
     </View>
@@ -392,18 +393,18 @@ export function CountryPickerModal({
           </TouchableOpacity>
         </View>
         <View style={fs.modalSearchWrap}>
-          <Feather name="search" size={16} color="#9CA3AF" />
+          <Feather name="search" size={16} color="#A3A39C" />
           <TextInput
             style={fs.modalSearchInput}
             value={search}
             onChangeText={setSearch}
             placeholder="Search countries or currency…"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor="#A3A39C"
             autoFocus
           />
           {search.length > 0 && (
             <TouchableOpacity onPress={() => setSearch("")} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Feather name="x-circle" size={16} color="#9CA3AF" />
+              <Feather name="x-circle" size={16} color="#A3A39C" />
             </TouchableOpacity>
           )}
         </View>
@@ -503,7 +504,7 @@ export function AmenitiesSection({
             value={customInput}
             onChangeText={onCustomInputChange}
             placeholder="e.g. Rooftop bar"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor="#A3A39C"
             maxLength={60}
             returnKeyType="done"
             onSubmitEditing={() => onCustomAdd(customInput.trim())}
@@ -540,6 +541,7 @@ export function PhotosSection({
   uploading,
   uploadProgress,
   onAdd,
+  onCapture,
   onDelete,
   onReorder,
   minPhotos = 1,
@@ -550,6 +552,8 @@ export function PhotosSection({
   uploading: boolean;
   uploadProgress?: { current: number; total: number };
   onAdd: () => void;
+  /** Optional camera-capture handler. When provided, a second "Camera" button is shown next to "Upload". */
+  onCapture?: () => void;
   onDelete: (id: string) => void;
   onReorder?: (id: string, direction: "up" | "down") => void;
   minPhotos?: number;
@@ -557,10 +561,12 @@ export function PhotosSection({
   error?: string;
 }) {
   const meetsMin = photos.length >= minPhotos;
+  const atMax = photos.length >= maxPhotos;
 
   const uploadLabel = uploadProgress
     ? `Uploading ${uploadProgress.current} of ${uploadProgress.total}…`
     : "Uploading…";
+  const uploadPct = uploadProgress ? Math.round((uploadProgress.current / uploadProgress.total) * 100) : 0;
 
   return (
     <View>
@@ -574,36 +580,69 @@ export function PhotosSection({
         <Feather
           name={meetsMin ? "check-circle" : "camera"}
           size={15}
-          color={meetsMin ? "#059669" : "#92400E"}
+          color={meetsMin ? K.colors.darkGreen : "#92400E"}
         />
         <Text style={[fs.counterText, meetsMin && fs.counterTextDone]}>
           {photos.length} / {minPhotos} minimum required{meetsMin ? " ✓" : ""}
         </Text>
       </View>
 
-      <TouchableOpacity
-        style={[fs.uploadArea, (photos.length >= maxPhotos || uploading) && { opacity: 0.5 }]}
-        onPress={onAdd}
-        disabled={uploading || photos.length >= maxPhotos}
-        activeOpacity={0.7}
-      >
-        {uploading ? (
-          <>
-            <ActivityIndicator color={K.colors.accent} size="small" />
-            <Text style={fs.uploadAreaText}>{uploadLabel}</Text>
-          </>
-        ) : (
-          <>
-            <Feather name="image" size={30} color={K.colors.accent} />
-            <Text style={fs.uploadAreaText}>
-              {photos.length >= maxPhotos
-                ? "Maximum photos reached"
-                : `Add Photos  (${photos.length} / ${maxPhotos})`}
-            </Text>
-            <Text style={fs.uploadAreaSub}>JPEG · PNG · WEBP · Max 5 MB each</Text>
-          </>
+      {/* Dashed drop-zone */}
+      <View style={fs.dropZone}>
+        <View style={fs.dropZoneIconWrap}>
+          <Feather name="image" size={26} color={K.colors.accent} />
+        </View>
+        <Text style={fs.dropZoneTitle}>
+          {atMax ? "Maximum photos reached" : "Tap a button below to add photos"}
+        </Text>
+        <Text style={fs.dropZoneSub}>JPEG · PNG · WEBP · Max 5 MB each</Text>
+
+        {uploading && (
+          <View style={fs.dropZoneProgressWrap}>
+            <View style={fs.dropZoneProgressTrack}>
+              <View style={[fs.dropZoneProgressFill, { width: `${uploadPct}%` }]} />
+            </View>
+            <Text style={fs.dropZoneProgressText}>{uploadLabel}</Text>
+          </View>
         )}
-      </TouchableOpacity>
+      </View>
+
+      <View style={fs.photoBtnRow}>
+        {onCapture && (
+          <TouchableOpacity
+            style={[fs.photoBtnOutline, (atMax || uploading) && fs.photoBtnDisabled]}
+            onPress={onCapture}
+            disabled={uploading || atMax}
+            activeOpacity={0.75}
+          >
+            {uploading ? (
+              <ActivityIndicator color={K.colors.darkGreen} size="small" />
+            ) : (
+              <>
+                <Feather name="camera" size={16} color={K.colors.darkGreen} />
+                <Text style={fs.photoBtnOutlineText}>Camera</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={[fs.photoBtnFill, (atMax || uploading) && fs.photoBtnDisabled]}
+          onPress={onAdd}
+          disabled={uploading || atMax}
+          activeOpacity={0.85}
+        >
+          {uploading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <>
+              <Feather name="upload" size={16} color="#fff" />
+              <Text style={fs.photoBtnFillText}>
+                Upload {`(${photos.length} / ${maxPhotos})`}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
 
       {!!error && (
         <View style={fs.photoError}>
@@ -616,7 +655,7 @@ export function PhotosSection({
         <View style={fs.photoGrid}>
           {photos.map((p, i) => (
             <View key={p.id} style={fs.photoItem}>
-              <Image source={{ uri: p.cdnUrl }} style={fs.photoThumb} resizeMode="cover" />
+              <ListingImage uri={p.cdnUrl} style={fs.photoThumb} resizeMode="cover" />
               {i === 0 && (
                 <View style={fs.coverBadge}>
                   <Text style={fs.coverBadgeText}>COVER</Text>
@@ -696,12 +735,12 @@ export function DocumentsSection({
         const isUploading = uploadingDoc === doc.key;
         return (
           <View key={doc.key} style={[fs.docCard, uploaded && fs.docCardDone]}>
-            <View style={[fs.docIconWrap, { backgroundColor: uploaded ? "#DCFCE7" : "#F1F5F9" }]}>
-              <Feather name={doc.icon} size={20} color={uploaded ? "#059669" : "#64748B"} />
+            <View style={[fs.docIconWrap, { backgroundColor: uploaded ? K.colors.bgTint : "#F1F0EC" }]}>
+              <Feather name={doc.icon} size={20} color={uploaded ? K.colors.darkGreen : "#8f8b84"} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={fs.docLabel}>{doc.label}</Text>
-              <Text style={[fs.docStatus, { color: uploaded ? "#059669" : "#94A3B8" }]}>
+              <Text style={[fs.docStatus, { color: uploaded ? K.colors.darkGreen : "#A3A39C" }]}>
                 {uploaded ? "Uploaded ✓" : "Not yet uploaded"}
               </Text>
             </View>
@@ -755,32 +794,21 @@ export function StepProgressBar({
 }) {
   return (
     <View style={fs.progressWrap}>
-      {steps.map((st, i) => (
-        <View key={st} style={fs.progressItem}>
+      <View style={fs.progressSegmentRow}>
+        {steps.map((_, i) => (
           <View
+            key={i}
             style={[
-              fs.progressDot,
-              i < currentStep && fs.progressDotDone,
-              i === currentStep && fs.progressDotActive,
+              fs.progressSegment,
+              i < steps.length - 1 && { marginRight: 4 },
+              i <= currentStep && fs.progressSegmentDone,
             ]}
-          >
-            {i < currentStep ? (
-              <Feather name="check" size={9} color="#fff" />
-            ) : (
-              <Text style={fs.progressDotNum}>{i + 1}</Text>
-            )}
-          </View>
-          <Text
-            style={[fs.progressLabel, i === currentStep && fs.progressLabelActive]}
-            numberOfLines={1}
-          >
-            {st}
-          </Text>
-          {i < steps.length - 1 && (
-            <View style={[fs.progressLine, i < currentStep && fs.progressLineDone]} />
-          )}
-        </View>
-      ))}
+          />
+        ))}
+      </View>
+      <Text style={fs.progressCaption}>
+        Step {currentStep + 1} of {steps.length}: <Text style={fs.progressCaptionStrong}>{steps[currentStep]}</Text>
+      </Text>
     </View>
   );
 }
@@ -807,9 +835,6 @@ export function WizardHeader({
         <View style={fs.wizardHeaderCenter}>
           <Image source={LOGO} style={fs.wizardLogo} resizeMode="contain" />
           <Text style={fs.wizardHeaderTitle}>{title}</Text>
-          <Text style={fs.wizardHeaderSub}>
-            Step {step + 1} of {steps.length} · {steps[step]}
-          </Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
@@ -881,13 +906,13 @@ export function WizardFooter({
 
 export const fs = StyleSheet.create({
   // groups
-  group: { marginBottom: 20 },
-  sectionHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 20 },
+  group: { marginBottom: 22 },
+  sectionHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 20 },
   sectionIconWrap: {
-    width: 36,
-    height: 36,
+    width: 38,
+    height: 38,
     borderRadius: K.radius.md,
-    backgroundColor: K.colors.accentDim,
+    backgroundColor: K.colors.bgTint,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 1,
@@ -896,7 +921,7 @@ export const fs = StyleSheet.create({
   sectionSubtitle: { fontSize: K.font.xs, color: K.colors.textMuted, lineHeight: 16 },
 
   // labels
-  label: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textDark, marginBottom: 6 },
+  label: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark, marginBottom: 6 },
   required: { color: K.colors.error },
   hint: { fontSize: K.font.xs, color: K.colors.textMuted, marginBottom: 6, lineHeight: 16 },
 
@@ -905,9 +930,9 @@ export const fs = StyleSheet.create({
     backgroundColor: "#fff",
     borderWidth: 1.5,
     borderColor: K.colors.border,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: K.radius.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
     fontSize: K.font.base,
     color: K.colors.textDark,
   },
@@ -919,14 +944,15 @@ export const fs = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     borderWidth: 1,
-    borderRadius: K.radius.md,
-    padding: 12,
+    borderRadius: K.radius.lg,
+    padding: 14,
     alignItems: "flex-start",
+    marginBottom: 8,
   },
   infoBannerText: { flex: 1, fontSize: K.font.sm, lineHeight: 18 },
 
   // stepper
-  stepperGroup: { marginBottom: 20 },
+  stepperGroup: { marginBottom: 22 },
   stepperRow: { flexDirection: "row", alignItems: "center", gap: 20, marginTop: 4 },
   stepperBtn: {
     width: 46,
@@ -945,20 +971,20 @@ export const fs = StyleSheet.create({
     textAlign: "center",
   },
 
-  // chips
+  // chips — bigger, card-like touch targets matching the new visual language
   chipRow: { flexDirection: "row", gap: 8, paddingBottom: 4 },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: K.radius.full,
+    paddingVertical: 11,
+    borderRadius: K.radius.lg,
     borderWidth: 1.5,
     borderColor: K.colors.border,
     backgroundColor: "#fff",
   },
-  chipActive: { backgroundColor: K.colors.accentDim, borderColor: K.colors.accent },
-  chipText: { fontSize: K.font.sm, fontWeight: "600", color: "#64748B" },
-  chipTextActive: { color: K.colors.darkGreen, fontWeight: "700" },
+  chipActive: { backgroundColor: K.colors.bgTint, borderColor: K.colors.accent },
+  chipText: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textMuted },
+  chipTextActive: { color: K.colors.darkGreen, fontWeight: "800" },
 
   // switch row
   switchRow: {
@@ -974,14 +1000,14 @@ export const fs = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 12,
-    padding: 14,
-    borderRadius: K.radius.md,
+    padding: 16,
+    borderRadius: K.radius.lg,
     borderWidth: 1.5,
     borderColor: K.colors.border,
     backgroundColor: "#fff",
-    marginBottom: 8,
+    marginBottom: 10,
   },
-  radioRowActive: { borderColor: K.colors.accent, backgroundColor: "#F0FFF8" },
+  radioRowActive: { borderColor: K.colors.accent, backgroundColor: K.colors.bgTint },
   radioDot: {
     width: 20,
     height: 20,
@@ -995,7 +1021,7 @@ export const fs = StyleSheet.create({
   },
   radioDotActive: { borderColor: K.colors.accent },
   radioDotInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: K.colors.accent },
-  radioLabel: { fontSize: K.font.sm, fontWeight: "600", color: K.colors.textDark },
+  radioLabel: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.textDark },
   radioLabelActive: { color: K.colors.darkGreen },
   radioDesc: { fontSize: K.font.xs, color: K.colors.textMuted, marginTop: 2, lineHeight: 16 },
 
@@ -1004,10 +1030,10 @@ export const fs = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: K.colors.accentDim,
+    backgroundColor: K.colors.bgTint,
     borderRadius: K.radius.full,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 7,
     borderWidth: 1,
     borderColor: K.colors.accent + "40",
     alignSelf: "flex-start",
@@ -1022,15 +1048,15 @@ export const fs = StyleSheet.create({
     backgroundColor: "#fff",
     borderWidth: 1.5,
     borderColor: K.colors.border,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: K.radius.lg,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
     gap: 10,
   },
   countryFlag: { fontSize: 22 },
-  countryBtnName: { fontSize: K.font.base, fontWeight: "600", color: K.colors.textDark },
+  countryBtnName: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark },
   countryBtnCurrency: { fontSize: K.font.xs, color: K.colors.textMuted, marginTop: 1 },
-  countryBtnPlaceholder: { flex: 1, fontSize: K.font.base, color: "#9CA3AF" },
+  countryBtnPlaceholder: { flex: 1, fontSize: K.font.base, color: "#A3A39C" },
 
   // country modal
   modalContainer: { flex: 1, backgroundColor: "#fff" },
@@ -1050,7 +1076,7 @@ export const fs = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: "#F8FAF9",
+    backgroundColor: K.colors.bgApp,
     borderBottomWidth: 1,
     borderBottomColor: K.colors.border,
   },
@@ -1062,16 +1088,16 @@ export const fs = StyleSheet.create({
     paddingVertical: 13,
     gap: 12,
   },
-  countryItemSelected: { backgroundColor: K.colors.accentDim },
+  countryItemSelected: { backgroundColor: K.colors.bgTint },
   countryItemFlag: { fontSize: 22 },
-  countryItemName: { fontSize: K.font.base, fontWeight: "600", color: K.colors.textDark },
+  countryItemName: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark },
   countryItemCurrency: { fontSize: K.font.xs, color: K.colors.textMuted, marginTop: 2 },
 
   // amenities
   amenityCategory: { marginBottom: 20 },
   amenityCatLabel: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "800",
     color: K.colors.textMuted,
     textTransform: "uppercase",
     letterSpacing: 1,
@@ -1081,25 +1107,25 @@ export const fs = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     borderRadius: K.radius.full,
     borderWidth: 1.5,
     borderColor: K.colors.border,
     backgroundColor: "#fff",
   },
-  amenityChipActive: { backgroundColor: K.colors.accentDim, borderColor: K.colors.accent },
+  amenityChipActive: { backgroundColor: K.colors.bgTint, borderColor: K.colors.accent },
   amenityEmoji: { fontSize: 13 },
-  amenityChipText: { fontSize: 12, color: "#64748B", fontWeight: "500" },
-  amenityChipTextActive: { color: K.colors.darkGreen, fontWeight: "700" },
+  amenityChipText: { fontSize: 12, color: K.colors.textMuted, fontWeight: "600" },
+  amenityChipTextActive: { color: K.colors.darkGreen, fontWeight: "800" },
 
   // custom amenity
   customRow: { flexDirection: "row", gap: 8 },
   addBtn: {
     backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: K.radius.lg,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
     justifyContent: "center",
   },
   addBtnText: { color: "#fff", fontWeight: "700", fontSize: K.font.sm },
@@ -1107,7 +1133,7 @@ export const fs = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: K.colors.accentDim,
+    backgroundColor: K.colors.bgTint,
     borderRadius: K.radius.full,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -1122,41 +1148,87 @@ export const fs = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     backgroundColor: "#FEF3C7",
-    borderRadius: K.radius.md,
-    padding: 10,
+    borderRadius: K.radius.lg,
+    padding: 11,
     marginBottom: 14,
     borderWidth: 1,
     borderColor: "#FCD34D",
   },
-  counterBadgeDone: { backgroundColor: "#DCFCE7", borderColor: "#6EE7B7" },
-  counterText: { fontSize: K.font.sm, fontWeight: "600", color: "#92400E" },
-  counterTextDone: { color: "#065F46" },
+  counterBadgeDone: { backgroundColor: K.colors.bgTint, borderColor: "#9be3bf" },
+  counterText: { fontSize: K.font.sm, fontWeight: "700", color: "#92400E" },
+  counterTextDone: { color: K.colors.darkGreen },
 
-  // upload area
-  uploadArea: {
+  // photo drop-zone (mockup-style dashed upload area)
+  dropZone: {
     borderWidth: 2,
-    borderColor: K.colors.accent,
+    borderColor: K.colors.border,
     borderStyle: "dashed",
-    borderRadius: K.radius.xl,
-    paddingVertical: 30,
+    borderRadius: K.radius.xxl,
+    paddingVertical: 32,
+    paddingHorizontal: 20,
     alignItems: "center",
-    gap: 8,
-    marginBottom: 16,
-    backgroundColor: K.colors.accentDim,
+    marginBottom: 14,
+    backgroundColor: "#fff",
   },
-  uploadAreaText: { fontSize: K.font.base, fontWeight: "700", color: K.colors.darkGreen },
-  uploadAreaSub: { fontSize: K.font.xs, color: K.colors.textMuted },
+  dropZoneIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: K.colors.bgTint,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  dropZoneTitle: { fontSize: K.font.base, fontWeight: "700", color: K.colors.textDark, textAlign: "center" },
+  dropZoneSub: { fontSize: K.font.xs, color: K.colors.textMuted, marginTop: 4, textAlign: "center" },
+  dropZoneProgressWrap: { width: "100%", marginTop: 16 },
+  dropZoneProgressTrack: {
+    height: 6,
+    borderRadius: K.radius.full,
+    backgroundColor: K.colors.border,
+    overflow: "hidden",
+  },
+  dropZoneProgressFill: { height: 6, borderRadius: K.radius.full, backgroundColor: K.colors.accent },
+  dropZoneProgressText: { fontSize: K.font.xs, color: K.colors.textMuted, marginTop: 8, textAlign: "center", fontWeight: "600" },
+
+  // photo action buttons (Camera + Upload row)
+  photoBtnRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
+  photoBtnOutline: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderWidth: 1.5,
+    borderColor: K.colors.accent,
+    borderRadius: K.radius.lg,
+    paddingVertical: 13,
+    backgroundColor: "#fff",
+  },
+  photoBtnOutlineText: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.darkGreen },
+  photoBtnFill: {
+    flex: 1.4,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    borderRadius: K.radius.lg,
+    paddingVertical: 13,
+    backgroundColor: K.colors.darkGreen,
+  },
+  photoBtnFillText: { fontSize: K.font.sm, fontWeight: "700", color: "#fff" },
+  photoBtnDisabled: { opacity: 0.45 },
 
   // photo grid
   photoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 8 },
-  photoItem: { position: "relative", borderRadius: K.radius.md, overflow: "hidden" },
+  photoItem: { position: "relative", borderRadius: K.radius.lg, overflow: "hidden" },
   photoThumb: { width: (W - 64) / 3, height: (W - 64) / 3 },
   coverBadge: {
     position: "absolute",
     top: 6,
     left: 6,
     backgroundColor: K.colors.darkGreen,
-    borderRadius: 4,
+    borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
@@ -1196,14 +1268,14 @@ export const fs = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     backgroundColor: "#fff",
-    borderRadius: K.radius.lg,
-    padding: 14,
+    borderRadius: K.radius.xl,
+    padding: 15,
     marginBottom: 10,
     borderWidth: 1.5,
     borderColor: K.colors.border,
     ...K.shadow.sm,
   },
-  docCardDone: { borderColor: "#6EE7B7", backgroundColor: "#F0FDF4" },
+  docCardDone: { borderColor: "#9be3bf", backgroundColor: K.colors.bgTint },
   docIconWrap: {
     width: 44,
     height: 44,
@@ -1226,9 +1298,9 @@ export const fs = StyleSheet.create({
   },
   docUploadBtn: {
     backgroundColor: K.colors.darkGreen,
-    borderRadius: K.radius.sm,
+    borderRadius: K.radius.md,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
     minWidth: 70,
     alignItems: "center",
   },
@@ -1244,61 +1316,50 @@ export const fs = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     backgroundColor: "#FEF2F2",
-    borderRadius: K.radius.sm,
-    padding: 8,
+    borderRadius: K.radius.md,
+    padding: 9,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: "#FECACA",
   },
   photoErrorText: { fontSize: K.font.xs, color: K.colors.error, fontWeight: "600" as const, flex: 1 },
 
-  // step progress bar
+  // step progress bar — thin segmented bar, matches the mockups
   progressWrap: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingBottom: 14,
-    paddingTop: 6,
-    alignItems: "flex-start",
+    paddingTop: 4,
   },
-  progressItem: { flex: 1, alignItems: "center", position: "relative" },
-  progressDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
+  progressSegmentRow: { flexDirection: "row" },
+  progressSegment: {
+    flex: 1,
+    height: 5,
+    borderRadius: K.radius.full,
+    backgroundColor: "rgba(255,255,255,0.18)",
   },
-  progressDotActive: { backgroundColor: "#fff" },
-  progressDotDone: { backgroundColor: K.colors.accent },
-  progressDotNum: { fontSize: 10, fontWeight: "700", color: "rgba(255,255,255,0.6)" },
-  progressLabel: { fontSize: 8, color: "rgba(255,255,255,0.5)", fontWeight: "600", textAlign: "center" },
-  progressLabelActive: { color: "#fff", fontWeight: "700" },
-  progressLine: {
-    position: "absolute",
-    top: 11,
-    left: "60%",
-    right: "-40%",
-    height: 2,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    zIndex: -1,
-  },
-  progressLineDone: { backgroundColor: K.colors.accent },
+  progressSegmentDone: { backgroundColor: K.colors.accent },
+  progressCaption: { fontSize: K.font.xs, color: "rgba(255,255,255,0.65)", fontWeight: "600", marginTop: 10, textAlign: "center" },
+  progressCaptionStrong: { color: "#fff", fontWeight: "800" },
 
   // wizard header
-  wizardHeader: { backgroundColor: K.colors.darkGreen },
+  wizardHeader: {
+    backgroundColor: K.colors.darkGreen,
+    borderBottomLeftRadius: K.radius.xxl,
+    borderBottomRightRadius: K.radius.xxl,
+    overflow: "hidden",
+  },
   wizardHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingBottom: 10,
+    paddingBottom: 12,
+    paddingTop: 4,
   },
   backBtn: {
     width: 40,
     height: 40,
-    borderRadius: 12,
+    borderRadius: K.radius.md,
     backgroundColor: K.colors.glassBg,
     borderWidth: 1,
     borderColor: K.colors.glassBorder,
@@ -1308,7 +1369,6 @@ export const fs = StyleSheet.create({
   wizardHeaderCenter: { flex: 1, alignItems: "center" },
   wizardLogo: { width: 56, height: 20, marginBottom: 4 },
   wizardHeaderTitle: { fontSize: K.font.lg, fontWeight: "800", color: "#fff" },
-  wizardHeaderSub: { fontSize: K.font.xs, color: K.colors.textLightMuted, marginTop: 2 },
 
   // wizard footer
   wizardFooter: {
@@ -1324,8 +1384,8 @@ export const fs = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     backgroundColor: "#FEF3C7",
-    borderRadius: K.radius.sm,
-    padding: 8,
+    borderRadius: K.radius.md,
+    padding: 9,
     marginBottom: 10,
   },
   disabledHintText: { fontSize: K.font.xs, color: "#92400E", fontWeight: "600", flex: 1 },
@@ -1345,7 +1405,7 @@ export const fs = StyleSheet.create({
     flex: 2,
     backgroundColor: K.colors.accent,
     borderRadius: K.radius.lg,
-    paddingVertical: 14,
+    paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
   },

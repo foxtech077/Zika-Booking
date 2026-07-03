@@ -1,8 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import {
   View,
   Text,
-  Image,
   FlatList,
   TouchableOpacity,
   RefreshControl,
@@ -12,8 +11,10 @@ import {
   Alert,
   ScrollView,
 } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { router } from "expo-router";
 import { AppLayout } from "../../components/layout/AppLayout";
+import { ListingImage } from "../../components/ListingImage";
 import { Feather } from "@expo/vector-icons";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { listingApi } from "../../lib/listing-api";
@@ -93,7 +94,7 @@ interface CardProps {
   onMore: () => void;
 }
 
-function ListingCard({ item, summary, maxBookings, onEdit, onMore }: CardProps) {
+const ListingCard = memo(function ListingCard({ item, summary, maxBookings, onEdit, onMore }: CardProps) {
   const cfg = STATUS_CFG[item.status] ?? { label: item.status, bg: "#64748B", text: "#fff" };
   const coverUrl = item.photos[0]?.cdnUrl ?? null;
   const bookings  = summary?.bookingCount ?? 0;
@@ -104,12 +105,14 @@ function ListingCard({ item, summary, maxBookings, onEdit, onMore }: CardProps) 
     ? formatCurrency(item.pricePerNight, item.currency ?? "USD")
     : "—";
 
+  const rating = summary?.averageRating;
+
   return (
     <View style={s.card}>
       {/* Photo */}
       <View style={s.photoWrap}>
         {coverUrl ? (
-          <Image source={{ uri: coverUrl }} style={s.photo} resizeMode="cover" />
+          <ListingImage uri={coverUrl} style={s.photo} resizeMode="cover" />
         ) : (
           <View style={s.photoPlaceholder}>
             <Feather
@@ -125,6 +128,14 @@ function ListingCard({ item, summary, maxBookings, onEdit, onMore }: CardProps) 
           <Text style={[s.statusBadgeText, { color: cfg.text }]}>{cfg.label}</Text>
         </View>
 
+        {/* Rating badge — top right */}
+        {rating != null && (
+          <View style={s.ratingBadge}>
+            <Feather name="star" size={11} color="#F59E0B" />
+            <Text style={s.ratingBadgeText}>{rating.toFixed(1)}</Text>
+          </View>
+        )}
+
         {/* Category badge — bottom left */}
         <View style={s.catBadge}>
           <Text style={s.catBadgeText}>
@@ -139,7 +150,7 @@ function ListingCard({ item, summary, maxBookings, onEdit, onMore }: CardProps) 
         <View style={s.nameRow}>
           <Text style={s.name} numberOfLines={1}>{item.name ?? "Untitled Listing"}</Text>
           <TouchableOpacity onPress={onMore} hitSlop={10} style={s.moreBtn}>
-            <Feather name="more-vertical" size={20} color="#94A3B8" />
+            <Feather name="more-vertical" size={18} color="#94A3B8" />
           </TouchableOpacity>
         </View>
 
@@ -176,33 +187,37 @@ function ListingCard({ item, summary, maxBookings, onEdit, onMore }: CardProps) 
           </View>
         )}
 
-        {/* Price + Actions */}
-        <View style={s.footRow}>
-          <View>
-            <Text style={s.price}>{priceLabel}</Text>
-            <Text style={s.priceUnit}>/ {item.category === "car" ? "day" : "night"}</Text>
-          </View>
-          <View style={s.actionsRow}>
-            {item.status !== "pending_review" && (
-              <TouchableOpacity style={s.editBtn} onPress={onEdit} activeOpacity={0.8}>
-                <Feather name="edit-2" size={13} color={K.colors.accent} />
-                <Text style={s.editBtnText}>Edit</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity
-              style={s.viewBtn}
-              onPress={() => router.push(`/listings/${item.id}/view` as any)}
-              activeOpacity={0.85}
-            >
-              <Feather name="eye" size={13} color="#fff" />
-              <Text style={s.viewBtnText}>View</Text>
+        {/* Price */}
+        <View style={s.priceBlockRow}>
+          <Text style={s.price}>{priceLabel}</Text>
+          <Text style={s.priceUnit}>/ {item.category === "car" ? "day" : "night"}</Text>
+        </View>
+
+        {/* Actions */}
+        <View style={s.actionsRow}>
+          {item.status !== "pending_review" && (
+            <TouchableOpacity style={s.actionBtnOutline} onPress={onEdit} activeOpacity={0.8}>
+              <Feather name="edit-2" size={14} color={K.colors.darkGreen} />
+              <Text style={s.actionBtnOutlineText}>Edit</Text>
             </TouchableOpacity>
-          </View>
+          )}
+          <TouchableOpacity
+            style={s.actionBtnOutline}
+            onPress={() => router.push(`/listings/${item.id}/view` as any)}
+            activeOpacity={0.8}
+          >
+            <Feather name="eye" size={14} color={K.colors.darkGreen} />
+            <Text style={s.actionBtnOutlineText}>View</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.actionBtnFill} onPress={onMore} activeOpacity={0.85}>
+            <Feather name="sliders" size={14} color="#fff" />
+            <Text style={s.actionBtnFillText}>Manage</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </View>
   );
-}
+});
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 
@@ -316,6 +331,15 @@ export default function ListingsScreen() {
   const totalRevMTD = stats?.thisMonthEarnings ?? 0;
   const activeCount = stats?.activeListingsCount ?? 0;
 
+  // Prefetch every loaded cover photo so cards that are about to scroll into
+  // view (or get revisited) are already in expo-image's memory/disk cache.
+  useEffect(() => {
+    const urls = (listingsQ.data?.listings ?? [])
+      .map((l) => l.photos[0]?.cdnUrl)
+      .filter((u): u is string => !!u);
+    if (urls.length) ExpoImage.prefetch(urls, "memory-disk");
+  }, [listingsQ.data]);
+
   function openMoreMenu(item: ListingItem) {
     const isLive   = item.status === "active" || item.status === "approved";
     const isPaused = item.status === "deactivated";
@@ -381,6 +405,19 @@ export default function ListingsScreen() {
   };
   const isRefreshing = listingsQ.isRefetching;
 
+  const renderItem = useCallback(
+    ({ item }: { item: ListingItem }) => (
+      <ListingCard
+        item={item}
+        summary={summaryMap[item.id]}
+        maxBookings={maxBookings}
+        onEdit={() => router.push(editRoute(item))}
+        onMore={() => openMoreMenu(item)}
+      />
+    ),
+    [summaryMap, maxBookings]
+  );
+
   return (
     <AppLayout>
       <View style={s.container}>
@@ -390,6 +427,11 @@ export default function ListingsScreen() {
         keyExtractor={(l) => l.id}
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
+        removeClippedSubviews
+        windowSize={7}
+        maxToRenderPerBatch={6}
+        initialNumToRender={6}
+        updateCellsBatchingPeriod={50}
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={refetch} tintColor={K.colors.accent} />
         }
@@ -452,26 +494,30 @@ export default function ListingsScreen() {
               })}
             </ScrollView>
 
-            {/* Stats strip */}
+            {/* Stats strip — two cards, matching the portfolio overview design */}
             {!isLoading && (
-              <View style={s.statsCard}>
-                <View style={s.statItem}>
-                  <View style={[s.statIconWrap, { backgroundColor: "#DCFCE7" }]}>
-                    <Feather name="trending-up" size={18} color={K.colors.accent} />
+              <View style={s.statsRow}>
+                <View style={s.statCard}>
+                  <View style={s.statCardTop}>
+                    <View style={[s.statIconWrap, { backgroundColor: K.colors.bgTint }]}>
+                      <Feather name="grid" size={16} color={K.colors.darkGreen} />
+                    </View>
                   </View>
-                  <View>
-                    <Text style={s.statLabel}>AVG. ACTIVE</Text>
-                    <Text style={s.statValue}>{activeCount} listing{activeCount !== 1 ? "s" : ""}</Text>
-                  </View>
+                  <Text style={s.statCardLabel}>Total Listings</Text>
+                  <Text style={s.statCardValue}>{allListings.length}</Text>
+                  <Text style={s.statCardSub}>{fmtMoney(totalRevMTD, getCurrencyForCountry(user?.country).code)} this month</Text>
                 </View>
-                <View style={s.statDivider} />
-                <View style={s.statItem}>
-                  <View>
-                    <Text style={s.statLabel}>REVENUE (MTD)</Text>
-                    <Text style={[s.statValue, { color: K.colors.textDark }]}>
-                      {fmtMoney(totalRevMTD, getCurrencyForCountry(user?.country).code)}
-                    </Text>
+                <View style={s.statCard}>
+                  <View style={s.statCardTop}>
+                    <View style={[s.statIconWrap, { backgroundColor: "#DCFCE7" }]}>
+                      <Feather name="check-circle" size={16} color={K.colors.accent} />
+                    </View>
                   </View>
+                  <Text style={s.statCardLabel}>Active Now</Text>
+                  <Text style={[s.statCardValue, { color: K.colors.accent }]}>{activeCount}</Text>
+                  <Text style={s.statCardSub}>
+                    {allListings.length > 0 ? `${Math.round((activeCount / allListings.length) * 100)}% of portfolio` : "No listings yet"}
+                  </Text>
                 </View>
               </View>
             )}
@@ -507,15 +553,7 @@ export default function ListingsScreen() {
             </View>
           )
         }
-        renderItem={({ item }) => (
-          <ListingCard
-            item={item}
-            summary={summaryMap[item.id]}
-            maxBookings={maxBookings}
-            onEdit={() => router.push(editRoute(item))}
-            onMore={() => openMoreMenu(item)}
-          />
-        )}
+        renderItem={renderItem}
         ItemSeparatorComponent={() => <View style={{ height: 16 }} />}
         ListFooterComponent={() => <View style={{ height: 100 }} />}
       />
@@ -608,28 +646,26 @@ const s = StyleSheet.create({
     color: "#fff",
   },
 
-  // Stats card
-  statsCard: {
-    flexDirection: "row",
+  // Stats strip — two side-by-side cards
+  statsRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
+  statCard: {
+    flex: 1,
     backgroundColor: "#fff",
     borderRadius: K.radius.xl,
-    padding: 16,
-    marginBottom: 16,
-    alignItems: "center",
+    padding: 14,
     ...K.shadow.sm,
   },
-  statItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
+  statCardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 },
   statIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
   },
-  statIconEmoji: { fontSize: 20 },
-  statDivider: { width: 1, height: 40, backgroundColor: "#E2E8F0", marginHorizontal: 12 },
-  statLabel: { fontSize: 9, color: "#94A3B8", fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase" },
-  statValue: { fontSize: K.font.lg, fontWeight: "800", color: K.colors.accent, marginTop: 2 },
+  statCardLabel: { fontSize: K.font.xs, color: "#94A3B8", fontWeight: "700" },
+  statCardValue: { fontSize: K.font.xxl, fontWeight: "900", color: K.colors.textDark, marginTop: 2, letterSpacing: -0.5 },
+  statCardSub: { fontSize: 10, color: "#94A3B8", fontWeight: "600", marginTop: 4 },
 
   // Card
   card: {
@@ -660,6 +696,20 @@ const s = StyleSheet.create({
     paddingVertical: 4,
   },
   statusBadgeText: { fontSize: 11, fontWeight: "700" },
+  ratingBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#fff",
+    borderRadius: K.radius.full,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    ...K.shadow.xs,
+  },
+  ratingBadgeText: { fontSize: 11, fontWeight: "800", color: K.colors.textDark },
   catBadge: {
     position: "absolute",
     bottom: 12,
@@ -708,36 +758,34 @@ const s = StyleSheet.create({
   rejectionText: { fontSize: K.font.xs, color: "#DC2626", lineHeight: 16 },
 
   // Footer price + actions
-  footRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  priceBlockRow: { flexDirection: "row", alignItems: "baseline", gap: 4, marginBottom: 12 },
   price: { fontSize: K.font.xl, fontWeight: "900", color: K.colors.textDark },
-  priceUnit: { fontSize: K.font.xs, color: "#94A3B8", marginTop: 1 },
+  priceUnit: { fontSize: K.font.xs, color: "#94A3B8" },
 
   actionsRow: { flexDirection: "row", gap: 8 },
-  editBtn: {
+  actionBtnOutline: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    justifyContent: "center",
+    gap: 5,
     borderWidth: 1.5,
-    borderColor: K.colors.accent,
+    borderColor: K.colors.border,
     borderRadius: K.radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
   },
-  editBtnText: { fontSize: K.font.sm, fontWeight: "700", color: K.colors.accent },
-  viewBtn: {
+  actionBtnOutlineText: { fontSize: 12, fontWeight: "700", color: K.colors.darkGreen },
+  actionBtnFill: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    backgroundColor: K.colors.accent,
+    justifyContent: "center",
+    gap: 5,
+    backgroundColor: K.colors.darkGreen,
     borderRadius: K.radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 9,
   },
-  viewBtnText: { fontSize: K.font.sm, fontWeight: "700", color: "#fff" },
+  actionBtnFillText: { fontSize: 12, fontWeight: "700", color: "#fff" },
 
   // States
   center: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 60, gap: 12 },

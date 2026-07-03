@@ -26,10 +26,18 @@ export function AppHeader({ onBurgerPress }: Props) {
     <SafeAreaView edges={["top"]} style={s.safe}>
       <View style={s.row}>
         <View style={s.logoWrap}>
+          {/*
+            The source PNG is the full lockup (icon + "KAINOOK" wordmark + tagline)
+            on a solid white background — there's no icon-only crop available.
+            Showing it "contain"-fit at badge size made the wordmark illegible and,
+            worse, its white background clashed against a colored box. Instead we
+            zoom/crop into just the icon mark (top portion of the image) and let it
+            sit directly on the header's own white background so there's no seam.
+          */}
           <Image
             source={require("../../assets/kainook_logo.png")}
             style={s.logo}
-            resizeMode="contain"
+            resizeMode="cover"
           />
         </View>
 
@@ -77,15 +85,17 @@ const s = StyleSheet.create({
     gap: 12,
   },
   logoWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: K.colors.darkGreen,
+    width: 44,
+    height: 44,
     overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: "flex-start",
+    justifyContent: "flex-start",
   },
-  logo:  { width: 34, height: 34 },
+  // The icon mark (the "K" + globe) only occupies roughly the top ~55% of the
+  // source image; everything below that is the wordmark + tagline. Rendering
+  // the image oversized and shifted up/left crops into just that icon region
+  // instead of shrinking the whole lockup down to an illegible thumbnail.
+  logo: { width: 80, height: 80, marginTop: -4, marginLeft: -18 },
   mid:   { flex: 1 },
   greet: { fontSize: 11, color: K.colors.textMuted, fontWeight: "500" },
   name:  { fontSize: 16, fontWeight: "800", color: K.colors.darkGreen, letterSpacing: -0.3 },

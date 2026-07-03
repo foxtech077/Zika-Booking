@@ -20,10 +20,14 @@ export function BottomTabBar() {
   const unreadCount = unreadData?.unreadCount ?? 0;
 
   function isActive(path: string) {
-    if (path === "/(provider)") {
-      return pathname === "/(provider)" || pathname === "/" || pathname === "";
+    // usePathname() strips route-group segments like "(provider)", so
+    // "/(provider)/bookings" never matches the real pathname "/bookings".
+    // Normalize by stripping the group segment before comparing.
+    const normalized = path.replace("/(provider)", "") || "/";
+    if (normalized === "/") {
+      return pathname === "/" || pathname === "";
     }
-    return pathname.startsWith(path);
+    return pathname === normalized || pathname.startsWith(`${normalized}/`);
   }
 
   return (
