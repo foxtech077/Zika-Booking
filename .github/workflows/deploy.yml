@@ -55,15 +55,18 @@ jobs:
           file: apps/admin/Dockerfile
           push: true
           tags: ${{ env.ECR_REGISTRY }}/zika/admin:latest
-      - name: Deploy to EC2 via SSM
-        run: |
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "i-00c4c4e18f6b3e18a" \
-            --document-name "AWS-RunShellScript" \
-            --comment "Deploy Zika-Booking" \
-            --parameters '{"commands":["cd /home/ubuntu/Zika-Booking","git fetch origin dev","git switch dev","git reset --hard origin/dev","aws ecr get-login-password --region af-south-1 | docker login --username AWS --password-stdin 891924441446.dkr.ecr.af-south-1.amazonaws.com","docker compose pull","docker compose up -d --remove-orphans","docker image prune -f"]}' \
-            --query "Command.CommandId" \
-            --output text)
-          echo "Command ID: $COMMAND_ID"
-          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "i-00c4c4e18f6b3e18a"
-          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "i-00c4c4e18f6b3e18a" --query "StandardOutputContent" --output text
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ZIKA__EC2_HOST }}
+          username: ${{ secrets.ZIKA__USER }}
+          key: ${{ secrets.ZIKA__SSH_KEY }}
+          script: |
+            cd /home/ubuntu/Zika-Booking
+            git fetch origin dev
+            git switch dev
+            git reset --hard origin/dev
+            aws ecr get-login-password --region af-south-1 | docker login --username AWS --password-stdin 891924441446.dkr.ecr.af-south-1.amazonaws.com
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image prune -f
