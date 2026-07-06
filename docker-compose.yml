@@ -6,7 +6,7 @@ services:
     ports:
       - "3001:3001"
     env_file:
-      - .env
+      - services/auth-service/.env
     network_mode: host
 
   listing-service:
@@ -16,7 +16,7 @@ services:
     ports:
       - "3003:3003"
     env_file:
-      - .env
+      - services/listing-service/.env
     network_mode: host
 
   payment-service:
@@ -26,7 +26,7 @@ services:
     ports:
       - "3004:3004"
     env_file:
-      - .env
+      - services/payment-service/.env
     network_mode: host
 
   web:
@@ -36,7 +36,7 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - .env
+      - apps/web/.env
     network_mode: host
 
   admin:
@@ -46,5 +46,5 @@ services:
     ports:
       - "3002:3002"
     env_file:
-      - .env
+      - apps/admin/.env
     network_mode: host
