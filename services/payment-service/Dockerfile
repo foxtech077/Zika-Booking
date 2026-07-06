@@ -11,7 +11,7 @@ COPY packages/ ./packages/
 COPY services/payment-service/ ./services/payment-service/
 RUN pnpm --filter @zika/types build
 RUN pnpm --filter @zika/validators build
-RUN pnpm --filter @zika/payment-service exec prisma generate
+RUN cd services/payment-service && npx prisma generate
 RUN pnpm --filter @zika/payment-service build
 WORKDIR /app/services/payment-service
 EXPOSE 3004
