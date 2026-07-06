@@ -13,7 +13,7 @@ const AUTH_API_BASE =
  * so the browser always holds the latest refresh token.
  */
 export async function POST(request: NextRequest) {
-  const refreshToken = request.cookies.get("refreshToken")?.value;
+  const refreshToken = request.cookies.get("web_refresh_token")?.value;
 
   if (!refreshToken) {
     return NextResponse.json(
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Cookie: `refreshToken=${refreshToken}`,
+        Cookie: `web_refresh_token=${refreshToken}`,
       },
     });
 
