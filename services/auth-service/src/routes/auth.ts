@@ -67,7 +67,7 @@ async function issueTokens(
   const expiresAt = new Date(Date.now() + REFRESH_TTL * 1000);
 
   await prisma.session.create({ data: { userId, tokenHash, expiresAt } });
-  reply.setCookie("refreshToken", refreshToken, COOKIE_OPTS);
+  reply.setCookie("web_refresh_token", refreshToken, COOKIE_OPTS);
 
   return { accessToken, expiresIn: Number(process.env["JWT_ACCESS_TTL_SECONDS"] ?? 900) };
 }
@@ -763,12 +763,12 @@ export async function authRoutes(app: FastifyInstance) {
   // ── POST /auth/logout  (UC-1.9) ────────────────────────────────────────────
   app.post("/auth/logout", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
-      const refreshToken = req.cookies["refreshToken"];
+      const refreshToken = req.cookies["web_refresh_token"];
       if (refreshToken) {
         const tokenHash = hashToken(refreshToken);
         await prisma.session.updateMany({ where: { tokenHash }, data: { revoked: true } });
       }
-      reply.clearCookie("refreshToken", { path: "/" });
+      reply.clearCookie("web_refresh_token", { path: "/" });
       return sendSuccess(reply, 200, { message: "Signed out successfully." });
     } catch {
       return sendError(reply, 400, "LOGOUT_FAILED", "Sign-out could not be completed. Please try again.");
@@ -780,7 +780,7 @@ export async function authRoutes(app: FastifyInstance) {
     try {
       const userId = (req as FastifyRequest & { userId: string }).userId;
       await prisma.session.updateMany({ where: { userId }, data: { revoked: true } });
-      reply.clearCookie("refreshToken", { path: "/" });
+        reply.clearCookie("web_refresh_token", { path: "/" });
       return sendSuccess(reply, 200, { message: "Signed out from all devices." });
     } catch {
       return sendError(reply, 400, "LOGOUT_FAILED", "Sign-out from all devices could not be completed. Please try again.");
@@ -789,7 +789,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   // ── POST /auth/refresh  (UC-1.5) ───────────────────────────────────────────
   app.post("/auth/refresh", { schema: { tags: ["User Auth"] } }, async (req: FastifyRequest, reply: FastifyReply) => {
-    const refreshToken = req.cookies["refreshToken"];
+    const refreshToken = req.cookies["web_refresh_token"];
     if (!refreshToken) return sendError(reply, 401, "NO_TOKEN", "No refresh token.");
 
     try {
@@ -800,7 +800,7 @@ export async function authRoutes(app: FastifyInstance) {
       });
 
       if (!session || session.revoked || session.expiresAt < new Date()) {
-        reply.clearCookie("refreshToken", { path: "/" });
+      reply.clearCookie("web_refresh_token", { path: "/" });
         return sendError(reply, 401, "INVALID_TOKEN", "Session expired. Please sign in again.");
       }
       if (session.user.status !== "active") {
