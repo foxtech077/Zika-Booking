@@ -12,6 +12,7 @@ import { MessageProviderButton } from "./components/MessageProviderButton";
 import { PublicReviewsSection } from "./components/PublicReviewsSection";
 import { GiveReviewEntry } from "./components/GiveReviewEntry";
 import { useAuthStore } from "@/stores/auth";
+import { capitalize } from "@/lib/utils";
 import { useFavourites } from "@/hooks/useFavourites";
 import ListingCard from "./components/ListingCard";
 import { ActivityPromoBanner, PersonalVoucherBanner } from "./components/PromoBanner";
@@ -1262,6 +1263,11 @@ export default function TravellerDashboard() {
     setSavedMethods([]);
   }
 
+  function toActivity(category: string): string {
+    const map: Record<string, string> = { hotel: "hotels", apartment: "apartments", car: "cars" };
+    return map[category] ?? category;
+  }
+
   // 6. Voucher Discount Validation — sends full booking context for tier/scope/country checks
   async function handleVoucherApply(codeOverride?: string) {
     const code = codeOverride ?? voucherCode;
@@ -1279,11 +1285,12 @@ export default function TravellerDashboard() {
       console.log("[ZikaSearch] Validating voucher code:", code, "with order value:", orderValue);
       const res = await listingApi.post<any>("/vouchers/validate", {
         code,
-        orderValue,
+        totalAmount: orderValue,
         listingId: detailListing.id,
-        category: detailListing.category,
-        country: detailListing.country,
-        tier: user?.currentTier,
+        activity: toActivity(detailListing.category),
+        guestCountry: detailListing.country,
+        guestId: user?.id ?? "",
+        guestTier: user?.currentTier ? capitalize(user.currentTier) : undefined,
       });
       console.log("[ZikaSearch] Voucher validation API response:", res.data);
       if (res.data.success) {

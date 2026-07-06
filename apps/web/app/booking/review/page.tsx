@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { paymentApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
 import { storeLatestReviewContext } from "@/services/traveller";
+import { useAuthStore } from "@/stores/auth";
+import { capitalize } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -118,8 +120,14 @@ function toIsoDatetime(dateStr: string | null | undefined): string {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+function toActivity(category: string): string {
+  const map: Record<string, string> = { hotel: "hotels", apartment: "apartments", car: "cars" };
+  return map[category] ?? category;
+}
+
 export default function BookingReviewPage() {
   const router = useRouter();
+  const { user } = useAuthStore();
 
   // ── Context from sessionStorage ─────────────────────────────────────────────
   const [ctx, setCtx] = useState<CheckoutCtx | null>(null);
@@ -428,10 +436,12 @@ export default function BookingReviewPage() {
       const base = ctx.pricePerNight * ctx.nightsOrDays;
       const res = await listingApi.post<any>("/vouchers/validate", {
         code: code.trim(),
-        orderValue: base,
+        totalAmount: base,
         listingId: ctx.listingId,
-        category: ctx.listingCategory,
-        country: ctx.listingCountry,
+        activity: toActivity(ctx.listingCategory),
+        guestCountry: ctx.listingCountry,
+        guestId: user?.id ?? "",
+        guestTier: user?.currentTier ? capitalize(user.currentTier) : undefined,
       });
       if (res.data.success) {
         const vDiscount: number = res.data.data.discountAmount || 0;
