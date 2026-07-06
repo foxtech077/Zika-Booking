@@ -11,7 +11,7 @@ COPY packages/ ./packages/
 COPY services/auth-service/ ./services/auth-service/
 RUN pnpm --filter @zika/types build
 RUN pnpm --filter @zika/validators build
-RUN pnpm --filter @zika/auth-service exec prisma generate
+RUN cd services/auth-service && npx prisma generate
 RUN pnpm --filter @zika/auth-service build
 WORKDIR /app/services/auth-service
 EXPOSE 3001

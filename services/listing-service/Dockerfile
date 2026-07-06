@@ -11,7 +11,7 @@ COPY packages/ ./packages/
 COPY services/listing-service/ ./services/listing-service/
 RUN pnpm --filter @zika/types build
 RUN pnpm --filter @zika/validators build
-RUN pnpm --filter @zika/listing-service exec prisma generate
+RUN cd services/listing-service && npx prisma generate
 RUN pnpm --filter @zika/listing-service build
 WORKDIR /app/services/listing-service
 EXPOSE 3003
