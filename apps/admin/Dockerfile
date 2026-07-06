@@ -1,11 +1,11 @@
 FROM node:20-alpine
 WORKDIR /app
 RUN npm install -g pnpm
-COPY package.json pnpm-lock.yaml ./
-COPY apps/admin/package.json ./apps/admin/
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/types/package.json ./packages/types/
 COPY packages/validators/package.json ./packages/validators/
-RUN pnpm install --frozen-lockfile
+COPY apps/admin/package.json ./apps/admin/
+RUN pnpm install --frozen-lockfile --ignore-scripts
 COPY packages/ ./packages/
 COPY apps/admin/ ./apps/admin/
 RUN pnpm --filter @zika/types build
