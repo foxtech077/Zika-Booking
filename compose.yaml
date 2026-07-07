@@ -23,6 +23,56 @@ services:
     volumes:
       - zika-redis-data:/data
 
+  auth-service:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/auth-service:latest
+    container_name: zika-auth
+    restart: always
+    ports:
+      - "3001:3001"
+    env_file:
+      - services/auth-service/.env
+    network_mode: host
+
+  listing-service:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/listing-service:latest
+    container_name: zika-listing
+    restart: always
+    ports:
+      - "3003:3003"
+    env_file:
+      - services/listing-service/.env
+    network_mode: host
+
+  payment-service:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/payment-service:latest
+    container_name: zika-payment
+    restart: always
+    ports:
+      - "3004:3004"
+    env_file:
+      - services/payment-service/.env
+    network_mode: host
+
+  web:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/web:latest
+    container_name: zika-web
+    restart: always
+    ports:
+      - "3000:3000"
+    env_file:
+      - apps/web/.env
+    network_mode: host
+
+  admin:
+    image: 891924441446.dkr.ecr.af-south-1.amazonaws.com/zika/admin:latest
+    container_name: zika-admin
+    restart: always
+    ports:
+      - "3002:3002"
+    env_file:
+      - apps/admin/.env
+    network_mode: host
+
 volumes:
   db_data:
   zika-redis-data:
