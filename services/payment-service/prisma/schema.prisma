@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["payments"]
+  schemas  = ["payments", "auth"]
 }
 
 enum PaymentProvider {
@@ -215,4 +215,14 @@ model RefundNotificationRetry {
   createdAt   DateTime          @default(now()) @map("created_at")
 
   @@schema("payments")
+}
+
+// ── Cross-schema read-only reference to auth.User (for email lookup) ──────────
+model AuthUser {
+  id        String  @id
+  email     String
+  firstName String
+  lastName  String
+
+  @@schema("auth")
 }
