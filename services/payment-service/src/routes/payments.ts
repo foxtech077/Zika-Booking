@@ -337,8 +337,13 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
 
     if (!customerAccount) {
+      const authUser = await prisma.authUser.findUnique({ where: { id: userId }, select: { email: true, firstName: true, lastName: true } });
       const customer = await stripe.customers.create(
-        { metadata: { userId } },
+        {
+          email: authUser?.email,
+          name: authUser ? `${authUser.firstName} ${authUser.lastName}` : undefined,
+          metadata: { userId },
+        },
         { idempotencyKey: `stripe-cust-${userId}` }
       );
 
