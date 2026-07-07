@@ -213,6 +213,15 @@ export default function VouchersPage() {
   };
 
   const handleSave = () => {
+    if (form.code.length < 6) {
+      alert("Voucher code must be at least 6 characters.");
+      return;
+    }
+    if (form.code.length > 12) {
+      alert("Voucher code must not exceed 12 characters.");
+      return;
+    }
+
     const payload = {
       title: form.title,
       code: form.code.toUpperCase(),
@@ -619,6 +628,7 @@ export default function VouchersPage() {
               onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
               placeholder="SUMMER20"
               className="font-mono uppercase tracking-wider"
+              maxLength={12}
               required
             />
           </div>
