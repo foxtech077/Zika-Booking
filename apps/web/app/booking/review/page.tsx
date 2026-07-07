@@ -443,7 +443,7 @@ export default function BookingReviewPage() {
         guestId: user?.id ?? "",
         guestTier: user?.currentTier ? capitalize(user.currentTier) : undefined,
       });
-      if (res.data.success) {
+      if (res.data.success && res.data.data.valid) {
         const vDiscount: number = res.data.data.discountAmount || 0;
         const updated: CheckoutCtx = {
           ...ctx,
@@ -455,7 +455,7 @@ export default function BookingReviewPage() {
         setCtx(updated);
         sessionStorage.setItem("zika:checkout", JSON.stringify(updated));
       } else {
-        setReviewVoucherError(res.data?.error?.message ?? "Invalid voucher code");
+        setReviewVoucherError(res.data?.data?.message ?? res.data?.error?.message ?? "Invalid voucher code");
       }
     } catch (err: any) {
       setReviewVoucherError(err?.response?.data?.error?.message ?? "Invalid voucher code");
