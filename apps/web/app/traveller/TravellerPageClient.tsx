@@ -411,10 +411,10 @@ export default function TravellerDashboard() {
     return result;
   }, [listings, filterBedrooms, filterBathrooms]);
 
-  // Derived discount — voucher wins only when it saves more than the promotion.
+  // Derived discount — explicit voucher selection always wins over auto-promotion.
   // Neither stacks with the other; we always pick the higher value.
   const effectiveDiscountSource: "voucher" | "promotion" | null =
-    voucherApplied && voucherDiscount >= promotionDiscount ? "voucher"
+    voucherApplied ? "voucher"
     : promotionDiscount > 0 ? "promotion"
     : null;
   const bestDiscount =
@@ -774,9 +774,7 @@ export default function TravellerDashboard() {
         )}
         {voucherApplied && (
           <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 text-xs font-medium text-emerald-800">
-            {effectiveDiscountSource === "voucher"
-              ? `✓ Voucher applied — saves ${detailListing.currency} ${voucherDiscount.toLocaleString()}`
-              : `✓ Voucher saved. Category promotion gives better savings — using promotion instead`}
+            ✓ Voucher applied — saves {detailListing.currency} {voucherDiscount.toLocaleString()}
           </div>
         )}
         {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
@@ -1293,13 +1291,22 @@ export default function TravellerDashboard() {
         guestTier: user?.currentTier ? capitalize(user.currentTier) : undefined,
       });
       console.log("[ZikaSearch] Voucher validation API response:", res.data);
-      if (res.data.success) {
+      if (res.data.success && res.data.data.valid) {
         const vDiscount = res.data.data.discountAmount || 0;
         console.log("[ZikaSearch] Voucher discount amount computed:", vDiscount);
+
+        // Promotion stacking guard — reject voucher if an active promotion gives more
+        if (activePromotion && promotionDiscount > vDiscount) {
+          console.log("[ZikaSearch] Voucher rejected: active promotion gives better discount", { promotionDiscount, voucherDiscount: vDiscount });
+          setVoucherError(`A better promotion (${activePromotion.name || "Category Discount"}) is active. Vouchers cannot be stacked with active promotions.`);
+          return;
+        }
+
+        console.log("[ZikaSearch] Voucher accepted");
         setVoucherApplied(true);
         setVoucherDiscount(vDiscount);
       } else {
-        const errMsg = res.data?.error?.message ?? "Invalid voucher code";
+        const errMsg = res.data?.data?.message ?? res.data?.error?.message ?? "Invalid voucher code";
         console.error("[ZikaSearch] Voucher validation failed:", errMsg);
         setVoucherError(errMsg);
       }
@@ -2218,14 +2225,6 @@ export default function TravellerDashboard() {
                                 )}
 
                                 {renderVoucherSelector()}
-                                {voucherApplied && (
-                                  <p className="text-xs font-semibold text-emerald-600">
-                                    {effectiveDiscountSource === "voucher"
-                                      ? `✓ Voucher applied — saves ${detailListing.currency} ${voucherDiscount.toLocaleString()}`
-                                      : `✓ Voucher applied. Promotion gives more savings — using promotion discount`}
-                                  </p>
-                                )}
-                                {voucherError && <p className="text-xs font-semibold text-red-600">{voucherError}</p>}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
                                   <span>Total</span>
                                   <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
