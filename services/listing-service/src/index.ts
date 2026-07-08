@@ -34,6 +34,22 @@ async function build() {
     trustProxy: true,
   });
 
+  // ── Global error handler — ensure all errors serialize as { success, error } ──
+  app.setErrorHandler((err, request, reply) => {
+    const statusCode = err.statusCode ?? 500;
+    // Schema validation errors (body/params/query)
+    if (err.validation) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: err.message },
+      });
+    }
+    return reply.status(statusCode).send({
+      success: false,
+      error: { code: err.code ?? "INTERNAL_ERROR", message: err.message ?? "An unexpected error occurred." },
+    });
+  });
+
   // Register Swagger API documentation
   await app.register(swagger, {
     openapi: {
