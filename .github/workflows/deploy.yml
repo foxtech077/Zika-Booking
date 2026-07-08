@@ -57,8 +57,8 @@ jobs:
           target: production
           push: true
           tags: ${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
-          cache-from: type=gha,scope=${{ matrix.service }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+          cache-from: type=registry,ref=${{ env.ECR_REGISTRY }}/${{ matrix.image }}:latest
+          cache-to: type=inline
           build-args: ${{ matrix.build_args }}
 
   deploy:
