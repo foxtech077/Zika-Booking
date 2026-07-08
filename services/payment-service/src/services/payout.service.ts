@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
+import { withRedisLock } from "../lib/redis.js";
 import { RefundStatus, PayoutStatus } from "../generated/index.js";
 
 export interface SchedulePayoutParams {
@@ -386,17 +387,12 @@ async function processSinglePayout(payout: any): Promise<void> {
   }
 }
 
-export function startPayoutJob(intervalMs = 15 * 60 * 1000): NodeJS.Timeout {
-  console.log(`[payout-job] Started — checking every ${intervalMs / 60_000} minute(s)`);
+const PAYOUT_LOCK_KEY = "cron:payout:running";
+const PAYOUT_LOCK_TTL = 10 * 60; // 10 minutes — generous safety net
 
-  // Run once immediately on startup, then on the interval
-  void processEligiblePayouts().catch((err) =>
-    console.error("[payout-job] Initial run failed:", err),
-  );
-
-  return setInterval(() => {
-    void processEligiblePayouts().catch((err) =>
-      console.error("[payout-job] Run failed:", err),
-    );
-  }, intervalMs);
+export async function runPayoutJob(): Promise<void> {
+  await withRedisLock(PAYOUT_LOCK_KEY, PAYOUT_LOCK_TTL, async () => {
+    console.log("[payout-job] Running (lock acquired)");
+    await processEligiblePayouts();
+  });
 }

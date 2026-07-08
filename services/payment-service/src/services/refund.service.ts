@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma.js";
+import { withRedisLock } from "../lib/redis.js";
 import { RefundRetryStatus } from "../generated/index.js";
 
 const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
@@ -173,19 +174,12 @@ export async function processFailedRefundNotifications(): Promise<void> {
   }
 }
 
-export function startRefundNotificationRetryJob(intervalMs = 15 * 60 * 1000): NodeJS.Timeout {
-  console.log(`[refund-retry-job] Started — checking every ${intervalMs / 60_000} minute(s)`);
+const REFUND_RETRY_LOCK_KEY = "cron:refund-retry:running";
+const REFUND_RETRY_LOCK_TTL = 10 * 60; // 10 minutes
 
-  // Run once immediately on startup, then on the interval
-  void processFailedRefundNotifications().catch((err) => {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[refund-retry-job] Initial run failed:", message);
+export async function runRefundNotificationRetryJob(): Promise<void> {
+  await withRedisLock(REFUND_RETRY_LOCK_KEY, REFUND_RETRY_LOCK_TTL, async () => {
+    console.log("[refund-retry-job] Running (lock acquired)");
+    await processFailedRefundNotifications();
   });
-
-  return setInterval(() => {
-    void processFailedRefundNotifications().catch((err) => {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("[refund-retry-job] Run failed:", message);
-    });
-  }, intervalMs);
 }

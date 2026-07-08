@@ -22,6 +22,7 @@
 		"@sendgrid/mail": "^8.1.6",
 		"dotenv": "^17.4.2",
 		"fastify": "^5.0.0",
+		"fastify-cron": "^1.4.0",
 		"fastify-raw-body": "^5.0.0",
 		"ioredis": "^5.3.2",
 		"jose": "^5.9.3",
