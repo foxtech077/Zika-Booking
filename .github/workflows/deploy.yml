@@ -8,6 +8,7 @@ env:
   ECR_REGISTRY: 891924441446.dkr.ecr.af-south-1.amazonaws.com
 jobs:
   build-and-push:
+    name: Build & Push (${{ matrix.service }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
