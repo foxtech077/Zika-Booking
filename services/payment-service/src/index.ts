@@ -3,14 +3,15 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
+import fastifyCron from "fastify-cron";
 import { paymentRoutes } from "./routes/payments.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { paymentMethodRoutes } from "./routes/payment-methods.js";
 import { adminPaymentRoutes } from "./routes/admin-payments.js";
 import { merchantRoutes } from "./routes/merchants.js";
 import { payoutRoutes } from "./routes/payouts.js";
-import { startPayoutJob } from "./services/payout.service.js";
-import { startRefundNotificationRetryJob } from "./services/refund.service.js";
+import { runPayoutJob } from "./services/payout.service.js";
+import { runRefundNotificationRetryJob } from "./services/refund.service.js";
 import { prisma } from "./lib/prisma.js";
 
 const PORT = Number(process.env["PORT"] ?? 3004);
@@ -136,20 +137,33 @@ async function build() {
   await app.register(merchantRoutes,);
   await app.register(payoutRoutes,);
 
+  // ── Background cron jobs ──────────────────────────────────────────────────
+  await app.register(fastifyCron, {
+    jobs: [
+      {
+        name: "payout-job",
+        cronTime: "*/5 * * * *",
+        onTick: () => void runPayoutJob().catch((err) => console.error("[payout-job] Cron run failed:", err)),
+      },
+      {
+        name: "refund-retry-job",
+        cronTime: "*/5 * * * *",
+        onTick: () => void runRefundNotificationRetryJob().catch((err) => console.error("[refund-retry-job] Cron run failed:", err)),
+      },
+    ],
+  });
+
   return app;
 }
 
 async function main() {
   const app = await build();
-  let payoutJobTimer: NodeJS.Timeout | undefined;
-  let refundRetryJobTimer: NodeJS.Timeout | undefined;
 
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     app.log.info(`[Payment Service] ${signal} received. Shutting down gracefully…`);
     try {
-      if (payoutJobTimer) clearInterval(payoutJobTimer);
-      if (refundRetryJobTimer) clearInterval(refundRetryJobTimer);
+      app.cron.stopAllJobs();
       await app.close();
       await prisma.$disconnect();
     } finally {
@@ -164,11 +178,11 @@ async function main() {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Payment Service] listening on ${HOST}:${PORT}`);
 
-    // Start the background payout processor (every 15 minutes)
-    payoutJobTimer = startPayoutJob(15 * 60 * 1000);
+    // Run background jobs once immediately on startup, then cron takes over
+    void runPayoutJob().catch((err) => console.error("[payout-job] Startup run failed:", err));
+    void runRefundNotificationRetryJob().catch((err) => console.error("[refund-retry-job] Startup run failed:", err));
 
-    // Start the background refund retry processor (every 15 minutes)
-    refundRetryJobTimer = startRefundNotificationRetryJob(15 * 60 * 1000);
+    app.cron.startAllJobs();
   } catch (err) {
     app.log.error(err);
     process.exit(1);
