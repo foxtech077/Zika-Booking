@@ -69,7 +69,7 @@ export interface Payout {
   providerId: string;
   amount: number | string;
   currency: string;
-  status: "scheduled" | "processing" | "paid" | "failed" | "cancelled";
+  status: "scheduled" | "processing" | "paid" | "failed" | "cancelled" | "pending";
   scheduledAt: string;
   processedAt: string | null;
   providerPayoutId: string | null;
