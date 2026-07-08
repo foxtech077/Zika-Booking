@@ -70,6 +70,8 @@ jobs:
           host: ${{ secrets.ZIKA__EC2_HOST }}
           username: ${{ secrets.ZIKA__USER }}
           key: ${{ secrets.ZIKA__SSH_KEY }}
+          timeout: 60s
+          proxy_timeout: 60s
           script: |
             cd /home/ubuntu/Zika-Booking
             git fetch origin dev
