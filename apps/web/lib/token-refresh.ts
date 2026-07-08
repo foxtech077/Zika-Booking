@@ -24,7 +24,6 @@ export async function refreshAccessToken(): Promise<string | null> {
       const res = await fetch("/api/auth/refresh", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
       });
 
       if (!res.ok) return null;
