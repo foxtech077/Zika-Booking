@@ -34,7 +34,8 @@ const REFRESH_TTL = Number(process.env["JWT_REFRESH_TTL_SECONDS"] ?? 2592000);
 const COOKIE_OPTS = {
   httpOnly: true,
   secure: process.env["NODE_ENV"] === "production",
-  sameSite: "strict" as const,
+  sameSite: "lax" as const,
+  domain: process.env["COOKIE_DOMAIN"] ?? ".kainook.com",
   maxAge: REFRESH_TTL,
   path: "/",
 };
