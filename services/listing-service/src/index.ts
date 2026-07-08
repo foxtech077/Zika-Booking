@@ -1,5 +1,5 @@
 import "dotenv/config";
-import Fastify from "fastify";
+import Fastify, { type FastifyError } from "fastify";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -35,7 +35,7 @@ async function build() {
   });
 
   // ── Global error handler — ensure all errors serialize as { success, error } ──
-  app.setErrorHandler((err, request, reply) => {
+  app.setErrorHandler((err: FastifyError, request, reply) => {
     const statusCode = err.statusCode ?? 500;
     // Schema validation errors (body/params/query)
     if (err.validation) {
