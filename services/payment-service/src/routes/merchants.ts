@@ -167,6 +167,20 @@ export async function merchantRoutes(app: FastifyInstance) {
       data: { isVerified, updatedAt: new Date() },
     });
 
+    // When verifying, clear stale "Merchant is not verified" failureReason on pending payouts
+    if (isVerified) {
+      await prisma.payout.updateMany({
+        where: {
+          merchantId: id,
+          failureReason: "Merchant is not verified",
+        },
+        data: {
+          failureReason: null,
+          updatedAt: new Date(),
+        },
+      });
+    }
+
     reply.send({ success: true, data: updated });
   });
 

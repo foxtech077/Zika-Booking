@@ -185,6 +185,7 @@ export async function payoutRoutes(app: FastifyInstance) {
         status: "paid",
         processedAt: new Date(),
         providerPayoutId: providerPayoutId ?? null,
+        failureReason: null,
         updatedAt: new Date(),
       },
     });
