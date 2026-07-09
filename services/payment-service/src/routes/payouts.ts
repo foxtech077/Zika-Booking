@@ -277,6 +277,7 @@ export async function payoutRoutes(app: FastifyInstance) {
       data: {
         status: "scheduled",
         failureReason: null,
+        retryCount: { increment: 1 },
         scheduledAt: new Date(), // process on next job run
         updatedAt: new Date(),
       },
