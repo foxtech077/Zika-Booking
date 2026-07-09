@@ -483,6 +483,8 @@ export async function searchRoutes(app: FastifyInstance) {
   );
 
   // ── GET /listings/:id/availability ───────────────────────────────────────
+  const LOCK_TTL_MS = 300_000; // 5 minutes — must match bookings.ts
+
   app.get(
     "/listings/:id/availability",
     {
@@ -499,6 +501,8 @@ export async function searchRoutes(app: FastifyInstance) {
           type: "object",
           properties: {
             month: { type: "string", description: "Month to query availability (YYYY-MM). Defaults to current month. Returns 3 months forward." },
+            start: { type: "string", description: "Start date (YYYY-MM-DD). Overrides month-based window." },
+            end: { type: "string", description: "End date (YYYY-MM-DD). Overrides month-based window." },
           },
         },
       },
@@ -506,36 +510,49 @@ export async function searchRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const { id } = req.params as { id: string };
-        const { month } = req.query as { month?: string };
+        const { month, start, end } = req.query as { month?: string; start?: string; end?: string };
 
       const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
       const now = new Date();
-      let rangeStart = now;
-      if (month) {
+      let rangeStart: Date;
+      let rangeEnd: Date;
+
+      if (start && end) {
+        rangeStart = new Date(start);
+        rangeEnd = new Date(end);
+      } else if (month) {
         const [y, m] = month.split("-").map(Number);
         rangeStart = new Date(y!, m! - 1, 1);
+        rangeEnd = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + 3, 1);
+      } else {
+        rangeStart = now;
+        rangeEnd = new Date(now.getFullYear(), now.getMonth() + 3, 1);
       }
-      const rangeEnd = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + 3, 1);
 
-            const [bookings, blockedDates] = await Promise.all([
-        prisma.booking.findMany({
-          where: {
-            listingId: id,
-            status: { in: ["pending_payment", "confirmed", "checked_in"] as any },
-            OR: [
-              { checkIn: { gte: rangeStart, lt: rangeEnd }, checkOut: { not: null } },
-              { pickupDatetime: { gte: rangeStart, lt: rangeEnd }, returnDatetime: { not: null } },
-            ],
-          },
-          select: { checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true },
-        }),
+      const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
+
+      const [bookings, blockedDates] = await Promise.all([
+        prisma.$queryRawUnsafe<{ check_in: Date | null; check_out: Date | null; pickup_datetime: Date | null; return_datetime: Date | null }[]>(`
+          SELECT check_in, check_out, pickup_datetime, return_datetime
+          FROM bookings
+          WHERE listing_id = $1
+            AND (
+              status = 'confirmed'
+              OR status = 'checked_in'
+              OR (status = 'pending_payment' AND created_at > $4)
+            )
+            AND (
+              (check_in IS NOT NULL AND check_in < $3 AND check_out > $2)
+              OR (pickup_datetime IS NOT NULL AND pickup_datetime < $3 AND return_datetime > $2)
+            )
+        `, id, rangeStart, rangeEnd, pendingExpiry),
         prisma.icalBlockedDate.findMany({
           where: {
             listingId: id,
-            startDate: { gte: rangeStart },
-            endDate: { lt: rangeEnd },
+            startDate: { lt: rangeEnd },
+            endDate: { gt: rangeStart },
           },
           select: { startDate: true, endDate: true },
         }),
@@ -543,8 +560,8 @@ export async function searchRoutes(app: FastifyInstance) {
 
       const unavailableRanges = [
         ...bookings.map((b) => ({
-          start: (b.checkIn ?? b.pickupDatetime)?.toISOString().slice(0, 10) ?? null,
-          end: (b.checkOut ?? b.returnDatetime)?.toISOString().slice(0, 10) ?? null,
+          start: (b.check_in ?? b.pickup_datetime)?.toISOString().slice(0, 10) ?? null,
+          end: (b.check_out ?? b.return_datetime)?.toISOString().slice(0, 10) ?? null,
         })),
         ...blockedDates.map((bd) => ({
           start: bd.startDate.toISOString().slice(0, 10),
