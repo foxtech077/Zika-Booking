@@ -443,6 +443,7 @@ async function processSinglePayout(payout: any): Promise<void> {
           status: "paid",
           processedAt: new Date(),
           providerPayoutId,
+          failureReason: null,
           updatedAt: new Date(),
         },
       });
