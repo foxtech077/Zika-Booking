@@ -87,7 +87,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
-    }
+      "router": {},
+      "eas": {
+        "projectId": "eb02914a-9afa-4816-8d96-31d713f19022"
+      }
+    },
+    "owner": "kainook.it"
   }
 }
