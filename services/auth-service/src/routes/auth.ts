@@ -1040,46 +1040,20 @@ export async function authRoutes(app: FastifyInstance) {
     }
   );
 
-  // ── PATCH /auth/profile/:id  (Partially Update Profile by User ID) ──────────
-  app.patch(
-    "/auth/profile/:id",
-    {
-      schema: {
-        tags: ["User Auth"],
-        summary: "Partially update profile details (name, photo, business name)",
-        security: [{ bearerAuth: [] }],
-        params: {
-          type: "object",
-          required: ["id"],
-          properties: {
-            id: { type: "string", description: "The User ID to update" },
-          },
-        },
-      body: {
-          type: "object",
-          properties: {
-            firstName: { type: "string" },
-            lastName: { type: "string" },
-            photoUrl: { type: "string", format: "uri", nullable: true },
-            businessName: { type: "string", nullable: true, description: "Provider business name (only allowed for providers)" },
-          },
-        },
-        
-      },
-      preHandler: [requireAuth],
-    },
-    async (req: FastifyRequest, reply: FastifyReply) => {
-      try {
-        const authUserId = (req as FastifyRequest & { userId: string }).userId;
-        const { id } = req.params as { id: string };
+  // ── Shared PATCH /auth/profile handler ────────────────────────────────────
+  // Supports both `PATCH /auth/profile/:id` (explicit id with ownership guard)
+  // and `PATCH /auth/profile` (uses the authenticated user's id).
+  async function patchProfileHandler(req: FastifyRequest, reply: FastifyReply, id: string) {
+    try {
+      const authUserId = (req as FastifyRequest & { userId: string }).userId;
 
-        // Guard: Prevent users from updating profiles other than their own
-        if (authUserId !== id) {
-          return sendError(reply, 403, "FORBIDDEN", "You are not authorized to update this profile.");
-        }
+      // Guard: Prevent users from updating profiles other than their own
+      if (authUserId !== id) {
+        return sendError(reply, 403, "FORBIDDEN", "You are not authorized to update this profile.");
+      }
 
-        // Validate request body using Zod
-        const parsed = patchProfileSchema.safeParse(req.body);
+      // Validate request body using Zod
+      const parsed = patchProfileSchema.safeParse(req.body);
         if (!parsed.success) {
           return sendError(
             reply,
@@ -1128,12 +1102,20 @@ export async function authRoutes(app: FastifyInstance) {
           }
         });
 
+        const signedPhotoUrl = await signPhotoUrl(updatedUser.photoUrl);
         return sendSuccess(reply, 200, {
           message: "Profile updated successfully.",
           profile: {
             id: updatedUser.id,
             name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
-            photoUrl: await signPhotoUrl(updatedUser.photoUrl),
+            photoUrl: signedPhotoUrl,
+            businessName: updatedUser.businessName,
+          },
+          user: {
+            id: updatedUser.id,
+            firstName: updatedUser.firstName,
+            lastName: updatedUser.lastName,
+            photoUrl: signedPhotoUrl,
             businessName: updatedUser.businessName,
           },
         });
@@ -1141,6 +1123,64 @@ export async function authRoutes(app: FastifyInstance) {
         req.log.error(err, "Failed to update profile");
         return sendError(reply, 500, "SERVER_ERROR", "Could not update profile. Please try again.");
       }
+    }
+
+  // ── PATCH /auth/profile  (Update the authenticated user's own profile) ──
+  app.patch(
+    "/auth/profile",
+    {
+      schema: {
+        tags: ["User Auth"],
+        summary: "Partially update the authenticated user's profile (name, photo, business name)",
+        security: [{ bearerAuth: [] }],
+        body: {
+          type: "object",
+          properties: {
+            firstName: { type: "string" },
+            lastName: { type: "string" },
+            photoUrl: { type: "string", format: "uri", nullable: true },
+            businessName: { type: "string", nullable: true, description: "Provider business name (only allowed for providers)" },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const authUserId = (req as FastifyRequest & { userId: string }).userId;
+      return patchProfileHandler(req, reply, authUserId);
+    }
+  );
+
+  // ── PATCH /auth/profile/:id  (Partially Update Profile by User ID) ──────────
+  app.patch(
+    "/auth/profile/:id",
+    {
+      schema: {
+        tags: ["User Auth"],
+        summary: "Partially update profile details (name, photo, business name)",
+        security: [{ bearerAuth: [] }],
+        params: {
+          type: "object",
+          required: ["id"],
+          properties: {
+            id: { type: "string", description: "The User ID to update" },
+          },
+        },
+        body: {
+          type: "object",
+          properties: {
+            firstName: { type: "string" },
+            lastName: { type: "string" },
+            photoUrl: { type: "string", format: "uri", nullable: true },
+            businessName: { type: "string", nullable: true, description: "Provider business name (only allowed for providers)" },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const { id } = req.params as { id: string };
+      return patchProfileHandler(req, reply, id);
     }
   );
 
