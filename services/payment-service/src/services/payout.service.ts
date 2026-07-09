@@ -432,7 +432,7 @@ async function processSinglePayout(payout: any): Promise<void> {
           metadata: { bookingId: payout.bookingId, payoutId: payout.id },
         },
         {
-          idempotencyKey: `payout-transfer-${payout.id}`,
+          idempotencyKey: `payout-transfer-${payout.id}-v${payout.retryCount}`,
         },
       );
       providerPayoutId = transfer.id;
