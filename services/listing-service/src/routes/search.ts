@@ -483,6 +483,14 @@ export async function searchRoutes(app: FastifyInstance) {
   );
 
   // ── GET /listings/:id/availability ───────────────────────────────────────
+  const LOCK_TTL_MS = 300_000; // 5 minutes — must match bookings.ts
+
+  function nextDay(dateStr: string): string {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+
   app.get(
     "/listings/:id/availability",
     {
@@ -499,6 +507,8 @@ export async function searchRoutes(app: FastifyInstance) {
           type: "object",
           properties: {
             month: { type: "string", description: "Month to query availability (YYYY-MM). Defaults to current month. Returns 3 months forward." },
+            start: { type: "string", description: "Start date (YYYY-MM-DD). Overrides month-based window." },
+            end: { type: "string", description: "End date (YYYY-MM-DD). Overrides month-based window." },
           },
         },
       },
@@ -506,51 +516,95 @@ export async function searchRoutes(app: FastifyInstance) {
     async (req: FastifyRequest, reply: FastifyReply) => {
       try {
         const { id } = req.params as { id: string };
-        const { month } = req.query as { month?: string };
+        const { month, start, end } = req.query as { month?: string; start?: string; end?: string };
 
-      const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true } });
+      const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true, unitCount: true } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      const unitCount = Math.max(1, listing.unitCount ?? 1);
 
       const now = new Date();
-      let rangeStart = now;
-      if (month) {
+      let rangeStart: Date;
+      let rangeEnd: Date;
+
+      if (start && end) {
+        rangeStart = new Date(start);
+        rangeEnd = new Date(end);
+      } else if (month) {
         const [y, m] = month.split("-").map(Number);
         rangeStart = new Date(y!, m! - 1, 1);
+        rangeEnd = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + 3, 1);
+      } else {
+        rangeStart = now;
+        rangeEnd = new Date(now.getFullYear(), now.getMonth() + 3, 1);
       }
-      const rangeEnd = new Date(rangeStart.getFullYear(), rangeStart.getMonth() + 3, 1);
 
-            const [bookings, blockedDates] = await Promise.all([
-        prisma.booking.findMany({
-          where: {
-            listingId: id,
-            status: { in: ["pending_payment", "confirmed", "checked_in"] as any },
-            OR: [
-              { checkIn: { gte: rangeStart, lt: rangeEnd }, checkOut: { not: null } },
-              { pickupDatetime: { gte: rangeStart, lt: rangeEnd }, returnDatetime: { not: null } },
-            ],
-          },
-          select: { checkIn: true, checkOut: true, pickupDatetime: true, returnDatetime: true },
-        }),
+      const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
+
+      const [bookings, blockedDates] = await Promise.all([
+        prisma.$queryRawUnsafe<{ check_in: Date | null; check_out: Date | null; pickup_datetime: Date | null; return_datetime: Date | null }[]>(`
+          SELECT check_in, check_out, pickup_datetime, return_datetime
+          FROM bookings
+          WHERE listing_id = $1
+            AND (
+              status = 'confirmed'
+              OR status = 'checked_in'
+              OR (status = 'pending_payment' AND created_at > $4)
+            )
+            AND (
+              (check_in IS NOT NULL AND check_in < $3 AND check_out > $2)
+              OR (pickup_datetime IS NOT NULL AND pickup_datetime < $3 AND return_datetime > $2)
+            )
+        `, id, rangeStart, rangeEnd, pendingExpiry),
         prisma.icalBlockedDate.findMany({
           where: {
             listingId: id,
-            startDate: { gte: rangeStart },
-            endDate: { lt: rangeEnd },
+            startDate: { lt: rangeEnd },
+            endDate: { gt: rangeStart },
           },
           select: { startDate: true, endDate: true },
         }),
       ]);
 
-      const unavailableRanges = [
-        ...bookings.map((b) => ({
-          start: (b.checkIn ?? b.pickupDatetime)?.toISOString().slice(0, 10) ?? null,
-          end: (b.checkOut ?? b.returnDatetime)?.toISOString().slice(0, 10) ?? null,
-        })),
-        ...blockedDates.map((bd) => ({
-          start: bd.startDate.toISOString().slice(0, 10),
-          end: bd.endDate.toISOString().slice(0, 10),
-        })),
-      ].filter((r) => r.start && r.end);
+      // Build per-day overlap counts
+      const dayCounts = new Map<string, number>();
+
+      function addRange(start: Date, end: Date) {
+        const cur = new Date(start);
+        while (cur < end) {
+          const key = cur.toISOString().slice(0, 10);
+          dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+
+      for (const b of bookings) {
+        const s = b.check_in ?? b.pickup_datetime;
+        const e = b.check_out ?? b.return_datetime;
+        if (s && e) addRange(s, e);
+      }
+      for (const bd of blockedDates) {
+        addRange(bd.startDate, bd.endDate);
+      }
+
+      // Only mark a day unavailable when all units are taken
+      const unavailableDays: string[] = [];
+      for (const [day, count] of dayCounts) {
+        if (count >= unitCount) unavailableDays.push(day);
+      }
+
+      // Group consecutive days into ranges
+      unavailableDays.sort();
+      const unavailableRanges: { start: string; end: string }[] = [];
+      let cur: { start: string; end: string } | null = null;
+      for (const day of unavailableDays) {
+        if (!cur || day > nextDay(cur.end)) {
+          if (cur) unavailableRanges.push(cur);
+          cur = { start: day, end: day };
+        } else {
+          cur.end = day;
+        }
+      }
+      if (cur) unavailableRanges.push(cur);
 
       return sendSuccess(reply, 200, { unavailableRanges });
 
