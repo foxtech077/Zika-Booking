@@ -31,7 +31,7 @@ export type BillingResult = {
 
 function calcDays(from?: string, to?: string): number {
   if (!from || !to) return 0;
-  return Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000);
+  return Math.max(1, Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000));
 }
 
 export function calculateBilling(input: BillingInput): BillingResult {

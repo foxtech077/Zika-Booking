@@ -598,9 +598,9 @@ export async function bookingRoutes(app: FastifyInstance) {
         // STEP 2: promotion logic (HERE, NOT in billing service)
         let units = 1;
         if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
-          units = Math.ceil((new Date(body.returnDatetime).getTime() - new Date(body.pickupDatetime).getTime()) / 86_400_000);
+          units = Math.max(1, Math.ceil((new Date(body.returnDatetime).getTime() - new Date(body.pickupDatetime).getTime()) / 86_400_000));
         } else if (body.checkIn && body.checkOut) {
-          units = Math.ceil((new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / 86_400_000);
+          units = Math.max(1, Math.ceil((new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / 86_400_000));
         }
         const baseAmount = baseRate * units;
 
