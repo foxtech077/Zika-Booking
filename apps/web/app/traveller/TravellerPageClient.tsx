@@ -1142,10 +1142,17 @@ export default function TravellerDashboard() {
       });
       if (res.data.success) {
         const d = res.data.data ?? {};
-        const blocked: string[] = d.blockedDates ?? [];
-        const held: any[] = d.bookings ?? d.locks ?? [];
-        const available = blocked.length === 0 && held.length === 0;
-        setAvailabilityStatus(available ? "available" : "unavailable");
+        const unavailableRanges: { start: string; end: string }[] = d.unavailableRanges ?? [];
+        const userStart = category === "car" ? detailPickupDate : detailCheckIn;
+        const userEnd = category === "car" ? detailReturnDate : detailCheckOut;
+        if (!userStart || !userEnd) {
+          setAvailabilityStatus(null);
+          return;
+        }
+        const hasOverlap = unavailableRanges.some(
+          (r) => userStart < r.end && userEnd > r.start
+        );
+        setAvailabilityStatus(hasOverlap ? "unavailable" : "available");
       } else {
         setAvailabilityStatus("unavailable");
       }
@@ -1163,6 +1170,7 @@ export default function TravellerDashboard() {
   // GET /listings/:id/availability is PUBLIC — no auth guard needed.
   useEffect(() => {
     if (!detailListing || lockToken) return;
+    setBookingError("");
     checkAvailability(detailListing.id, detailListing.category);
   }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
 
