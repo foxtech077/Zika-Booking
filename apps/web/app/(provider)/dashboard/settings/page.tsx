@@ -275,7 +275,7 @@ export default function SettingsPage() {
 
   const profileMutation = useMutation({
     mutationFn: () =>
-      api.patch("/auth/profile", {
+      api.patch(`/auth/profile/${user.id}`, {
         firstName: profileForm.firstName,
         lastName: profileForm.lastName,
         businessName: profileForm.businessName,
