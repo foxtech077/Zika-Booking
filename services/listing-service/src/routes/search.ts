@@ -485,6 +485,12 @@ export async function searchRoutes(app: FastifyInstance) {
   // ── GET /listings/:id/availability ───────────────────────────────────────
   const LOCK_TTL_MS = 300_000; // 5 minutes — must match bookings.ts
 
+  function nextDay(dateStr: string): string {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+
   app.get(
     "/listings/:id/availability",
     {
@@ -512,8 +518,9 @@ export async function searchRoutes(app: FastifyInstance) {
         const { id } = req.params as { id: string };
         const { month, start, end } = req.query as { month?: string; start?: string; end?: string };
 
-      const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true } });
+      const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true, unitCount: true } });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
+      const unitCount = Math.max(1, listing.unitCount ?? 1);
 
       const now = new Date();
       let rangeStart: Date;
@@ -558,16 +565,46 @@ export async function searchRoutes(app: FastifyInstance) {
         }),
       ]);
 
-      const unavailableRanges = [
-        ...bookings.map((b) => ({
-          start: (b.check_in ?? b.pickup_datetime)?.toISOString().slice(0, 10) ?? null,
-          end: (b.check_out ?? b.return_datetime)?.toISOString().slice(0, 10) ?? null,
-        })),
-        ...blockedDates.map((bd) => ({
-          start: bd.startDate.toISOString().slice(0, 10),
-          end: bd.endDate.toISOString().slice(0, 10),
-        })),
-      ].filter((r) => r.start && r.end);
+      // Build per-day overlap counts
+      const dayCounts = new Map<string, number>();
+
+      function addRange(start: Date, end: Date) {
+        const cur = new Date(start);
+        while (cur < end) {
+          const key = cur.toISOString().slice(0, 10);
+          dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
+          cur.setDate(cur.getDate() + 1);
+        }
+      }
+
+      for (const b of bookings) {
+        const s = b.check_in ?? b.pickup_datetime;
+        const e = b.check_out ?? b.return_datetime;
+        if (s && e) addRange(s, e);
+      }
+      for (const bd of blockedDates) {
+        addRange(bd.startDate, bd.endDate);
+      }
+
+      // Only mark a day unavailable when all units are taken
+      const unavailableDays: string[] = [];
+      for (const [day, count] of dayCounts) {
+        if (count >= unitCount) unavailableDays.push(day);
+      }
+
+      // Group consecutive days into ranges
+      unavailableDays.sort();
+      const unavailableRanges: { start: string; end: string }[] = [];
+      let cur: { start: string; end: string } | null = null;
+      for (const day of unavailableDays) {
+        if (!cur || day > nextDay(cur.end)) {
+          if (cur) unavailableRanges.push(cur);
+          cur = { start: day, end: day };
+        } else {
+          cur.end = day;
+        }
+      }
+      if (cur) unavailableRanges.push(cur);
 
       return sendSuccess(reply, 200, { unavailableRanges });
 
