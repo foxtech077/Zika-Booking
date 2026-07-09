@@ -1961,8 +1961,8 @@ export default function TravellerDashboard() {
                             {isCar ? (
                               <div className="grid grid-cols-2 divide-x divide-slate-300">
                                 {([
-                                  { label: "Pickup", id: "dp-pickup", val: detailPickupDate, set: setDetailPickupDate, minVal: getTodayString() },
-                                  { label: "Return", id: "dp-return", val: detailReturnDate, set: setDetailReturnDate, minVal: detailPickupDate || getTodayString() },
+                                  { label: "Pickup", id: "dp-pickup", val: detailPickupDate, set: (v: string) => { setDetailPickupDate(v); if (detailReturnDate && v > detailReturnDate) setDetailReturnDate(v); }, minVal: getTodayString() },
+                                  { label: "Return", id: "dp-return", val: detailReturnDate, set: (v: string) => { setDetailReturnDate(v); if (detailPickupDate && v < detailPickupDate) setDetailPickupDate(v); }, minVal: detailPickupDate || getTodayString() },
                                 ] as const).map(({ label, id, val, set, minVal }) => {
                                   const fmt = val ? new Date(val + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
                                   return (
@@ -1986,8 +1986,8 @@ export default function TravellerDashboard() {
                               <>
                                 <div className="grid grid-cols-2 divide-x divide-slate-300">
                                   {([
-                                    { label: "Check-in", id: "dp-checkin", val: detailCheckIn, set: setDetailCheckIn, minVal: getTodayString() },
-                                    { label: "Check-out", id: "dp-checkout", val: detailCheckOut, set: setDetailCheckOut, minVal: detailCheckIn || getTodayString() },
+                                    { label: "Check-in", id: "dp-checkin", val: detailCheckIn, set: (v: string) => { setDetailCheckIn(v); if (detailCheckOut && v > detailCheckOut) setDetailCheckOut(v); }, minVal: getTodayString() },
+                                    { label: "Check-out", id: "dp-checkout", val: detailCheckOut, set: (v: string) => { setDetailCheckOut(v); if (detailCheckIn && v < detailCheckIn) setDetailCheckIn(v); }, minVal: detailCheckIn || getTodayString() },
                                   ] as const).map(({ label, id, val, set, minVal }) => {
                                     const fmt = val ? new Date(val + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
                                     return (
@@ -2035,12 +2035,12 @@ export default function TravellerDashboard() {
                           )}
                           {availabilityStatus === "unavailable" && (
                             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-700">
-                              ⛔ Selected dates are no longer available. Please choose different dates.
+                               Selected dates are no longer available. Please choose different dates.
                             </div>
                           )}
                           {availabilityStatus === "available" && (
                             <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs font-semibold text-emerald-700">
-                              ✓ Dates are available — reserve now!
+                               Dates are available — reserve now!
                             </div>
                           )}
 
