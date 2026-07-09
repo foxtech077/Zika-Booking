@@ -40,6 +40,7 @@ interface DashboardSummary {
   currency: string;
   total: StatusBucket;
   paid: StatusBucket;
+  pending: StatusBucket;
   upcoming: StatusBucket;
   processing: StatusBucket;
   failed: StatusBucket;
@@ -61,10 +62,14 @@ function payoutActivityDate(payout: Payout): string {
   return payout.processedAt ?? payout.scheduledAt ?? payout.createdAt;
 }
 
-function bucketFor(status: PayoutStatus): keyof Omit<DashboardSummary, "currency" | "monthlyTrend" | "recentPayouts"> {
+function bucketFor(
+  status: PayoutStatus
+): keyof Omit<DashboardSummary, "currency" | "monthlyTrend" | "recentPayouts"> | undefined {
   switch (status) {
     case "paid":
       return "paid";
+    case "pending":
+      return "pending";
     case "scheduled":
       return "upcoming";
     case "processing":
@@ -73,6 +78,8 @@ function bucketFor(status: PayoutStatus): keyof Omit<DashboardSummary, "currency
       return "failed";
     case "cancelled":
       return "cancelled";
+    default:
+      return undefined;
   }
 }
 
@@ -84,6 +91,7 @@ function buildDashboardSummary(payouts: Payout[]): DashboardSummary {
     currency,
     total: emptyBucket(),
     paid: emptyBucket(),
+    pending: emptyBucket(),
     upcoming: emptyBucket(),
     processing: emptyBucket(),
     failed: emptyBucket(),
@@ -100,8 +108,10 @@ function buildDashboardSummary(payouts: Payout[]): DashboardSummary {
     summary.total.count += 1;
 
     const key = bucketFor(payout.status);
-    summary[key].amount += amount;
-    summary[key].count += 1;
+    if (key) {
+      summary[key].amount += amount;
+      summary[key].count += 1;
+    }
 
     const month = new Date(payoutActivityDate(payout));
     if (!Number.isNaN(month.getTime())) {
@@ -276,6 +286,14 @@ export default function PaymentDashboardPage() {
               count={summary.paid.count}
               icon={<CheckCircle2 />}
               tone="bg-green-700 text-white"
+              loading={false}
+            />
+            <SummaryCard
+              label="Pending Payouts"
+              value={formatCurrency(summary.pending.amount, currency)}
+              count={summary.pending.count}
+              icon={<Clock3 />}
+              tone="bg-amber-500 text-white"
               loading={false}
             />
             <SummaryCard
