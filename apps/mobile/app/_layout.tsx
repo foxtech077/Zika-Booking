@@ -1,8 +1,8 @@
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 import { useEffect, useRef } from "react";
-import { AppState, type AppStateStatus, Platform } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { AppState, type AppStateStatus, Platform, View } from "react-native";
+import { SafeAreaView, SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 
@@ -131,13 +131,24 @@ async function verifySession(): Promise<"ok" | "revoked" | "network_error"> {
 export default function RootLayout() {
   const hydrate = useAuthStore((s) => s.hydrate);
   const isHydrated = useAuthStore((s) => s.isHydrated);
-  useLocationBootstrap();
-  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
+
+  if (!isHydrated) return null;
+
+  return (
+    <SafeAreaProvider>
+      <RootLayoutContent />
+    </SafeAreaProvider>
+  );
+}
+
+function RootLayoutContent() {
+  useLocationBootstrap();
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     async function runCheck() {
@@ -192,7 +203,7 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!isHydrated) return null;
+  const insets = useSafeAreaInsets();
 
   return (
     <StripeProvider
@@ -200,13 +211,28 @@ export default function RootLayout() {
       merchantIdentifier="merchant.com.kainook.app"
     >
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" />
-        <Stack
-          screenOptions={({ route }) => ({
-            headerShown: false,
-            ...(screenOptionsByName[route.name] ?? {}),
-          })}
-        />
+        <View style={{ flex: 1, backgroundColor: "#F9F8F6" }}>
+          <StatusBar style="light" backgroundColor="#024622" translucent={false} />
+          {Platform.OS === "ios" && (
+            <View
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                height: insets.top,
+                backgroundColor: "#024622",
+                zIndex: 9999,
+              }}
+            />
+          )}
+          <Stack
+            screenOptions={({ route }) => ({
+              headerShown: false,
+              ...(screenOptionsByName[route.name] ?? {}),
+            })}
+          />
+        </View>
       </QueryClientProvider>
     </StripeProvider>
   );
