@@ -10,16 +10,28 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Image,
+  ImageBackground,
+  Dimensions,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
+import { Ionicons } from "@expo/vector-icons";
 import { api } from "../lib/api";
 import { useAuthStore } from "../store/auth";
 import { handleRoleAndStatusRedirect } from "./(auth)/login";
-import { K } from "../constants/theme";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 import { useKeyboard } from "../hooks/useKeyboard";
+
+const { height: SCREEN_H } = Dimensions.get("window");
+const HERO_H = 280;
+
+const GREEN = "#024622";
+const ACCENT = "#1D8D2B";
+const TEXT = "#111827";
+const MUTED = "#6B7280";
+const BORDER = "#E5E7EB";
+const INPUT_BG = "#F3F4F6";
+const ERR = "#EF4444";
 
 function openDeepLink(token: string) {
   if (typeof window !== "undefined") {
@@ -39,35 +51,6 @@ export default function ResetPasswordScreen() {
     }
   }, [token]);
 
-  if (Platform.OS === "web") {
-    return (
-      <View style={styles.container}>
-        <View style={styles.center}>
-          {token ? (
-            <>
-              <ActivityIndicator size="large" color="#16a34a" style={{ marginBottom: 24 }} />
-              <Text style={styles.title}>Opening Kainook…</Text>
-              <Text style={styles.sub}>
-                The app should open automatically.{"\n"}
-                If it doesn't, tap the button below.
-              </Text>
-              <TouchableOpacity style={styles.btn} onPress={() => openDeepLink(token)}>
-                <Text style={styles.btnText}>Open in App</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={styles.emoji}>❌</Text>
-              <Text style={styles.title}>Invalid link</Text>
-              <Text style={styles.sub}>
-                This password reset link is invalid. Please request a new one.
-              </Text>
-            </>
-          )}
-        </View>
-      </View>
-    );
-  }
   const [form, setForm] = useState({ password: "", confirmPassword: "" });
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -137,6 +120,36 @@ export default function ResetPasswordScreen() {
     mutation.mutate();
   }
 
+  if (Platform.OS === "web") {
+    return (
+      <View style={styles.container}>
+        <View style={styles.center}>
+          {token ? (
+            <>
+              <ActivityIndicator size="large" color="#16a34a" style={{ marginBottom: 24 }} />
+              <Text style={styles.title}>Opening Kainook…</Text>
+              <Text style={styles.sub}>
+                The app should open automatically.{"\n"}
+                If it doesn't, tap the button below.
+              </Text>
+              <TouchableOpacity style={styles.btn} onPress={() => openDeepLink(token)}>
+                <Text style={styles.btnTxt}>Open in App</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.emoji}>❌</Text>
+              <Text style={styles.title}>Invalid link</Text>
+              <Text style={styles.sub}>
+                This password reset link is invalid. Please request a new one.
+              </Text>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  }
+
   if (!token) {
     return (
       <View style={styles.container}>
@@ -151,7 +164,7 @@ export default function ResetPasswordScreen() {
             style={styles.btn}
             onPress={() => router.replace("/(auth)/login")}
           >
-            <Text style={styles.btnText}>Back to Sign In</Text>
+            <Text style={styles.btnTxt}>Back to Sign In</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -160,7 +173,7 @@ export default function ResetPasswordScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.root}
       behavior={
         Platform.OS === "ios"
           ? "padding"
@@ -170,99 +183,120 @@ export default function ResetPasswordScreen() {
       }
     >
       <ScrollView
+        style={{
+          flex: 1,
+          backgroundColor: "#fff",
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+        }}
         contentContainerStyle={styles.scroll}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Brand mark */}
-        <View style={styles.logoContainer}>
-          <Image
-            source={require("../assets/logo.png")}
-            style={styles.logoImage}
-            resizeMode="contain"
-          />
-        </View>
+        {/* ── Hero section ── */}
+        <ImageBackground
+          source={require("../assets/splash.png")}
+          style={[styles.hero, { height: HERO_H }]}
+          resizeMode="cover"
+        >
+          <View style={styles.heroOverlay} />
+        </ImageBackground>
 
-        <Text style={styles.headline}>Set New{"\n"}Password</Text>
-        <Text style={styles.subheadline}>
-          Choose a strong password for your account.
-        </Text>
+        <View style={{ paddingHorizontal: 24 }}>
+          <Text style={styles.cardTitle}>Set New Password</Text>
+          <Text style={styles.subheadline}>
+            Choose a strong password for your account.
+          </Text>
 
-        <View style={styles.card}>
           {/* New password */}
-          <Text style={styles.label}>New Password</Text>
-          <View style={styles.passRow}>
-            <TextInput
-              style={[
-                styles.input,
-                styles.inputFlex,
-                errors.password ? styles.inputError : null,
-              ]}
-              value={form.password}
-              onChangeText={(v) => {
-                setForm((p) => ({ ...p, password: v }));
-                setErrors({});
-              }}
-              placeholder="Min. 8 characters"
-              placeholderTextColor={K.colors.textLightDim}
-              secureTextEntry={!showPass}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              style={styles.eyeBtn}
-              onPress={() => setShowPass((v) => !v)}
-            >
-              <Text style={styles.eyeIcon}>{showPass ? "🙈" : "👁️"}</Text>
-            </TouchableOpacity>
+          <View style={styles.field}>
+            <Text style={styles.label}>New Password</Text>
+            <View style={[styles.inputRow, errors.password ? styles.inputError : null]}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color={MUTED}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                value={form.password}
+                onChangeText={(v) => {
+                  setForm((p) => ({ ...p, password: v }));
+                  setErrors({});
+                }}
+                placeholder="Min. 8 characters"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!showPass}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                onPress={() => setShowPass((p) => !p)}
+                style={styles.eye}
+              >
+                <Ionicons
+                  name={showPass ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color={MUTED}
+                />
+              </TouchableOpacity>
+            </View>
+            {errors.password ? (
+              <Text style={styles.fieldError}>{errors.password}</Text>
+            ) : null}
           </View>
-          {errors.password ? (
-            <Text style={styles.fieldError}>{errors.password}</Text>
-          ) : null}
 
           {/* Confirm password */}
-          <Text style={[styles.label, { marginTop: 16 }]}>Confirm Password</Text>
-          <View style={styles.passRow}>
-            <TextInput
-              style={[
-                styles.input,
-                styles.inputFlex,
-                errors.confirmPassword ? styles.inputError : null,
-              ]}
-              value={form.confirmPassword}
-              onChangeText={(v) => {
-                setForm((p) => ({ ...p, confirmPassword: v }));
-                setErrors({});
-              }}
-              placeholder="Repeat password"
-              placeholderTextColor={K.colors.textLightDim}
-              secureTextEntry={!showConfirm}
-              autoCapitalize="none"
-              returnKeyType="done"
-              onSubmitEditing={handleSubmit}
-            />
-            <TouchableOpacity
-              style={styles.eyeBtn}
-              onPress={() => setShowConfirm((v) => !v)}
-            >
-              <Text style={styles.eyeIcon}>{showConfirm ? "🙈" : "👁️"}</Text>
-            </TouchableOpacity>
+          <View style={styles.field}>
+            <Text style={styles.label}>Confirm Password</Text>
+            <View style={[styles.inputRow, errors.confirmPassword ? styles.inputError : null]}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color={MUTED}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                value={form.confirmPassword}
+                onChangeText={(v) => {
+                  setForm((p) => ({ ...p, confirmPassword: v }));
+                  setErrors({});
+                }}
+                placeholder="Repeat password"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!showConfirm}
+                autoCapitalize="none"
+                returnKeyType="done"
+                onSubmitEditing={handleSubmit}
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirm((p) => !p)}
+                style={styles.eye}
+              >
+                <Ionicons
+                  name={showConfirm ? "eye-off-outline" : "eye-outline"}
+                  size={18}
+                  color={MUTED}
+                />
+              </TouchableOpacity>
+            </View>
+            {errors.confirmPassword ? (
+              <Text style={styles.fieldError}>{errors.confirmPassword}</Text>
+            ) : null}
           </View>
-          {errors.confirmPassword ? (
-            <Text style={styles.fieldError}>{errors.confirmPassword}</Text>
-          ) : null}
 
+          {/* General Error */}
           {errors.general ? (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorText}>{errors.general}</Text>
+            <View style={styles.errBox}>
+              <Ionicons name="alert-circle-outline" size={15} color={ERR} />
+              <Text style={styles.errTxt}>{errors.general}</Text>
             </View>
           ) : null}
 
+          {/* Submit */}
           <TouchableOpacity
-            style={[
-              styles.primaryBtn,
-              mutation.isPending && styles.btnDisabled,
-              { marginTop: 24 },
-            ]}
+            style={[styles.btn, mutation.isPending && styles.btnDim]}
             onPress={handleSubmit}
             disabled={mutation.isPending}
             activeOpacity={0.85}
@@ -270,7 +304,7 @@ export default function ResetPasswordScreen() {
             {mutation.isPending ? (
               <ActivityIndicator color="#fff" size="small" />
             ) : (
-              <Text style={styles.primaryBtnText}>Set New Password</Text>
+              <Text style={styles.btnTxt}>Set New Password</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -280,8 +314,8 @@ export default function ResetPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: K.colors.darkGreen },
-  scroll: { paddingHorizontal: 24, paddingTop: 60, paddingBottom: 40 },
+  root: { flex: 1, backgroundColor: GREEN },
+  container: { flex: 1, backgroundColor: GREEN },
 
   center: {
     flex: 1,
@@ -292,120 +326,93 @@ const styles = StyleSheet.create({
   },
   emoji: { fontSize: 56, marginBottom: 20 },
   title: {
-    fontSize: K.font.xxl,
+    fontSize: 24,
     fontWeight: "800",
     color: "#fff",
     textAlign: "center",
     marginBottom: 12,
   },
   sub: {
-    fontSize: K.font.base,
-    color: K.colors.textLightMuted,
+    fontSize: 15,
+    color: "rgba(255,255,255,0.72)",
     textAlign: "center",
     lineHeight: 24,
     marginBottom: 32,
   },
   btn: {
-    backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-  },
-  btnText: { color: "#fff", fontSize: K.font.base, fontWeight: "700" },
-
-  logoContainer: {
-    width: 110,
-    height: 110,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: GREEN,
+    borderRadius: 14,
+    height: 52,
     alignItems: "center",
     justifyContent: "center",
-    overflow: "hidden",
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
   },
-  logoImage: { width: 100, height: 100 },
+  btnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 
-  headline: {
-    fontSize: K.font.xxxl,
+  hero: {
+    width: "100%",
+    height: 280,
+    justifyContent: "flex-end",
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+
+  scroll: {
+    paddingTop: 28,
+    paddingBottom: 36,
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+  cardTitle: {
+    fontSize: 20,
     fontWeight: "800",
-    color: "#fff",
-    lineHeight: 38,
-    letterSpacing: -0.5,
+    color: TEXT,
+    marginBottom: 12,
+    letterSpacing: -0.3,
   },
   subheadline: {
-    fontSize: K.font.base,
-    color: K.colors.textLightMuted,
-    marginTop: 10,
-    marginBottom: 28,
-    lineHeight: 22,
+    fontSize: 14,
+    color: MUTED,
+    marginBottom: 24,
+    lineHeight: 20,
   },
 
-  card: {
-    backgroundColor: K.colors.glassBg,
-    borderRadius: K.radius.xxl,
-    borderWidth: 1,
-    borderColor: K.colors.glassBorder,
-    padding: 24,
-  },
-  label: {
-    fontSize: K.font.sm,
-    fontWeight: "600",
-    color: K.colors.textLightMuted,
-    marginBottom: 8,
-    letterSpacing: 0.3,
-  },
-  passRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  input: {
-    backgroundColor: K.colors.glassInput,
-    borderWidth: 1,
-    borderColor: K.colors.glassInputBorder,
-    borderRadius: K.radius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: K.font.base,
-    color: K.colors.textLight,
-  },
-  inputFlex: { flex: 1 },
-  inputError: { borderColor: K.colors.error },
-  eyeBtn: {
-    backgroundColor: K.colors.glassInput,
-    borderWidth: 1,
-    borderColor: K.colors.glassInputBorder,
-    borderRadius: K.radius.md,
+  field: { marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: "600", color: TEXT, marginBottom: 8 },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: INPUT_BG,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: BORDER,
     paddingHorizontal: 14,
-    paddingVertical: 14,
   },
-  eyeIcon: { fontSize: 16 },
-  fieldError: { fontSize: 12, color: "#FCA5A5", marginTop: 4 },
+  inputIcon: { marginRight: 10 },
+  input: { flex: 1, paddingVertical: 13, fontSize: 15, color: TEXT },
+  eye: { paddingVertical: 13, paddingLeft: 8 },
+  inputError: { borderColor: ERR },
+  fieldError: { fontSize: 12, color: ERR, marginTop: 4 },
 
-  errorBox: {
-    backgroundColor: "rgba(239,68,68,0.15)",
-    borderRadius: K.radius.md,
-    borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.30)",
+  btnDim: { opacity: 0.6 },
+  btnTxt: { color: "#fff", fontSize: 16, fontWeight: "700" },
+
+  errBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#FEF2F2",
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#FECACA",
     paddingHorizontal: 14,
     paddingVertical: 12,
-    marginTop: 16,
+    marginBottom: 16,
   },
-  errorText: { color: "#FCA5A5", fontSize: K.font.sm, lineHeight: 20 },
-
-  primaryBtn: {
-    backgroundColor: K.colors.accent,
-    borderRadius: K.radius.md,
-    height: 54,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  btnDisabled: { opacity: 0.45 },
-  primaryBtnText: {
-    color: "#fff",
-    fontSize: K.font.lg,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-  },
+  errTxt: { flex: 1, color: "#DC2626", fontSize: 13, lineHeight: 18 },
 });

@@ -24,7 +24,7 @@ import type { PublicUser, ApiResponse, AuthResponse } from "@zika/types";
 import { useKeyboard } from "@/hooks/useKeyboard";
 
 const { height: SCREEN_H } = Dimensions.get("window");
-const HERO_H = Math.round(SCREEN_H * 0.44);
+const HERO_H = Math.round(SCREEN_H * 0.43);
 
 const GREEN = "#024622";
 const ACCENT = "#1D8D2B";
@@ -71,13 +71,15 @@ try {
   _GoogleSignin =
     require("@react-native-google-signin/google-signin").GoogleSignin;
   // Configure once at module load — client IDs are public, not secrets
-  _GoogleSignin.configure({
-    webClientId:
-      "397191986681-clt35826mp608u6ptq9udm8m7c7dk80u.apps.googleusercontent.com",
-    iosClientId:
-      "397191986681-40j0eqotdon89ogv4cgvfsfpb48ehc7h.apps.googleusercontent.com",
-    offlineAccess: false,
-  });
+  if (_GoogleSignin) {
+    _GoogleSignin.configure({
+      webClientId:
+        "397191986681-clt35826mp608u6ptq9udm8m7c7dk80u.apps.googleusercontent.com",
+      iosClientId:
+        "397191986681-40j0eqotdon89ogv4cgvfsfpb48ehc7h.apps.googleusercontent.com",
+      offlineAccess: false,
+    });
+  }
 } catch {
   /* Expo Go or module not available */
 }
@@ -223,7 +225,6 @@ export default function LoginScreen() {
         style={{
           flex: 1,
           backgroundColor: "#fff",
-          marginTop: -24,
           borderTopLeftRadius: 28,
           borderTopRightRadius: 28,
         }}
@@ -235,13 +236,14 @@ export default function LoginScreen() {
         <ImageBackground
           source={require("../../assets/splash.png")}
           style={[ss.hero, { height: HERO_H }]}
-          resizeMode="cover"
+          resizeMode="contain"
         >
           <View style={ss.heroOverlay} />
         </ImageBackground>
         <View
           style={{
             paddingHorizontal: 24,
+            marginTop: -30,
           }}
         >
           <Text style={ss.cardTitle}>Sign In</Text>
@@ -413,43 +415,17 @@ const ss = StyleSheet.create({
 
   hero: {
     width: "100%",
-    height: 280,
     justifyContent: "flex-end",
     borderBottomLeftRadius: 32,
     borderBottomRightRadius: 32,
-    marginBottom: 16,
     overflow: "hidden",
   },
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(1,26,12,0.62)",
   },
-  heroContent: { paddingHorizontal: 28, paddingBottom: 44 },
-  logoWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: "#fff",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  logo: { width: 50, height: 50 },
-  heroTitle: {
-    fontSize: 32,
-    fontWeight: "800",
-    color: "#fff",
-    letterSpacing: -0.5,
-  },
-  heroSub: { fontSize: 15, color: "rgba(255,255,255,0.72)", marginTop: 6 },
 
   scroll: {
-    paddingTop: 28,
+    paddingTop: 24,
     paddingBottom: 36,
     backgroundColor: "#fff",
     borderTopLeftRadius: 28,
@@ -459,7 +435,7 @@ const ss = StyleSheet.create({
     fontSize: 20,
     fontWeight: "800",
     color: TEXT,
-    marginBottom: 24,
+    marginBottom: 14,
     letterSpacing: -0.3,
   },
 

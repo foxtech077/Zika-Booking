@@ -196,33 +196,33 @@ export default function RegisterScreen() {
             : undefined
       }
     >
-      {/* ── Hero ── */}
-      <ImageBackground
-        source={require("../../assets/splash.png")}
-        style={[ss.hero, { height: Math.round(SCREEN_H * 0.36) }]}
-        resizeMode="cover"
-      >
-        <View style={[ss.heroOverlay, { backgroundColor: `${heroBg}CC` }]} />
-        {/* Back button */}
-        <TouchableOpacity style={ss.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color="#fff" />
-        </TouchableOpacity>
-        <View style={ss.heroContent}>
-          <View style={ss.logoWrap}>
-            <Image source={require("../../assets/logo.png")} style={ss.logo} resizeMode="contain" />
-          </View>
-          <Text style={ss.heroTitle}>Create Account</Text>
-          <Text style={ss.heroSub}>{heroTagline}</Text>
-        </View>
-      </ImageBackground>
+      {/* Back button (fixed / floating) */}
+      <TouchableOpacity style={ss.backBtn} onPress={() => router.back()}>
+        <Ionicons name="chevron-back" size={24} color="#fff" />
+      </TouchableOpacity>
 
-      {/* ── Scrollable form ── */}
       <ScrollView
-        style={[ss.formScroll, { marginTop: -24 }]}
+        style={{
+          flex: 1,
+          backgroundColor: "#fff",
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
+        }}
         contentContainerStyle={ss.formContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
+        {/* ── Hero section ── */}
+        <ImageBackground
+          source={require("../../assets/splash.png")}
+          style={[ss.hero, { height: Math.round(SCREEN_H * 0.43) }]}
+          resizeMode="contain"
+        >
+          <View style={ss.heroOverlay} />
+        </ImageBackground>
+
+        <View style={{ paddingHorizontal: 24, marginTop: -30 }}>
+          <Text style={ss.cardTitle}>Create Account</Text>
         {/* ── Account type tabs ── */}
         <View style={ss.tabRow}>
           <TouchableOpacity
@@ -260,34 +260,34 @@ export default function RegisterScreen() {
           {isProvider ? "Provider Details" : "Personal Details"}
         </Text>
 
-        {/* ── Name row ── */}
-        <View style={ss.nameRow}>
-          <View style={[ss.field, { flex: 1 }]}>
-            <Text style={ss.label}>First Name</Text>
-            <View style={[ss.inputBox, errors.firstName ? ss.inputErr : null]}>
-              <TextInput
-                style={ss.input}
-                value={form.firstName}
-                onChangeText={(v) => { set("firstName")(v); clearErr("firstName"); }}
-                placeholder="Ada"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-            {errors.firstName ? <Text style={ss.fieldErr}>{errors.firstName}</Text> : null}
+        {/* ── First Name ── */}
+        <View style={ss.field}>
+          <Text style={ss.label}>First Name</Text>
+          <View style={[ss.inputBox, errors.firstName ? ss.inputErr : null]}>
+            <TextInput
+              style={ss.input}
+              value={form.firstName}
+              onChangeText={(v) => { set("firstName")(v); clearErr("firstName"); }}
+              placeholder="Ada"
+              placeholderTextColor="#9CA3AF"
+            />
           </View>
-          <View style={[ss.field, { flex: 1 }]}>
-            <Text style={ss.label}>Last Name</Text>
-            <View style={[ss.inputBox, errors.lastName ? ss.inputErr : null]}>
-              <TextInput
-                style={ss.input}
-                value={form.lastName}
-                onChangeText={(v) => { set("lastName")(v); clearErr("lastName"); }}
-                placeholder="Okafor"
-                placeholderTextColor="#9CA3AF"
-              />
-            </View>
-            {errors.lastName ? <Text style={ss.fieldErr}>{errors.lastName}</Text> : null}
+          {errors.firstName ? <Text style={ss.fieldErr}>{errors.firstName}</Text> : null}
+        </View>
+
+        {/* ── Last Name ── */}
+        <View style={ss.field}>
+          <Text style={ss.label}>Last Name</Text>
+          <View style={[ss.inputBox, errors.lastName ? ss.inputErr : null]}>
+            <TextInput
+              style={ss.input}
+              value={form.lastName}
+              onChangeText={(v) => { set("lastName")(v); clearErr("lastName"); }}
+              placeholder="Okafor"
+              placeholderTextColor="#9CA3AF"
+            />
           </View>
+          {errors.lastName ? <Text style={ss.fieldErr}>{errors.lastName}</Text> : null}
         </View>
 
         {/* ── Email ── */}
@@ -460,6 +460,7 @@ export default function RegisterScreen() {
             </TouchableOpacity>
           </Link>
         </View>
+        </View>
       </ScrollView>
 
       {/* ── Country picker modal ── */}
@@ -554,29 +555,40 @@ const ss = StyleSheet.create({
   root: { flex: 1, backgroundColor: GREEN },
 
   // Hero
-  hero:        { width: "100%", justifyContent: "flex-end" },
-  heroOverlay: { ...StyleSheet.absoluteFillObject },
+  hero: {
+    width: "100%",
+    justifyContent: "flex-end",
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  heroOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   backBtn: {
-    position: "absolute", top: 52, left: 20,
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center", justifyContent: "center",
+    position: "absolute",
+    top: 48,
+    left: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 10,
   },
-  heroContent: { paddingHorizontal: 24, paddingBottom: 36 },
-  logoWrap: {
-    width: 52, height: 52, borderRadius: 14,
-    backgroundColor: "#fff",
-    alignItems: "center", justifyContent: "center",
-    marginBottom: 14,
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 5,
-  },
-  logo:      { width: 40, height: 40 },
-  heroTitle: { fontSize: 28, fontWeight: "800", color: "#fff", letterSpacing: -0.4 },
-  heroSub:   { fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 5 },
 
   // Form
   formScroll:   { flex: 1, backgroundColor: "#fff", borderTopLeftRadius: 28, borderTopRightRadius: 28 },
-  formContent:  { paddingHorizontal: 22, paddingTop: 24, paddingBottom: 40 },
+  formContent:  { paddingTop: 24, paddingBottom: 40 },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: TEXT,
+    marginBottom: 14,
+    letterSpacing: -0.3,
+  },
 
   // Tab row
   tabRow: {
