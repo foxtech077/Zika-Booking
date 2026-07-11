@@ -215,6 +215,7 @@ function RootLayoutContent() {
           <StatusBar style="light" backgroundColor="#024622" translucent={false} />
           {Platform.OS === "ios" && (
             <View
+              pointerEvents="none"
               style={{
                 position: "absolute",
                 top: 0,

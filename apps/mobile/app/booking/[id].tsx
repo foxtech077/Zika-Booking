@@ -10,7 +10,7 @@ import {
   StyleSheet,
   Share,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
@@ -304,6 +304,7 @@ export default function BookingDetailScreen() {
   const { id, fromPayment } = useLocalSearchParams<{ id: string; fromPayment?: string }>();
   const router = useRouter();
   const qc = useQueryClient();
+  const insets = useSafeAreaInsets();
   const [imgError, setImgError] = useState(false);
   // Stable flag: true only for the lifetime of this screen instance when arriving from payment
   const [justPaid] = useState(() => fromPayment === "true");
@@ -448,7 +449,7 @@ export default function BookingDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={styles.container} edges={["top","bottom"]}>
       <ScrollView contentContainerStyle={styles.scroll} stickyHeaderIndices={[0]}>
         {/* Cover photo + back button */}
         <View style={styles.photoContainer}>
@@ -462,11 +463,11 @@ export default function BookingDetailScreen() {
           ) : (
             <View style={[styles.coverPhoto, styles.coverPhotoPlaceholder]} />
           )}
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={[styles.backBtn, { top: insets.top > 0 ? insets.top + 12 : 12 }]} onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.shareBtn}
+            style={[styles.shareBtn, { top: insets.top > 0 ? insets.top + 12 : 12 }]}
             onPress={() => void shareVoucher(booking)}
           >
             <Ionicons name="share-outline" size={20} color="#fff" />

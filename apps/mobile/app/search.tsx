@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useMemo, memo } from "react";
+import { useState, useCallback, useEffect, useMemo, memo } from "react";
 import {
   View,
   Text,
@@ -1303,7 +1303,7 @@ export default function SearchScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       {/* ── Search header refiner bar ── */}
       <View style={styles.searchHeader}>
         <TouchableOpacity

@@ -75,7 +75,7 @@ export default function EditProfileScreen() {
   }
 
   return (
-    <SafeAreaView style={s.safeArea} edges={["bottom"]}>
+    <SafeAreaView style={s.safeArea} edges={["top", "bottom"]}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={
