@@ -8,7 +8,8 @@ import { StatusBar } from "expo-status-bar";
 
 // Configure default edges globally for react-native-safe-area-context
 if (SafeAreaView.defaultProps) {
-  SafeAreaView.defaultProps.edges = Platform.OS === "android" ? ["top", "bottom"] : ["top"];
+  SafeAreaView.defaultProps.edges =
+    Platform.OS === "android" ? ["top", "bottom"] : ["top"];
 } else {
   SafeAreaView.defaultProps = {
     edges: Platform.OS === "android" ? ["top", "bottom"] : ["top"],
@@ -23,34 +24,70 @@ import { useLocationBootstrap } from "../hooks/useLocation";
 import { queryClient } from "../lib/query-client";
 
 const screenOptionsByName: Record<string, object> = {
-  "pending-approval":               { headerShown: false },
-  suspended:                        { headerShown: false },
-  "(provider)":                     { headerShown: false },
-  wallet:                           { headerShown: false },
-  notifications:                    { headerShown: false },
-  "listings/new":                   { headerShown: false },
-  "listings/[id]/index":            { headerShown: false },
-  "booking/[id]":                   { headerShown: false },
-  "booking/submitted":              { headerShown: false },
-  "provider/booking/[id]":          { headerShown: false },
-  search:                           { headerShown: true, title: "Search Results", headerBackTitle: "Back" },
-  "book/[listingId]":               { headerShown: true, headerBackTitle: "Back" },
-  "pay/[bookingId]":                { headerShown: true, title: "Complete Payment", headerBackTitle: "Back" },
-  "review/[bookingId]":             { headerShown: true, title: "Leave a Review", headerBackTitle: "Back" },
+  "pending-approval": { headerShown: false },
+  suspended: { headerShown: false },
+  "(provider)": { headerShown: false },
+  wallet: { headerShown: false },
+  notifications: { headerShown: false },
+  "listings/new": { headerShown: false },
+  "listings/[id]/index": { headerShown: false },
+  "booking/[id]": { headerShown: false },
+  "booking/submitted": { headerShown: false },
+  "provider/booking/[id]": { headerShown: false },
+  search: {
+    headerShown: true,
+    title: "Search Results",
+    headerBackTitle: "Back",
+  },
+  "book/[listingId]": { headerShown: true, headerBackTitle: "Back" },
+  "pay/[bookingId]": {
+    headerShown: true,
+    title: "Complete Payment",
+    headerBackTitle: "Back",
+  },
+  "review/[bookingId]": {
+    headerShown: true,
+    title: "Leave a Review",
+    headerBackTitle: "Back",
+  },
   // ── Booking documents ────────────────────────────────────────────────────────
-  "booking/receipt/[id]":           { headerShown: true, title: "Receipt", headerBackTitle: "Back" },
-  "booking/qr/[id]":                { headerShown: true, title: "QR Code", headerBackTitle: "Back" },
-  "booking/voucher/[id]":           { headerShown: true, title: "Voucher", headerBackTitle: "Back" },
+  "booking/receipt/[id]": {
+    headerShown: true,
+    title: "Receipt",
+    headerBackTitle: "Back",
+  },
+  "booking/qr/[id]": {
+    headerShown: true,
+    title: "QR Code",
+    headerBackTitle: "Back",
+  },
+  "booking/voucher/[id]": {
+    headerShown: true,
+    title: "Voucher",
+    headerBackTitle: "Back",
+  },
   // ── Payment method management ─────────────────────────────────────────────
-  "payment-methods/index":          { headerShown: true, title: "Payment Methods", headerBackTitle: "Back" },
-  "payment-methods/add-card":       { headerShown: true, title: "Add Card", headerBackTitle: "Back" },
-  "payment-methods/add-tara":       { headerShown: true, title: "Add Mobile Money", headerBackTitle: "Back" },
+  "payment-methods/index": {
+    headerShown: true,
+    title: "Payment Methods",
+    headerBackTitle: "Back",
+  },
+  "payment-methods/add-card": {
+    headerShown: true,
+    title: "Add Card",
+    headerBackTitle: "Back",
+  },
+  "payment-methods/add-tara": {
+    headerShown: true,
+    title: "Add Mobile Money",
+    headerBackTitle: "Back",
+  },
   // ── Profile management ────────────────────────────────────────────────────
-  "edit-profile":                   { headerShown: false },
+  "edit-profile": { headerShown: false },
   // ── Legal documents ───────────────────────────────────────────────────────
-  "legal/[doc]":                    { headerShown: false },
+  "legal/[doc]": { headerShown: false },
   // ── Help & FAQ ────────────────────────────────────────────────────────────
-  "help":                           { headerShown: false },
+  help: { headerShown: false },
 };
 
 // Error codes from the auth service that mean "this account can't continue"
@@ -67,12 +104,13 @@ async function verifySession(): Promise<"ok" | "revoked" | "network_error"> {
   const { accessToken, user } = useAuthStore.getState();
   if (!accessToken || !user) return "ok"; // not logged in — nothing to check
 
-  const apiUrl = process.env["EXPO_PUBLIC_API_URL"] ?? "https://api.kainook.com/auth";
+  const apiUrl =
+    process.env["EXPO_PUBLIC_API_URL"] ?? "https://api.kainook.com/auth";
   try {
     await axios.post(
       `${apiUrl}/auth/refresh`,
       {},
-      { withCredentials: true, timeout: 8_000 }
+      { withCredentials: true, timeout: 8_000 },
     );
     return "ok";
   } catch (err: unknown) {
@@ -114,7 +152,9 @@ export default function RootLayout() {
     function startInterval() {
       if (intervalRef.current) return;
       // Poll every 30 s while app is in foreground
-      intervalRef.current = setInterval(() => { runCheck().catch(() => {}); }, 30_000);
+      intervalRef.current = setInterval(() => {
+        runCheck().catch(() => {});
+      }, 30_000);
     }
 
     function stopInterval() {
@@ -131,17 +171,20 @@ export default function RootLayout() {
     startInterval();
 
     // Pause polling when app backgrounds, resume on foreground
-    const sub = AppState.addEventListener("change", (nextState: AppStateStatus) => {
-      const prev = appStateRef.current;
-      appStateRef.current = nextState;
+    const sub = AppState.addEventListener(
+      "change",
+      (nextState: AppStateStatus) => {
+        const prev = appStateRef.current;
+        appStateRef.current = nextState;
 
-      if (nextState === "active" && prev !== "active") {
-        runCheck().catch(() => {});   // immediate check on foreground
-        startInterval();   // restart interval
-      } else if (nextState === "background" || nextState === "inactive") {
-        stopInterval();    // no polling while backgrounded
-      }
-    });
+        if (nextState === "active" && prev !== "active") {
+          runCheck().catch(() => {}); // immediate check on foreground
+          startInterval(); // restart interval
+        } else if (nextState === "background" || nextState === "inactive") {
+          stopInterval(); // no polling while backgrounded
+        }
+      },
+    );
 
     return () => {
       sub.remove();
@@ -157,7 +200,7 @@ export default function RootLayout() {
       merchantIdentifier="merchant.com.kainook.app"
     >
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="auto" />
+        <StatusBar style="light" />
         <Stack
           screenOptions={({ route }) => ({
             headerShown: false,

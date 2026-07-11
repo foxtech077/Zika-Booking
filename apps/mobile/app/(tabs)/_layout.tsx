@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Dimensions } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -42,6 +42,8 @@ const tl = StyleSheet.create({
   badgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
 });
 
+const { width: SCREEN_W } = Dimensions.get("window");
+
 export default function TabLayout() {
   const user = useAuthStore((s) => s.user);
   const insets = useSafeAreaInsets();
@@ -70,13 +72,14 @@ export default function TabLayout() {
           ...K.shadow.xs,
         },
         tabBarLabelStyle: {
-          fontSize: 11,
+          fontSize: SCREEN_W < 375 ? 9 : SCREEN_W < 415 ? 10 : 11,
           fontWeight: "700",
           marginTop: 2,
-          letterSpacing: 0.1,
+          letterSpacing: 0.02,
         },
         tabBarItemStyle: {
           paddingVertical: 2,
+          paddingHorizontal: 1,
         },
       }}
     >
