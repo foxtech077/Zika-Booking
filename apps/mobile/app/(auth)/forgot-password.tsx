@@ -13,6 +13,7 @@ import {
   Dimensions,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
@@ -61,16 +62,20 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
+    <SafeAreaView
       style={styles.root}
-      behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : isKeyboardOpen
-            ? "height"
-            : undefined
-      }
+      edges={Platform.OS === "android" ? ["top", "bottom"] : ["top"]}
     >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
+      >
       {/* Back button (fixed / floating) */}
       <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
         <Ionicons name="chevron-back" size={24} color="#fff" />
@@ -152,7 +157,8 @@ export default function ForgotPasswordScreen() {
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

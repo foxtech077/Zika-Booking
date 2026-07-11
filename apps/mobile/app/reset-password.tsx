@@ -13,6 +13,7 @@ import {
   ImageBackground,
   Dimensions,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
@@ -172,16 +173,20 @@ export default function ResetPasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
+    <SafeAreaView
       style={styles.root}
-      behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : isKeyboardOpen
-            ? "height"
-            : undefined
-      }
+      edges={Platform.OS === "android" ? ["top", "bottom"] : ["top"]}
     >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
+      >
       <ScrollView
         style={{
           flex: 1,
@@ -309,7 +314,8 @@ export default function ResetPasswordScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 

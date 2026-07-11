@@ -1,9 +1,19 @@
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 import { useEffect, useRef } from "react";
-import { AppState, type AppStateStatus } from "react-native";
+import { AppState, type AppStateStatus, Platform } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+
+// Configure default edges globally for react-native-safe-area-context
+if (SafeAreaView.defaultProps) {
+  SafeAreaView.defaultProps.edges = Platform.OS === "android" ? ["top", "bottom"] : ["top"];
+} else {
+  SafeAreaView.defaultProps = {
+    edges: Platform.OS === "android" ? ["top", "bottom"] : ["top"],
+  };
+}
 import { QueryClientProvider } from "@tanstack/react-query";
 import { StripeProvider } from "@stripe/stripe-react-native";
 import axios from "axios";

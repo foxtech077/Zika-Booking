@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet } from "react-native";
 import { Tabs, Redirect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthStore } from "../../store/auth";
 import { useUnreadCount } from "../../hooks/messaging";
 import { K } from "../../constants/theme";
@@ -43,6 +44,8 @@ const tl = StyleSheet.create({
 
 export default function TabLayout() {
   const user = useAuthStore((s) => s.user);
+  const insets = useSafeAreaInsets();
+
   if (!user) return <Redirect href="/(auth)/login" />;
 
   if (user.userType === "provider") {
@@ -61,8 +64,8 @@ export default function TabLayout() {
           backgroundColor: K.colors.tabBarBg,
           borderTopWidth: 1,
           borderTopColor: K.colors.tabBarBorder,
-          height: 68,
-          paddingBottom: 10,
+          height: 58 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom - 4 : 8,
           paddingTop: 8,
           ...K.shadow.xs,
         },

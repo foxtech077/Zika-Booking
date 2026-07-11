@@ -14,6 +14,7 @@ import {
   Image,
   Dimensions,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
@@ -210,16 +211,20 @@ export default function LoginScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
+    <SafeAreaView
       style={ss.root}
-      behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : isKeyboardOpen
-            ? "height"
-            : undefined
-      }
+      edges={Platform.OS === "android" ? ["top", "bottom"] : ["top"]}
     >
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
+      >
       {/* ── Form card ── */}
       <ScrollView
         style={{
@@ -363,7 +368,8 @@ export default function LoginScreen() {
           </View>
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
