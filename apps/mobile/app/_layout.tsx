@@ -34,11 +34,7 @@ const screenOptionsByName: Record<string, object> = {
   "booking/[id]": { headerShown: false },
   "booking/submitted": { headerShown: false },
   "provider/booking/[id]": { headerShown: false },
-  search: {
-    headerShown: true,
-    title: "Search Results",
-    headerBackTitle: "Back",
-  },
+  search: { headerShown: false },
   "book/[listingId]": { headerShown: true, headerBackTitle: "Back" },
   "pay/[bookingId]": {
     headerShown: true,
