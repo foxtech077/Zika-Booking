@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   StyleSheet,
   Share,
+  BackHandler,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -312,6 +313,20 @@ export default function BookingDetailScreen() {
   const [autoRefresh, setAutoRefresh] = useState(() => fromPayment === "true");
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
 
+  useEffect(() => {
+    if (!justPaid) return;
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        router.replace("/(tabs)");
+        return true;
+      }
+    );
+
+    return () => subscription.remove();
+  }, [justPaid]);
+
   const { data: booking, isLoading, isError, refetch } = useQuery<BookingDetail>({
     queryKey: ["booking", id],
     queryFn: async () => {
@@ -463,11 +478,20 @@ export default function BookingDetailScreen() {
           ) : (
             <View style={[styles.coverPhoto, styles.coverPhotoPlaceholder]} />
           )}
-          <TouchableOpacity style={[styles.backBtn, { top: insets.top > 0 ? insets.top + 12 : 12 }]} onPress={() => router.back()}>
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => {
+              if (justPaid) {
+                router.replace("/(tabs)");
+              } else {
+                router.back();
+              }
+            }}
+          >
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.shareBtn, { top: insets.top > 0 ? insets.top + 12 : 12 }]}
+            style={styles.shareBtn}
             onPress={() => void shareVoucher(booking)}
           >
             <Ionicons name="share-outline" size={20} color="#fff" />
