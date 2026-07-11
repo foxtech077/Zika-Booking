@@ -12,6 +12,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useKeyboard } from "../../hooks/useKeyboard";
 import { ReviewStars } from "./ReviewStars";
 import { K } from "../../constants/theme";
 
@@ -36,6 +37,7 @@ interface Props {
 // Submits via POST /reviews/:id/reply with body `{ reply }`.
 export function ProviderReplyModal({ review, visible, onClose, onSubmit, isSubmitting }: Props) {
   const [reply, setReply] = useState("");
+  const isKeyboardOpen = useKeyboard();
 
   if (!review) return null;
 
@@ -54,7 +56,16 @@ export function ProviderReplyModal({ review, visible, onClose, onSubmit, isSubmi
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
+      >
         <View style={s.overlay}>
           <View style={s.sheet}>
             <View style={s.sheetHeader}>

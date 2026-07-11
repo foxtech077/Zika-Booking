@@ -21,6 +21,7 @@ import { listingApi } from "../../lib/listing-api";
 import { K } from "../../constants/theme";
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useKeyboard } from "../../hooks/useKeyboard";
 
 // ── Layout constants ───────────────────────────────────────────────────────────
 const SCREEN_W = Dimensions.get("window").width;
@@ -250,6 +251,7 @@ function AvailabilityCalendar({ blockedDates }: { blockedDates: BlockedDateItem[
 // ── Main screen ────────────────────────────────────────────────────────────────
 export default function CalendarSyncScreen() {
   const queryClient = useQueryClient();
+  const isKeyboardOpen = useKeyboard();
 
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [selectedPlatform, setSelectedPlatform] = useState<"Airbnb" | "Booking.com">("Airbnb");
@@ -489,7 +491,13 @@ export default function CalendarSyncScreen() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : isKeyboardOpen
+            ? "height"
+            : undefined
+      }
       style={{ flex: 1 }}
     >
       <View style={st.container}>

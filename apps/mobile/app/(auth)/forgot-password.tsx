@@ -13,11 +13,13 @@ import {
 import { Link, router } from "expo-router";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../../lib/api";
+import { useKeyboard } from "../../hooks/useKeyboard";
 import { K } from "../../constants/theme";
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const isKeyboardOpen = useKeyboard();
 
   const mutation = useMutation({
     mutationFn: () => api.post("auth/forgot-password", { email }),
@@ -45,7 +47,16 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : isKeyboardOpen
+            ? "height"
+            : undefined
+      }
+    >
       <View style={styles.inner}>
         {/* Back button */}
         <TouchableOpacity style={styles.backArrow} onPress={() => router.back()}>

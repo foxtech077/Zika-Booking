@@ -12,6 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useKeyboard } from "../hooks/useKeyboard";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../store/auth";
@@ -23,6 +24,7 @@ import { K } from "../constants/theme";
 export default function EditProfileScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const isKeyboardOpen = useKeyboard();
   const isProvider = user?.userType === "provider";
   // Triggers a fetch here too (if the cached photo is stale/missing) rather
   // than relying solely on the Profile tab having already populated it.
@@ -74,7 +76,16 @@ export default function EditProfileScreen() {
 
   return (
     <SafeAreaView style={s.safeArea} edges={["bottom"]}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
+      >
         <View style={s.header}>
           <TouchableOpacity style={s.backBtn} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Ionicons name="arrow-back" size={22} color={K.colors.textDark} />

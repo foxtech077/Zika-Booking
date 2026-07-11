@@ -23,6 +23,7 @@ import { api } from "../../lib/api";
 import { useAuthStore } from "../../store/auth";
 import { handleRoleAndStatusRedirect, GoogleSignInButton } from "./login";
 import type { ApiResponse, PublicUser } from "@zika/types";
+import { useKeyboard } from "../../hooks/useKeyboard";
 import { ALL_COUNTRIES, POPULAR_COUNTRIES, type CountryData } from "../../constants/countries";
 
 const { height: SCREEN_H } = Dimensions.get("window");
@@ -50,6 +51,7 @@ interface FieldErrors {
 export default function RegisterScreen() {
   const setAuth          = useAuthStore((s) => s.setAuth);
   const setLocalCurrency = useAuthStore((s) => s.setLocalCurrency);
+  const isKeyboardOpen = useKeyboard();
 
   const params = useLocalSearchParams<{ userType?: string }>();
   const [userType, setUserType] = useState<"guest" | "provider">(
@@ -186,7 +188,13 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       style={ss.root}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : isKeyboardOpen
+            ? "height"
+            : undefined
+      }
     >
       {/* ── Hero ── */}
       <ImageBackground

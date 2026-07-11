@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { useAuthStore } from "../store/auth";
 import { handleRoleAndStatusRedirect } from "./(auth)/login";
 import { K } from "../constants/theme";
 import type { ApiResponse, AuthResponse } from "@zika/types";
+import { useKeyboard } from "../hooks/useKeyboard";
 
 function openDeepLink(token: string) {
   if (typeof window !== "undefined") {
@@ -28,6 +29,7 @@ function openDeepLink(token: string) {
 
 export default function ResetPasswordScreen() {
   const { token } = useLocalSearchParams<{ token?: string }>();
+  const isKeyboardOpen = useKeyboard();
 
   // On web: the email link opens localhost:3000/reset-password?token=...
   // Redirect to the native app deep link so the native screen handles the form
@@ -159,7 +161,13 @@ export default function ResetPasswordScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : isKeyboardOpen
+            ? "height"
+            : undefined
+      }
     >
       <ScrollView
         contentContainerStyle={styles.scroll}

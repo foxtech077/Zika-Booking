@@ -11,6 +11,7 @@ import {
   BackHandler,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import { useKeyboard } from "../../hooks/useKeyboard";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -114,6 +115,7 @@ type FormErrors = Partial<Record<keyof HotelForm | "photos" | "documents", strin
 export default function HotelListingScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const qc = useQueryClient();
+  const isKeyboardOpen = useKeyboard();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -508,7 +510,13 @@ export default function HotelListingScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
       >
       <ScrollView
         contentContainerStyle={s.scroll}
