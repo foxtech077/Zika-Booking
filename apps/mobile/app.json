@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kainook.app",
+      "buildNumber": "1",
       "entitlements": {
         "com.apple.developer.applesignin": [
           "Default"

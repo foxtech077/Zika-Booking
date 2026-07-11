@@ -36,6 +36,12 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
+          <string>exp+kainook</string>
+        </array>
+      </dict>
+      <dict>
+        <key>CFBundleURLSchemes</key>
+        <array>
           <string>com.googleusercontent.apps.397191986681-40j0eqotdon89ogv4cgvfsfpb48ehc7h</string>
         </array>
       </dict>
