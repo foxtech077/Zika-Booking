@@ -47,7 +47,7 @@ async function importAnonViews() {
       listingIds: ids,
     });
     await SecureStore.deleteItemAsync("zika:anon_views");
-  } catch {}
+  } catch { }
 }
 
 // ─── redirect helper ─────────────────────────────────────────────────────────
@@ -75,9 +75,9 @@ try {
   if (_GoogleSignin) {
     _GoogleSignin.configure({
       webClientId:
-        "397191986681-clt35826mp608u6ptq9udm8m7c7dk80u.apps.googleusercontent.com",
+        "1022728776661-50ctighki9jm25ig10b39matcr0ihslr.apps.googleusercontent.com",
       iosClientId:
-        "397191986681-40j0eqotdon89ogv4cgvfsfpb48ehc7h.apps.googleusercontent.com",
+        "1022728776661-6aucvg2l0r7suuogj2m9lgcjodetb2rn.apps.googleusercontent.com",
       offlineAccess: false,
     });
   }
@@ -195,8 +195,8 @@ export default function LoginScreen() {
       }
       setError(
         data?.error?.message ??
-          (err as any)?.message ??
-          "Unable to sign in. Please try again.",
+        (err as any)?.message ??
+        "Unable to sign in. Please try again.",
       );
     },
   });
@@ -225,149 +225,149 @@ export default function LoginScreen() {
               : undefined
         }
       >
-      {/* ── Form card ── */}
-      <ScrollView
-        style={{
-          flex: 1,
-          backgroundColor: "#fff",
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-        }}
-        contentContainerStyle={ss.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ── Hero section ── */}
-        <ImageBackground
-          source={require("../../assets/splash.png")}
-          style={[ss.hero, { height: HERO_H }]}
-          resizeMode="contain"
-        >
-          <View style={ss.heroOverlay} />
-        </ImageBackground>
-        <View
+        {/* ── Form card ── */}
+        <ScrollView
           style={{
-            paddingHorizontal: 24,
-            marginTop: -30,
+            flex: 1,
+            backgroundColor: "#fff",
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
           }}
+          contentContainerStyle={ss.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={ss.cardTitle}>Sign In</Text>
+          {/* ── Hero section ── */}
+          <ImageBackground
+            source={require("../../assets/splash.png")}
+            style={[ss.hero, { height: HERO_H }]}
+            resizeMode="contain"
+          >
+            <View style={ss.heroOverlay} />
+          </ImageBackground>
+          <View
+            style={{
+              paddingHorizontal: 24,
+              marginTop: -30,
+            }}
+          >
+            <Text style={ss.cardTitle}>Sign In</Text>
 
-          {/* Email */}
-          <View style={ss.field}>
-            <Text style={ss.label}>Email Address</Text>
-            <View style={ss.inputRow}>
-              <Ionicons
-                name="mail-outline"
-                size={18}
-                color={MUTED}
-                style={ss.inputIcon}
-              />
-              <TextInput
-                style={ss.input}
-                value={email}
-                onChangeText={(v) => {
-                  setEmail(v);
-                  setError(null);
-                }}
-                placeholder="you@example.com"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-              />
-            </View>
-          </View>
-
-          {/* Password */}
-          <View style={ss.field}>
-            <Text style={ss.label}>Password</Text>
-            <View style={ss.inputRow}>
-              <Ionicons
-                name="lock-closed-outline"
-                size={18}
-                color={MUTED}
-                style={ss.inputIcon}
-              />
-              <TextInput
-                style={ss.input}
-                value={password}
-                onChangeText={(v) => {
-                  setPassword(v);
-                  setError(null);
-                }}
-                placeholder="Your password"
-                placeholderTextColor="#9CA3AF"
-                secureTextEntry={!showPass}
-              />
-              <TouchableOpacity
-                onPress={() => setShowPass((p) => !p)}
-                style={ss.eye}
-              >
+            {/* Email */}
+            <View style={ss.field}>
+              <Text style={ss.label}>Email Address</Text>
+              <View style={ss.inputRow}>
                 <Ionicons
-                  name={showPass ? "eye-off-outline" : "eye-outline"}
+                  name="mail-outline"
                   size={18}
                   color={MUTED}
+                  style={ss.inputIcon}
                 />
-              </TouchableOpacity>
+                <TextInput
+                  style={ss.input}
+                  value={email}
+                  onChangeText={(v) => {
+                    setEmail(v);
+                    setError(null);
+                  }}
+                  placeholder="you@example.com"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                />
+              </View>
             </View>
-          </View>
 
-          {/* Forgot password */}
-          <Link href="/(auth)/forgot-password" asChild>
-            <TouchableOpacity style={ss.forgotWrap}>
-              <Text style={ss.forgotTxt}>Forgot Password?</Text>
-            </TouchableOpacity>
-          </Link>
-
-          {/* Error */}
-          {error ? (
-            <View style={ss.errBox}>
-              <Ionicons name="alert-circle-outline" size={15} color={ERR} />
-              <Text style={ss.errTxt}>{error}</Text>
+            {/* Password */}
+            <View style={ss.field}>
+              <Text style={ss.label}>Password</Text>
+              <View style={ss.inputRow}>
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={18}
+                  color={MUTED}
+                  style={ss.inputIcon}
+                />
+                <TextInput
+                  style={ss.input}
+                  value={password}
+                  onChangeText={(v) => {
+                    setPassword(v);
+                    setError(null);
+                  }}
+                  placeholder="Your password"
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showPass}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowPass((p) => !p)}
+                  style={ss.eye}
+                >
+                  <Ionicons
+                    name={showPass ? "eye-off-outline" : "eye-outline"}
+                    size={18}
+                    color={MUTED}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
-          ) : null}
 
-          {/* Submit */}
-          <TouchableOpacity
-            style={[ss.btn, loginMutation.isPending && ss.btnDim]}
-            onPress={submit}
-            disabled={loginMutation.isPending}
-            activeOpacity={0.85}
-          >
-            {loginMutation.isPending ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={ss.btnTxt}>Sign In</Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Divider */}
-          <View style={ss.divRow}>
-            <View style={ss.divLine} />
-            <Text style={ss.divTxt}>or continue with</Text>
-            <View style={ss.divLine} />
-          </View>
-
-          {/* Social buttons */}
-          <View style={ss.socialRow}>
-            <GoogleSignInButton onError={(m) => setError(m)} />
-            {Platform.OS === "ios" && (
-              <AppleButton onError={(m) => setError(m)} />
-            )}
-          </View>
-
-          {/* Register link */}
-          <View style={ss.linkRow}>
-            <Text style={ss.linkTxt}>Don't have an account? </Text>
-            <Link href="/(auth)/register" asChild>
-              <TouchableOpacity>
-                <Text style={ss.link}>Sign Up</Text>
+            {/* Forgot password */}
+            <Link href="/(auth)/forgot-password" asChild>
+              <TouchableOpacity style={ss.forgotWrap}>
+                <Text style={ss.forgotTxt}>Forgot Password?</Text>
               </TouchableOpacity>
             </Link>
+
+            {/* Error */}
+            {error ? (
+              <View style={ss.errBox}>
+                <Ionicons name="alert-circle-outline" size={15} color={ERR} />
+                <Text style={ss.errTxt}>{error}</Text>
+              </View>
+            ) : null}
+
+            {/* Submit */}
+            <TouchableOpacity
+              style={[ss.btn, loginMutation.isPending && ss.btnDim]}
+              onPress={submit}
+              disabled={loginMutation.isPending}
+              activeOpacity={0.85}
+            >
+              {loginMutation.isPending ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={ss.btnTxt}>Sign In</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={ss.divRow}>
+              <View style={ss.divLine} />
+              <Text style={ss.divTxt}>or continue with</Text>
+              <View style={ss.divLine} />
+            </View>
+
+            {/* Social buttons */}
+            <View style={ss.socialRow}>
+              <GoogleSignInButton onError={(m) => setError(m)} />
+              {Platform.OS === "ios" && (
+                <AppleButton onError={(m) => setError(m)} />
+              )}
+            </View>
+
+            {/* Register link */}
+            <View style={ss.linkRow}>
+              <Text style={ss.linkTxt}>Don't have an account? </Text>
+              <Link href="/(auth)/register" asChild>
+                <TouchableOpacity>
+                  <Text style={ss.link}>Sign Up</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

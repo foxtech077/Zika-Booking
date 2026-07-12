@@ -12,7 +12,20 @@
           "package_name": "com.kainook.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1022728776661-kpj28lqbk70srq3aajnpj20fq0pptq5s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.kainook.app",
+            "certificate_hash": "76d2100fd2e5eabcbf642e622145e08642f5072a"
+          }
+        },
+        {
+          "client_id": "1022728776661-50ctighki9jm25ig10b39matcr0ihslr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDVlyJDFbzO3L8_eLnYn73LYblkgotXX4k"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1022728776661-50ctighki9jm25ig10b39matcr0ihslr.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1022728776661-6aucvg2l0r7suuogj2m9lgcjodetb2rn.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.kainook.app"
+              }
+            }
+          ]
         }
       }
     }
