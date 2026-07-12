@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, memo } from "react";
+import { useState, useCallback, useEffect, useMemo, memo, useRef } from "react";
 import {
   View,
   Text,
@@ -736,6 +736,12 @@ export default function SearchScreen() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [allResults, setAllResults] = useState<SearchResult[]>([]);
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
+
+  // FlatList ref — used to programmatically scroll to the top when the user
+  // switches categories so they always see new-category results from the start.
+  const flatListRef = useRef<import("react-native").FlatList<SearchResult>>(null);
+  // Tracks the current vertical scroll offset for optional future restoration.
+  const scrollY = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
 
   // Active filters calculation
@@ -796,6 +802,9 @@ export default function SearchScreen() {
     setAirConditioning(false);
     setSeatsMin(null);
     setDriverAge("");
+    // Scroll to the top immediately so the user sees the new category's
+    // results from the beginning rather than from a mid-list position.
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }
 
   // ── Step 1: Geocode (falls back to local city map when API requires auth) ──
@@ -840,10 +849,12 @@ export default function SearchScreen() {
     }
   }, [geo, placeName, radiusKm]);
 
-  // Reset results and cursor when category changes (tab transition)
+  // Reset pagination cursor when category changes.
+  // We deliberately do NOT call setAllResults([]) here — keeping the previous
+  // category's items visible (via placeholderData) prevents a blank-screen flash
+  // while the next category's results are loading.
   useEffect(() => {
     setCursor(null);
-    setAllResults([]);
   }, [category]);
 
   // Center on user's current GPS location
@@ -915,6 +926,7 @@ export default function SearchScreen() {
     isLoading: searchLoading,
     isError: searchError,
     isFetching: searchFetching,
+    isPlaceholderData,
     refetch: retrySearch,
   } = useQuery<SearchResponse["data"]>({
     queryKey: searchQueryKey,
@@ -998,22 +1010,46 @@ export default function SearchScreen() {
         );
       }
 
-      if (!cursor) {
-        setAllResults(filteredResults);
-      } else {
-        setAllResults((prev) => {
-          const existingIds = new Set(prev.map((r) => r.id));
-          const fresh = filteredResults.filter((r) => !existingIds.has(r.id));
-          return [...prev, ...fresh];
-        });
-      }
-
-      return incoming;
+      // Return filtered results — allResults is synced via the useEffect below
+      // so that cache hits (where queryFn is NOT re-run) are also handled.
+      return { ...incoming, results: filteredResults };
     },
+    // Show the previous query's data while a new query is loading.
+    // This prevents the blank-screen flash when the user switches categories
+    // or changes filters — they continue to see the last visible list.
+    placeholderData: (previousData) => previousData,
+    // Do not re-fetch on component mount when data already exists in cache.
+    // The user will see cached data instantly; a background refetch will
+    // happen only once the staleTime window has elapsed.
+    refetchOnMount: false,
     enabled: true,
     retry: 1,
     staleTime: 30_000,
   });
+
+  // ── Sync React Query data → accumulated local state ──────────────────────────
+  // This useEffect replaces the old setAllResults() calls that lived inside
+  // queryFn.  Moving them here means cache hits (where queryFn is skipped
+  // entirely) still update allResults correctly.
+  useEffect(() => {
+    // Skip placeholder data — it belongs to a different query key and must not
+    // overwrite the accumulated list that is still valid for the current context.
+    if (isPlaceholderData || !searchData) return;
+
+    if (!cursor) {
+      // Page 1 — replace the entire list (new category, new filter, new sort).
+      setAllResults(searchData.results ?? []);
+    } else {
+      // Subsequent pages — append, deduplicating by id.
+      setAllResults((prev) => {
+        const existingIds = new Set(prev.map((r) => r.id));
+        const fresh = (searchData.results ?? []).filter(
+          (r) => !existingIds.has(r.id),
+        );
+        return [...prev, ...fresh];
+      });
+    }
+  }, [searchData, cursor, isPlaceholderData]);
 
   // ── Favourite toggle ──
   const handleFavouriteToggle = useCallback(
@@ -1042,7 +1078,8 @@ export default function SearchScreen() {
     if (newSort === sort) return;
     setSort(newSort);
     setCursor(null);
-    setAllResults([]);
+    // Do NOT call setAllResults([]) — the previous sorted list stays visible
+    // (via placeholderData) until the freshly sorted results arrive.
   }
 
   // ── Load more ──
@@ -1215,11 +1252,11 @@ export default function SearchScreen() {
     driverAge,
   ]);
 
-  // Any filter change (including removing a badge) starts a fresh page-1 search
-  // instead of appending onto whatever page was already loaded before the change.
+  // Any filter change resets pagination to page 1.
+  // We deliberately do NOT call setAllResults([]) here — the previous list
+  // stays visible (via placeholderData) while the fresh filtered page loads.
   useEffect(() => {
     setCursor(null);
-    setAllResults([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     priceMin,
@@ -1639,11 +1676,15 @@ export default function SearchScreen() {
           </View>
         ) : (
           <FlatList
+            ref={flatListRef}
             data={allResults}
             keyExtractor={(item) => item.id}
             style={styles.list}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            // Track scroll position so handleCategoryChange can scroll to top.
+            onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+            scrollEventThrottle={150}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}

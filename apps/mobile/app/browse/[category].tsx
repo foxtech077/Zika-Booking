@@ -1,5 +1,5 @@
 "use no memo";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, TextInput, Dimensions,
@@ -250,7 +250,7 @@ export default function BrowseCategoryScreen() {
   const [allResults, setAllResults] = useState<Listing[]>([]);
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
 
-  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, isPlaceholderData, refetch } = useQuery({
     queryKey: ["browse", apiCategory, sort, cursor],
     queryFn: async () => {
       const qp = new URLSearchParams({
@@ -267,18 +267,31 @@ export default function BrowseCategoryScreen() {
       const incoming: { totalCount: number; nextCursor: string | null; results: Listing[] } = res.data.data;
       const fresh = (incoming.results ?? []).filter((r) => r.listingType === apiCategory);
 
-      if (cursor === 0) {
-        setAllResults(fresh);
-      } else {
-        setAllResults((prev) => {
-          const seen = new Set(prev.map((r) => r.id));
-          return [...prev, ...fresh.filter((r) => !seen.has(r.id))];
-        });
-      }
-      return incoming;
+      // Return filtered results — allResults is synced via the useEffect below
+      // so that cache hits (where queryFn is NOT re-run) are handled correctly.
+      return { ...incoming, results: fresh };
     },
+    // Keep the previous page visible while a new sort / load-more is in flight.
+    placeholderData: (previousData) => previousData,
+    // Avoid a network hit on every remount when we already have fresh cache.
+    refetchOnMount: false,
     staleTime: 30_000,
   });
+
+  // ── Sync React Query data → accumulated local list ────────────────────────
+  // Moving this logic out of queryFn means cache hits (where queryFn is never
+  // called) also correctly populate / append the displayed list.
+  useEffect(() => {
+    if (isPlaceholderData || !data) return;
+    if (cursor === 0) {
+      setAllResults(data.results ?? []);
+    } else {
+      setAllResults((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        return [...prev, ...(data.results ?? []).filter((r) => !seen.has(r.id))];
+      });
+    }
+  }, [data, cursor, isPlaceholderData]);
 
   // Client-side keyword filter — applied to all loaded results
   const displayResults = keyword.trim()
@@ -317,7 +330,8 @@ export default function BrowseCategoryScreen() {
     if (newSort === sort) return;
     setSort(newSort);
     setCursor(0);
-    setAllResults([]);
+    // Do NOT call setAllResults([]) — the previous sorted list stays visible
+    // (via placeholderData) until the freshly sorted results arrive.
   }
 
   function handleLoadMore() {
@@ -402,7 +416,7 @@ export default function BrowseCategoryScreen() {
           <Ionicons name="wifi-outline" size={48} color={BORDER} />
           <Text style={s.errTitle}>Failed to load listings</Text>
           <Text style={s.errSub}>Please check your connection and try again.</Text>
-          <TouchableOpacity style={s.retryBtn} onPress={() => { setCursor(0); setAllResults([]); void refetch(); }}>
+          <TouchableOpacity style={s.retryBtn} onPress={() => { setCursor(0); void refetch(); }}>
             <Text style={s.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
