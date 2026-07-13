@@ -148,19 +148,85 @@ export async function authRoutes(app: FastifyInstance) {
 
     try {
       const existing = await prisma.user.findUnique({
-        where: { email }
+        where: { email },
+        include: {
+          verificationTokens: {
+            where: { tokenType: "email_verification", used: false },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+        },
       });
 
       if (existing) {
-        return sendError(
-          reply,
-          409,
-          "EMAIL_EXISTS",
-          "An account with this email already exists.",
-          {
-            email: "An account with this email already exists."
+        // Active, suspended, or banned accounts — block registration
+        if (existing.status !== "pending_verification") {
+          return sendError(
+            reply,
+            409,
+            "EMAIL_EXISTS",
+            "An account with this email already exists.",
+            {
+              email: "An account with this email already exists."
+            }
+          );
+        }
+
+        // Pending verification — check if the token is still valid
+        const latestToken = existing.verificationTokens[0];
+        const tokenStillValid = latestToken && latestToken.expiresAt >= new Date();
+
+        if (tokenStillValid) {
+          // Token is still valid — resend verification email
+          const plainToken = generateToken();
+
+          // Invalidate old tokens
+          await prisma.verificationToken.updateMany({
+            where: { userId: existing.id, used: false, tokenType: "email_verification" },
+            data: { used: true, usedAt: new Date(), invalidatedReason: "superseded" },
+          });
+
+          const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          await prisma.verificationToken.create({
+            data: {
+              userId: existing.id,
+              tokenHash: hashToken(plainToken),
+              tokenType: "email_verification",
+              expiresAt,
+            },
+          });
+
+          try {
+            await sendVerificationEmail(email, plainToken);
+            await prisma.emailLog.create({
+              data: {
+                userId: existing.id,
+                type: "verification_resend",
+                recipient: email,
+                status: "sent",
+                sentAt: new Date(),
+              },
+            });
+          } catch (error) {
+            console.error("[Auth] Verification email delivery failed", error);
+            await prisma.emailLog.create({
+              data: {
+                userId: existing.id,
+                type: "verification_resend",
+                recipient: email,
+                status: "failed",
+                sentAt: new Date(),
+              },
+            });
           }
-        );
+
+          return sendSuccess(reply, 200, {
+            message: "An account with this email is pending verification. A new verification email has been sent. Please check your inbox.",
+          });
+        }
+
+        // Token expired — delete the old unverified user and allow fresh registration
+        await prisma.user.delete({ where: { id: existing.id } });
       }
 
       const passwordHash = await hashPassword(password);
