@@ -9,7 +9,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>$(DEVELOPMENT_LANGUAGE)</string>
     <key>CFBundleDisplayName</key>
-    <string>kainook</string>
+    <string>Kainook</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -42,7 +42,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>com.googleusercontent.apps.397191986681-40j0eqotdon89ogv4cgvfsfpb48ehc7h</string>
+          <string>com.googleusercontent.apps.1022728776661-6aucvg2l0r7suuogj2m9lgcjodetb2rn</string>
         </array>
       </dict>
     </array>
