@@ -261,7 +261,6 @@ model Listing {
 
   // ── Hotel extended fields ────────────────────────────────────────────────
   featuredPhotoId    String?  @map("featured_photo_id")
-  hasRoomTypes       Boolean  @default(false) @map("has_room_types")
   maxAdults          Int?     @map("max_adults")
   maxChildren        Int?     @map("max_children")
   childrenAllowed    Boolean  @default(true) @map("children_allowed")

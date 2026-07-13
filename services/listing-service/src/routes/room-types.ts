@@ -155,35 +155,22 @@ export async function roomTypeRoutes(app: FastifyInstance) {
         const { name, roomType, description, pricePerNight, unitCount, maxGuests, sortOrder } =
           parsed.data;
 
-        const roomTypeRecord = await prisma.$transaction(async (tx) => {
-          const rt = await tx.hotelRoomType.create({
-            data: {
-              listingId: id,
-              name,
-              roomType,
-              description,
-              pricePerNight,
-              unitCount,
-              maxGuests,
-              sortOrder,
-            },
-          });
-
-          // Set hasRoomTypes flag on the listing if not already set
-          if (!listing.hasRoomTypes) {
-            await tx.listing.update({
-              where: { id },
-              data: { hasRoomTypes: true },
-            });
-          }
-
-          return rt;
+        const rt = await prisma.hotelRoomType.create({
+          data: {
+            listingId: id,
+            name,
+            roomType,
+            description,
+            pricePerNight,
+            unitCount,
+            maxGuests,
+            sortOrder,
+          },
         });
 
         return sendSuccess(reply, 201, {
-          ...roomTypeRecord,
-          pricePerNight: Number(roomTypeRecord.pricePerNight),
-          hasRoomTypes: true,
+          ...rt,
+          pricePerNight: Number(rt.pricePerNight),
         });
       } catch (err) {
         req.log.error({ err }, "Failed to create room type");
@@ -413,26 +400,6 @@ export async function roomTypeRoutes(app: FastifyInstance) {
 
         const data = parsed.data;
 
-        // If deactivating, check that at least one other active room type remains
-        if (data.isActive === false && existing.isActive === true) {
-          const activeCount = await prisma.hotelRoomType.count({
-            where: {
-              listingId: id,
-              isActive: true,
-              id: { not: rtId },
-            },
-          });
-
-          if (activeCount === 0) {
-            return sendError(
-              reply,
-              400,
-              "LAST_ACTIVE_ROOM_TYPE",
-              "Cannot deactivate the last active room type. At least one must remain.",
-            );
-          }
-        }
-
         const roomType = await prisma.hotelRoomType.update({
           where: { id: rtId },
           data,
@@ -512,24 +479,6 @@ export async function roomTypeRoutes(app: FastifyInstance) {
           return sendSuccess(reply, 200, {
             message: "Room type is already deactivated.",
           });
-        }
-
-        // Check that at least one other active room type remains
-        const activeCount = await prisma.hotelRoomType.count({
-          where: {
-            listingId: id,
-            isActive: true,
-            id: { not: rtId },
-          },
-        });
-
-        if (activeCount === 0) {
-          return sendError(
-            reply,
-            400,
-            "LAST_ACTIVE_ROOM_TYPE",
-            "Cannot deactivate the last active room type. At least one must remain.",
-          );
         }
 
         await prisma.hotelRoomType.update({

@@ -595,7 +595,7 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         // ── 1a. ROOM TYPE (for hotels with room types) ─────────────────────
         let roomTypeRecord: any = null;
-        if (listing.hasRoomTypes && listing.category === "hotel") {
+        if (listing.category === "hotel") {
           if (!body.roomTypeId) {
             return sendError(
               reply,
@@ -628,14 +628,6 @@ export async function bookingRoutes(app: FastifyInstance) {
               `Max guests allowed for this room type: ${roomTypeRecord.maxGuests}`
             );
           }
-        } else if (listing.hasRoomTypes && !body.roomTypeId) {
-          // Hotel has room types but none provided
-          return sendError(
-            reply,
-            400,
-            "ROOM_TYPE_REQUIRED",
-            "roomTypeId is required for hotel listings with room types."
-          );
         }
 
         // STEP 1: base rate (from room type if available, otherwise from listing)

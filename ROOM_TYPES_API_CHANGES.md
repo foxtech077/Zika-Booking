@@ -11,7 +11,6 @@ This document describes the API changes for supporting multiple room types under
 ```
 Listing (Hotel Property)
 ├── name, location, starRating, amenities, policies, photos, iCal feeds
-├── hasRoomTypes: true
 │
 └── HotelRoomType[] (Bookable Options)
      ├── Standard Room  →  $80/night, 10 units
@@ -71,14 +70,12 @@ Create a new room type for a hotel listing.
     "unitCount": 5,
     "maxGuests": 3,
     "sortOrder": 0,
-    "isActive": true,
-    "hasRoomTypes": true
+    "isActive": true
   }
 }
 ```
 
 **Notes:**
-- First room type creation automatically sets `hasRoomTypes = true` on the listing
 - Only hotel listings can have room types
 - Provider must own the listing
 
@@ -204,7 +201,6 @@ Deactivate a room type (soft delete).
 - Sets `isActive = false` (does not physically delete)
 - Existing bookings for this room type are unaffected
 - Prevents new bookings for this room type
-- At least one active room type must remain for the listing to be submittable
 
 ---
 
@@ -217,10 +213,7 @@ Deactivate a room type (soft delete).
 - `unitCount` — now per room type
 - `pricePerNight` — now per room type
 
-**New field:**
-- `hasRoomTypes` — automatically managed (set to `true` when first room type is created)
-
-**Remaining hotel-level fields:**
+**Hotel-level fields:**
 ```json
 {
   "listingTitle": "Safari Hotel",
@@ -252,7 +245,6 @@ Deactivate a room type (soft delete).
         "title": "Safari Hotel",
         "nightlyRate": 80.00,
         "currency": "USD",
-        "hasRoomTypes": true,
         "roomType": null,
         "starRating": 4,
         "roomTypes": [
@@ -280,8 +272,8 @@ Deactivate a room type (soft delete).
 ```
 
 **Notes:**
-- `nightlyRate` shows the **cheapest** active room type price
-- `roomType` is `null` when `hasRoomTypes = true` (use `roomTypes[]` instead)
+- `nightlyRate` shows the **cheapest** active room type price for hotels
+- `roomType` is `null` for hotels (use `roomTypes[]` instead)
 - Price filtering uses the minimum room type price
 
 ---
@@ -358,7 +350,7 @@ Deactivate a room type (soft delete).
 ```
 
 **Notes:**
-- `roomTypeId` is required for hotel listings with `hasRoomTypes = true`
+- `roomTypeId` is **required** for hotel listings
 - Pricing uses the room type's `pricePerNight`
 - Redis lock key includes room type: `rlk:{listingId}:{roomTypeId}:{checkIn}:{checkOut}`
 - Allows concurrent bookings of different room types at the same hotel
@@ -402,6 +394,39 @@ Deactivate a room type (soft delete).
 
 ---
 
+### GET /listings/:id/public
+
+Public listing detail now includes room types for hotels.
+
+**New response fields:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "listing-uuid",
+    "title": "Safari Hotel",
+    "nightlyRate": 80.00,
+    "roomType": null,
+    "roomTypes": [
+      {
+        "id": "rt-uuid-1",
+        "name": "Standard Room",
+        "roomType": "standard",
+        "pricePerNight": 80.00,
+        "unitCount": 10,
+        "maxGuests": 2
+      }
+    ]
+  }
+}
+```
+
+**Notes:**
+- `nightlyRate` shows the cheapest active room type price for hotels
+- `roomType` is `null` for hotels (use `roomTypes[]` instead)
+
+---
+
 ### GET /booking/quote
 
 **New query parameter:**
@@ -431,21 +456,13 @@ GET /booking/quote?listingId=listing-uuid&roomTypeId=rt-uuid-2&currency=USD
 
 ---
 
-## Backward Compatibility
+## Non-Hotel Listings (Apartments & Cars)
 
-### Old Fields Kept as Fallback
-
-The following fields remain on the `Listing` model but are **ignored** when `hasRoomTypes = true`:
+The following fields remain on the `Listing` model for apartments and cars:
 - `roomType` — for apartments/cars that don't use room types
-- `unitCount` — for apartments/cars
-- `pricePerNight` — for apartments/cars
-
-### Migration
-
-Existing hotel listings with `roomType`/`pricePerNight`/`unitCount` are automatically migrated:
-1. A `HotelRoomType` record is created from the existing fields
-2. `hasRoomTypes` is set to `true`
-3. Old fields remain for backward compatibility
+- `unitCount` — for cars (fleet count)
+- `pricePerNight` — for apartments
+- `pricePerDay` — for cars
 
 ---
 

@@ -94,8 +94,7 @@ const amenitiesGroupedSchema = z.object({
 export const patchListingSchema = z.object({
   name: z.string().max(200).optional(),
   listingTitle: z.string().max(200).optional(),
-  // roomType, unitCount, pricePerNight are now managed via /listings/:id/room-types
-  // These fields are kept for backward compatibility with apartments/cars
+  // These fields are used for apartments/cars only; hotel room types are managed via /listings/:id/room-types
   roomType: z.preprocess((val) => {
     if (typeof val !== "string") return val;
     return val.toLowerCase().replace(/\s+/g, "_");
@@ -655,8 +654,7 @@ export async function listingRoutes(app: FastifyInstance) {
         "  - `operating_permit` or `hotel_operating_permit`",
         "  - `tourism_certificate` or `tourism_authority_certificate`",
         "",
-        "If **hasRoomTypes** is true, at least one active room type must exist via POST /listings/:id/room-types.",
-        "Otherwise, the listing must have **roomType**, **unitCount** (≥ 1), and **pricePerNight** (> 0).",
+        "At least one active room type must exist via POST /listings/:id/room-types.",
         "",
         "Only `draft` or `rejected` hotel listings can be submitted.",
       ].join("\n"),
@@ -716,19 +714,12 @@ export async function listingRoutes(app: FastifyInstance) {
       const failures: string[] = [];
       if (!listing.name?.trim()) failures.push("Property name is required.");
 
-      // Validate room types if hasRoomTypes is true
-      if (listing.hasRoomTypes) {
-        const activeRoomTypes = await prisma.hotelRoomType.count({
-          where: { listingId: id, isActive: true },
-        });
-        if (activeRoomTypes === 0) {
-          failures.push("At least one active room type is required when room types are enabled.");
-        }
-      } else {
-        // Legacy validation for listings without room types
-        if (!listing.roomType) failures.push("Room type is required.");
-        if (!listing.unitCount || listing.unitCount < 1) failures.push("Number of units is required.");
-        if (!listing.pricePerNight || Number(listing.pricePerNight) <= 0) failures.push("Price per night must be greater than 0.");
+      // Validate at least one active room type exists
+      const activeRoomTypes = await prisma.hotelRoomType.count({
+        where: { listingId: id, isActive: true },
+      });
+      if (activeRoomTypes === 0) {
+        failures.push("At least one active room type is required.");
       }
 
       if (!listing.currency) failures.push("Currency is required.");

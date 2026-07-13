@@ -138,7 +138,13 @@ export async function searchRoutes(app: FastifyInstance) {
     if (priceMin !== undefined) where[priceField] = { ...where[priceField], gte: priceMin };
     if (priceMax !== undefined) where[priceField] = { ...where[priceField], lte: priceMax };
     if (cancellationPolicy) where.cancellationPolicy = cancellationPolicy;
-    if (roomType) where.roomType = roomType;
+    if (roomType) {
+      if (category === "hotel") {
+        where.hotelRoomTypes = { some: { roomType: roomType as any, isActive: true } };
+      } else {
+        where.roomType = roomType;
+      }
+    }
     if (smokingAllowed !== undefined) where.smokingAllowed = smokingAllowed === "true";
     if (petsAllowed !== undefined) where.petsAllowed = petsAllowed === "true";
     // Hotel
@@ -284,7 +290,7 @@ export async function searchRoutes(app: FastifyInstance) {
       // Calculate nightly rate: use minimum room type price for hotels with room types
       let nightlyRate: number | null = null;
       if (l.category !== "car") {
-        if (l.hasRoomTypes && l.hotelRoomTypes.length > 0) {
+        if (l.category === "hotel" && l.hotelRoomTypes.length > 0) {
           // Use the minimum pricePerNight across active room types
           nightlyRate = Math.min(...l.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)));
         } else if (l.pricePerNight) {
@@ -307,9 +313,8 @@ export async function searchRoutes(app: FastifyInstance) {
         // Hotel
         starRating: l.starRating,
         isAccredited: !!l.approvedAt,
-        hasRoomTypes: l.hasRoomTypes,
-        roomType: l.hasRoomTypes ? null : l.roomType,
-        roomTypes: l.hasRoomTypes
+        roomType: l.category === "hotel" ? null : l.roomType,
+        roomTypes: l.category === "hotel"
           ? l.hotelRoomTypes.map((rt) => ({
               id: rt.id,
               name: rt.name,
@@ -444,6 +449,7 @@ export async function searchRoutes(app: FastifyInstance) {
           photos: { where: { deletedAt: null }, orderBy: { position: "asc" } },
           amenities: true,
           customAmenities: true,
+          hotelRoomTypes: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
         },
       });
 
@@ -489,8 +495,22 @@ export async function searchRoutes(app: FastifyInstance) {
         city: listing.town,
         countryCode: listing.country,
         primaryPhotoUrl: signedPhotos[0]?.cdnUrl ?? null,
-        nightlyRate: listing.category !== "car" && listing.pricePerNight ? Number(listing.pricePerNight) : null,
+        nightlyRate: listing.category !== "car"
+          ? (listing.category === "hotel" && listing.hotelRoomTypes.length > 0
+              ? Math.min(...listing.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)))
+              : (listing.pricePerNight ? Number(listing.pricePerNight) : null))
+          : null,
         dailyRate: listing.category === "car" && listing.pricePerDay ? Number(listing.pricePerDay) : null,
+        roomTypes: listing.category === "hotel"
+          ? listing.hotelRoomTypes.map((rt) => ({
+              id: rt.id,
+              name: rt.name,
+              roomType: rt.roomType,
+              pricePerNight: Number(rt.pricePerNight),
+              unitCount: rt.unitCount,
+              maxGuests: rt.maxGuests,
+            }))
+          : undefined,
         isAccredited: !!listing.approvedAt,
         longStayDiscountEnabled: listing.longStayEnabled,
         promoBadge,
@@ -545,7 +565,7 @@ export async function searchRoutes(app: FastifyInstance) {
 
       const listing = await prisma.listing.findUnique({
         where: { id, deletedAt: null },
-        select: { id: true, status: true, unitCount: true, hasRoomTypes: true },
+        select: { id: true, status: true, unitCount: true, category: true },
       });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
@@ -568,7 +588,7 @@ export async function searchRoutes(app: FastifyInstance) {
       const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
 
       // If listing has room types, return per-room-type availability
-      if (listing.hasRoomTypes) {
+      if (listing.category === "hotel") {
         const roomTypes = await prisma.hotelRoomType.findMany({
           where: { listingId: id, isActive: true },
           orderBy: { sortOrder: "asc" },
