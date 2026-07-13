@@ -191,6 +191,7 @@ export async function searchRoutes(app: FastifyInstance) {
       include: {
         photos: { where: { deletedAt: null }, orderBy: { position: "asc" }, take: 1 },
         amenities: true,
+        hotelRoomTypes: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
       },
       take: 500,
     });
@@ -279,39 +280,63 @@ export async function searchRoutes(app: FastifyInstance) {
       if (promo) promoBadge = { labelText: promo.labelText, labelColour: promo.labelColour };
     } catch { /* non-critical */ }
 
-    const results = page.map((l) => ({
-      id: l.id,
-      listingType: l.category,
-      title: l.name,
-      city: l.town,
-      countryCode: l.country,
-      distanceKm: Math.round(l.distanceKm * 10) / 10,
-      primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
-      nightlyRate: l.category !== "car" && l.pricePerNight ? Number(l.pricePerNight) : null,
-      dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
-      currency: l.currency,
-      cancellationPolicy: l.cancellationPolicy,
-      // Hotel
-      starRating: l.starRating,
-      isAccredited: !!l.approvedAt,
-      roomType: l.roomType,
-      // Apartment
-      bedrooms: l.bedrooms,
-      bathrooms: l.bathrooms,
-      maxGuests: l.maxGuests,
-      longStayDiscountEnabled: l.longStayEnabled,
-      // Car
-      carMake: l.carMake,
-      carModel: l.carModel,
-      carYear: l.carYear,
-      transmission: l.transmission,
-      seats: l.seats,
-      mileagePolicy: l.mileagePolicy,
-      // Favourited
-      isFavourited: guestId ? favouriteSet.has(l.id) : undefined,
-      // Promotion badge (null when no active campaign for this category)
-      promoBadge,
-    }));
+    const results = page.map((l) => {
+      // Calculate nightly rate: use minimum room type price for hotels with room types
+      let nightlyRate: number | null = null;
+      if (l.category !== "car") {
+        if (l.hasRoomTypes && l.hotelRoomTypes.length > 0) {
+          // Use the minimum pricePerNight across active room types
+          nightlyRate = Math.min(...l.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)));
+        } else if (l.pricePerNight) {
+          nightlyRate = Number(l.pricePerNight);
+        }
+      }
+
+      return {
+        id: l.id,
+        listingType: l.category,
+        title: l.name,
+        city: l.town,
+        countryCode: l.country,
+        distanceKm: Math.round(l.distanceKm * 10) / 10,
+        primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
+        nightlyRate,
+        dailyRate: l.category === "car" && l.pricePerDay ? Number(l.pricePerDay) : null,
+        currency: l.currency,
+        cancellationPolicy: l.cancellationPolicy,
+        // Hotel
+        starRating: l.starRating,
+        isAccredited: !!l.approvedAt,
+        hasRoomTypes: l.hasRoomTypes,
+        roomType: l.hasRoomTypes ? null : l.roomType,
+        roomTypes: l.hasRoomTypes
+          ? l.hotelRoomTypes.map((rt) => ({
+              id: rt.id,
+              name: rt.name,
+              roomType: rt.roomType,
+              pricePerNight: Number(rt.pricePerNight),
+              unitCount: rt.unitCount,
+              maxGuests: rt.maxGuests,
+            }))
+          : undefined,
+        // Apartment
+        bedrooms: l.bedrooms,
+        bathrooms: l.bathrooms,
+        maxGuests: l.maxGuests,
+        longStayDiscountEnabled: l.longStayEnabled,
+        // Car
+        carMake: l.carMake,
+        carModel: l.carModel,
+        carYear: l.carYear,
+        transmission: l.transmission,
+        seats: l.seats,
+        mileagePolicy: l.mileagePolicy,
+        // Favourited
+        isFavourited: guestId ? favouriteSet.has(l.id) : undefined,
+        // Promotion badge (null when no active campaign for this category)
+        promoBadge,
+      };
+    });
 
     return sendSuccess(reply, 200, {
       totalCount: total,
@@ -518,9 +543,11 @@ export async function searchRoutes(app: FastifyInstance) {
         const { id } = req.params as { id: string };
         const { month, start, end } = req.query as { month?: string; start?: string; end?: string };
 
-      const listing = await prisma.listing.findUnique({ where: { id, deletedAt: null }, select: { id: true, status: true, unitCount: true } });
+      const listing = await prisma.listing.findUnique({
+        where: { id, deletedAt: null },
+        select: { id: true, status: true, unitCount: true, hasRoomTypes: true },
+      });
       if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-      const unitCount = Math.max(1, listing.unitCount ?? 1);
 
       const now = new Date();
       let rangeStart: Date;
@@ -539,6 +566,114 @@ export async function searchRoutes(app: FastifyInstance) {
       }
 
       const pendingExpiry = new Date(Date.now() - LOCK_TTL_MS);
+
+      // If listing has room types, return per-room-type availability
+      if (listing.hasRoomTypes) {
+        const roomTypes = await prisma.hotelRoomType.findMany({
+          where: { listingId: id, isActive: true },
+          orderBy: { sortOrder: "asc" },
+        });
+
+        if (roomTypes.length === 0) {
+          return sendSuccess(reply, 200, { roomTypeAvailability: [] });
+        }
+
+        const roomTypeIds = roomTypes.map((rt) => rt.id);
+
+        // Fetch bookings grouped by roomTypeId
+        const bookings = await prisma.$queryRawUnsafe<{
+          room_type_id: string | null;
+          check_in: Date | null;
+          check_out: Date | null;
+          pickup_datetime: Date | null;
+          return_datetime: Date | null;
+        }[]>(`
+          SELECT room_type_id, check_in, check_out, pickup_datetime, return_datetime
+          FROM bookings
+          WHERE listing_id = ANY($1)
+            AND room_type_id IS NOT NULL
+            AND (
+              status = 'confirmed'
+              OR status = 'checked_in'
+              OR (status = 'pending_payment' AND created_at > $4)
+            )
+            AND (
+              (check_in IS NOT NULL AND check_in < $3 AND check_out > $2)
+              OR (pickup_datetime IS NOT NULL AND pickup_datetime < $3 AND return_datetime > $2)
+            )
+        `, roomTypeIds, rangeStart, rangeEnd, pendingExpiry);
+
+        // Fetch iCal blocked dates (affects ALL room types)
+        const blockedDates = await prisma.icalBlockedDate.findMany({
+          where: {
+            listingId: id,
+            startDate: { lt: rangeEnd },
+            endDate: { gt: rangeStart },
+          },
+          select: { startDate: true, endDate: true },
+        });
+
+        // Build per-room-type availability
+        const roomTypeAvailability = roomTypes.map((rt) => {
+          const dayCounts = new Map<string, number>();
+
+          function addRange(start: Date, end: Date) {
+            const cur = new Date(start);
+            while (cur < end) {
+              const key = cur.toISOString().slice(0, 10);
+              dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
+              cur.setDate(cur.getDate() + 1);
+            }
+          }
+
+          // Add bookings for this room type
+          for (const b of bookings) {
+            if (b.room_type_id === rt.id) {
+              const s = b.check_in ?? b.pickup_datetime;
+              const e = b.check_out ?? b.return_datetime;
+              if (s && e) addRange(s, e);
+            }
+          }
+
+          // Add iCal blocked dates (affects all room types)
+          for (const bd of blockedDates) {
+            addRange(bd.startDate, bd.endDate);
+          }
+
+          // Only mark a day unavailable when all units of this room type are taken
+          const unavailableDays: string[] = [];
+          for (const [day, count] of dayCounts) {
+            if (count >= rt.unitCount) unavailableDays.push(day);
+          }
+
+          // Group consecutive days into ranges
+          unavailableDays.sort();
+          const unavailableRanges: { start: string; end: string }[] = [];
+          let cur: { start: string; end: string } | null = null;
+          for (const day of unavailableDays) {
+            if (!cur || day > nextDay(cur.end)) {
+              if (cur) unavailableRanges.push(cur);
+              cur = { start: day, end: day };
+            } else {
+              cur!.end = day;
+            }
+          }
+          if (cur) unavailableRanges.push(cur);
+
+          return {
+            roomTypeId: rt.id,
+            roomType: rt.roomType,
+            name: rt.name,
+            unitCount: rt.unitCount,
+            unavailableRanges,
+          };
+        });
+
+        return sendSuccess(reply, 200, { roomTypeAvailability });
+      }
+
+      // Legacy: no room types — return single unavailable ranges
+      const unitCount = Math.max(1, listing.unitCount ?? 1);
 
       const [bookings, blockedDates] = await Promise.all([
         prisma.$queryRawUnsafe<{ check_in: Date | null; check_out: Date | null; pickup_datetime: Date | null; return_datetime: Date | null }[]>(`

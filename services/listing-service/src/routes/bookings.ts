@@ -538,6 +538,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           required: ["listingId"],
           properties: {
             listingId: { type: "string" },
+            roomTypeId: { type: "string", description: "Required for hotel listings with room types" },
             checkIn: { type: "string", format: "date" },
             checkOut: { type: "string", format: "date" },
             pickupDatetime: { type: "string", format: "date-time" },
@@ -574,6 +575,7 @@ export async function bookingRoutes(app: FastifyInstance) {
 
       const body = req.body as {
         listingId: string;
+        roomTypeId?: string;
         checkIn?: string;
         checkOut?: string;
         pickupDatetime?: string;
@@ -590,10 +592,56 @@ export async function bookingRoutes(app: FastifyInstance) {
         if (!listing) {
           return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
         }
-        // STEP 1: base rate
-        const baseRate = Number(
-          listing.pricePerNight ?? listing.pricePerDay ?? 0
-        );
+
+        // ── 1a. ROOM TYPE (for hotels with room types) ─────────────────────
+        let roomTypeRecord: any = null;
+        if (listing.hasRoomTypes && listing.category === "hotel") {
+          if (!body.roomTypeId) {
+            return sendError(
+              reply,
+              400,
+              "ROOM_TYPE_REQUIRED",
+              "roomTypeId is required for hotel listings with room types."
+            );
+          }
+          roomTypeRecord = await prisma.hotelRoomType.findFirst({
+            where: {
+              id: body.roomTypeId,
+              listingId: listing.id,
+              isActive: true,
+            },
+          });
+          if (!roomTypeRecord) {
+            return sendError(
+              reply,
+              404,
+              "ROOM_TYPE_NOT_FOUND",
+              "Room type not found or is inactive."
+            );
+          }
+          // Check maxGuests for room type
+          if (body.guests && roomTypeRecord.maxGuests && body.guests > roomTypeRecord.maxGuests) {
+            return sendError(
+              reply,
+              400,
+              "EXCEEDS_CAPACITY",
+              `Max guests allowed for this room type: ${roomTypeRecord.maxGuests}`
+            );
+          }
+        } else if (listing.hasRoomTypes && !body.roomTypeId) {
+          // Hotel has room types but none provided
+          return sendError(
+            reply,
+            400,
+            "ROOM_TYPE_REQUIRED",
+            "roomTypeId is required for hotel listings with room types."
+          );
+        }
+
+        // STEP 1: base rate (from room type if available, otherwise from listing)
+        const baseRate = roomTypeRecord
+          ? Number(roomTypeRecord.pricePerNight)
+          : Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
 
         // STEP 2: promotion logic (HERE, NOT in billing service)
         let units = 1;
@@ -675,9 +723,14 @@ export async function bookingRoutes(app: FastifyInstance) {
 
         // ── 6. AVAILABILITY CHECK ───────────────────
         if (listing.category !== "car" && body.checkIn && body.checkOut) {
+          // Use room type's unitCount if available, otherwise use listing's unitCount
+          const effectiveUnitCount = roomTypeRecord
+            ? roomTypeRecord.unitCount
+            : Math.max(1, listing.unitCount ?? 1);
+
           const avail = await checkAvailability(
             listing.id,
-            Math.max(1, listing.unitCount ?? 1),
+            effectiveUnitCount,
             new Date(body.checkIn),
             new Date(body.checkOut)
           );
@@ -713,10 +766,13 @@ export async function bookingRoutes(app: FastifyInstance) {
         }
 
         // ── 7. LOCK KEY ─────────────────────────────
+        // Include roomTypeId in lock key for hotels to allow concurrent bookings of different room types
         const lockKey =
           listing.category === "car"
             ? `rlk:${listing.id}:${body.pickupDatetime?.slice(0, 10)}:${body.returnDatetime?.slice(0, 10)}`
-            : `rlk:${listing.id}:${body.checkIn}:${body.checkOut}`;
+            : roomTypeRecord
+              ? `rlk:${listing.id}:${roomTypeRecord.id}:${body.checkIn}:${body.checkOut}`
+              : `rlk:${listing.id}:${body.checkIn}:${body.checkOut}`;
 
         const lockToken = randomUUID();
         const ctxKey = `rlk:ctx:${lockToken}`;
@@ -737,6 +793,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         const ctx = {
           guestId,
           listingId: listing.id,
+          roomTypeId: roomTypeRecord?.id ?? null,
           checkIn: body.checkIn,
           checkOut: body.checkOut,
           pickupDatetime: body.pickupDatetime,
@@ -792,6 +849,7 @@ export async function bookingRoutes(app: FastifyInstance) {
         const pricingPreview = {
           units: billing.units,
           baseAmount: billing.baseAmount,
+          nightlyRate: baseRate,
           promotionDiscount: billing.promotionDiscount,
           voucherDiscount: billing.voucherDiscount,
           serviceFee: billing.serviceFee,
@@ -799,6 +857,11 @@ export async function bookingRoutes(app: FastifyInstance) {
           deliveryFee: billing.deliveryFee,
           totalAmount: billing.totalAmount,
           currency: listing.currency,
+          // Room type info (if applicable)
+          ...(roomTypeRecord && {
+            roomType: roomTypeRecord.roomType,
+            roomTypeName: roomTypeRecord.name,
+          }),
         };
 
         return sendSuccess(reply, 200, {
@@ -874,7 +937,10 @@ export async function bookingRoutes(app: FastifyInstance) {
             error: { code: "ALREADY_RENEWED", message: "This lock has already been renewed once." },
           });
 
-        const lockKey = `rlk:${ctx.listingId}:${ctx.checkIn ?? ctx.pickupDatetime?.slice(0, 10)}:${ctx.checkOut ?? ctx.returnDatetime?.slice(0, 10)}`;
+        // Include roomTypeId in lock key if present in context
+        const lockKey = ctx.roomTypeId
+          ? `rlk:${ctx.listingId}:${ctx.roomTypeId}:${ctx.checkIn ?? ctx.pickupDatetime?.slice(0, 10)}:${ctx.checkOut ?? ctx.returnDatetime?.slice(0, 10)}`
+          : `rlk:${ctx.listingId}:${ctx.checkIn ?? ctx.pickupDatetime?.slice(0, 10)}:${ctx.checkOut ?? ctx.returnDatetime?.slice(0, 10)}`;
         ctx.renewed = true;
 
         await redis.pexpire(lockKey, LOCK_TTL_MS);
@@ -928,7 +994,10 @@ export async function bookingRoutes(app: FastifyInstance) {
         if (ctx.guestId !== guestId)
           return sendError(reply, 403, "FORBIDDEN", "Lock does not belong to you.");
 
-        const lockKey = `rlk:${ctx.listingId}:${ctx.checkIn ?? ctx.pickupDatetime?.slice(0, 10)}:${ctx.checkOut ?? ctx.returnDatetime?.slice(0, 10)}`;
+        // Include roomTypeId in lock key if present in context
+        const lockKey = ctx.roomTypeId
+          ? `rlk:${ctx.listingId}:${ctx.roomTypeId}:${ctx.checkIn ?? ctx.pickupDatetime?.slice(0, 10)}:${ctx.checkOut ?? ctx.returnDatetime?.slice(0, 10)}`
+          : `rlk:${ctx.listingId}:${ctx.checkIn ?? ctx.pickupDatetime?.slice(0, 10)}:${ctx.checkOut ?? ctx.returnDatetime?.slice(0, 10)}`;
         await redis.del(lockKey, `rlk:ctx:${lockToken}`);
         reply.status(204).send();
       } catch (err) {
@@ -952,6 +1021,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           properties: {
             lockToken: { type: "string" },
             listingId: { type: "string" },
+            roomTypeId: { type: "string", description: "Required for hotel listings with room types" },
             checkIn: { type: "string", format: "date" },
             checkOut: { type: "string", format: "date" },
             pickupDatetime: { type: "string", format: "date-time" },
@@ -1006,6 +1076,7 @@ export async function bookingRoutes(app: FastifyInstance) {
       const body = req.body as {
         lockToken: string;
         listingId: string;
+        roomTypeId?: string;
         checkIn?: string;
         checkOut?: string;
         pickupDatetime?: string;
@@ -1057,6 +1128,14 @@ export async function bookingRoutes(app: FastifyInstance) {
         });
         if (!listing) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
 
+        // Load room type record if roomTypeId is in context
+        let roomTypeRecord: any = null;
+        if (ctx.roomTypeId) {
+          roomTypeRecord = await prisma.hotelRoomType.findUnique({
+            where: { id: ctx.roomTypeId },
+          });
+        }
+
         const validStatuses = listing.category === "hotel" ? ["approved"] : ["active"];
         if (!validStatuses.includes(listing.status)) {
           return reply.status(410).send({
@@ -1077,10 +1156,13 @@ export async function bookingRoutes(app: FastifyInstance) {
         }
         const commissionRate = await getCommissionRate(listing.country ?? null);
 
+        // Use room type's pricePerNight if available, otherwise use listing's rate
         const rate =
           listing.category === "car"
             ? Number(listing.pricePerDay ?? 0)
-            : Number(listing.pricePerNight ?? 0);
+            : roomTypeRecord
+              ? Number(roomTypeRecord.pricePerNight)
+              : Number(listing.pricePerNight ?? 0);
 
         // 1. BASE BILLING (NO VOUCHER)
 
@@ -1223,6 +1305,7 @@ export async function bookingRoutes(app: FastifyInstance) {
           data: {
             reference,
             listingId: listing.id,
+            roomTypeId: ctx.roomTypeId ?? null,
             guestId,
             providerId: listing.providerId,
             listingType: listing.category,
