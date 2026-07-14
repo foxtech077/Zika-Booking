@@ -22,6 +22,20 @@ import ReservationCard from "./components/ReservationCard";
 import MapView from "./components/MapView";
 import type { PublicListingDetail } from "@/types";
 
+const AMENITY_CATEGORY: Record<string, string> = {
+  wifi: "Connectivity", smart_tv: "Connectivity", work_desk: "Connectivity",
+  printer: "Connectivity", workspace: "Connectivity",
+  breakfast: "Food & Drink", restaurant_on_site: "Food & Drink",
+  coffee_machine: "Food & Drink", minibar: "Food & Drink", kitchen: "Food & Drink",
+  pool: "Wellness", gym: "Wellness", spa: "Wellness", sauna: "Wellness",
+  hot_tub: "Wellness", fitness_centre: "Wellness",
+  ac: "Comfort", heating: "Comfort", laundry: "Comfort", parking: "Comfort",
+  elevator: "Comfort", accessible: "Comfort",
+  reception_24h: "Services", housekeeping_daily: "Services",
+  airport_shuttle: "Services", security_24h: "Services",
+  shop_on_site: "Services", pet_friendly: "Services",
+};
+
 interface User {
   id: string;
   firstName: string;
@@ -916,7 +930,7 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.join(",");
+      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.map(k => AMENITY_CATEGORY[k] ? `${AMENITY_CATEGORY[k]}:${k}` : k).join(",");
 
       if (activeCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
@@ -1006,7 +1020,7 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.join(",");
+      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.map(k => AMENITY_CATEGORY[k] ? `${AMENITY_CATEGORY[k]}:${k}` : k).join(",");
       if (searchCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
         if (searchCheckOut) params.check_out = searchCheckOut;
