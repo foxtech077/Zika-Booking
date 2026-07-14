@@ -2624,7 +2624,7 @@ export default function TravellerDashboard() {
                 <div className="flex items-center justify-center gap-2 mb-3">
                   {([
                     { key: "hotel" as const, label: "Hotels", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg> },
-                    { key: "apartment" as const, label: "Apartments", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg> },
+                    { key: "apartment" as const, label: "Home", icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg> },
                     { key: "car" as const, label: "Cars", icon: <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" /><circle cx="7" cy="17" r="2" /><path d="M9 17h6" /><circle cx="17" cy="17" r="2" /></svg> },
                   ] as const).map(({ key, label, icon }) => (
                     <button
@@ -2913,7 +2913,7 @@ export default function TravellerDashboard() {
                     <h2 className="text-3xl md:text-4xl font-serif text-slate-900">Stay in Excellence</h2>
                   </div>
                   <div className="flex gap-2">
-                    {([{ key: "hotel", label: "Hotels" }, { key: "apartment", label: "Apartments" }, { key: "car", label: "Cars" }] as const).map(({ key, label }) => (
+                    {([{ key: "hotel", label: "Hotels" }, { key: "apartment", label: "Home" }, { key: "car", label: "Cars" }] as const).map(({ key, label }) => (
                       <button
                         key={key}
                         onClick={() => loadFeaturedListings(key)}
@@ -3482,7 +3482,7 @@ export default function TravellerDashboard() {
                     </h1>
                     <p className="text-sm text-slate-500 mt-0.5">
                       {searchDestination.trim()
-                        ? `${searchCategory === "car" ? "Car rentals" : searchCategory === "hotel" ? "Hotels" : "Apartments"} matching your search`
+                        ? `${searchCategory === "car" ? "Car rentals" : searchCategory === "hotel" ? "Hotels" : "Homes"} matching your search`
                         : `Browse ${searchCategory === "car" ? "car rentals" : searchCategory + "s"} worldwide`}
                     </p>
                   </div>
@@ -3836,7 +3836,7 @@ export default function TravellerDashboard() {
                   }}
                   className={`px-4 py-3 text-sm font-semibold rounded-xl text-left transition ${activeTab === "search" && searchCategory === cat ? "bg-[#0c2614] text-white" : "text-slate-700 hover:bg-slate-50"}`}
                 >
-                  {cat === "hotel" ? "Stays" : cat === "apartment" ? "Apartments" : "Car Rentals"}
+                  {cat === "hotel" ? "Stays" : cat === "apartment" ? "Home" : "Car Rentals"}
                 </button>
               ))}
               {user && (

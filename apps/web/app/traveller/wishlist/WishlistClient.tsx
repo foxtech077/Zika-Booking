@@ -13,7 +13,7 @@ type Category = "hotel" | "apartment" | "car";
 const TABS: { key: Category | "all"; label: string }[] = [
   { key: "all", label: "All" },
   { key: "hotel", label: "Hotels" },
-  { key: "apartment", label: "Apartments" },
+  { key: "apartment", label: "Home" },
   { key: "car", label: "Cars" },
 ];
 
@@ -174,8 +174,7 @@ export default function WishlistClient() {
             Kainook
           </Link>
           <nav className="hidden md:flex items-center gap-1">
-            {(["Hotels", "Apartments", "Cars"] as const).map((label) => {
-              const href = `/traveller/${label.toLowerCase()}`;
+            {([{ label: "Hotels", href: "/traveller/hotels" }, { label: "Home", href: "/traveller/apartments" }, { label: "Cars", href: "/traveller/cars" }] as const).map(({ label, href }) => {
               return (
                 <Link key={href} href={href} className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-[#0c2614] transition-colors">
                   {label}

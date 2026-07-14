@@ -23,7 +23,7 @@ interface SearchFormProps {
 
 const CATEGORIES = [
   { value: "hotel", label: "Hotels" },
-  { value: "apartment", label: "Apartments" },
+  { value: "apartment", label: "Home" },
   { value: "car", label: "Car Rentals" },
 ] as const;
 
