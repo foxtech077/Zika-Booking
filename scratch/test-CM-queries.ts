@@ -34,8 +34,8 @@ async function run() {
         'refund' as type,
         'refund_issued' as action,
         'system' as actor,
-        "createdAt" as timestamp,
-        jsonb_build_object('paymentId', "paymentId", 'amount', amount) as metadata
+        "created_at" as timestamp,
+        jsonb_build_object('paymentId', "payment_id", 'amount', amount) as metadata
       FROM payments."Refund"
       WHERE status = 'succeeded'
       
