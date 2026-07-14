@@ -14,7 +14,7 @@ import {
   isValidPhotoType,
   isValidDocumentType,
   fileExtFromContentType,
-  withSignedPhotos,
+
 } from "../lib/s3.js";
 import { geocodePlaceId, geocodeAddress, reverseGeocode } from "../lib/geocoding.js";
 import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/email.js";
@@ -353,7 +353,7 @@ export async function listingRoutes(app: FastifyInstance) {
       ]);
 
       const signedListings = await Promise.all(
-        listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
+        listings.map((l) => ({ ...l, photos: l.photos })),
       );
       return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
     } catch (err) {
@@ -422,7 +422,7 @@ export async function listingRoutes(app: FastifyInstance) {
       const formattedListing = {
         ...listing,
         amenities: groupedAmenities,
-        photos: await withSignedPhotos(listing.photos),
+        photos: listing.photos,
       };
 
       return sendSuccess(reply, 200, formattedListing);
