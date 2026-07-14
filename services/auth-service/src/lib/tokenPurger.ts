@@ -13,7 +13,7 @@ export async function purgeExpiredTokens(): Promise<void> {
       console.log(`[Token Purger] Purged ${tokenResult.count} expired verification tokens.`);
     }
 
-    const STALE_CUTOFF = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+    const STALE_CUTOFF = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const userResult = await prisma.user.deleteMany({
       where: {
         status: "pending_verification",
@@ -21,7 +21,7 @@ export async function purgeExpiredTokens(): Promise<void> {
       },
     });
     if (userResult.count > 0) {
-      console.log(`[Token Purger] Purged ${userResult.count} stale unverified users (pending > 48h).`);
+      console.log(`[Token Purger] Purged ${userResult.count} stale unverified users (pending > 24h).`);
     }
   } catch (error) {
     console.error("[Token Purger] Error during purge:", error instanceof Error ? error.message : error);

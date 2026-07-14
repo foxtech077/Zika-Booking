@@ -30,11 +30,14 @@ export function VerifyClient() {
         setEmail(user.email);
         setTimeout(() => router.replace(user.userType === "provider" ? "/dashboard" : "/traveller"), 2000);
       })
-      .catch((err: { response?: { data?: ApiResponse<unknown>; status?: number } }) => {
-        const code = (err.response?.data as { error?: { code?: string } } | undefined)?.error?.code;
+      .catch((err: { response?: { data?: ApiResponse<{ email?: string }>; status?: number } }) => {
+        const errorBody = (err.response?.data as { error?: { code?: string; fields?: { email?: string } } } | undefined)?.error;
+        const code = errorBody?.code;
         const status = err.response?.status;
-        if (status === 410 || code === "TOKEN_EXPIRED") setState("expired");
-        else if (code === "TOKEN_USED") setState("used");
+        if (status === 410 || code === "TOKEN_EXPIRED") {
+          if (errorBody?.fields?.email) setEmail(errorBody.fields.email);
+          setState("expired");
+        } else if (code === "TOKEN_USED") setState("used");
         else if (code === "INVALID_TOKEN") setState("invalid");
         else setState("error");
       });
