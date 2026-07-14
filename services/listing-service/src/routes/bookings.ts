@@ -2515,6 +2515,7 @@ export async function bookingRoutes(app: FastifyInstance) {
             title: booking.listing.name,
             address: booking.listing.address,
             town: booking.listing.town,
+            neighborhood: booking.listing.neighborhood,
             country: booking.listing.country,
             primaryPhotoUrl: booking.listing.photos[0]?.cdnUrl ?? null,
           },

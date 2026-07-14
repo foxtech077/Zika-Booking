@@ -195,6 +195,7 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
                       type:    { type: "string" },
                       address: { type: "string", nullable: true },
                       town:    { type: "string", nullable: true },
+                      neighborhood: { type: "string", nullable: true },
                       country: { type: "string", nullable: true },
                     },
                     required: ["id", "type"],
@@ -262,7 +263,7 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
           where: { id },
           include: {
             listing: {
-              select: { id: true, name: true, address: true, town: true, country: true },
+              select: { id: true, name: true, address: true, town: true, neighborhood: true, country: true },
             },
           },
         });
@@ -310,6 +311,7 @@ export async function bookingDocumentRoutes(app: FastifyInstance) {
             type:    booking.listingType,
             address: booking.listing.address ?? null,
             town:    booking.listing.town ?? null,
+            neighborhood: booking.listing.neighborhood ?? null,
             country: booking.listing.country ?? null,
           },
           period: {

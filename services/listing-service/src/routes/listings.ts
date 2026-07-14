@@ -115,6 +115,7 @@ export const patchListingSchema = z.object({
   lat: z.number().optional().nullable(),
   lng: z.number().optional().nullable(),
   town: z.string().max(100).optional().nullable(),
+  neighborhood: z.string().max(100).optional().nullable(),
   country: z.string().length(2).optional().nullable(),
   amenities: amenitiesGroupedSchema.optional(),
   customAmenities: z.array(z.string().max(60)).optional(),
@@ -466,6 +467,7 @@ export async function listingRoutes(app: FastifyInstance) {
           petsAllowed: { type: "boolean" },
           address: { type: "string" },
           town: { type: "string", maxLength: 100 },
+          neighborhood: { type: "string", maxLength: 100 },
           country: { type: "string", minLength: 2, maxLength: 2 },
           amenities: {
             type: "object",
@@ -567,7 +569,7 @@ export async function listingRoutes(app: FastifyInstance) {
       }
 
       // Geocoding Rules (Requirement 5)
-      // Address selection MUST auto-fill: lat, lng, town, country.
+      // Address selection MUST auto-fill: lat, lng, town, neighborhood, country.
       // Manual pin drag updates ONLY lat/lng.
       if (parsed.data.address && parsed.data.address !== listing.address) {
         const geo = await geocodeAddress(parsed.data.address);
@@ -575,6 +577,7 @@ export async function listingRoutes(app: FastifyInstance) {
           dbFields.lat = geo.lat;
           dbFields.lng = geo.lng;
           dbFields.town = geo.town;
+          dbFields.neighborhood = geo.neighborhood;
           dbFields.country = geo.country;
         }
       }
