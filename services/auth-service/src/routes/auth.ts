@@ -46,12 +46,13 @@ export const postProfileSchema = z.object({
   photoUrl: z.string().url("Invalid photo URL"),
 });
 
-// PATCH schema - name, photoUrl, and businessName (for providers)
+// PATCH schema - name, photoUrl, businessName (for providers), and country
 export const patchProfileSchema = z.object({
   firstName: z.string().min(1, "First name cannot be empty").optional(),
   lastName: z.string().min(1, "Last name cannot be empty").optional(),
   photoUrl: z.string().url("Invalid photo URL").optional().nullable(),
   businessName: z.string().max(255).optional().nullable(),
+  country: z.string().length(2).toUpperCase().optional().nullable(),
 });
 
 // ── Helper: issue tokens and set cookie ─────────────────────────────────────
@@ -1130,7 +1131,7 @@ export async function authRoutes(app: FastifyInstance) {
           );
         }
 
-        const { firstName, lastName, photoUrl, businessName } = parsed.data;
+        const { firstName, lastName, photoUrl, businessName, country } = parsed.data;
 
         // Fetch current user type to validate business name restriction
         const userRecord = await prisma.user.findUnique({
@@ -1151,6 +1152,7 @@ export async function authRoutes(app: FastifyInstance) {
         const updateData: Record<string, any> = {};
         if (photoUrl !== undefined) updateData.photoUrl = photoUrl;
         if (businessName !== undefined) updateData.businessName = businessName;
+        if (country !== undefined) updateData.country = country;
         
         // Split name into firstName & lastName
          if (firstName !== undefined) updateData.firstName = firstName;
@@ -1165,6 +1167,7 @@ export async function authRoutes(app: FastifyInstance) {
             lastName: true,
             photoUrl: true,
             businessName: true,
+            country: true,
           }
         });
 
@@ -1176,6 +1179,7 @@ export async function authRoutes(app: FastifyInstance) {
             name: `${updatedUser.firstName} ${updatedUser.lastName}`.trim(),
             photoUrl: signedPhotoUrl,
             businessName: updatedUser.businessName,
+            country: updatedUser.country,
           },
           user: {
             id: updatedUser.id,
@@ -1183,6 +1187,7 @@ export async function authRoutes(app: FastifyInstance) {
             lastName: updatedUser.lastName,
             photoUrl: signedPhotoUrl,
             businessName: updatedUser.businessName,
+            country: updatedUser.country,
           },
         });
       } catch (err: any) {
@@ -1206,6 +1211,7 @@ export async function authRoutes(app: FastifyInstance) {
             lastName: { type: "string" },
             photoUrl: { type: "string", format: "uri", nullable: true },
             businessName: { type: "string", nullable: true, description: "Provider business name (only allowed for providers)" },
+            country: { type: "string", minLength: 2, maxLength: 2, description: "ISO 3166-1 alpha-2 country code" },
           },
         },
       },
@@ -1239,6 +1245,7 @@ export async function authRoutes(app: FastifyInstance) {
             lastName: { type: "string" },
             photoUrl: { type: "string", format: "uri", nullable: true },
             businessName: { type: "string", nullable: true, description: "Provider business name (only allowed for providers)" },
+            country: { type: "string", minLength: 2, maxLength: 2, description: "ISO 3166-1 alpha-2 country code" },
           },
         },
       },
