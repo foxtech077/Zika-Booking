@@ -374,7 +374,7 @@ export async function listingRoutes(app: FastifyInstance) {
           id: { type: "string" }
         }
       },
-      
+
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -388,6 +388,7 @@ export async function listingRoutes(app: FastifyInstance) {
           documents: { where: { replacedAt: null } },
           amenities: true,
           customAmenities: true,
+          // hotelRoomTypes: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
         },
       });
 
@@ -423,6 +424,10 @@ export async function listingRoutes(app: FastifyInstance) {
         ...listing,
         amenities: groupedAmenities,
         photos: await withSignedPhotos(listing.photos),
+        // hotelRoomTypes: listing.hotelRoomTypes.map((rt) => ({
+        //   ...rt,
+        //   pricePerNight: Number(rt.pricePerNight),
+        // })),
       };
 
       return sendSuccess(reply, 200, formattedListing);
@@ -678,7 +683,7 @@ export async function listingRoutes(app: FastifyInstance) {
             error: {
               type: "object",
               properties: {
-                code:    { type: "string", example: "VALIDATION_ERROR" },
+                code: { type: "string", example: "VALIDATION_ERROR" },
                 message: { type: "string", example: "Property name is required. At least one photo is required." },
               },
             },

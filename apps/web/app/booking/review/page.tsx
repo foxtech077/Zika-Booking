@@ -43,6 +43,9 @@ interface CheckoutCtx {
   driverAge?: number;
   deliveryRequested?: boolean;
   deliveryAddress?: string;
+  roomTypeId?: string;
+  roomTypeName?: string;
+  roomType?: string;
 }
 
 interface WalletVoucher {
@@ -336,6 +339,9 @@ export default function BookingReviewPage() {
         body.driverAge = ctx.driverAge;
         body.deliveryRequested = ctx.deliveryRequested;
         body.deliveryAddress = ctx.deliveryAddress;
+      }
+      if (ctx.listingCategory === "hotel") {
+        body.roomTypeId = ctx.roomTypeId;
       }
       if (ctx.discountSource === "voucher" && ctx.voucherCode) body.voucherCode = ctx.voucherCode;
       if (ctx.discountSource === "promotion" && ctx.promotionId) body.promotionId = ctx.promotionId;
@@ -632,6 +638,9 @@ export default function BookingReviewPage() {
                         <div>
                           <p className="text-xs text-slate-400 uppercase tracking-wider font-semibold mb-0.5">{ctx.listingCategory}</p>
                           <h3 className="font-bold text-slate-800 text-base leading-snug">{ctx.listingTitle}</h3>
+                          {ctx.roomTypeName && (
+                            <p className="text-xs font-semibold text-[#1D8D2B] mt-0.5">{ctx.roomTypeName}</p>
+                          )}
                           <p className="text-sm text-slate-500 mt-0.5">{ctx.listingTown}, {ctx.listingCountry}</p>
                         </div>
                       </div>
@@ -1024,6 +1033,9 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: ReturnType<
           <div className="min-w-0">
             <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">{ctx.listingCategory}</p>
             <p className="text-sm font-bold text-slate-800 truncate">{ctx.listingTitle}</p>
+            {ctx.roomTypeName && (
+              <p className="text-[10px] font-semibold text-[#1D8D2B] truncate">{ctx.roomTypeName}</p>
+            )}
             <p className="text-xs text-slate-500">{ctx.listingTown}</p>
           </div>
         </div>
@@ -1100,6 +1112,9 @@ function ConfirmedView({
           <InfoRow label="Booking Reference" value={confirmed.reference} />
           <InfoRow label="Traveller Name" value={`${ctx.firstName} ${ctx.lastName}`} />
           <InfoRow label={isCar ? "Vehicle" : "Property"} value={ctx.listingTitle} />
+          {ctx.roomTypeName && (
+            <InfoRow label="Room Type" value={ctx.roomTypeName} />
+          )}
           {!isCar ? (
             <>
               <InfoRow label="Check-in" value={fmtDate(ctx.checkIn)} />
@@ -1224,6 +1239,9 @@ function VoucherLayout({
       {/* Booking Details */}
       <VoucherSection title="Booking Details">
         <VoucherRow label={isCar ? "Vehicle" : "Property"} value={ctx.listingTitle} />
+        {ctx.roomTypeName && (
+          <VoucherRow label="Room Type" value={ctx.roomTypeName} />
+        )}
         <VoucherRow label="Location" value={`${ctx.listingTown}, ${ctx.listingCountry}`} />
         {!isCar ? (
           <>
