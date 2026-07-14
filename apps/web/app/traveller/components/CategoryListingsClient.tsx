@@ -817,29 +817,21 @@ export default function CategoryListingsClient({ category }: Props) {
     const params: Record<string, any> = {
       category,
       limit: effectiveLimit,
-      offset: newOffset,
+      cursor: newOffset,
       lat,
       lng,
       // Use global radius for ALL text searches so results are not constrained by geography.
       // Browse (no text) uses global radius too for a full category inventory view.
       radius_km: 20000,
-      sort_by: sortBy,
+      sort: sortBy,
     };
-
-    // Always pass the user's text as `q` — backend may use it for full-text matching.
-    // This is the primary mechanism for name/hotel/apartment/car searches.
-    if (dest) {
-      params.q = dest;
-      params.name = dest; // some backends also accept `name`
-    }
 
     if (guests > 1) params.guests = guests;
     if (filters.priceMax < 500000) params.price_max = filters.priceMax;
     if (filters.rating) params.rating_min = filters.rating;
-    if (filters.amenities.length) params.amenities = filters.amenities.join(",");
+    if (filters.amenities.length) params.amenity_ids = filters.amenities.join(",");
     if (filters.cancellation) params.cancellation_policy = filters.cancellation;
-    if (filters.instantOnly) params.instant_booking = true;
-    if (filters.minStay) params.min_stay = filters.minStay;
+    if (filters.minStay) params.min_stay_nights = filters.minStay;
 
     if (!isCar) {
       if (checkIn) params.check_in = checkIn;
@@ -849,8 +841,8 @@ export default function CategoryListingsClient({ category }: Props) {
     }
 
     if (category === "apartment") {
-      if (filters.bedrooms) params.bedrooms = filters.bedrooms;
-      if (filters.bathrooms) params.bathrooms = filters.bathrooms;
+      if (filters.bedrooms) params.bedrooms_min = filters.bedrooms;
+      if (filters.bathrooms) params.bathrooms_min = filters.bathrooms;
       if (filters.longStayDiscount) params.long_stay_discount = true;
     }
 
@@ -860,10 +852,9 @@ export default function CategoryListingsClient({ category }: Props) {
       if (filters.carCategory) params.car_category = filters.carCategory.toLowerCase();
       if (filters.transmission) params.transmission = filters.transmission;
       if (filters.fuelType) params.fuel_type = filters.fuelType;
-      if (filters.seats) params.min_seats = filters.seats;
-      if (filters.minDriverAge) params.min_driver_age = filters.minDriverAge;
-      if (filters.airportPickup) params.airport_pickup = true;
-      if (filters.deliveryAvailable) params.delivery_available = true;
+      if (filters.seats) params.seats_min = filters.seats;
+      if (filters.minDriverAge) params.driver_age = filters.minDriverAge;
+      if (filters.deliveryAvailable) params.delivery = true;
     }
 
     console.log("[Search] Request payload:", params);
