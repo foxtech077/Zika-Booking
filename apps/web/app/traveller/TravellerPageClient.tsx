@@ -916,7 +916,7 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenities = selectedAmenities.join(",");
+      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.join(",");
 
       if (activeCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
@@ -1006,7 +1006,7 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenities = selectedAmenities.join(",");
+      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.join(",");
       if (searchCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
         if (searchCheckOut) params.check_out = searchCheckOut;
