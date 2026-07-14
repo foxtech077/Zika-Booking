@@ -175,11 +175,21 @@ export async function searchRoutes(app: FastifyInstance) {
     }
     if (airConditioning !== undefined) where.airConditioning = airConditioning === "true";
     if (delivery !== undefined) where.deliveryEnabled = delivery === "true";
-    if (amenityIds?.length) {
-      where.amenities = { some: { amenityKey: { in: amenityIds } } };
-    }
     // Nullable range guards — combined into AND so they don't overwrite each other
     const andClauses: any[] = [];
+    if (amenityIds?.length) {
+      const PREFIXES = ["Connectivity", "Food & Drink", "Wellness", "Comfort", "Services"];
+      const seen = new Set<string>();
+      for (const id of amenityIds) {
+        const base = id.includes(":") ? id.split(":")[1] : id;
+        if (!seen.has(base)) {
+          seen.add(base);
+          andClauses.push({
+            amenities: { some: { amenityKey: { in: [base, ...PREFIXES.map(p => `${p}:${base}`)] } } }
+          });
+        }
+      }
+    }
     if (driverAge !== undefined) {
       andClauses.push({ OR: [{ minimumDriverAge: null }, { minimumDriverAge: { lte: driverAge } }] });
     }
