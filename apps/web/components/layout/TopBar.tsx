@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, LogOut, User, ChevronDown } from "lucide-react";
+import { Bell, LogOut, User, ChevronDown, HelpCircle } from "lucide-react";
 import { listingsService } from "@/services/listings";
 import { useAuthStore } from "@/stores/auth";
 import { Avatar } from "@/components/ui/Avatar";
@@ -131,6 +131,13 @@ export function TopBar() {
                 >
                   <User className="w-4 h-4 text-green-600" />
                   Profile &amp; Settings
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); router.push("/faq"); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
+                >
+                  <HelpCircle className="w-4 h-4 text-green-600" />
+                  Help &amp; FAQ
                 </button>
                 <div className="my-1 border-t border-slate-100" />
                 <button

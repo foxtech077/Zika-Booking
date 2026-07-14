@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User } from "lucide-react";
+import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthStore } from "@/stores/auth";
@@ -20,6 +20,7 @@ const TRAVELLER_ROUTES = {
   messages: "/traveller/messages",
   reviews: "/traveller/reviews",
   profile: "/traveller/profile",
+  faq: "/faq",
 } as const;
 
 interface TravellerHeaderProps {
@@ -339,6 +340,14 @@ export function TravellerHeader({
                       >
                         <Star className="h-4 w-4 text-green-600" />
                         My Reviews
+                      </Link>
+                      <Link
+                        href={TRAVELLER_ROUTES.faq}
+                        onClick={() => setMenuOpen(false)}
+                        className="flex w-full items-center gap-2.5 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-all"
+                      >
+                        <HelpCircle className="h-4 w-4 text-green-600" />
+                        Help &amp; FAQ
                       </Link>
                       <div className="my-1 border-t border-slate-100" />
                       <button
