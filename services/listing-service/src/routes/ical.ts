@@ -819,46 +819,34 @@ export async function icalRoutes(app: FastifyInstance) {
   });
 }
 
-// ── Background polling (15-min cycle) ────────────────────────────────────────
+// ── Background polling ────────────────────────────────────────────────────────
 
-export function startIcalPoller() {
-  const POLL_INTERVAL_MS = parseInt(process.env.ICAL_POLL_INTERVAL_MS ?? "") || 15 * 60 * 1000;
+export async function pollIcalFeeds() {
+  try {
+    const feeds = await prisma.icalFeed.findMany({
+      where: { isActive: true },
+      select: { id: true, consecutiveFailures: true, nextRetryAt: true },
+    });
 
-  async function poll() {
-    try {
-      const feeds = await prisma.icalFeed.findMany({
-        where: { isActive: true },
-        select: { id: true, consecutiveFailures: true, nextRetryAt: true },
-      });
-
-      const now = new Date();
-      for (const feed of feeds) {
-        if (feed.nextRetryAt && feed.nextRetryAt > now) {
-          console.log(`[iCal Poller] Skipping feed ${feed.id} — next retry at ${feed.nextRetryAt.toISOString()}`);
-          continue;
-        }
-
-        try {
-          const result = await syncFeed(feed.id);
-          if (result.error) {
-            console.warn(`[iCal Poller] Feed ${feed.id} sync error: ${result.error}`);
-          } else {
-            console.log(`[iCal Poller] Feed ${feed.id} synced ${result.synced} events.`);
-          }
-        } catch (syncErr) {
-          console.error(`[iCal Poller] Unexpected error for feed ${feed.id}:`, syncErr);
-        }
+    const now = new Date();
+    for (const feed of feeds) {
+      if (feed.nextRetryAt && feed.nextRetryAt > now) {
+        console.log(`[iCal Poller] Skipping feed ${feed.id} — next retry at ${feed.nextRetryAt.toISOString()}`);
+        continue;
       }
-    } catch (error) {
-      console.warn("[iCal Poller] DB error (will retry):", error instanceof Error ? error.message : error);
+
+      try {
+        const result = await syncFeed(feed.id);
+        if (result.error) {
+          console.warn(`[iCal Poller] Feed ${feed.id} sync error: ${result.error}`);
+        } else {
+          console.log(`[iCal Poller] Feed ${feed.id} synced ${result.synced} events.`);
+        }
+      } catch (syncErr) {
+        console.error(`[iCal Poller] Unexpected error for feed ${feed.id}:`, syncErr);
+      }
     }
+  } catch (error) {
+    console.warn("[iCal Poller] DB error (will retry):", error instanceof Error ? error.message : error);
   }
-
-  setInterval(() => { poll().catch(() => null); }, POLL_INTERVAL_MS);
-
-  setTimeout(() => {
-    poll().catch(() => null);
-  }, 5000);
-
-  console.log(`[iCal Poller] Started — polling every ${POLL_INTERVAL_MS / 1000}s`);
 }

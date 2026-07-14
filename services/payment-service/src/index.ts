@@ -3,7 +3,8 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
-import fastifyCron from "fastify-cron";
+import { fastifySchedule } from "@fastify/schedule";
+import { SimpleIntervalJob, AsyncTask } from "toad-scheduler";
 import { paymentRoutes } from "./routes/payments.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { paymentMethodRoutes } from "./routes/payment-methods.js";
@@ -137,21 +138,8 @@ async function build() {
   await app.register(merchantRoutes,);
   await app.register(payoutRoutes,);
 
-  // ── Background cron jobs ──────────────────────────────────────────────────
-  await app.register(fastifyCron, {
-    jobs: [
-      {
-        name: "payout-job",
-        cronTime: "*/5 * * * *",
-        onTick: () => void runPayoutJob().catch((err) => console.error("[payout-job] Cron run failed:", err)),
-      },
-      {
-        name: "refund-retry-job",
-        cronTime: "*/5 * * * *",
-        onTick: () => void runRefundNotificationRetryJob().catch((err) => console.error("[refund-retry-job] Cron run failed:", err)),
-      },
-    ],
-  });
+  // ── Background scheduled jobs ──────────────────────────────────────────────
+  await app.register(fastifySchedule);
 
   return app;
 }
@@ -163,7 +151,6 @@ async function main() {
   const shutdown = async (signal: string) => {
     app.log.info(`[Payment Service] ${signal} received. Shutting down gracefully…`);
     try {
-      app.cron.stopAllJobs();
       await app.close();
       await prisma.$disconnect();
     } finally {
@@ -178,11 +165,19 @@ async function main() {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Payment Service] listening on ${HOST}:${PORT}`);
 
-    // Run background jobs once immediately on startup, then cron takes over
+    // Run background jobs once immediately on startup, then scheduled jobs take over
     void runPayoutJob().catch((err) => console.error("[payout-job] Startup run failed:", err));
     void runRefundNotificationRetryJob().catch((err) => console.error("[refund-retry-job] Startup run failed:", err));
 
-    app.cron.startAllJobs();
+    const onErr = (name: string) => (err: any) => console.error(`[${name}] Job run failed:`, err);
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ seconds: 60 }, new AsyncTask("payout-job", () => runPayoutJob(), onErr("payout-job"))),
+    );
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ seconds: 60 }, new AsyncTask("refund-retry-job", () => runRefundNotificationRetryJob(), onErr("refund-retry-job"))),
+    );
   } catch (err) {
     app.log.error(err);
     process.exit(1);
