@@ -579,6 +579,12 @@ export async function listingRoutes(app: FastifyInstance) {
         }
       }
 
+      // If lat/lng are now provided for an apartment, clear temporary activation
+      if (listing.category === "apartment" && dbFields.lat && dbFields.lng) {
+        dbFields.temporaryActivation = false;
+        dbFields.geoVerificationDueAt = null;
+      }
+
       // Reset to draft if was rejected; active apartments stay active
       const newStatus = listing.status === "rejected" ? "draft" : listing.status;
 
@@ -936,11 +942,22 @@ export async function listingRoutes(app: FastifyInstance) {
         return sendError(reply, 422, "VALIDATION_ERROR", failures.join(" "), { failures });
       }
 
+      const needsGeo = listing.category === "apartment" && (!listing.lat || !listing.lng);
+
       await prisma.listing.update({
         where: { id },
         data: {
           status: "active",
           activatedAt: listing.activatedAt ?? new Date(),
+          ...(needsGeo
+            ? {
+                temporaryActivation: true,
+                geoVerificationDueAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
+              }
+            : {
+                temporaryActivation: false,
+                geoVerificationDueAt: null,
+              }),
         },
       });
 
@@ -950,12 +967,17 @@ export async function listingRoutes(app: FastifyInstance) {
         listing.category as "apartment" | "car"
       ).catch(() => null);
 
+      const msg = needsGeo
+        ? "Your apartment is now live with a temporary 180-day activation. Please update your location/address to complete verification and keep your listing active."
+        : listing.category === "car"
+          ? "Your car rental is now live!"
+          : "Your apartment is now live!";
+
       return sendSuccess(reply, 200, {
-        message:
-          listing.category === "car"
-            ? "Your car rental is now live!"
-            : "Your apartment is now live!",
+        message: msg,
         status: "active",
+        temporaryActivation: needsGeo,
+        ...(needsGeo ? { geoVerificationDueAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000) } : {}),
       });
     } catch (err) {
       req.log.error({ err }, "Failed to activate listing");
