@@ -17,6 +17,20 @@ const MapView = dynamic(() => import("./MapView"), { ssr: false });
 /* ── constants ───────────────────────────────────────────────── */
 const PAGE_SIZE = 20;
 
+const AMENITY_CATEGORY: Record<string, string> = {
+  wifi: "Connectivity", smart_tv: "Connectivity", work_desk: "Connectivity",
+  printer: "Connectivity", workspace: "Connectivity",
+  breakfast: "Food & Drink", restaurant_on_site: "Food & Drink",
+  coffee_machine: "Food & Drink", minibar: "Food & Drink", kitchen: "Food & Drink",
+  pool: "Wellness", gym: "Wellness", spa: "Wellness", sauna: "Wellness",
+  hot_tub: "Wellness", fitness_centre: "Wellness",
+  ac: "Comfort", heating: "Comfort", laundry: "Comfort", parking: "Comfort",
+  elevator: "Comfort", accessible: "Comfort",
+  reception_24h: "Services", housekeeping_daily: "Services",
+  airport_shuttle: "Services", security_24h: "Services",
+  shop_on_site: "Services", pet_friendly: "Services",
+};
+
 const CATEGORY_META = {
   hotel: {
     label: "Hotels",
@@ -829,7 +843,7 @@ export default function CategoryListingsClient({ category }: Props) {
     if (guests > 1) params.guests = guests;
     if (filters.priceMax < 500000) params.price_max = filters.priceMax;
     if (filters.rating) params.rating_min = filters.rating;
-    if (filters.amenities.length) params.amenity_ids = filters.amenities.join(",");
+    if (filters.amenities.length) params.amenity_ids = filters.amenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
     if (filters.cancellation) params.cancellation_policy = filters.cancellation;
     if (filters.minStay) params.min_stay_nights = filters.minStay;
 
