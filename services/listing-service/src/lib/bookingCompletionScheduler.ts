@@ -81,19 +81,4 @@ export async function completeEligibleBookings(): Promise<void> {
   }
 }
 
-export function startBookingCompletionScheduler(intervalMs = 5 * 60 * 1000): void {
-  console.log(`[Booking Completion Scheduler] Started — checking every ${intervalMs / 60_000} minute(s)`);
 
-  // Run once shortly after startup, then run periodically
-  setTimeout(() => {
-    void completeEligibleBookings().catch((err) =>
-      console.error("[Booking Completion Scheduler] Initial run failed:", err)
-    );
-  }, 10_000); // 10 seconds startup delay
-
-  setInterval(() => {
-    void completeEligibleBookings().catch((err) =>
-      console.error("[Booking Completion Scheduler] Periodic run failed:", err)
-    );
-  }, intervalMs);
-}

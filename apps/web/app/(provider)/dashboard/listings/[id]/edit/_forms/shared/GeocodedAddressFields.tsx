@@ -30,9 +30,9 @@ export function GeocodedAddressFields({
 }: Props) {
   const geo = useMutation({
     mutationFn: (addr: string) =>
-      listingApi.get(`/geocode?address=${encodeURIComponent(addr)}`).then((r) => r.data),
+      listingApi.get(`/geocode?address=${encodeURIComponent(addr)}`).then((r) => r.data.data),
     onSuccess: (data) => {
-      if (data.lat && data.lng) onGeocoded(data as GeoResult);
+      if (data?.lat && data?.lng) onGeocoded(data as GeoResult);
     },
   });
 

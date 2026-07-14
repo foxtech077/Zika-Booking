@@ -195,24 +195,4 @@ async function fetchProviderEmails(providerIds: string[]): Promise<string[]> {
   }
 }
 
-// ── Scheduler: fires at 00:01 UTC every day ───────────────────────────────────
-
-export function startCommissionScheduler(): void {
-  function scheduleNext(): void {
-    const now = new Date();
-    const next = new Date();
-    next.setUTCHours(0, 1, 0, 0); // 00:01 UTC
-    if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
-    const delayMs = next.getTime() - now.getTime();
-
-    setTimeout(() => {
-      promotePendingRates()
-        .catch((err) => console.error("[CommissionScheduler] Error:", err))
-        .finally(() => scheduleNext());
-    }, delayMs);
-
-    console.log(`[CommissionScheduler] Next run at ${next.toISOString()}`);
-  }
-
-  scheduleNext();
-}
+export { promotePendingRates };

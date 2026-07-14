@@ -5,6 +5,8 @@ import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
+import { fastifySchedule } from "@fastify/schedule";
+import { SimpleIntervalJob, AsyncTask } from "toad-scheduler";
 import Redis from "ioredis";
 import { listingRoutes } from "./routes/listings.js";
 import { adminListingRoutes } from "./routes/admin-listings.js";
@@ -14,16 +16,18 @@ import { reviewRoutes } from "./routes/reviews.js";
 import { commissionRoutes } from "./routes/commission.js";
 import { voucherRoutes } from "./routes/vouchers.js";
 import { providerRoutes } from "./routes/provider.js";
-import { icalRoutes, startIcalPoller } from "./routes/ical.js";
+import { icalRoutes, pollIcalFeeds } from "./routes/ical.js";
 import { messagingRoutes } from "./routes/messaging.js";
-import { startCommissionScheduler } from "./lib/commissionScheduler.js";
+import { promotePendingRates } from "./lib/commissionScheduler.js";
 import { bookingDocumentRoutes } from "./routes/booking-documents.js";
 import { loyaltyRoutes } from "./routes/loyalty.js";
 import { locationRoutes } from "./routes/location.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { profilePhotoRoutes } from "./routes/profile-photos.js";
-import { startVoucherExpiryWarner } from "./lib/voucherExpiryWarner.js";
-import { startBookingCompletionScheduler } from "./lib/bookingCompletionScheduler.js";
+import { roomTypeRoutes } from "./routes/room-types.js";
+import { checkVoucherExpiryWarnings } from "./lib/voucherExpiryWarner.js";
+import { completeEligibleBookings } from "./lib/bookingCompletionScheduler.js";
+import { cancelStalePendingPayments } from "./lib/pendingPaymentCanceller.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
@@ -89,6 +93,7 @@ async function build() {
         { name: "Admin Vouchers", description: "Admin voucher code generation and validation rules management" },
         { name: "Loyalty", description: "AfriPoints loyalty programme — tier profile, points history for guests" },
         { name: "Admin Loyalty", description: "Admin manual points adjustment and guest loyalty history" },
+        { name: "Room Types", description: "Hotel room type management — create, update, and deactivate room types with pricing and availability" },
       ],
       components: {
         securitySchemes: {
@@ -335,6 +340,10 @@ app.all("/admin/payouts/*", async (req, reply) => {
   await app.register(locationRoutes);
   await app.register(notificationRoutes);
   await app.register(profilePhotoRoutes);
+  await app.register(roomTypeRoutes);
+
+  // ── Background scheduled jobs ──────────────────────────────────────────────
+  await app.register(fastifySchedule);
 
   return app;
 }
@@ -344,10 +353,31 @@ async function main() {
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Listing Service] listening on ${HOST}:${PORT}`);
-    startIcalPoller();
-    startCommissionScheduler();
-    startVoucherExpiryWarner();
-    startBookingCompletionScheduler();
+
+    // Scheduled jobs are registered after listen so the app is fully ready
+    const onErr = (name: string) => (err: any) => console.error(`[${name}] Job run failed:`, err);
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ seconds: 60 }, new AsyncTask("pending-payment-canceller", () => cancelStalePendingPayments(), onErr("PendingPaymentCanceller"))),
+    );
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ minutes: 5 }, new AsyncTask("booking-completion", () => completeEligibleBookings(), onErr("BookingCompletionScheduler"))),
+    );
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ hours: 4 }, new AsyncTask("voucher-expiry-warner", () => checkVoucherExpiryWarnings(), onErr("VoucherExpiryWarner"))),
+    );
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ minutes: 15 }, new AsyncTask("ical-poller", () => pollIcalFeeds(), onErr("IcalPoller"))),
+    );
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ hours: 1 }, new AsyncTask("commission-scheduler", () => promotePendingRates(), onErr("CommissionScheduler"))),
+    );
+
+    console.log(`[Listing Service] Scheduled background jobs registered.`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
