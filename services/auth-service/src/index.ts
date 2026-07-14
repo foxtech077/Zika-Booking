@@ -7,6 +7,8 @@ import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { getRedis } from "./lib/redis";
+import { fastifySchedule } from "@fastify/schedule";
+import { SimpleIntervalJob, AsyncTask } from "toad-scheduler";
 import { authRoutes } from "./routes/auth";
 import {
   adminAuthRoutes,
@@ -14,8 +16,8 @@ import {
   adminOperatorRoutes,
 } from "./routes/admin-auth";
 import { adminDashboardRoutes } from "./routes/admin-dashboard.js";
-import { startTokenPurger } from "./lib/tokenPurger.js";
-import { startAuditLogPurger } from "./lib/auditLogPurger.js";
+import { purgeExpiredTokens } from "./lib/tokenPurger.js";
+import { purgeExpiredAuditLogs } from "./lib/auditLogPurger.js";
 
 const PORT = Number(process.env["AUTH_SERVICE_PORT"] ?? 3001);
 const HOST = process.env["AUTH_SERVICE_HOST"] ?? "0.0.0.0";
@@ -203,6 +205,9 @@ async function build() {
   await app.register(adminOperatorRoutes);
   await app.register(adminDashboardRoutes);
 
+  // ── Background scheduled jobs ──────────────────────────────────────────────
+  await app.register(fastifySchedule);
+
   return app;
 }
 
@@ -211,8 +216,16 @@ async function main() {
   try {
     await app.listen({ port: PORT, host: HOST });
     console.log(`[Auth Service] listening on ${HOST}:${PORT}`);
-    startTokenPurger();
-    startAuditLogPurger();
+
+    const onErr = (name: string) => (err: any) => console.error(`[${name}] Job run failed:`, err);
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ hours: 1 }, new AsyncTask("token-purger", () => purgeExpiredTokens(), onErr("TokenPurger"))),
+    );
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ hours: 24 }, new AsyncTask("audit-log-purger", () => purgeExpiredAuditLogs(), onErr("AuditLogPurger"))),
+    );
   } catch (err) {
     app.log.error(err);
     process.exit(1);
