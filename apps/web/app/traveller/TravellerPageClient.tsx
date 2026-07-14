@@ -930,7 +930,7 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.map(k => AMENITY_CATEGORY[k] ? `${AMENITY_CATEGORY[k]}:${k}` : k).join(",");
+      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
 
       if (activeCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
@@ -1020,7 +1020,7 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.map(k => AMENITY_CATEGORY[k] ? `${AMENITY_CATEGORY[k]}:${k}` : k).join(",");
+      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
       if (searchCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
         if (searchCheckOut) params.check_out = searchCheckOut;
