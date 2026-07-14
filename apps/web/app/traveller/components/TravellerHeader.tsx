@@ -178,7 +178,7 @@ export function TravellerHeader({
                 isHotelsActive,
               )}
               {navBtn(
-                "Apartments",
+                "Home",
                 TRAVELLER_ROUTES.apartments,
                 isApartmentsActive,
               )}
@@ -371,7 +371,7 @@ export function TravellerHeader({
                 <div className="grid gap-2">
                   {mobileNavBtn("Destinations", TRAVELLER_ROUTES.destinations, isDestinationsActive)}
                   {mobileNavBtn("Hotels", TRAVELLER_ROUTES.hotels, isHotelsActive)}
-                  {mobileNavBtn("Apartments", TRAVELLER_ROUTES.apartments, isApartmentsActive)}
+                  {mobileNavBtn("Home", TRAVELLER_ROUTES.apartments, isApartmentsActive)}
                   {mobileNavBtn("Car Rentals", TRAVELLER_ROUTES.cars, isCarsActive)}
                   {user && mobileNavBtn("My Reservations", TRAVELLER_ROUTES.bookings, isBookingsActive)}
                 </div>

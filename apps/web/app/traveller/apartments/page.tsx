@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import CategoryListingsClient from "../components/CategoryListingsClient";
 
-export const metadata = { title: "Apartments — Kainook" };
+export const metadata = { title: "Home — Kainook" };
 
 export default function ApartmentsPage() {
   return (

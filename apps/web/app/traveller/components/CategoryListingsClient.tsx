@@ -25,10 +25,10 @@ const CATEGORY_META = {
     subtitle: "Exceptional stays hand-picked for the discerning traveller.",
   },
   apartment: {
-    label: "Apartments",
-    plural: "apartments",
-    title: "Apartments",
-    subtitle: "Spacious apartments that feel like home, wherever you are.",
+    label: "Home",
+    plural: "homes",
+    title: "Home",
+    subtitle: "Spacious homes that feel like home, wherever you are.",
   },
   car: {
     label: "Cars",
@@ -40,7 +40,7 @@ const CATEGORY_META = {
 
 const NAV_ITEMS: Array<{ label: string; category: "hotel" | "apartment" | "car" }> = [
   { label: "Hotels", category: "hotel" },
-  { label: "Apartments", category: "apartment" },
+  { label: "Home", category: "apartment" },
   { label: "Cars", category: "car" },
 ];
 
