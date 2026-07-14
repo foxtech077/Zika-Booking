@@ -353,6 +353,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             category: { type: "string" },
             country: { type: "string", nullable: true },
             town: { type: "string", nullable: true },
+            neighborhood: { type: "string", nullable: true },
             claimedStarRating: { type: "integer", nullable: true },
             starRating: { type: "integer", nullable: true },
             submissionCount: { type: "integer" },
@@ -1490,6 +1491,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           petsAllowed: { type: "boolean" },
           address: { type: "string" },
           town: { type: "string", maxLength: 100 },
+          neighborhood: { type: "string", maxLength: 100 },
           country: { type: "string", minLength: 2, maxLength: 2 },
           amenities: {
             type: "object",
@@ -2121,6 +2123,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   starRating: { type: "integer", nullable: true },
                   country: { type: "string", nullable: true },
                   town: { type: "string", nullable: true },
+                  neighborhood: { type: "string", nullable: true },
                   pricePerNight: { type: "number", nullable: true },
                   currency: { type: "string", nullable: true },
                   submissionCount: { type: "integer" },
@@ -2162,7 +2165,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         status: "draft" as const,
       },
       AND: [
-        q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { town: { contains: q, mode: "insensitive" as const } }] } : {},
+        q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { town: { contains: q, mode: "insensitive" as const } }, { neighborhood: { contains: q, mode: "insensitive" as const } }] } : {},
         status ? { status: status as any } : {},
         category ? { category: category as any } : {},
         isCountryManager
@@ -2188,6 +2191,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             starRating: true,
             country: true,
             town: true,
+            neighborhood: true,
             pricePerNight: true,
              pricePerDay: true,
             currency: true,

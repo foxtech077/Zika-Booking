@@ -199,6 +199,7 @@ model Listing {
   lat                   Decimal?            @db.Decimal(9, 6)
   lng                   Decimal?            @db.Decimal(9, 6)
   town                  String?             @db.VarChar(100)
+  neighborhood          String?             @db.VarChar(100)
   country               String?             @db.Char(2)
   claimedStarRating     Int?                @map("claimed_star_rating")
   starRating            Int?                @map("star_rating")
