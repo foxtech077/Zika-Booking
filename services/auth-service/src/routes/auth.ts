@@ -227,7 +227,11 @@ export async function authRoutes(app: FastifyInstance) {
         }
 
         // Token expired — delete the old unverified user and allow fresh registration
-        await prisma.user.delete({ where: { id: existing.id } });
+        try {
+          await prisma.user.delete({ where: { id: existing.id } });
+        } catch (delErr: any) {
+          if (delErr?.code !== "P2025") throw delErr;
+        }
       }
 
       const passwordHash = await hashPassword(password);
@@ -439,7 +443,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       if (record.expiresAt < new Date()) {
-        return html("⌛", "Link Expired", "Your verification link has expired (links are valid for 24 hours). Please open the app and request a new verification email.", "#d97706");
+        return html("⌛", "Link Expired", "Your verification link has expired (links are valid for 24 hours). Please sign in to request a new verification email.", "#d97706");
       }
 
       // Already verified
@@ -543,7 +547,8 @@ export async function authRoutes(app: FastifyInstance) {
             reply,
             410,
             "TOKEN_EXPIRED",
-            "Your verification link has expired."
+            "Your verification link has expired.",
+            { email: record.user.email }
           );
         }
 
