@@ -181,7 +181,8 @@ export async function searchRoutes(app: FastifyInstance) {
       const PREFIXES = ["Connectivity", "Food & Drink", "Wellness", "Comfort", "Services"];
       const seen = new Set<string>();
       for (const id of amenityIds) {
-        const base = id.includes(":") ? id.split(":")[1] : id;
+        const col = id.indexOf(":");
+        const base = col === -1 ? id : id.slice(col + 1);
         if (!seen.has(base)) {
           seen.add(base);
           andClauses.push({
