@@ -28,6 +28,7 @@ import { roomTypeRoutes } from "./routes/room-types.js";
 import { checkVoucherExpiryWarnings } from "./lib/voucherExpiryWarner.js";
 import { completeEligibleBookings } from "./lib/bookingCompletionScheduler.js";
 import { cancelStalePendingPayments } from "./lib/pendingPaymentCanceller.js";
+import { expireStaleGeoVerifications } from "./lib/geoVerificationExpirer.js";
 
 const PORT = Number(process.env["LISTING_SERVICE_PORT"] ?? 3003);
 const HOST = process.env["LISTING_SERVICE_HOST"] ?? "0.0.0.0";
@@ -375,6 +376,10 @@ async function main() {
 
     app.scheduler.addSimpleIntervalJob(
       new SimpleIntervalJob({ hours: 1 }, new AsyncTask("commission-scheduler", () => promotePendingRates(), onErr("CommissionScheduler"))),
+    );
+
+    app.scheduler.addSimpleIntervalJob(
+      new SimpleIntervalJob({ hours: 2 }, new AsyncTask("geo-verification-expirer", () => expireStaleGeoVerifications(), onErr("GeoVerificationExpirer"))),
     );
 
     console.log(`[Listing Service] Scheduled background jobs registered.`);
