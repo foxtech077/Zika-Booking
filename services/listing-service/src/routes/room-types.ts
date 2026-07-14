@@ -221,7 +221,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
         if (!listing) return;
 
         const roomTypes = await prisma.hotelRoomType.findMany({
-          where: { listingId: id },
+          where: { listingId: id, isActive: true },
           orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
         });
 
@@ -428,7 +428,7 @@ export async function roomTypeRoutes(app: FastifyInstance) {
       preHandler: [requireProviderRole],
       schema: {
         tags: ["Room Types"],
-        summary: "Deactivate a room type (soft delete)",
+        summary: "Delete a room type (hard delete if no bookings, else soft deactivate)",
         security: [{ bearerAuth: [] }],
         params: {
           type: "object",
@@ -481,13 +481,27 @@ export async function roomTypeRoutes(app: FastifyInstance) {
           });
         }
 
+        const bookingCount = await prisma.booking.count({
+          where: { roomTypeId: rtId },
+        });
+
+        if (bookingCount === 0) {
+          await prisma.hotelRoomType.delete({
+            where: { id: rtId },
+          });
+
+          return sendSuccess(reply, 200, {
+            message: "Room type deleted successfully.",
+          });
+        }
+
         await prisma.hotelRoomType.update({
           where: { id: rtId },
           data: { isActive: false },
         });
 
         return sendSuccess(reply, 200, {
-          message: "Room type deactivated successfully.",
+          message: "Room type deactivated successfully. It has existing bookings so it cannot be permanently deleted.",
         });
       } catch (err) {
         req.log.error({ err }, "Failed to deactivate room type");
