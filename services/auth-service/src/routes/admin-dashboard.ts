@@ -174,7 +174,7 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks WHERE status = 'open' AND created_at >= ${start} AND created_at <= ${end}`;
         hotelCount = Number(hotelData?.count || 0);
 
-        const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM payments."Refund" WHERE status = 'pending' AND "createdAt" >= ${start} AND "createdAt" <= ${end}`;
+        const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM payments."Refund" WHERE status = 'pending' AND "created_at" >= ${start} AND "created_at" <= ${end}`;
         refundCount = Number(refundData?.count || 0);
       } else {
         const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks WHERE status = 'open'`;
@@ -279,8 +279,8 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
           'refund' as type,
           'refund_issued' as action,
           'system' as actor,
-          "createdAt" as timestamp,
-          jsonb_build_object('paymentId', "paymentId", 'amount', amount) as metadata
+          "created_at" as timestamp,
+          jsonb_build_object('paymentId', "payment_id", 'amount', amount) as metadata
         FROM payments."Refund"
         WHERE status = 'succeeded'
         
@@ -733,7 +733,7 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks WHERE status = 'open' AND created_at >= ${start} AND created_at <= ${end}`;
         hotelCount = Number(hotelData?.count || 0);
 
-        const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM payments."Refund" WHERE status = 'pending' AND "createdAt" >= ${start} AND "createdAt" <= ${end}`;
+        const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM payments."Refund" WHERE status = 'pending' AND "created_at" >= ${start} AND "created_at" <= ${end}`;
         refundCount = Number(refundData?.count || 0);
       } else {
         const [hotelData] = await prisma.$queryRaw<[{ count: bigint }]>`SELECT COUNT(*) as count FROM listing.listing_review_tasks WHERE status = 'open'`;
@@ -837,8 +837,8 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
           'refund' as type, 
           'refund_issued' as action, 
           'system' as actor, 
-          "createdAt" as timestamp, 
-          json_build_object('paymentId', "paymentId", 'amount', amount)::jsonb as metadata 
+          "created_at" as timestamp, 
+          json_build_object('paymentId', "payment_id", 'amount', amount)::jsonb as metadata 
         FROM payments."Refund"
         WHERE status = 'succeeded'
         
@@ -914,8 +914,8 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
           'refund' as type, 
           'refund_issued' as action, 
           'system' as actor, 
-          "createdAt" as timestamp, 
-          json_build_object('paymentId', "paymentId", 'amount', amount)::jsonb as metadata 
+          "created_at" as timestamp, 
+          json_build_object('paymentId', "payment_id", 'amount', amount)::jsonb as metadata 
         FROM payments."Refund"
         WHERE status = 'succeeded'
         ORDER BY timestamp DESC
@@ -990,7 +990,7 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
       const [refundData] = await prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(*) as count FROM payments."Refund" r
-        JOIN payments."Payment" p ON r."paymentId" = p.id
+        JOIN payments."Payment" p ON r."payment_id" = p.id
         JOIN listing.bookings b ON p."bookingId" = b.id
         JOIN listing.listings l ON b.listing_id = l.id
         WHERE r.status = 'pending' AND l.country = ANY(${countryScope})
@@ -1093,10 +1093,10 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
           'refund' as type, 
           'refund_issued' as action, 
           'system' as actor, 
-          r."createdAt" as timestamp, 
-          json_build_object('paymentId', r."paymentId", 'amount', r.amount)::jsonb as metadata 
+          r."created_at" as timestamp, 
+          json_build_object('paymentId', r."payment_id", 'amount', r.amount)::jsonb as metadata 
         FROM payments."Refund" r
-        JOIN payments."Payment" p ON r."paymentId" = p.id
+        JOIN payments."Payment" p ON r."payment_id" = p.id
         JOIN listing.bookings b ON p."bookingId" = b.id
         JOIN listing.listings l ON b.listing_id = l.id
         WHERE r.status = 'succeeded' AND l.country = ANY(${countryScope})

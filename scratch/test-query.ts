@@ -28,10 +28,10 @@ async function run() {
         'refund' as type, 
         'refund_issued' as action, 
         'system' as actor, 
-        r."createdAt" as timestamp, 
-        json_build_object('paymentId', r."paymentId", 'amount', r.amount)::jsonb as metadata 
+        r."created_at" as timestamp, 
+        json_build_object('paymentId', r."payment_id", 'amount', r.amount)::jsonb as metadata 
       FROM payments."Refund" r
-      JOIN payments."Payment" p ON r."paymentId" = p.id
+      JOIN payments."Payment" p ON r."payment_id" = p.id
       JOIN listing.bookings b ON p."bookingId" = b.id
       JOIN listing.listings l ON b.listing_id = l.id
       WHERE r.status = 'succeeded' AND l.country = ANY(${countryScope})
