@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
-import { withSignedPhotos } from "../lib/s3.js";
+
 import { DriveType, FuelType } from "../generated/index.js";
 
 // ── Geo helper ────────────────────────────────────────────────────────────────
@@ -469,7 +469,7 @@ export async function searchRoutes(app: FastifyInstance) {
         isFavourited = !!fav;
       }
 
-      const signedPhotos = await withSignedPhotos(listing.photos);
+      const listingPhotos = listing.photos;
 
       // Fetch active promotion badge for this category
       let promoBadge: { labelText: string; labelColour: string } | null = null;
@@ -486,7 +486,7 @@ export async function searchRoutes(app: FastifyInstance) {
       // Strip sensitive car fields pre-booking
       const data: any = {
         ...listing,
-        photos: signedPhotos,
+        photos: listingPhotos,
         licencePlate: undefined,
         isFavourited: guestId ? isFavourited : undefined,
         // Add basic information aliases to match /listings/search
@@ -494,7 +494,7 @@ export async function searchRoutes(app: FastifyInstance) {
         title: listing.name,
         city: listing.town,
         countryCode: listing.country,
-        primaryPhotoUrl: signedPhotos[0]?.cdnUrl ?? null,
+        primaryPhotoUrl: listingPhotos[0]?.cdnUrl ?? null,
         nightlyRate: listing.category !== "car"
           ? (listing.category === "hotel" && listing.hotelRoomTypes.length > 0
               ? Math.min(...listing.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)))

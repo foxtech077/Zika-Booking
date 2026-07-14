@@ -5,7 +5,7 @@ import { getTaxRate } from "../services/getTaxRate.services.js";
 import { calculateBilling } from "../services/billing.service.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
-import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
+import { createPresignedDownloadUrl } from "../lib/s3.js";
 import { fireNotification } from "../lib/notifications.js";
 import { patchListingSchema } from "./listings.js";
 import { triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
@@ -311,7 +311,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           ...t,
           listing: {
             ...t.listing,
-            photos: await withSignedPhotos(t.listing.photos),
+            photos: t.listing.photos,
           },
         })),
       );
@@ -541,7 +541,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         mileageLimitKm: listing.category === "car" ? listing.mileageLimitKm : undefined,
 
         amenities: groupedAmenities,
-        photos: await withSignedPhotos(listing.photos),
+        photos: listing.photos,
         docChecklist,
       });
     } catch (err: any) {
@@ -1615,7 +1615,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       });
       if (!updated) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-      const formatted = { ...updated, photos: await withSignedPhotos(updated.photos) };
+      const formatted = { ...updated, photos: updated.photos };
       return sendSuccess(reply, 200, { message: "Listing updated.", data: formatted });
     },
   });
@@ -2213,7 +2213,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           return {
             ...l,
             pricePerNight,
-            photos: await withSignedPhotos(l.photos),
+            photos: l.photos,
           };
         }),
       );
