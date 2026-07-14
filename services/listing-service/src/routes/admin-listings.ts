@@ -5,7 +5,7 @@ import { getTaxRate } from "../services/getTaxRate.services.js";
 import { calculateBilling } from "../services/billing.service.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireAdmin, type AdminRequest } from "../middleware/auth.js";
-import { createPresignedDownloadUrl, withSignedPhotos } from "../lib/s3.js";
+import { createPresignedDownloadUrl } from "../lib/s3.js";
 import { fireNotification } from "../lib/notifications.js";
 import { patchListingSchema } from "./listings.js";
 import { triggerPaymentRefund, generateRefundIdempotencyKey } from "../services/payment.services.js";
@@ -311,7 +311,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           ...t,
           listing: {
             ...t.listing,
-            photos: await withSignedPhotos(t.listing.photos),
+            photos: t.listing.photos,
           },
         })),
       );
@@ -353,6 +353,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             category: { type: "string" },
             country: { type: "string", nullable: true },
             town: { type: "string", nullable: true },
+            neighborhood: { type: "string", nullable: true },
             claimedStarRating: { type: "integer", nullable: true },
             starRating: { type: "integer", nullable: true },
             submissionCount: { type: "integer" },
@@ -541,7 +542,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         mileageLimitKm: listing.category === "car" ? listing.mileageLimitKm : undefined,
 
         amenities: groupedAmenities,
-        photos: await withSignedPhotos(listing.photos),
+        photos: listing.photos,
         docChecklist,
       });
     } catch (err: any) {
@@ -1490,6 +1491,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           petsAllowed: { type: "boolean" },
           address: { type: "string" },
           town: { type: "string", maxLength: 100 },
+          neighborhood: { type: "string", maxLength: 100 },
           country: { type: "string", minLength: 2, maxLength: 2 },
           amenities: {
             type: "object",
@@ -1615,7 +1617,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         },
       });
       if (!updated) return sendError(reply, 404, "NOT_FOUND", "Listing not found.");
-      const formatted = { ...updated, photos: await withSignedPhotos(updated.photos) };
+      const formatted = { ...updated, photos: updated.photos };
       return sendSuccess(reply, 200, { message: "Listing updated.", data: formatted });
     },
   });
@@ -2121,6 +2123,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
                   starRating: { type: "integer", nullable: true },
                   country: { type: "string", nullable: true },
                   town: { type: "string", nullable: true },
+                  neighborhood: { type: "string", nullable: true },
                   pricePerNight: { type: "number", nullable: true },
                   currency: { type: "string", nullable: true },
                   submissionCount: { type: "integer" },
@@ -2162,7 +2165,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
         status: "draft" as const,
       },
       AND: [
-        q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { town: { contains: q, mode: "insensitive" as const } }] } : {},
+        q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { town: { contains: q, mode: "insensitive" as const } }, { neighborhood: { contains: q, mode: "insensitive" as const } }] } : {},
         status ? { status: status as any } : {},
         category ? { category: category as any } : {},
         isCountryManager
@@ -2188,6 +2191,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
             starRating: true,
             country: true,
             town: true,
+            neighborhood: true,
             pricePerNight: true,
              pricePerDay: true,
             currency: true,
@@ -2213,7 +2217,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           return {
             ...l,
             pricePerNight,
-            photos: await withSignedPhotos(l.photos),
+            photos: l.photos,
           };
         }),
       );

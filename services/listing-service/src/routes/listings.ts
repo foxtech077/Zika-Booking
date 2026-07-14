@@ -14,7 +14,7 @@ import {
   isValidPhotoType,
   isValidDocumentType,
   fileExtFromContentType,
-  withSignedPhotos,
+
 } from "../lib/s3.js";
 import { geocodePlaceId, geocodeAddress, reverseGeocode } from "../lib/geocoding.js";
 import { sendListingSubmittedEmail, sendListingActivatedEmail } from "../lib/email.js";
@@ -115,6 +115,7 @@ export const patchListingSchema = z.object({
   lat: z.number().optional().nullable(),
   lng: z.number().optional().nullable(),
   town: z.string().max(100).optional().nullable(),
+  neighborhood: z.string().max(100).optional().nullable(),
   country: z.string().length(2).optional().nullable(),
   amenities: amenitiesGroupedSchema.optional(),
   customAmenities: z.array(z.string().max(60)).optional(),
@@ -353,7 +354,7 @@ export async function listingRoutes(app: FastifyInstance) {
       ]);
 
       const signedListings = await Promise.all(
-        listings.map(async (l) => ({ ...l, photos: await withSignedPhotos(l.photos) })),
+        listings.map((l) => ({ ...l, photos: l.photos })),
       );
       return sendSuccess(reply, 200, { listings: signedListings, total, page: parseInt(page, 10), limit: take });
     } catch (err) {
@@ -423,11 +424,11 @@ export async function listingRoutes(app: FastifyInstance) {
       const formattedListing = {
         ...listing,
         amenities: groupedAmenities,
-        photos: await withSignedPhotos(listing.photos),
         // hotelRoomTypes: listing.hotelRoomTypes.map((rt) => ({
         //   ...rt,
         //   pricePerNight: Number(rt.pricePerNight),
         // })),
+        photos: listing.photos,
       };
 
       return sendSuccess(reply, 200, formattedListing);
@@ -471,6 +472,7 @@ export async function listingRoutes(app: FastifyInstance) {
           petsAllowed: { type: "boolean" },
           address: { type: "string" },
           town: { type: "string", maxLength: 100 },
+          neighborhood: { type: "string", maxLength: 100 },
           country: { type: "string", minLength: 2, maxLength: 2 },
           amenities: {
             type: "object",
@@ -572,7 +574,7 @@ export async function listingRoutes(app: FastifyInstance) {
       }
 
       // Geocoding Rules (Requirement 5)
-      // Address selection MUST auto-fill: lat, lng, town, country.
+      // Address selection MUST auto-fill: lat, lng, town, neighborhood, country.
       // Manual pin drag updates ONLY lat/lng.
       if (parsed.data.address && parsed.data.address !== listing.address) {
         const geo = await geocodeAddress(parsed.data.address);
@@ -580,8 +582,15 @@ export async function listingRoutes(app: FastifyInstance) {
           dbFields.lat = geo.lat;
           dbFields.lng = geo.lng;
           dbFields.town = geo.town;
+          dbFields.neighborhood = geo.neighborhood;
           dbFields.country = geo.country;
         }
+      }
+
+      // If lat/lng are now provided for an apartment, clear temporary activation
+      if (listing.category === "apartment" && dbFields.lat && dbFields.lng) {
+        dbFields.temporaryActivation = false;
+        dbFields.geoVerificationDueAt = null;
       }
 
       // Reset to draft if was rejected; active apartments stay active
@@ -941,11 +950,22 @@ export async function listingRoutes(app: FastifyInstance) {
         return sendError(reply, 422, "VALIDATION_ERROR", failures.join(" "), { failures });
       }
 
+      const needsGeo = listing.category === "apartment" && (!listing.lat || !listing.lng);
+
       await prisma.listing.update({
         where: { id },
         data: {
           status: "active",
           activatedAt: listing.activatedAt ?? new Date(),
+          ...(needsGeo
+            ? {
+              temporaryActivation: true,
+              geoVerificationDueAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
+            }
+            : {
+              temporaryActivation: false,
+              geoVerificationDueAt: null,
+            }),
         },
       });
 
@@ -955,12 +975,17 @@ export async function listingRoutes(app: FastifyInstance) {
         listing.category as "apartment" | "car"
       ).catch(() => null);
 
+      const msg = needsGeo
+        ? "Your apartment is now live with a temporary 180-day activation. Please update your location/address to complete verification and keep your listing active."
+        : listing.category === "car"
+          ? "Your car rental is now live!"
+          : "Your apartment is now live!";
+
       return sendSuccess(reply, 200, {
-        message:
-          listing.category === "car"
-            ? "Your car rental is now live!"
-            : "Your apartment is now live!",
+        message: msg,
         status: "active",
+        temporaryActivation: needsGeo,
+        ...(needsGeo ? { geoVerificationDueAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000) } : {}),
       });
     } catch (err) {
       req.log.error({ err }, "Failed to activate listing");

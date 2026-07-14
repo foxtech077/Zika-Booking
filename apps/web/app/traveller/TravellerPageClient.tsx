@@ -22,6 +22,21 @@ import ReservationCard from "./components/ReservationCard";
 import MapView from "./components/MapView";
 import type { PublicListingDetail } from "@/types";
 
+const AMENITY_CATEGORY: Record<string, string> = {
+  wifi: "Connectivity", smart_tv: "Connectivity", work_desk: "Connectivity",
+  printer: "Connectivity", workspace: "Connectivity",
+  breakfast: "Food & Drink", restaurant_on_site: "Food & Drink",
+  coffee_machine: "Food & Drink", minibar: "Food & Drink", kitchen: "Food & Drink",
+  pool: "Wellness", gym: "Wellness", spa: "Wellness", sauna: "Wellness",
+  hot_tub: "Wellness", fitness_centre: "Wellness",
+  ac: "Comfort", heating: "Comfort", laundry: "Comfort", parking: "Comfort",
+  elevator: "Comfort", accessible: "Comfort",
+  reception_24h: "Services", housekeeping_daily: "Services",
+  airport_shuttle: "Services", security_24h: "Services",
+  shop_on_site: "Services", pet_friendly: "Services",
+  tv: "Services", fireplace: "Comfort", balcony: "Comfort", washer: "Comfort",
+};
+
 interface User {
   id: string;
   firstName: string;
@@ -107,15 +122,38 @@ const TAX_RATES: Record<string, number> = {
 };
 
 const AMENITY_LABELS: Record<string, string> = {
-  wifi: "High-Speed Wi-Fi",
-  pool: "Infinity Swimming Pool",
-  ac: "Air Conditioning",
-  kitchen: "Professional Chef Kitchen",
-  gym: "State-of-the-art Gym",
-  parking: "Complimentary Valet Parking",
-  tv: "Smart UHD TV",
-  washer: "In-unit Washer & Dryer",
-  fireplace: "Cosy Wood Fireplace"
+  wifi: "High-Speed Wi-Fi", "Connectivity:wifi": "High-Speed Wi-Fi",
+  smart_tv: "Smart TV", "Connectivity:smart_tv": "Smart TV",
+  work_desk: "Work Desk", "Connectivity:work_desk": "Work Desk",
+  printer: "Printer", "Connectivity:printer": "Printer",
+  workspace: "Workspace", "Connectivity:workspace": "Workspace",
+  breakfast: "Breakfast", "Food & Drink:breakfast": "Breakfast",
+  restaurant_on_site: "Restaurant", "Food & Drink:restaurant_on_site": "Restaurant",
+  coffee_machine: "Coffee Machine", "Food & Drink:coffee_machine": "Coffee Machine",
+  minibar: "Minibar", "Food & Drink:minibar": "Minibar",
+  kitchen: "Kitchen", "Food & Drink:kitchen": "Kitchen",
+  pool: "Pool", "Wellness:pool": "Pool",
+  gym: "Gym", "Wellness:gym": "Gym",
+  spa: "Spa", "Wellness:spa": "Spa",
+  sauna: "Sauna", "Wellness:sauna": "Sauna",
+  hot_tub: "Hot Tub", "Wellness:hot_tub": "Hot Tub",
+  fitness_centre: "Fitness Centre", "Wellness:fitness_centre": "Fitness Centre",
+  ac: "Air Conditioning", "Comfort:ac": "Air Conditioning",
+  heating: "Heating", "Comfort:heating": "Heating",
+  laundry: "Laundry", "Comfort:laundry": "Laundry",
+  parking: "Parking", "Comfort:parking": "Parking",
+  elevator: "Elevator", "Comfort:elevator": "Elevator",
+  accessible: "Wheelchair Accessible", "Comfort:accessible": "Wheelchair Accessible",
+  reception_24h: "24/7 Reception", "Services:reception_24h": "24/7 Reception",
+
+  airport_shuttle: "Airport Shuttle", "Services:airport_shuttle": "Airport Shuttle",
+  security_24h: "24/7 Security", "Services:security_24h": "24/7 Security",
+  shop_on_site: "Shop On-Site", "Services:shop_on_site": "Shop On-Site",
+  pet_friendly: "Pet Friendly", "Services:pet_friendly": "Pet Friendly",
+  tv: "TV", "Services:tv": "TV",
+  fireplace: "Fireplace", "Comfort:fireplace": "Fireplace",
+  balcony: "Balcony", "Comfort:balcony": "Balcony",
+  washer: "Washer & Dryer", "Comfort:washer": "Washer & Dryer",
 };
 
 // No mock data — listings are fetched live from the backend API
@@ -918,7 +956,7 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenities = selectedAmenities.join(",");
+      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
 
       if (activeCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
@@ -1008,7 +1046,7 @@ export default function TravellerDashboard() {
       if (selectedRating) params.rating_min = selectedRating;
       if (selectedCancellation) params.cancellation_policy = selectedCancellation;
       if (showInstantOnly) params.instant_booking = true;
-      if (selectedAmenities.length > 0) params.amenities = selectedAmenities.join(",");
+      if (selectedAmenities.length > 0) params.amenity_ids = selectedAmenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
       if (searchCategory !== "car") {
         if (searchCheckIn) params.check_in = searchCheckIn;
         if (searchCheckOut) params.check_out = searchCheckOut;
@@ -3409,16 +3447,19 @@ export default function TravellerDashboard() {
                     <label className="block text-xs font-semibold text-slate-700">Amenities</label>
                     <div className="flex flex-wrap gap-2 pt-0.5">
                       {[
-                        { key: "kitchen", label: "Full Kitchen" },
-                        { key: "wifi", label: "Workspace" },
-                        { key: "pool", label: "Balcony" },
-                        { key: "pool", label: "Infinity Pool" },
-                        { key: "gym", label: "24/7 Gym" },
+                        { key: "wifi", label: "Wi-Fi" },
+                        { key: "pool", label: "Pool" },
+                        { key: "ac", label: "Air Conditioning" },
+                        { key: "kitchen", label: "Kitchen" },
+                        { key: "gym", label: "Gym" },
+                        { key: "parking", label: "Parking" },
+                        { key: "spa", label: "Spa" },
+                        { key: "breakfast", label: "Breakfast" },
                       ].map(({ key, label }) => {
                         const active = selectedAmenities.includes(key);
                         return (
                           <button
-                            key={label}
+                            key={key}
                             onClick={() => setSelectedAmenities((prev) =>
                               active ? prev.filter((a) => a !== key) : [...prev, key]
                             )}
@@ -4023,7 +4064,38 @@ export default function TravellerDashboard() {
                 <div className="space-y-2">
                   <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Amenities</label>
                   <div className="grid grid-cols-3 gap-2">
-                    {[{ key: "wifi", label: "Wi-Fi" }, { key: "pool", label: "Pool" }, { key: "parking", label: "Parking" }, { key: "ac", label: "A/C" }, { key: "gym", label: "Gym" }, { key: "kitchen", label: "Kitchen" }].map(({ key, label }) => {
+                    {[
+                      { key: "wifi", label: "Wi-Fi" },
+                      { key: "smart_tv", label: "Smart TV" },
+                      { key: "work_desk", label: "Work Desk" },
+                      { key: "workspace", label: "Workspace" },
+                      { key: "breakfast", label: "Breakfast" },
+                      { key: "restaurant_on_site", label: "Restaurant" },
+                      { key: "coffee_machine", label: "Coffee Machine" },
+                      { key: "minibar", label: "Minibar" },
+                      { key: "kitchen", label: "Kitchen" },
+                      { key: "pool", label: "Pool" },
+                      { key: "gym", label: "Gym" },
+                      { key: "spa", label: "Spa" },
+                      { key: "sauna", label: "Sauna" },
+                      { key: "hot_tub", label: "Hot Tub" },
+                      { key: "fitness_centre", label: "Fitness Centre" },
+                      { key: "ac", label: "Air Conditioning" },
+                      { key: "heating", label: "Heating" },
+                      { key: "laundry", label: "Laundry" },
+                      { key: "parking", label: "Parking" },
+                      { key: "elevator", label: "Elevator" },
+                      { key: "accessible", label: "Wheelchair Accessible" },
+                      { key: "reception_24h", label: "24/7 Reception" },
+                      { key: "housekeeping_daily", label: "Daily Housekeeping" },
+                      { key: "airport_shuttle", label: "Airport Shuttle" },
+                      { key: "security_24h", label: "24/7 Security" },
+                      { key: "shop_on_site", label: "Shop On-Site" },
+                      { key: "pet_friendly", label: "Pet Friendly" },
+                      { key: "tv", label: "TV" },
+                      { key: "fireplace", label: "Fireplace" },
+                      { key: "balcony", label: "Balcony" },
+                    ].map(({ key, label }) => {
                       const active = selectedAmenities.includes(key);
                       return (
                         <button

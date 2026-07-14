@@ -17,6 +17,21 @@ const MapView = dynamic(() => import("./MapView"), { ssr: false });
 /* ── constants ───────────────────────────────────────────────── */
 const PAGE_SIZE = 20;
 
+const AMENITY_CATEGORY: Record<string, string> = {
+  wifi: "Connectivity", smart_tv: "Connectivity", work_desk: "Connectivity",
+  printer: "Connectivity", workspace: "Connectivity",
+  breakfast: "Food & Drink", restaurant_on_site: "Food & Drink",
+  coffee_machine: "Food & Drink", minibar: "Food & Drink", kitchen: "Food & Drink",
+  pool: "Wellness", gym: "Wellness", spa: "Wellness", sauna: "Wellness",
+  hot_tub: "Wellness", fitness_centre: "Wellness",
+  ac: "Comfort", heating: "Comfort", laundry: "Comfort", parking: "Comfort",
+  elevator: "Comfort", accessible: "Comfort",
+  reception_24h: "Services", housekeeping_daily: "Services",
+  airport_shuttle: "Services", security_24h: "Services",
+  shop_on_site: "Services", pet_friendly: "Services",
+  tv: "Services", fireplace: "Comfort", balcony: "Comfort", washer: "Comfort",
+};
+
 const CATEGORY_META = {
   hotel: {
     label: "Hotels",
@@ -52,13 +67,33 @@ const CAT_HREF: Record<"hotel" | "apartment" | "car", string> = {
 
 const AMENITY_OPTIONS = [
   { key: "wifi", label: "Wi-Fi" },
-  { key: "pool", label: "Pool" },
-  { key: "ac", label: "Air Conditioning" },
+  { key: "smart_tv", label: "Smart TV" },
+  { key: "work_desk", label: "Work Desk" },
+  { key: "workspace", label: "Workspace" },
+  { key: "breakfast", label: "Breakfast" },
+  { key: "restaurant_on_site", label: "Restaurant" },
+  { key: "coffee_machine", label: "Coffee Machine" },
+  { key: "minibar", label: "Minibar" },
   { key: "kitchen", label: "Kitchen" },
+  { key: "pool", label: "Pool" },
   { key: "gym", label: "Gym" },
+  { key: "spa", label: "Spa" },
+  { key: "sauna", label: "Sauna" },
+  { key: "hot_tub", label: "Hot Tub" },
+  { key: "fitness_centre", label: "Fitness Centre" },
+  { key: "ac", label: "Air Conditioning" },
+  { key: "heating", label: "Heating" },
+  { key: "laundry", label: "Laundry" },
   { key: "parking", label: "Parking" },
-  { key: "tv", label: "Smart TV" },
-  { key: "washer", label: "Washer" },
+  { key: "elevator", label: "Elevator" },
+  { key: "accessible", label: "Wheelchair Accessible" },
+  { key: "reception_24h", label: "24/7 Reception" },
+  { key: "housekeeping_daily", label: "Daily Housekeeping" },
+  { key: "airport_shuttle", label: "Airport Shuttle" },
+  { key: "security_24h", label: "24/7 Security" },
+  { key: "shop_on_site", label: "Shop On-Site" },
+  { key: "pet_friendly", label: "Pet Friendly" },
+  { key: "tv", label: "TV" },
   { key: "fireplace", label: "Fireplace" },
   { key: "balcony", label: "Balcony" },
 ];
@@ -817,29 +852,21 @@ export default function CategoryListingsClient({ category }: Props) {
     const params: Record<string, any> = {
       category,
       limit: effectiveLimit,
-      offset: newOffset,
+      cursor: newOffset,
       lat,
       lng,
       // Use global radius for ALL text searches so results are not constrained by geography.
       // Browse (no text) uses global radius too for a full category inventory view.
       radius_km: 20000,
-      sort_by: sortBy,
+      sort: sortBy,
     };
-
-    // Always pass the user's text as `q` — backend may use it for full-text matching.
-    // This is the primary mechanism for name/hotel/apartment/car searches.
-    if (dest) {
-      params.q = dest;
-      params.name = dest; // some backends also accept `name`
-    }
 
     if (guests > 1) params.guests = guests;
     if (filters.priceMax < 500000) params.price_max = filters.priceMax;
     if (filters.rating) params.rating_min = filters.rating;
-    if (filters.amenities.length) params.amenities = filters.amenities.join(",");
+    if (filters.amenities.length) params.amenity_ids = filters.amenities.flatMap(k => AMENITY_CATEGORY[k] ? [`${AMENITY_CATEGORY[k]}:${k}`, k] : [k]).join(",");
     if (filters.cancellation) params.cancellation_policy = filters.cancellation;
-    if (filters.instantOnly) params.instant_booking = true;
-    if (filters.minStay) params.min_stay = filters.minStay;
+    if (filters.minStay) params.min_stay_nights = filters.minStay;
 
     if (!isCar) {
       if (checkIn) params.check_in = checkIn;
@@ -849,8 +876,8 @@ export default function CategoryListingsClient({ category }: Props) {
     }
 
     if (category === "apartment") {
-      if (filters.bedrooms) params.bedrooms = filters.bedrooms;
-      if (filters.bathrooms) params.bathrooms = filters.bathrooms;
+      if (filters.bedrooms) params.bedrooms_min = filters.bedrooms;
+      if (filters.bathrooms) params.bathrooms_min = filters.bathrooms;
       if (filters.longStayDiscount) params.long_stay_discount = true;
     }
 
@@ -860,10 +887,9 @@ export default function CategoryListingsClient({ category }: Props) {
       if (filters.carCategory) params.car_category = filters.carCategory.toLowerCase();
       if (filters.transmission) params.transmission = filters.transmission;
       if (filters.fuelType) params.fuel_type = filters.fuelType;
-      if (filters.seats) params.min_seats = filters.seats;
-      if (filters.minDriverAge) params.min_driver_age = filters.minDriverAge;
-      if (filters.airportPickup) params.airport_pickup = true;
-      if (filters.deliveryAvailable) params.delivery_available = true;
+      if (filters.seats) params.seats_min = filters.seats;
+      if (filters.minDriverAge) params.driver_age = filters.minDriverAge;
+      if (filters.deliveryAvailable) params.delivery = true;
     }
 
     console.log("[Search] Request payload:", params);

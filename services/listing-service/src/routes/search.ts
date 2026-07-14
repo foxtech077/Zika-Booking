@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { prisma } from "../lib/prisma.js";
 import { sendSuccess, sendError } from "../lib/errors.js";
 import { requireProvider, optionalGuest, type GuestRequest } from "../middleware/auth.js";
-import { withSignedPhotos } from "../lib/s3.js";
+
 import { DriveType, FuelType } from "../generated/index.js";
 
 // ── Geo helper ────────────────────────────────────────────────────────────────
@@ -175,11 +175,22 @@ export async function searchRoutes(app: FastifyInstance) {
     }
     if (airConditioning !== undefined) where.airConditioning = airConditioning === "true";
     if (delivery !== undefined) where.deliveryEnabled = delivery === "true";
-    if (amenityIds?.length) {
-      where.amenities = { some: { amenityKey: { in: amenityIds } } };
-    }
     // Nullable range guards — combined into AND so they don't overwrite each other
     const andClauses: any[] = [];
+    if (amenityIds?.length) {
+      const PREFIXES = ["Connectivity", "Food & Drink", "Wellness", "Comfort", "Services"];
+      const seen = new Set<string>();
+      for (const id of amenityIds) {
+        const col = id.indexOf(":");
+        const base = col === -1 ? id : id.slice(col + 1);
+        if (!seen.has(base)) {
+          seen.add(base);
+          andClauses.push({
+            amenities: { some: { amenityKey: { in: [base, ...PREFIXES.map(p => `${p}:${base}`)] } } }
+          });
+        }
+      }
+    }
     if (driverAge !== undefined) {
       andClauses.push({ OR: [{ minimumDriverAge: null }, { minimumDriverAge: { lte: driverAge } }] });
     }
@@ -303,6 +314,7 @@ export async function searchRoutes(app: FastifyInstance) {
         listingType: l.category,
         title: l.name,
         city: l.town,
+        neighborhood: l.neighborhood,
         countryCode: l.country,
         distanceKm: Math.round(l.distanceKm * 10) / 10,
         primaryPhotoUrl: l.photos[0]?.cdnUrl ?? null,
@@ -469,7 +481,7 @@ export async function searchRoutes(app: FastifyInstance) {
         isFavourited = !!fav;
       }
 
-      const signedPhotos = await withSignedPhotos(listing.photos);
+      const listingPhotos = listing.photos;
 
       // Fetch active promotion badge for this category
       let promoBadge: { labelText: string; labelColour: string } | null = null;
@@ -486,15 +498,16 @@ export async function searchRoutes(app: FastifyInstance) {
       // Strip sensitive car fields pre-booking
       const data: any = {
         ...listing,
-        photos: signedPhotos,
+        photos: listingPhotos,
         licencePlate: undefined,
         isFavourited: guestId ? isFavourited : undefined,
         // Add basic information aliases to match /listings/search
         listingType: listing.category,
         title: listing.name,
         city: listing.town,
+        neighborhood: listing.neighborhood,
         countryCode: listing.country,
-        primaryPhotoUrl: signedPhotos[0]?.cdnUrl ?? null,
+        primaryPhotoUrl: listingPhotos[0]?.cdnUrl ?? null,
         nightlyRate: listing.category !== "car"
           ? (listing.category === "hotel" && listing.hotelRoomTypes.length > 0
               ? Math.min(...listing.hotelRoomTypes.map((rt) => Number(rt.pricePerNight)))
@@ -807,6 +820,7 @@ export async function searchRoutes(app: FastifyInstance) {
           title: l.name,
           category: l.category,
           city: l.town,
+          neighborhood: l.neighborhood,
           countryCode: l.country,
           nightlyRate: l.pricePerNight ? Number(l.pricePerNight) : null,
           currency: l.currency,
@@ -934,6 +948,7 @@ export async function searchRoutes(app: FastifyInstance) {
             category: f.listing.category,
             status: f.listing.status,
             city: f.listing.town,
+            neighborhood: f.listing.neighborhood,
             countryCode: f.listing.country,
             nightlyRate: f.listing.pricePerNight ? Number(f.listing.pricePerNight) : null,
             currency: f.listing.currency,
@@ -1032,6 +1047,7 @@ export async function searchRoutes(app: FastifyInstance) {
             category: v.listing.category,
             status: v.listing.status,
             city: v.listing.town,
+            neighborhood: v.listing.neighborhood,
             nightlyRate: v.listing.pricePerNight ? Number(v.listing.pricePerNight) : null,
             currency: v.listing.currency,
             primaryPhotoUrl: v.listing.photos[0]?.cdnUrl ?? null,
