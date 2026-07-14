@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Poppins } from "next/font/google";
@@ -13,6 +13,7 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: { default: "Kainook", template: "%s | Kainook" },
   description: "Book hotels, apartments, and car rentals worldwide.",
+  icons: { icon: "/kainook-logo.jpeg" },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

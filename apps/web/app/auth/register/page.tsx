@@ -34,6 +34,8 @@ export default function RegisterPage() {
   const [submitted, setSubmitted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false);
 
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((p) => ({ ...p, [key]: e.target.value }));
@@ -47,6 +49,9 @@ export default function RegisterPage() {
         userType,
         businessName: userType === "provider" ? form.businessName : undefined,
         country: userType === "provider" ? form.country || undefined : undefined,
+        agreedToTerms: true,
+        agreedToPrivacy: true,
+        agreedAt: new Date().toISOString(),
       };
       const res = await api.post<ApiResponse<Partial<AuthResponse> & { message?: string }>>("/auth/register", payload);
       if (!res.data.success) throw res.data;
@@ -86,6 +91,10 @@ export default function RegisterPage() {
       return;
     }
     setErrors({});
+    if (!agreedToTerms || !agreedToPrivacy) {
+      setErrors((p) => ({ ...p, general: "You must accept the Terms of Service and Privacy Policy to continue." }));
+      return;
+    }
     mutation.mutate();
   }
 
@@ -372,11 +381,61 @@ export default function RegisterPage() {
               </div>
             )}
 
+            {/* Compliance checkboxes */}
+            <div className="mb-4 space-y-2.5">
+              <label className="flex items-start gap-2.5 cursor-pointer group">
+                <input
+                  id="agree-terms"
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={(e) => {
+                    setAgreedToTerms(e.target.checked);
+                    setErrors((p) => ({ ...p, general: undefined }));
+                  }}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary accent-primary cursor-pointer"
+                />
+                <span className="text-xs text-gray-600 leading-relaxed">
+                  I agree to the{" "}
+                  <Link
+                    href="/legal/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary font-semibold hover:underline"
+                  >
+                    Terms of Service
+                  </Link>
+                </span>
+              </label>
+              <label className="flex items-start gap-2.5 cursor-pointer group">
+                <input
+                  id="agree-privacy"
+                  type="checkbox"
+                  checked={agreedToPrivacy}
+                  onChange={(e) => {
+                    setAgreedToPrivacy(e.target.checked);
+                    setErrors((p) => ({ ...p, general: undefined }));
+                  }}
+                  className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary accent-primary cursor-pointer"
+                />
+                <span className="text-xs text-gray-600 leading-relaxed">
+                  I have read and accept the{" "}
+                  <Link
+                    href="/legal/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary font-semibold hover:underline"
+                  >
+                    Privacy Policy
+                  </Link>
+                </span>
+              </label>
+            </div>
+
             {/* Submit */}
             <button
               id="register-submit-btn"
               type="submit"
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || !agreedToTerms || !agreedToPrivacy}
               className="w-full bg-primary hover:bg-primary-dark text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm"
             >
               {mutation.isPending ? (
