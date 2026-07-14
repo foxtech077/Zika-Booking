@@ -187,12 +187,7 @@ export function TravellerHeader({
                 TRAVELLER_ROUTES.cars,
                 isCarsActive,
               )}
-              {user &&
-                navBtn(
-                  "My Reservations",
-                  TRAVELLER_ROUTES.bookings,
-                  isBookingsActive,
-              )}
+
             </nav>
           </div>
 
@@ -229,62 +224,6 @@ export function TravellerHeader({
             {/* Authenticated */}
             {user && (
               <>
-                {/* Messages */}
-                <Link
-                  href={TRAVELLER_ROUTES.messages}
-                  className={cn(
-                    "hidden items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-all md:flex",
-                    isMessagesActive
-                      ? "border-[#0c2614] bg-[#0c2614] text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-[#1D8D2B] hover:text-[#0c2614]",
-                  )}
-                >
-                  <MessageSquare
-                    className={cn("h-3.5 w-3.5", !isMessagesActive && "text-[#1D8D2B]")}
-                  />
-                  Messages
-                  {unreadCount > 0 && (
-                    <span
-                      className={cn(
-                        "inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold",
-                        isMessagesActive ? "bg-white/20 text-white" : "bg-rose-100 text-rose-700",
-                      )}
-                    >
-                      {unreadCount > 99 ? "99+" : unreadCount}
-                    </span>
-                  )}
-                </Link>
-
-                {/* Wishlist */}
-                <Link
-                  href={TRAVELLER_ROUTES.wishlist}
-                  className={cn(
-                    "hidden items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-all md:flex",
-                    isWishlistActive
-                      ? "border-[#0c2614] bg-[#0c2614] text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-[#1D8D2B] hover:text-[#0c2614]",
-                  )}
-                >
-                  <Heart
-                    className={cn("h-3.5 w-3.5", !isWishlistActive && "text-[#1D8D2B]")}
-                  />
-                  Wishlist
-                </Link>
-
-                {/* My Reviews */}
-                <Link
-                  href={TRAVELLER_ROUTES.reviews}
-                  className={cn(
-                    "hidden items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-semibold transition-all md:flex",
-                    isReviewsActive
-                      ? "border-[#0c2614] bg-[#0c2614] text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-[#1D8D2B] hover:text-[#0c2614]",
-                  )}
-                >
-                  <Star className={cn("h-3.5 w-3.5", !isReviewsActive && "text-[#1D8D2B]")} />
-                  My Reviews
-                </Link>
-
                 {/* Avatar dropdown */}
                 <div className="relative" ref={dropdownRef}>
                   <button
@@ -348,6 +287,59 @@ export function TravellerHeader({
                         <User className="h-4 w-4 text-green-600" />
                         Profile
                       </button>
+                      <div className="my-1 border-t border-slate-100" />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          router.push(TRAVELLER_ROUTES.bookings);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                          isBookingsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                        )}
+                      >
+                        <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        My Reservations
+                      </button>
+                      <Link
+                        href={TRAVELLER_ROUTES.messages}
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                          isMessagesActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                        )}
+                      >
+                        <MessageSquare className="h-4 w-4 text-green-600" />
+                        <span className="flex-1">Messages</span>
+                        {unreadCount > 0 && (
+                          <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-rose-100 px-1 text-[10px] font-bold text-rose-700">
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                          </span>
+                        )}
+                      </Link>
+                      <Link
+                        href={TRAVELLER_ROUTES.wishlist}
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                          isWishlistActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                        )}
+                      >
+                        <Heart className="h-4 w-4 text-green-600" />
+                        Wishlist
+                      </Link>
+                      <Link
+                        href={TRAVELLER_ROUTES.reviews}
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                          isReviewsActive ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                        )}
+                      >
+                        <Star className="h-4 w-4 text-green-600" />
+                        My Reviews
+                      </Link>
                       <div className="my-1 border-t border-slate-100" />
                       <button
                         type="button"
