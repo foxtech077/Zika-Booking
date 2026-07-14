@@ -14,6 +14,21 @@ export interface CustomAmenity {
   name: string;
 }
 
+export interface HotelRoomType {
+  id: string;
+  listingId: string;
+  name: string;
+  roomType: "standard" | "superior" | "deluxe" | "suite" | "junior_suite" | "studio" | "family_room" | "presidential_suite";
+  description?: string | null;
+  pricePerNight: number;
+  unitCount: number;
+  maxGuests?: number | null;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface PublicListingDetail {
   id: string;
   providerId: string;
@@ -52,4 +67,6 @@ export interface PublicListingDetail {
   isAccredited?: boolean;
   longStayDiscountEnabled?: boolean;
   instantBooking?: boolean;
+  roomTypes?: HotelRoomType[];
 }
+

@@ -375,7 +375,7 @@ export async function listingRoutes(app: FastifyInstance) {
           id: { type: "string" }
         }
       },
-      
+
     }
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     try {
@@ -389,6 +389,7 @@ export async function listingRoutes(app: FastifyInstance) {
           documents: { where: { replacedAt: null } },
           amenities: true,
           customAmenities: true,
+          // hotelRoomTypes: { where: { isActive: true }, orderBy: { sortOrder: "asc" } },
         },
       });
 
@@ -423,6 +424,10 @@ export async function listingRoutes(app: FastifyInstance) {
       const formattedListing = {
         ...listing,
         amenities: groupedAmenities,
+        // hotelRoomTypes: listing.hotelRoomTypes.map((rt) => ({
+        //   ...rt,
+        //   pricePerNight: Number(rt.pricePerNight),
+        // })),
         photos: listing.photos,
       };
 
@@ -687,7 +692,7 @@ export async function listingRoutes(app: FastifyInstance) {
             error: {
               type: "object",
               properties: {
-                code:    { type: "string", example: "VALIDATION_ERROR" },
+                code: { type: "string", example: "VALIDATION_ERROR" },
                 message: { type: "string", example: "Property name is required. At least one photo is required." },
               },
             },
@@ -954,13 +959,13 @@ export async function listingRoutes(app: FastifyInstance) {
           activatedAt: listing.activatedAt ?? new Date(),
           ...(needsGeo
             ? {
-                temporaryActivation: true,
-                geoVerificationDueAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
-              }
+              temporaryActivation: true,
+              geoVerificationDueAt: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000),
+            }
             : {
-                temporaryActivation: false,
-                geoVerificationDueAt: null,
-              }),
+              temporaryActivation: false,
+              geoVerificationDueAt: null,
+            }),
         },
       });
 

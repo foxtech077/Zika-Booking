@@ -285,6 +285,7 @@ export default function TravellerDashboard() {
   // Details & Checkout context
   const [selectedListingId, setSelectedListingId] = useState<string | null>(null);
   const [detailListing, setDetailListing] = useState<PublicListingDetail | null>(null);
+  const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [lockToken, setLockToken] = useState<string>("");
@@ -554,12 +555,13 @@ export default function TravellerDashboard() {
       photos: l.photos || (l.primaryPhotoUrl ? [{ id: "ph", cdnUrl: l.primaryPhotoUrl, position: 1 }] : []),
       amenities: l.amenities || [],
       customAmenities: l.customAmenities || [],
-      description: l.description || "",
       distanceKm: l.distanceKm ?? undefined,
+      description: l.description || "",
       isFavourited: l.isFavourited ?? false,
       isAccredited: l.isAccredited ?? false,
       longStayDiscountEnabled: l.longStayDiscountEnabled ?? false,
       instantBooking: l.instantBooking ?? l.instant_booking ?? false,
+      roomTypes: l.roomTypes || [],
     };
   }
 
@@ -1140,9 +1142,21 @@ export default function TravellerDashboard() {
           primaryPhotoUrl: item.primaryPhotoUrl || item.photos?.[0]?.cdnUrl || null,
           photos: item.photos || (item.primaryPhotoUrl ? [{ id: "ph", cdnUrl: item.primaryPhotoUrl, position: 1 }] : []),
           amenities: item.amenities || [],
-          customAmenities: item.customAmenities || []
+          customAmenities: item.customAmenities || [],
+          roomTypes: item.roomTypes || []
         };
         setDetailListing(details);
+
+        let cheapestRtId: string | null = null;
+        if (details.category === "hotel" && details.roomTypes && details.roomTypes.length > 0) {
+          const activeRts = details.roomTypes.filter((rt) => rt.isActive);
+          if (activeRts.length > 0) {
+            const sorted = [...activeRts].sort((a, b) => a.pricePerNight - b.pricePerNight);
+            cheapestRtId = sorted[0]?.id ?? null;
+          }
+        }
+        setSelectedRoomTypeId(cheapestRtId);
+
         addToRecentlyViewed(details);
         listingApi.post("/guests/me/recently-viewed", { listingId: id }).catch(() => { });
         fetchActivePromotion(details.category);
@@ -1180,7 +1194,21 @@ export default function TravellerDashboard() {
       });
       if (res.data.success) {
         const d = res.data.data ?? {};
-        const unavailableRanges: { start: string; end: string }[] = d.unavailableRanges ?? [];
+        let unavailableRanges: { start: string; end: string }[] = [];
+
+        if (category === "hotel") {
+          if (!selectedRoomTypeId) {
+            setAvailabilityStatus(null);
+            return;
+          }
+          const rtAvail = (d.roomTypeAvailability ?? []).find(
+            (rt: any) => rt.roomTypeId === selectedRoomTypeId
+          );
+          unavailableRanges = rtAvail?.unavailableRanges ?? [];
+        } else {
+          unavailableRanges = d.unavailableRanges ?? [];
+        }
+
         const userStart = category === "car" ? detailPickupDate : detailCheckIn;
         const userEnd = category === "car" ? detailReturnDate : detailCheckOut;
         if (!userStart || !userEnd) {
@@ -1210,7 +1238,7 @@ export default function TravellerDashboard() {
     if (!detailListing || lockToken) return;
     setBookingError("");
     checkAvailability(detailListing.id, detailListing.category);
-  }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
+  }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId]);
 
   // Recompute promotion discount whenever dates or active promotion changes.
   // effectiveDiscountSource is derived — no state mutation needed here.
@@ -1248,6 +1276,15 @@ export default function TravellerDashboard() {
       listingId: detailListing.id,
       guests: searchGuests
     };
+
+    if (detailListing.category === "hotel") {
+      if (!selectedRoomTypeId) {
+        setBookingError("Please select a room type.");
+        setLockingListing(false);
+        return;
+      }
+      body.roomTypeId = selectedRoomTypeId;
+    }
 
     if (detailListing.category !== "car") {
       if (!detailCheckIn || !detailCheckOut) {
@@ -1655,6 +1692,12 @@ export default function TravellerDashboard() {
       return;
     }
     const isCar = detailListing.category === "car";
+    const isHotel = detailListing.category === "hotel";
+    const selectedRt = isHotel
+      ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+      : null;
+    const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+
     const ctx = {
       listingId: detailListing.id,
       listingTitle: detailListing.name,
@@ -1662,7 +1705,7 @@ export default function TravellerDashboard() {
       listingPhoto: detailListing.primaryPhotoUrl ?? null,
       listingTown: detailListing.town,
       listingCountry: detailListing.country,
-      pricePerNight: detailListing.pricePerNight,
+      pricePerNight,
       currency: detailListing.currency,
       checkIn: !isCar ? detailCheckIn : undefined,
       checkOut: !isCar ? detailCheckOut : undefined,
@@ -1683,6 +1726,9 @@ export default function TravellerDashboard() {
       driverAge: isCar ? driverAge : undefined,
       deliveryRequested: isCar ? deliveryRequested : undefined,
       deliveryAddress: isCar ? deliveryAddress : undefined,
+      roomTypeId: selectedRoomTypeId ?? undefined,
+      roomTypeName: selectedRt ? selectedRt.name : undefined,
+      roomType: selectedRt ? selectedRt.roomType : undefined,
     };
     sessionStorage.setItem("zika:checkout", JSON.stringify(ctx));
     router.push("/booking/review");
@@ -1949,17 +1995,26 @@ export default function TravellerDashboard() {
                 <div className="lg:col-span-4 relative lg:sticky lg:top-28 top-4 self-start">
                   <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left shadow-slate-200/50">
                     {/* Price header */}
-                    <div className="flex justify-between items-baseline mb-3">
-                      <div className="text-2xl font-bold text-slate-900">
-                        {detailListing.currency} {detailListing.pricePerNight.toLocaleString()}
-                        <span className="text-sm font-normal text-slate-500 ml-1">/ {detailListing.category === "car" ? "day" : "night"}</span>
-                      </div>
-                      {detailListing.starRating && (
-                        <div className="text-sm font-semibold flex items-center gap-1 text-slate-800">
-                          ⭐ {detailListing.starRating}
+                    {(() => {
+                      const isHotel = detailListing.category === "hotel";
+                      const selectedRt = isHotel
+                        ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+                        : null;
+                      const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+                      return (
+                        <div className="flex justify-between items-baseline mb-3">
+                          <div className="text-2xl font-bold text-slate-900">
+                            {detailListing.currency} {pricePerNight.toLocaleString()}
+                            <span className="text-sm font-normal text-slate-500 ml-1">/ {detailListing.category === "car" ? "day" : "night"}</span>
+                          </div>
+                          {detailListing.starRating && (
+                            <div className="text-sm font-semibold flex items-center gap-1 text-slate-800">
+                              ⭐ {detailListing.starRating}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
 
                     {/* Best Offer banner — shown when an active promotion exists */}
                     {activePromotion && (
@@ -1984,10 +2039,16 @@ export default function TravellerDashboard() {
 
                     {!lockToken ? (() => {
                       const isCar = detailListing.category === "car";
+                      const isHotel = detailListing.category === "hotel";
+                      const selectedRt = isHotel
+                        ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+                        : null;
+                      const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+
                       const start = isCar ? detailPickupDate : detailCheckIn;
                       const end = isCar ? detailReturnDate : detailCheckOut;
                       const days = calcDays(start, end);
-                      const baseTotal = detailListing.pricePerNight * days;
+                      const baseTotal = pricePerNight * days;
                       const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
                       const sidebarDiscount = bestDiscount;
                       const grandTotal = Math.max(0, baseTotal + serviceFee - sidebarDiscount);
@@ -2041,11 +2102,11 @@ export default function TravellerDashboard() {
                                         </p>
                                         <input id={id} type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
                                           className="sr-only" />
-                                      </div>
+                                    </div>
                                     );
                                   })}
                                 </div>
-                                <div className="p-3">
+                                <div className="p-3 border-t border-slate-300">
                                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Guests</p>
                                   <select
                                     value={searchAdults}
@@ -2057,6 +2118,24 @@ export default function TravellerDashboard() {
                                     ))}
                                   </select>
                                 </div>
+                                {detailListing.category === "hotel" && detailListing.roomTypes && detailListing.roomTypes.length > 0 && (
+                                  <div className="p-3 border-t border-slate-200">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Type</p>
+                                    <select
+                                      value={selectedRoomTypeId || ""}
+                                      onChange={(e) => setSelectedRoomTypeId(e.target.value || null)}
+                                      className="w-full mt-1 text-sm bg-transparent outline-none font-semibold text-slate-800"
+                                    >
+                                      {detailListing.roomTypes
+                                        .filter((rt) => rt.isActive)
+                                        .map((rt) => (
+                                          <option key={rt.id} value={rt.id}>
+                                            {rt.name} — {detailListing.currency} {Number(rt.pricePerNight).toLocaleString()}/night
+                                          </option>
+                                        ))}
+                                    </select>
+                                  </div>
+                                )}
                               </>
                             )}
                           </div>

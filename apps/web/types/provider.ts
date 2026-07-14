@@ -1,3 +1,5 @@
+import type { HotelRoomType } from "./index";
+
 // ── Listing types ─────────────────────────────────────────────────────────────
 
 export type ListingCategory = "hotel" | "apartment" | "car";
@@ -64,6 +66,7 @@ export interface Listing {
   doors?: number | null;
   mileagePolicy?: string | null;
   mileageLimitKm?: number | null;
+  hotelRoomTypes?: HotelRoomType[];
 }
 
 // ── Booking types ─────────────────────────────────────────────────────────────
