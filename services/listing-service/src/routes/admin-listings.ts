@@ -402,8 +402,10 @@ export async function adminListingRoutes(app: FastifyInstance) {
             smokingAllowed: { type: "boolean", nullable: true },
             petsAllowed: { type: "boolean", nullable: true },
             // Hotel Specific
-            roomType: { type: "string", nullable: true },
-            unitCount: { type: "integer", nullable: true },
+            hotelRoomTypes: {
+              type: "array",
+              items: { type: "object", additionalProperties: true },
+            },
             // Apartment Specific
             bedrooms: { type: "integer", nullable: true },
             bathrooms: { type: "integer", nullable: true },
@@ -463,6 +465,7 @@ export async function adminListingRoutes(app: FastifyInstance) {
           documents: { where: { replacedAt: null } },
           amenities: true,
           customAmenities: true,
+          hotelRoomTypes: { orderBy: { sortOrder: "asc" } },
           reviewTasks: { where: { status: { in: ["open", "escalated"] } }, take: 1, orderBy: { createdAt: "desc" } },
         },
       });
@@ -508,9 +511,13 @@ export async function adminListingRoutes(app: FastifyInstance) {
         cancellationPolicy: listing.cancellationPolicy,
         description: listing.description,
         currency: listing.currency,
-        // Hotel-only fields (omitted for cars and apartments)
-        roomType: listing.category === "hotel" ? listing.roomType : undefined,
-        unitCount: listing.category === "hotel" ? listing.unitCount : undefined,
+        // Hotel-only fields
+        hotelRoomTypes: listing.category === "hotel"
+          ? listing.hotelRoomTypes.map((rt) => ({
+              ...rt,
+              pricePerNight: Number(rt.pricePerNight),
+            }))
+          : undefined,
         smokingAllowed: listing.category !== "car" ? listing.smokingAllowed : undefined,
         petsAllowed: listing.category !== "car" ? listing.petsAllowed : undefined,
         

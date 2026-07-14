@@ -435,6 +435,7 @@ console.log(`${window.location.origin}/admin/api/admin/auth/login`);
                     placeholder="123 456"
                     maxLength={6}
                     required
+                    autoFocus
                     className="text-center text-2xl tracking-[0.5em] font-mono"
                   />
                 </div>
@@ -566,6 +567,7 @@ console.log(`${window.location.origin}/admin/api/admin/auth/login`);
                     placeholder="xxxx-xxxx-xx"
                     maxLength={20}
                     required
+                    autoFocus
                     leftIcon={<Key className="h-4 w-4" />}
                   />
                 ) : (
@@ -579,6 +581,7 @@ console.log(`${window.location.origin}/admin/api/admin/auth/login`);
                     placeholder="123 456"
                     maxLength={6}
                     required
+                    autoFocus
                     className="text-center text-2xl tracking-[0.5em] font-mono"
                   />
                 )}

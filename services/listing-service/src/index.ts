@@ -22,6 +22,7 @@ import { loyaltyRoutes } from "./routes/loyalty.js";
 import { locationRoutes } from "./routes/location.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { profilePhotoRoutes } from "./routes/profile-photos.js";
+import { roomTypeRoutes } from "./routes/room-types.js";
 import { startVoucherExpiryWarner } from "./lib/voucherExpiryWarner.js";
 import { startBookingCompletionScheduler } from "./lib/bookingCompletionScheduler.js";
 
@@ -89,6 +90,7 @@ async function build() {
         { name: "Admin Vouchers", description: "Admin voucher code generation and validation rules management" },
         { name: "Loyalty", description: "AfriPoints loyalty programme — tier profile, points history for guests" },
         { name: "Admin Loyalty", description: "Admin manual points adjustment and guest loyalty history" },
+        { name: "Room Types", description: "Hotel room type management — create, update, and deactivate room types with pricing and availability" },
       ],
       components: {
         securitySchemes: {
@@ -335,6 +337,7 @@ app.all("/admin/payouts/*", async (req, reply) => {
   await app.register(locationRoutes);
   await app.register(notificationRoutes);
   await app.register(profilePhotoRoutes);
+  await app.register(roomTypeRoutes);
 
   return app;
 }
