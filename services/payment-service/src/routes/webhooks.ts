@@ -336,60 +336,8 @@
         summary: "Tara webhook — receive payment status events",
         description:
           "Called by Tara when a mobile money payment succeeds or fails. " +
-          "Validates HMAC-SHA256 signature in the `X-Tara-Signature` header.\n\n" +
+          "Validates HMAC-SHA256 signature in the `x-tara-signature` header.\n\n" +
           "The payload contains `status` field — `SUCCESS` means payment succeeded.",
-        headers: {
-          type: "object",
-          required: ["x-tara-signature"],
-          properties: {
-            "x-tara-signature": {
-              type: "string",
-              description: "HMAC-SHA256 hex digest of the raw JSON body signed with TARA_WEBHOOK_SECRET",
-            },
-          },
-        },
-        body: {
-          type: "object",
-          required: ["paymentId", "status"],
-          properties: {
-            businessId: {
-              type: "string",
-              description: "Tara business ID",
-            },
-            paymentId: {
-              type: "string",
-              description: "Tara payment transaction reference",
-            },
-            productId: {
-              type: "string",
-              description: "Product identifier sent during initiation",
-            },
-            amount: {
-              type: "string",
-              description: "Payment amount as string",
-            },
-            collectionId: {
-              type: "string",
-              description: "Tara collection ID",
-            },
-            phoneNumber: {
-              type: "string",
-              description: "Payer phone number",
-            },
-            creationDate: {
-              type: "string",
-              description: "Timestamp when the payment was created",
-            },
-            changeDate: {
-              type: "string",
-              description: "Timestamp when the payment was last updated",
-            },
-            status: {
-              type: "string",
-              description: "Payment status from Tara (e.g. SUCCESS, FAILED)",
-            },
-          },
-        },
         response: {
           200: {
             type: "object",
