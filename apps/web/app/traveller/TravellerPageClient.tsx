@@ -524,12 +524,27 @@ export default function TravellerDashboard() {
   function mapSearchResult(l: any): PublicListingDetail {
     const town = l.town || l.city || "";
     const country = l.country || l.countryCode || "";
+    const rawRoomTypes = l.hotelRoomTypes || l.roomTypes || [];
     return {
       id: l.id,
       providerId: l.providerId,
       category: l.category || l.listingType,
       name: l.name || l.title,
-      pricePerNight: Number(l.pricePerNight || l.nightlyRate || l.pricePerDay || l.dailyRate || 0),
+      pricePerNight: (() => {
+        let basePrice = Number(l.pricePerNight || l.nightlyRate || l.pricePerDay || l.dailyRate || 0);
+        if ((l.category === "hotel" || l.listingType === "hotel") && Array.isArray(rawRoomTypes) && rawRoomTypes.length > 0) {
+          const activeRts = rawRoomTypes.filter((rt: any) => rt.isActive !== false);
+          if (activeRts.length > 0) {
+            const prices = activeRts
+              .map((rt: any) => Number(rt.pricePerNight))
+              .filter((p: number) => !isNaN(p) && p > 0);
+            if (prices.length > 0) {
+              return Math.min(...prices);
+            }
+          }
+        }
+        return basePrice;
+      })(),
       currency: l.currency || "KES",
       minStayNights: l.minStayNights || 1,
       checkinTime: l.checkinTime || "",
@@ -561,7 +576,7 @@ export default function TravellerDashboard() {
       isAccredited: l.isAccredited ?? false,
       longStayDiscountEnabled: l.longStayDiscountEnabled ?? false,
       instantBooking: l.instantBooking ?? l.instant_booking ?? false,
-      roomTypes: l.roomTypes || [],
+      roomTypes: rawRoomTypes,
     };
   }
 
@@ -696,10 +711,15 @@ export default function TravellerDashboard() {
   useEffect(() => {
     if (detailListing) {
       const isCar = detailListing.category === "car";
+      const isHotel = detailListing.category === "hotel";
+      const selectedRt = isHotel
+        ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+        : null;
+      const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
       const start = isCar ? detailPickupDate : detailCheckIn;
       const end = isCar ? detailReturnDate : detailCheckOut;
       const days = calcDays(start, end);
-      const baseTotal = detailListing.pricePerNight * days;
+      const baseTotal = pricePerNight * days;
       const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
       const taxRate = TAX_RATES[detailListing.country] ?? 0;
       const taxAmount = Math.ceil(baseTotal * taxRate);
@@ -718,7 +738,7 @@ export default function TravellerDashboard() {
         finalPrice: grandTotal,
       });
     }
-  }, [detailListing?.id, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, bestDiscount, voucherApplied, voucherDiscount, promotionDiscount]);
+  }, [detailListing?.id, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, bestDiscount, voucherApplied, voucherDiscount, promotionDiscount, selectedRoomTypeId]);
 
   // Reusable Voucher dropdown & Manual entry component
   function renderVoucherSelector() {
@@ -1110,13 +1130,28 @@ export default function TravellerDashboard() {
       const res = await listingApi.get<any>(`/listings/${id}/public`);
       if (res.data.success && res.data.data) {
         const item = res.data.data;
+        const rawRoomTypes = item.hotelRoomTypes || item.roomTypes || [];
         const details: PublicListingDetail = {
           id: item.id,
           providerId: item.providerId,
           category: item.category,
           name: item.name,
           description: item.description,
-          pricePerNight: Number(item.pricePerNight || item.pricePerDay || 0),
+          pricePerNight: (() => {
+            let basePrice = Number(item.pricePerNight || item.pricePerDay || 0);
+            if ((item.category === "hotel" || item.listingType === "hotel") && Array.isArray(rawRoomTypes) && rawRoomTypes.length > 0) {
+              const activeRts = rawRoomTypes.filter((rt: any) => rt.isActive !== false);
+              if (activeRts.length > 0) {
+                const prices = activeRts
+                  .map((rt: any) => Number(rt.pricePerNight))
+                  .filter((p: number) => !isNaN(p) && p > 0);
+                if (prices.length > 0) {
+                  return Math.min(...prices);
+                }
+              }
+            }
+            return basePrice;
+          })(),
           currency: item.currency,
           minStayNights: item.minStayNights,
           checkinTime: item.checkinTime,
@@ -1143,13 +1178,13 @@ export default function TravellerDashboard() {
           photos: item.photos || (item.primaryPhotoUrl ? [{ id: "ph", cdnUrl: item.primaryPhotoUrl, position: 1 }] : []),
           amenities: item.amenities || [],
           customAmenities: item.customAmenities || [],
-          roomTypes: item.roomTypes || []
+          roomTypes: rawRoomTypes
         };
         setDetailListing(details);
 
         let cheapestRtId: string | null = null;
         if (details.category === "hotel" && details.roomTypes && details.roomTypes.length > 0) {
-          const activeRts = details.roomTypes.filter((rt) => rt.isActive);
+          const activeRts = details.roomTypes.filter((rt) => rt.isActive !== false);
           if (activeRts.length > 0) {
             const sorted = [...activeRts].sort((a, b) => a.pricePerNight - b.pricePerNight);
             cheapestRtId = sorted[0]?.id ?? null;
@@ -1252,12 +1287,19 @@ export default function TravellerDashboard() {
     const end = isCar ? detailReturnDate : detailCheckOut;
     const days = calcDays(start, end);
     if (days <= 0) { setPromotionDiscount(0); return; }
-    const base = detailListing.pricePerNight * days;
+    
+    const isHotel = detailListing.category === "hotel";
+    const selectedRt = isHotel
+      ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+      : null;
+    const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+    
+    const base = pricePerNight * days;
     const pDiscount = activePromotion.discountType === "percentage"
       ? Math.round(base * activePromotion.discountValue / 100)
       : Math.round(activePromotion.discountValue);
     setPromotionDiscount(pDiscount);
-  }, [activePromotion, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id]);
+  }, [activePromotion, detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId]);
 
   // Helper: calculate nights/days between two date strings
   function calcDays(start: string, end: string): number {
@@ -2127,7 +2169,7 @@ export default function TravellerDashboard() {
                                       className="w-full mt-1 text-sm bg-transparent outline-none font-semibold text-slate-800"
                                     >
                                       {detailListing.roomTypes
-                                        .filter((rt) => rt.isActive)
+                                        .filter((rt) => rt.isActive !== false)
                                         .map((rt) => (
                                           <option key={rt.id} value={rt.id}>
                                             {rt.name} — {detailListing.currency} {Number(rt.pricePerNight).toLocaleString()}/night
@@ -2211,7 +2253,7 @@ export default function TravellerDashboard() {
                           {days > 0 && (
                             <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
                               <div className="flex justify-between">
-                                <span>{detailListing.currency} {detailListing.pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
+                                <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
                                 <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
                               </div>
                               <div className="flex justify-between">
@@ -2278,10 +2320,15 @@ export default function TravellerDashboard() {
                         {/* ── STEP 0: Booking Review ── */}
                         {checkoutStep === "review" && (() => {
                           const isCar = detailListing.category === "car";
+                          const isHotel = detailListing.category === "hotel";
+                          const selectedRt = isHotel
+                            ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+                            : null;
+                          const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
                           const start = isCar ? detailPickupDate : detailCheckIn;
                           const end = isCar ? detailReturnDate : detailCheckOut;
                           const days = calcDays(start, end);
-                          const base = detailListing.pricePerNight * days;
+                          const base = pricePerNight * days;
                           const serviceFee = Math.ceil(base * 0.05);
                           const taxRate = TAX_RATES[detailListing.country] ?? 0;
                           const taxAmount = Math.ceil(base * taxRate);
@@ -2329,7 +2376,7 @@ export default function TravellerDashboard() {
                               {/* Price breakdown */}
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
-                                  <span>{detailListing.currency} {detailListing.pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
+                                  <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days !== 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {base.toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between text-slate-500">
@@ -2510,16 +2557,21 @@ export default function TravellerDashboard() {
                           {/* Price summary */}
                           {(() => {
                             const isCar = detailListing.category === "car";
+                            const isHotel = detailListing.category === "hotel";
+                            const selectedRt = isHotel
+                              ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
+                              : null;
+                            const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
                             const start = isCar ? detailPickupDate : detailCheckIn;
                             const end = isCar ? detailReturnDate : detailCheckOut;
                             const days = calcDays(start, end);
-                            const baseTotal = detailListing.pricePerNight * days;
+                            const baseTotal = pricePerNight * days;
                             const serviceFee = Math.ceil(baseTotal * 0.05);
                             const grandTotal = Math.max(0, baseTotal + serviceFee - bestDiscount);
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
-                                  <span>{detailListing.currency} {detailListing.pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
+                                  <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between"><span>Service fee (5%)</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>

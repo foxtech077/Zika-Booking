@@ -141,12 +141,27 @@ async function geocodeDestination(q: string): Promise<{ lat: number; lng: number
 function mapListing(l: any): PublicListingDetail {
   const town = l.town || l.city || "";
   const country = l.country || l.countryCode || "";
+  const rawRoomTypes = l.hotelRoomTypes || l.roomTypes || [];
   return {
     id: l.id,
     providerId: l.providerId,
     category: l.category || l.listingType,
     name: l.name || l.title,
-    pricePerNight: Number(l.pricePerNight || l.nightlyRate || l.pricePerDay || l.dailyRate || 0),
+    pricePerNight: (() => {
+      let basePrice = Number(l.pricePerNight || l.nightlyRate || l.pricePerDay || l.dailyRate || 0);
+      if ((l.category === "hotel" || l.listingType === "hotel") && Array.isArray(rawRoomTypes) && rawRoomTypes.length > 0) {
+        const activeRts = rawRoomTypes.filter((rt: any) => rt.isActive !== false);
+        if (activeRts.length > 0) {
+          const prices = activeRts
+            .map((rt: any) => Number(rt.pricePerNight))
+            .filter((p: number) => !isNaN(p) && p > 0);
+          if (prices.length > 0) {
+            return Math.min(...prices);
+          }
+        }
+      }
+      return basePrice;
+    })(),
     currency: l.currency || "KES",
     minStayNights: l.minStayNights || 1,
     checkinTime: l.checkinTime || "",
@@ -178,6 +193,7 @@ function mapListing(l: any): PublicListingDetail {
     isAccredited: l.isAccredited ?? false,
     longStayDiscountEnabled: l.longStayDiscountEnabled ?? false,
     instantBooking: l.instantBooking ?? l.instant_booking ?? false,
+    roomTypes: rawRoomTypes,
   };
 }
 
