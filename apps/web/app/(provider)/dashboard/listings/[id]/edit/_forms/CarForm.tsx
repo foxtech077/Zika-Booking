@@ -112,6 +112,7 @@ type CarState = {
   lat: number | null;
   lng: number | null;
   town: string;
+  neighborhood: string;
   country: string;
   transmission: string;
   fuelType: string;
@@ -209,6 +210,7 @@ function initState(l: Listing): CarState {
     lat: toNullableNumber(a.lat),
     lng: toNullableNumber(a.lng),
     town: l.town ?? "",
+    neighborhood: (l as any).neighborhood ?? "",
     country: l.country ?? "",
     transmission: normalizeTransmission(l.transmission),
     fuelType: normalizeFuelType(l.fuelType),
@@ -260,6 +262,7 @@ function buildPayload(s: CarState): Record<string, unknown> {
   p.lat = toNullableNumber(s.lat);
   p.lng = toNullableNumber(s.lng);
   p.town = trimOrNull(s.town);
+  p.neighborhood = trimOrNull(s.neighborhood);
   p.country = countryOrNull(s.country);
 
   p.colour = trimOrNull(s.colour);
@@ -690,6 +693,7 @@ export function CarForm({ listingId, listing }: Props) {
                   <GeocodedAddressFields
                     address={s.address}
                     town={s.town}
+                    neighborhood={s.neighborhood}
                     country={s.country}
                     addressLabel="Pickup Address"
                     onChange={(f, v) => {
@@ -708,6 +712,7 @@ export function CarForm({ listingId, listing }: Props) {
                         lat: r.lat,
                         lng: r.lng,
                         town: r.town,
+                        neighborhood: r.neighborhood,
                         country: r.country,
                         // Auto-populate currency from geocoded country (only if a mapping exists)
                         ...(detectedCurrency ? { currency: detectedCurrency } : {}),

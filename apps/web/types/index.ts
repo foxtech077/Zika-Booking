@@ -49,6 +49,7 @@ export interface PublicListingDetail {
   lat: number;
   lng: number;
   town: string;
+  neighborhood?: string | null;
   country: string;
   starRating?: number;
   carMake?: string;

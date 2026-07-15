@@ -57,6 +57,7 @@ type HotelState = {
   lat: number | null;
   lng: number | null;
   town: string;
+  neighborhood: string;
   country: string;
   // claimedStarRating intentionally omitted — ratings are set by traveller reviews only.
   currency: string;
@@ -80,6 +81,7 @@ function initState(l: Listing): HotelState {
     lat: (l as any).lat ?? null,
     lng: (l as any).lng ?? null,
     town: l.town ?? "",
+    neighborhood: (l as any).neighborhood ?? "",
     country: l.country ?? "",
     // claimedStarRating intentionally excluded — ratings come from traveller reviews.
     currency: l.currency ?? "USD",
@@ -131,6 +133,7 @@ function buildPayload(s: HotelState): Record<string, unknown> {
   p.lat = toNullableNumber(s.lat);
   p.lng = toNullableNumber(s.lng);
   p.town = trimOrNull(s.town);
+  p.neighborhood = trimOrNull(s.neighborhood);
   p.country = countryOrNull(s.country);
 
   // Pricing
@@ -603,6 +606,7 @@ export function HotelForm({ listingId, listing }: Props) {
                     <GeocodedAddressFields
                       address={s.address}
                       town={s.town}
+                      neighborhood={s.neighborhood}
                       country={s.country}
                       onChange={(f, v) => {
                         const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
@@ -620,6 +624,7 @@ export function HotelForm({ listingId, listing }: Props) {
                           lat: r.lat,
                           lng: r.lng,
                           town: r.town,
+                          neighborhood: r.neighborhood,
                           country: r.country,
                           // Auto-populate currency from geocoded country (only if a mapping exists)
                           ...(detectedCurrency ? { currency: detectedCurrency } : {}),

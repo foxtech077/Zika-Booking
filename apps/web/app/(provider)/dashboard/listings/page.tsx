@@ -20,6 +20,7 @@ import { ConfirmModal } from "@/components/modals/Modals";
 import { formatDate, formatCurrency, slugToLabel, cn } from "@/lib/utils";
 import type { Listing, ListingCategory } from "@/types/provider";
 import { useAuthStore } from "@/stores/auth";
+import type { HotelRoomType } from "@/types";
 
 const TOKEN_KEY = "zika:access_token";
 
@@ -318,11 +319,15 @@ function SectionDivider({ title }: { title: string }) {
 function ViewListingModal({
   listing,
   isLoadingFull,
+  roomTypes,
+  isLoadingRoomTypes,
   onClose,
   onAction,
 }: {
   listing: Listing | null;
   isLoadingFull: boolean;
+  roomTypes?: HotelRoomType[] | null;
+  isLoadingRoomTypes?: boolean;
   onClose: () => void;
   onAction: (action: string, l: Listing) => void;
 }) {
@@ -430,10 +435,52 @@ function ViewListingModal({
             ) : (
               <div className="p-5 space-y-5">
 
+                {/* ── Room Types Section ── */}
+                {l.category === "hotel" && (
+                  <div className="rounded-2xl border border-border/60 bg-slate-50 p-5 space-y-4">
+                    <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400">Room Types Setup</p>
+                    {isLoadingRoomTypes ? (
+                      <div className="py-4 flex flex-col items-center gap-2 text-slate-400">
+                        <div className="w-5 h-5 border-2 border-slate-200 border-t-primary rounded-full animate-spin" />
+                        <span className="text-xs">Loading room types...</span>
+                      </div>
+                    ) : !roomTypes || roomTypes.length === 0 ? (
+                      <p className="text-xs text-slate-500 italic">No room types defined yet.</p>
+                    ) : (
+                      <div className="overflow-x-auto border border-border/60 rounded-xl bg-white">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-border/60 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
+                              <th className="p-3">Room Name</th>
+                              <th className="p-3">Classification</th>
+                              <th className="p-3">Price/Night</th>
+                              <th className="p-3">Inventory</th>
+                              <th className="p-3">Max Guests</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {roomTypes.map((rt) => (
+                              <tr key={rt.id} className="hover:bg-slate-50/50">
+                                <td className="p-3 font-semibold text-slate-900">{rt.name}</td>
+                                <td className="p-3 capitalize">{rt.roomType.replace("_", " ")}</td>
+                                <td className="p-3 font-semibold text-slate-800">
+                                  {formatCurrency(Number(rt.pricePerNight), l.currency ?? "USD")}
+                                </td>
+                                <td className="p-3">{rt.unitCount} {rt.unitCount > 1 ? "rooms" : "room"}</td>
+                                <td className="p-3">{rt.maxGuests ?? 2} guest{(rt.maxGuests ?? 2) > 1 ? "s" : ""}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* ── Core Info Grid ── */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5 bg-slate-50 rounded-2xl p-5 border border-border/60">
 
-                  <InfoField label={getPriceLabel(l)} value={priceValue} icon={<span className="text-xs">💰</span>} />
+                  {/* <InfoField label={getPriceLabel(l)} value={priceValue} icon={<span className="text-xs">💰</span>} /> */}
                   <InfoField label="Currency" value={l.currency ?? "—"} />
                   <InfoField label="Status" value={slugToLabel(l.status)} />
                   <InfoField label="Category" value={slugToLabel(l.category)} />
@@ -783,6 +830,15 @@ export default function ListingsPage() {
     enabled: !!selected?.id,
   });
 
+  const { data: roomTypes, isLoading: isLoadingRoomTypes } = useQuery<HotelRoomType[]>({
+    queryKey: ["provider-listing-room-types", selected?.id, Boolean(getAuthToken(token))],
+    queryFn: () => withTokenRefresh(
+      (tokenOverride) => listingApi.get(`/listings/${selected?.id}/room-types`, getAuthConfig(tokenOverride)).then(r => r.data.data ?? r.data),
+      token
+    ),
+    enabled: !!selected?.id && selected?.category === "hotel",
+  });
+
   const fullSelected = fullSelectedQuery || selected;
 
   const listings: Listing[] = data?.listings ?? [];
@@ -1075,6 +1131,8 @@ export default function ListingsPage() {
       <ViewListingModal
         listing={fullSelected as Listing | null}
         isLoadingFull={isLoadingFull}
+        roomTypes={roomTypes}
+        isLoadingRoomTypes={isLoadingRoomTypes}
         onClose={() => setSelected(null)}
         onAction={(action, l) => {
           setSelected(null);

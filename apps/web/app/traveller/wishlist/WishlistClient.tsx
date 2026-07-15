@@ -23,6 +23,7 @@ function mapListing(item: any): PublicListingDetail | null {
   if (!raw?.id && !raw?.listingId) return null;
   const town = raw.town || raw.city || "";
   const country = raw.country || raw.countryCode || "";
+  const rawRoomTypes = raw.hotelRoomTypes || raw.roomTypes || [];
   return {
     // Prefer the explicit listingId field over the record's own id to avoid
     // using the favourite-record UUID when the API returns { id, listingId, listing }
@@ -30,7 +31,21 @@ function mapListing(item: any): PublicListingDetail | null {
     providerId: raw.providerId,
     category: raw.category || raw.listingType || "hotel",
     name: raw.name || raw.title || "Untitled",
-    pricePerNight: Number(raw.pricePerNight || raw.nightlyRate || raw.pricePerDay || raw.dailyRate || 0),
+    pricePerNight: (() => {
+      let basePrice = Number(raw.pricePerNight || raw.nightlyRate || raw.pricePerDay || raw.dailyRate || 0);
+      if ((raw.category === "hotel" || raw.listingType === "hotel") && Array.isArray(rawRoomTypes) && rawRoomTypes.length > 0) {
+        const activeRts = rawRoomTypes.filter((rt: any) => rt.isActive !== false);
+        if (activeRts.length > 0) {
+          const prices = activeRts
+            .map((rt: any) => Number(rt.pricePerNight))
+            .filter((p: number) => !isNaN(p) && p > 0);
+          if (prices.length > 0) {
+            return Math.min(...prices);
+          }
+        }
+      }
+      return basePrice;
+    })(),
     currency: raw.currency || "KES",
     minStayNights: raw.minStayNights || 1,
     checkinTime: raw.checkinTime || "",
@@ -40,6 +55,7 @@ function mapListing(item: any): PublicListingDetail | null {
     lat: raw.lat || 0,
     lng: raw.lng || 0,
     town,
+    neighborhood: raw.neighborhood,
     country,
     starRating: raw.starRating,
     maxGuests: raw.maxGuests,
@@ -62,6 +78,7 @@ function mapListing(item: any): PublicListingDetail | null {
     isAccredited: raw.isAccredited ?? false,
     longStayDiscountEnabled: raw.longStayDiscountEnabled ?? false,
     instantBooking: raw.instantBooking ?? raw.instant_booking ?? false,
+    roomTypes: rawRoomTypes,
   };
 }
 

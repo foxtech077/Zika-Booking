@@ -43,6 +43,7 @@ type ApartmentState = {
   lat: number | null;
   lng: number | null;
   town: string;
+  neighborhood: string;
   country: string;
   pricePerNight: string;
   currency: string;
@@ -93,6 +94,7 @@ function initState(l: Listing): ApartmentState {
     lat:                 toNullableNumber(a.lat),
     lng:                 toNullableNumber(a.lng),
     town:                l.town              ?? "",
+    neighborhood:        (l as any).neighborhood      ?? "",
     country:             l.country           ?? "",
     pricePerNight:       l.pricePerNight ? String(l.pricePerNight) : "",
     currency:            l.currency          ?? "USD",
@@ -125,6 +127,7 @@ function buildPayload(s: ApartmentState): Record<string, unknown> {
   p.lat = toNullableNumber(s.lat);
   p.lng = toNullableNumber(s.lng);
   p.town = trimOrNull(s.town);
+  p.neighborhood = trimOrNull(s.neighborhood);
   p.country = countryOrNull(s.country);
 
   const price = toNullableNumber(s.pricePerNight);
@@ -455,6 +458,7 @@ export function ApartmentForm({ listingId, listing }: Props) {
                 <GeocodedAddressFields
                   address={s.address}
                   town={s.town}
+                  neighborhood={s.neighborhood}
                   country={s.country}
                   onChange={(f, v) => {
                     const normalized = f === "country" ? v.toUpperCase().slice(0, 2) : v;
@@ -472,6 +476,7 @@ export function ApartmentForm({ listingId, listing }: Props) {
                       lat: r.lat,
                       lng: r.lng,
                       town: r.town,
+                      neighborhood: r.neighborhood,
                       country: r.country,
                       // Auto-populate currency from geocoded country (only if a mapping exists)
                       ...(detectedCurrency ? { currency: detectedCurrency } : {}),
