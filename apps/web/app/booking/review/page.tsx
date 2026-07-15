@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { parsePhoneNumber } from "libphonenumber-js";
 import { paymentApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
 import { storeLatestReviewContext } from "@/services/traveller";
@@ -84,25 +85,26 @@ const TAX_RATES: Record<string, number> = {
 const CARD_LOGOS = ["Visa", "Mastercard", "Amex", "UnionPay", "Apple Pay", "Google Pay", "PayPal", "Bank Debit", "Klarna"];
 
 const COUNTRY_NETWORKS: Record<string, { value: string; label: string }[]> = {
-  Benin: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
-  "Burkina Faso": [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
-  Cameroon: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }],
-  Congo: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
-  Gabon: [{ value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
-  Kenya: [{ value: "airtel", label: "Airtel Money" }],
-  Rwanda: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
-  Senegal: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }],
-  "Sierra Leone": [{ value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }],
-  Uganda: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
-  Tanzania: [{ value: "airtel", label: "Airtel Money" }, { value: "orange", label: "Orange Money" }],
-  Ghana: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
-  Zambia: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
-  "Ivory Coast": [{ value: "wave", label: "Wave Money" }, { value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
+  BJ: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
+  BF: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  CM: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }],
+  CG: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  CD: [{ value: "airtel", label: "Airtel Money" }],
+  CI: [{ value: "wave", label: "Wave Money" }, { value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
+  GA: [{ value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  KE: [{ value: "airtel", label: "Airtel Money" }],
+  RW: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  SN: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }],
+  SL: [{ value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }],
+  UG: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  TZ: [{ value: "airtel", label: "Airtel Money" }, { value: "orange", label: "Orange Money" }],
+  GH: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  ZM: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
 };
 
-function getNetworksForCountry(countryName: string): { value: string; label: string }[] {
-  if (!countryName) return [];
-  return COUNTRY_NETWORKS[countryName] ?? [];
+function getNetworksForCountry(countryCode: string): { value: string; label: string }[] {
+  if (!countryCode) return [];
+  return COUNTRY_NETWORKS[countryCode.toUpperCase()] ?? [];
 }
 
 const TARA_COUNTRIES = new Set(Object.keys(COUNTRY_NETWORKS));
@@ -169,6 +171,7 @@ export default function BookingReviewPage() {
 
   // ── Payment State ────────────────────────────────────────────────────────────
   const [mobileNumber, setMobileNumber] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState("");
   const [network, setNetwork] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [payError, setPayError] = useState("");
@@ -197,8 +200,22 @@ export default function BookingReviewPage() {
       const data: CheckoutCtx = JSON.parse(raw);
       setCtx(data);
       if (data.voucherCode) setReviewVoucherCode(data.voucherCode);
-      setProvider(TARA_COUNTRIES.has(data.listingCountry) ? "tara" : "stripe");
       if ((data as any).mobileNumber) setMobileNumber((data as any).mobileNumber ?? "");
+      if (data.phone) {
+        try {
+          const parsed = parsePhoneNumber(data.phone);
+          if (parsed?.country) {
+            setPhoneCountry(parsed.country);
+            setProvider(TARA_COUNTRIES.has(parsed.country) ? "tara" : "stripe");
+          } else {
+            setProvider("stripe");
+          }
+        } catch {
+          setProvider("stripe");
+        }
+      } else {
+        setProvider("stripe");
+      }
 
       // Resume timer from lockExpiresAt
       const expiresAt = new Date(data.lockExpiresAt).getTime();
@@ -510,7 +527,7 @@ export default function BookingReviewPage() {
   }
 
   const isCar = ctx.listingCategory === "car";
-  const hasTara = TARA_COUNTRIES.has(ctx.listingCountry);
+  const hasTara = TARA_COUNTRIES.has(phoneCountry);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -886,7 +903,15 @@ export default function BookingReviewPage() {
                         <input
                           type="tel"
                           value={mobileNumber}
-                          onChange={(e) => setMobileNumber(e.target.value)}
+                          onChange={(e) => {
+                            setMobileNumber(e.target.value);
+                            try {
+                              const parsed = parsePhoneNumber(e.target.value);
+                              setPhoneCountry(parsed?.country ?? "");
+                            } catch {
+                              setPhoneCountry("");
+                            }
+                          }}
                           placeholder="+254 700 000 000"
                           className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F]"
                         />
@@ -898,7 +923,7 @@ export default function BookingReviewPage() {
                           className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F] bg-white"
                         >
                           <option value="">Select Network</option>
-                          {getNetworksForCountry(ctx?.listingCountry ?? "").map((n) => (
+                          {getNetworksForCountry(phoneCountry).map((n) => (
                             <option key={n.value} value={n.value}>{n.label}</option>
                           ))}
                         </select>

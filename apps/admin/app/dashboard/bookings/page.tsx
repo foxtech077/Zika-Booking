@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { parsePhoneNumber } from "libphonenumber-js";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
@@ -236,6 +237,16 @@ export default function BookingsPage() {
   });
 
   // Resend payment link for draft bookings
+  const resendPhoneCountry = useMemo(() => {
+    if (!resendModal?.guestPhone) return "";
+    try {
+      const parsed = parsePhoneNumber(resendModal.guestPhone);
+      return parsed?.country ?? "";
+    } catch {
+      return "";
+    }
+  }, [resendModal]);
+
   const resendLinkMut = useMutation({
     mutationFn: async ({ id, gateway }: { id: string; gateway: "stripe" | "tara" }) => {
       setResendError("");
@@ -1133,7 +1144,7 @@ export default function BookingsPage() {
                   className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
                 >
                   <option value="">Select Network</option>
-                  {getNetworksForCountry(resendModal?.listing?.country).map((n) => (
+                  {getNetworksForCountry(resendPhoneCountry).map((n) => (
                     <option key={n.value} value={n.value}>{n.label}</option>
                   ))}
                 </select>

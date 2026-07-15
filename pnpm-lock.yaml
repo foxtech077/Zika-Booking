@@ -63,6 +63,9 @@ importers:
       i18n-iso-countries:
         specifier: ^7.14.0
         version: 7.14.0
+      libphonenumber-js:
+        specifier: ^1.13.8
+        version: 1.13.8
       lucide-react:
         specifier: ^1.16.0
         version: 1.17.0(react@18.3.1)
@@ -278,6 +281,9 @@ importers:
       leaflet:
         specifier: ^1.9.4
         version: 1.9.4
+      libphonenumber-js:
+        specifier: ^1.13.8
+        version: 1.13.8
       lucide-react:
         specifier: ^1.16.0
         version: 1.17.0(react@18.3.1)
