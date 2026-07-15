@@ -55,6 +55,7 @@ function mapListing(item: any): PublicListingDetail | null {
     lat: raw.lat || 0,
     lng: raw.lng || 0,
     town,
+    neighborhood: raw.neighborhood,
     country,
     starRating: raw.starRating,
     maxGuests: raw.maxGuests,

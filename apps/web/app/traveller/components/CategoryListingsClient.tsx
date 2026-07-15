@@ -171,6 +171,7 @@ function mapListing(l: any): PublicListingDetail {
     lat: l.lat || 0,
     lng: l.lng || 0,
     town,
+    neighborhood: l.neighborhood,
     country,
     starRating: l.starRating,
     maxGuests: l.maxGuests,
