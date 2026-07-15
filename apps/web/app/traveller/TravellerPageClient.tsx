@@ -1911,7 +1911,7 @@ export default function TravellerDashboard() {
                     <div className="flex items-center gap-3 text-sm font-semibold text-slate-700">
                       {detailListing.starRating && <span className="flex items-center gap-1"><span className="text-[#1D8D2B]">⭐</span> {detailListing.starRating}</span>}
                       <span className="text-slate-400">•</span>
-                      <span className="underline cursor-pointer hover:text-slate-900">{detailListing.address}, {detailListing.town}, {detailListing.country}</span>
+                      <span className="underline cursor-pointer hover:text-slate-900">{detailListing.address}, {detailListing.neighborhood ? `${detailListing.neighborhood}, ` : ""}{detailListing.town}, {detailListing.country}</span>
                     </div>
                     <div className="flex items-center gap-4 text-sm font-semibold text-slate-700">
                       <button className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white">
@@ -2029,7 +2029,7 @@ export default function TravellerDashboard() {
                           <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                         </svg>
-                        <p className="text-sm font-semibold text-slate-600">{detailListing.town}{detailListing.country ? `, ${detailListing.country}` : ""}</p>
+                        <p className="text-sm font-semibold text-slate-600">{detailListing.neighborhood ? `${detailListing.neighborhood}, ` : ""}{detailListing.town}{detailListing.country ? `, ${detailListing.country}` : ""}</p>
                       </div>
                     </div>
                   </div>
@@ -2348,7 +2348,7 @@ export default function TravellerDashboard() {
                                 />
                                 <div className="min-w-0">
                                   <p className="font-bold text-slate-900 text-sm leading-tight truncate">{detailListing.name}</p>
-                                  <p className="text-[10px] text-slate-500 mt-0.5 capitalize">{detailListing.category} · {detailListing.town}, {detailListing.country}</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5 capitalize">{detailListing.category} · {detailListing.neighborhood ? `${detailListing.neighborhood}, ` : ""}{detailListing.town}, {detailListing.country}</p>
                                   {detailListing.starRating && <p className="text-[10px] text-amber-500 font-semibold">⭐ {detailListing.starRating}</p>}
                                 </div>
                               </div>
