@@ -337,8 +337,7 @@
         description:
           "Called by Tara when a mobile money payment succeeds or fails. " +
           "Validates HMAC-SHA256 signature in the `X-Tara-Signature` header.\n\n" +
-          "**To simulate in Swagger (dev only):** generate the signature with:\n" +
-          "`echo -n '{\"event\":\"payment_successful\",\"taraReference\":\"TARA-xxx\"}' | openssl dgst -sha256 -hmac YOUR_TARA_WEBHOOK_SECRET`",
+          "The payload contains `status` field — `SUCCESS` means payment succeeded.",
         headers: {
           type: "object",
           required: ["x-tara-signature"],
@@ -351,28 +350,43 @@
         },
         body: {
           type: "object",
-          required: ["event"],
+          required: ["paymentId", "status"],
           properties: {
-            event: {
+            businessId: {
               type: "string",
-              enum: ["payment_successful", "payment_failed"],
-              description: "Event type from Tara",
+              description: "Tara business ID",
             },
-            taraReference: {
+            paymentId: {
               type: "string",
-              description: "Tara's own transaction reference (returned from /payments/initiate)",
+              description: "Tara payment transaction reference",
             },
-            reference: {
+            productId: {
               type: "string",
-              description: "Your idempotency reference (booking reference + attempt number)",
+              description: "Product identifier sent during initiation",
             },
-            failureCode: {
+            amount: {
               type: "string",
-              description: "Error code on payment_failed events",
+              description: "Payment amount as string",
             },
-            failureMessage: {
+            collectionId: {
               type: "string",
-              description: "Human-readable failure reason",
+              description: "Tara collection ID",
+            },
+            phoneNumber: {
+              type: "string",
+              description: "Payer phone number",
+            },
+            creationDate: {
+              type: "string",
+              description: "Timestamp when the payment was created",
+            },
+            changeDate: {
+              type: "string",
+              description: "Timestamp when the payment was last updated",
+            },
+            status: {
+              type: "string",
+              description: "Payment status from Tara (e.g. SUCCESS, FAILED)",
             },
           },
         },
@@ -404,40 +418,45 @@
       }
 
       const body = req.body as {
-        event: string;
-        reference?: string;
-        taraReference?: string;
-        failureCode?: string;
-        failureMessage?: string;
+        paymentId: string;
+        status: string;
+        businessId?: string;
+        productId?: string;
+        amount?: string;
+        collectionId?: string;
+        phoneNumber?: string;
+        creationDate?: string;
+        changeDate?: string;
       };
 
-      app.log.info(`[tara-webhook] Received event: ${body.event}`);
+      const reference = body.paymentId;
+      const isSuccess = body.status === "SUCCESS";
 
-      const taraReference = body.taraReference ?? body.reference;
+      app.log.info(`[tara-webhook] Received status: ${body.status} for paymentId: ${reference}`);
 
       try {
-        if (body.event === "payment_successful") {
-          const payment = await prisma.payment.findFirst({
-            where: { providerPaymentId: taraReference },
-          });
+        const payment = await prisma.payment.findFirst({
+          where: { providerPaymentId: reference },
+        });
 
-          if (!payment) {
-            app.log.warn(`[tara-webhook] Payment not found for taraReference ${taraReference}`);
-            return reply.status(200).send({ received: true });
+        if (!payment) {
+          app.log.warn(`[tara-webhook] Payment not found for paymentId ${reference}`);
+          return reply.status(200).send({ received: true });
+        }
+
+        if (isSuccess) {
+          if (payment.status !== "captured") {
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: {
+                status: "captured",
+                capturedAt: new Date(),
+                paymentMethodType: "mobile_money",
+              },
+            });
           }
 
           try {
-            if (payment.status !== "captured") {
-              await prisma.payment.update({
-                where: { id: payment.id },
-                data: {
-                  status: "captured",
-                  capturedAt: new Date(),
-                  paymentMethodType: "mobile_money",
-                },
-              });
-            }
-
             await bookingConfirmedHandler({
               id: payment.id,
               paymentProvider: payment.paymentProvider,
@@ -450,37 +469,15 @@
               message: err.message,
             });
           }
-          if (payment.status === "captured") {
-            return reply.status(200).send({ received: true });
-          }
 
-          await prisma.payment.update({
-            where: { id: payment.id },
-            data: {
-              status: "captured",
-              capturedAt: new Date(),
-              paymentMethodType: "mobile_money",
-            },
-          });
-
-          await bookingConfirmedHandler({ id: payment.id, metadata: { bookingId: payment.bookingId } });
-
-        } else if (body.event === "payment_failed") {
-          const payment = await prisma.payment.findFirst({
-            where: { providerPaymentId: taraReference },
-          });
-
-          if (!payment) {
-            app.log.warn(`[tara-webhook] Payment not found for taraReference ${taraReference}`);
-            return reply.status(200).send({ received: true });
-          }
-
+          return reply.status(200).send({ received: true });
+        } else {
           await prisma.payment.update({
             where: { id: payment.id },
             data: {
               status: "failed",
-              failureCode: body.failureCode ?? null,
-              failureMessage: body.failureMessage ?? null,
+              failureCode: body.status,
+              failureMessage: `Tara payment failed with status: ${body.status}`,
             },
           });
 
