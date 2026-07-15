@@ -588,6 +588,9 @@ importers:
       jose:
         specifier: ^5.9.3
         version: 5.10.0
+      libphonenumber-js:
+        specifier: ^1.13.8
+        version: 1.13.8
       pdfkit:
         specifier: ^0.19.0
         version: 0.19.0
@@ -4579,6 +4582,9 @@ packages:
   leven@3.1.0:
     resolution: {integrity: sha512-qsda+H8jTaUaN/x5vzW2rzc+8Rw4TAQ/4KjB46IwK5VH+IlVeeeje/EoZRpiXvIqjFgK84QffqPztGI3VBLG1A==}
     engines: {node: '>=6'}
+
+  libphonenumber-js@1.13.8:
+    resolution: {integrity: sha512-80xal1m93rADejw2pMp2MSzFhHCPLEspjHxnH2UtqI+DgAmElsbmLMiqk9niwH9NWAfjsRtaJI+qBrOEmRx9nQ==}
 
   light-my-request@6.6.0:
     resolution: {integrity: sha512-CHYbu8RtboSIoVsHZ6Ye4cj4Aw/yg2oAFimlF7mNvfDV192LR7nDiKtSIfCuLT7KokPSTn/9kfVLm5OGN0A28A==}
@@ -11341,6 +11347,8 @@ snapshots:
   leaflet@1.9.4: {}
 
   leven@3.1.0: {}
+
+  libphonenumber-js@1.13.8: {}
 
   light-my-request@6.6.0:
     dependencies:

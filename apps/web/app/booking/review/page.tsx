@@ -75,16 +75,6 @@ type PayProvider = "stripe" | "tara";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const AFRICAN_COUNTRIES = new Set([
-  "Kenya", "Nigeria", "Ghana", "Tanzania", "Uganda", "South Africa", "Rwanda",
-  "Ethiopia", "Zambia", "Zimbabwe", "Cameroon", "Ivory Coast", "Senegal",
-  "Mali", "Burkina Faso", "Niger", "Chad", "Somalia", "Sudan", "Egypt",
-  "Morocco", "Algeria", "Tunisia", "Libya", "Angola", "Mozambique",
-  "Madagascar", "Malawi", "Botswana", "Namibia", "Lesotho", "Eswatini",
-  "Mauritius", "Seychelles", "Burundi", "Djibouti", "Eritrea", "Gabon",
-  "Guinea", "Liberia", "Sierra Leone", "Gambia", "Cape Verde",
-]);
-
 const TAX_RATES: Record<string, number> = {
   Kenya: 0.16, Nigeria: 0.075, Ghana: 0.125, Tanzania: 0.18,
   Uganda: 0.18, "South Africa": 0.15, Rwanda: 0.18, Ethiopia: 0.15,
@@ -92,6 +82,30 @@ const TAX_RATES: Record<string, number> = {
 };
 
 const CARD_LOGOS = ["Visa", "Mastercard", "Amex", "UnionPay", "Apple Pay", "Google Pay", "PayPal", "Bank Debit", "Klarna"];
+
+const COUNTRY_NETWORKS: Record<string, { value: string; label: string }[]> = {
+  Benin: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
+  "Burkina Faso": [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  Cameroon: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }],
+  Congo: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  Gabon: [{ value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  Kenya: [{ value: "airtel", label: "Airtel Money" }],
+  Rwanda: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  Senegal: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }],
+  "Sierra Leone": [{ value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }],
+  Uganda: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  Tanzania: [{ value: "airtel", label: "Airtel Money" }, { value: "orange", label: "Orange Money" }],
+  Ghana: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  Zambia: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  "Ivory Coast": [{ value: "wave", label: "Wave Money" }, { value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
+};
+
+function getNetworksForCountry(countryName: string): { value: string; label: string }[] {
+  if (!countryName) return [];
+  return COUNTRY_NETWORKS[countryName] ?? [];
+}
+
+const TARA_COUNTRIES = new Set(Object.keys(COUNTRY_NETWORKS));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -155,6 +169,7 @@ export default function BookingReviewPage() {
 
   // ── Payment State ────────────────────────────────────────────────────────────
   const [mobileNumber, setMobileNumber] = useState("");
+  const [network, setNetwork] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [payError, setPayError] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
@@ -182,7 +197,7 @@ export default function BookingReviewPage() {
       const data: CheckoutCtx = JSON.parse(raw);
       setCtx(data);
       if (data.voucherCode) setReviewVoucherCode(data.voucherCode);
-      setProvider(AFRICAN_COUNTRIES.has(data.listingCountry) ? "tara" : "stripe");
+      setProvider(TARA_COUNTRIES.has(data.listingCountry) ? "tara" : "stripe");
       if ((data as any).mobileNumber) setMobileNumber((data as any).mobileNumber ?? "");
 
       // Resume timer from lockExpiresAt
@@ -276,7 +291,15 @@ export default function BookingReviewPage() {
     method: string,
   ) {
     if (pollRef.current) clearInterval(pollRef.current);
+    const startedAt = Date.now();
     pollRef.current = setInterval(async () => {
+      if (Date.now() - startedAt > 120_000) {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+        setPayError("Payment took too long. Please try again.");
+        setStep("payment");
+        return;
+      }
       try {
         const res = await paymentApi.get(`/payments/${pmId}/status`);
         const status = res.data?.data?.status as string | undefined;
@@ -383,6 +406,7 @@ export default function BookingReviewPage() {
           bookingId: bId,
           paymentProvider: "tara",
           mobileNumber: mobileNumber.trim(),
+          network: network.trim() || undefined,
         });
         if (!payRes.data.success) {
           setPayError(payRes.data?.error?.message ?? "Payment initiation failed.");
@@ -486,7 +510,7 @@ export default function BookingReviewPage() {
   }
 
   const isCar = ctx.listingCategory === "car";
-  const isAfrican = AFRICAN_COUNTRIES.has(ctx.listingCountry);
+  const hasTara = TARA_COUNTRIES.has(ctx.listingCountry);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -840,7 +864,7 @@ export default function BookingReviewPage() {
                     {/* Payment method selector */}
                     <SectionCard title="Payment Method">
                       <div className="grid grid-cols-2 gap-3">
-                        {(isAfrican ? (["tara", "stripe"] as PayProvider[]) : (["stripe", "tara"] as PayProvider[])).map((p) => (
+                        {(hasTara ? (["tara", "stripe"] as PayProvider[]) : (["stripe", "tara"] as PayProvider[])).map((p) => (
                           <button
                             key={p}
                             onClick={() => setProvider(p)}
@@ -848,8 +872,8 @@ export default function BookingReviewPage() {
                           >
                             <span className="text-2xl">{p === "tara" ? "📱" : "💳"}</span>
                             <span>{p === "tara" ? "Mobile Money" : "Card & Digital Wallets"}</span>
-                            {isAfrican && p === "tara" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
-                            {!isAfrican && p === "stripe" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
+                            {hasTara && p === "tara" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
+                            {!hasTara && p === "stripe" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
                           </button>
                         ))}
                       </div>
@@ -867,6 +891,17 @@ export default function BookingReviewPage() {
                           className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F]"
                         />
                         <p className="text-xs text-slate-400 mt-2">You will receive a payment prompt on this number.</p>
+                        <label className="block text-sm font-medium text-slate-700 mb-1.5 mt-4">Network</label>
+                        <select
+                          value={network}
+                          onChange={(e) => setNetwork(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F] bg-white"
+                        >
+                          <option value="">Select Network</option>
+                          {getNetworksForCountry(ctx?.listingCountry ?? "").map((n) => (
+                            <option key={n.value} value={n.value}>{n.label}</option>
+                          ))}
+                        </select>
                       </SectionCard>
                     )}
 

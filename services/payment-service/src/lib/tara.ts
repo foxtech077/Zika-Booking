@@ -87,6 +87,7 @@ export async function initiateTaraPayment(opts: {
   reference: string;   // booking reference, e.g. ZIKA-001234-KE
   description: string;
   attemptNumber?: number;
+  network?: string;
 }): Promise<TaraPaymentResult> {
   const idempotencyKey = `${opts.reference}-${opts.attemptNumber ?? 1}`;
 
@@ -95,7 +96,7 @@ export async function initiateTaraPayment(opts: {
     businessId:  TARA_BUSINESS_ID,
     productId:   `prod-${idempotencyKey}`,
     productName: opts.description,
-    network:     "wave",
+    network:     opts.network ?? "wave",
     productPrice: opts.amount,
     phoneNumber: opts.mobileNumber.replace("+", ""),
     webhookUrl:  TARA_WEBHOOK_URL,
