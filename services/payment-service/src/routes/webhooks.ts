@@ -377,6 +377,8 @@
         changeDate?: string;
       };
 
+      app.log.info({ payload: body }, "[tara-webhook] Raw payload received");
+
       const reference = body.paymentId;
       const isSuccess = body.status === "SUCCESS";
 
@@ -394,6 +396,7 @@
 
         if (isSuccess) {
           if (payment.status !== "captured") {
+            app.log.info(`[tara-webhook] Updating payment ${payment.id} from ${payment.status} → captured`);
             await prisma.payment.update({
               where: { id: payment.id },
               data: {
@@ -402,6 +405,8 @@
                 paymentMethodType: "mobile_money",
               },
             });
+          } else {
+            app.log.info(`[tara-webhook] Payment ${payment.id} already captured — skipping status update`);
           }
 
           try {
@@ -420,6 +425,7 @@
 
           return reply.status(200).send({ received: true });
         } else {
+          app.log.info(`[tara-webhook] Updating payment ${payment.id} from ${payment.status} → failed (code: ${body.status})`);
           await prisma.payment.update({
             where: { id: payment.id },
             data: {
@@ -430,6 +436,7 @@
           });
 
           if (payment.attemptNumber >= 3) {
+            app.log.info(`[tara-webhook] Max attempts (${payment.attemptNumber}) reached — failing booking ${payment.bookingId}`);
             await failBooking(payment.bookingId);
           }
         }
