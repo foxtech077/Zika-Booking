@@ -353,16 +353,18 @@
         },
       },
     }, async (req: FastifyRequest, reply: FastifyReply) => {
+      app.log.info({ headers: req.headers, body: req.body }, "[tara-webhook] Incoming request — headers & body");
+
       const signature = req.headers["x-tara-signature"];
       if (!signature || typeof signature !== "string") {
-        app.log.warn({ headers: req.headers }, "[tara-webhook] Rejected — missing x-tara-signature header");
+        app.log.warn("[tara-webhook] Rejected — missing x-tara-signature header");
         return sendError(reply, 400, "MISSING_SIGNATURE", "Missing X-Tara-Signature header.");
       }
 
       const rawBodyStr = JSON.stringify(req.body);
 
       if (!verifyTaraWebhookSignature(rawBodyStr, signature, TARA_WEBHOOK_SECRET)) {
-        app.log.warn({ signature, payload: req.body }, "[tara-webhook] Rejected — signature verification failed");
+        app.log.warn({ signature }, "[tara-webhook] Rejected — signature verification failed");
         return sendError(reply, 400, "INVALID_SIGNATURE", "Tara signature verification failed.");
       }
 
