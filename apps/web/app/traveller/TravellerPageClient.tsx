@@ -722,7 +722,8 @@ export default function TravellerDashboard() {
       const end = isCar ? detailReturnDate : detailCheckOut;
       const days = calcDays(start, end);
       const baseTotal = pricePerNight * days;
-      const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
+      const discountedTotal = Math.max(0, baseTotal - bestDiscount);
+      const serviceFee = days > 0 ? Math.ceil(discountedTotal * 0.05) : 0;
       const taxRate = TAX_RATES[detailListing.country] ?? 0;
       const taxAmount = Math.ceil(baseTotal * taxRate);
       const grandTotal = Math.max(0, baseTotal + serviceFee + taxAmount - bestDiscount);
@@ -2098,8 +2099,9 @@ export default function TravellerDashboard() {
                       const end = isCar ? detailReturnDate : detailCheckOut;
                       const days = calcDays(start, end);
                       const baseTotal = pricePerNight * days;
-                      const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
                       const sidebarDiscount = bestDiscount;
+                      const subtotal = Math.max(0, baseTotal - sidebarDiscount);
+                      const serviceFee = days > 0 ? Math.ceil(subtotal * 0.1) : 0;
                       const grandTotal = Math.max(0, baseTotal + serviceFee - sidebarDiscount);
 
                       return (
@@ -2264,7 +2266,7 @@ export default function TravellerDashboard() {
                                 <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
                               </div>
                               <div className="flex justify-between">
-                                <span>Service fee (5%)</span>
+                                <span>Service fee</span>
                                 <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
                               </div>
                               {sidebarDiscount > 0 && (
@@ -2336,11 +2338,12 @@ export default function TravellerDashboard() {
                           const end = isCar ? detailReturnDate : detailCheckOut;
                           const days = pricingPreview ? pricingPreview.units : calcDays(start, end);
                           const base = pricingPreview ? pricingPreview.baseAmount : pricePerNight * days;
-                          const serviceFee = pricingPreview ? pricingPreview.serviceFee : Math.ceil(base * 0.05);
-                          const taxAmount = pricingPreview ? pricingPreview.taxAmount : 0;
                           const discount = pricingPreview
                             ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
                             : bestDiscount;
+                          const subtotal = base - discount;
+                          const serviceFee = pricingPreview ? pricingPreview.serviceFee : Math.ceil(subtotal * 0.05);
+                          const taxAmount = pricingPreview ? pricingPreview.taxAmount : 0;
                           const grandTotal = pricingPreview
                             ? base - discount + serviceFee + taxAmount + (pricingPreview.deliveryFee ?? 0)
                             : Math.max(0, base + serviceFee + taxAmount - bestDiscount);
@@ -2577,10 +2580,11 @@ export default function TravellerDashboard() {
                             const end = isCar ? detailReturnDate : detailCheckOut;
                             const days = pricingPreview ? pricingPreview.units : calcDays(start, end);
                             const baseTotal = pricingPreview ? pricingPreview.baseAmount : pricePerNight * days;
-                            const serviceFee = pricingPreview ? pricingPreview.serviceFee : Math.ceil(baseTotal * 0.05);
                             const discount = pricingPreview
                               ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
                               : bestDiscount;
+                            const subtotal = baseTotal - discount;
+                            const serviceFee = pricingPreview ? pricingPreview.serviceFee : Math.ceil(subtotal * 0.05);
                             const grandTotal = pricingPreview
                               ? baseTotal - discount + serviceFee + (pricingPreview.deliveryFee ?? 0)
                               : Math.max(0, baseTotal + serviceFee - bestDiscount);
