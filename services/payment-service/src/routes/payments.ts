@@ -221,9 +221,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       summary: "Trigger STK push for Tara payment link",
       body: {
         type: "object",
-        properties: {
-          network: { type: "string", description: "Mobile money network (e.g. wave, mtn, orange, airtel). Defaults to wave." },
-        },
+        properties: {},
       },
     },
   }, async (req, reply) => {
