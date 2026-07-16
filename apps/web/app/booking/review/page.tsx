@@ -12,6 +12,18 @@ import { capitalize } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+interface PricingPreview {
+  units: number;
+  baseAmount: number;
+  nightlyRate: number;
+  promotionDiscount: number;
+  voucherDiscount: number;
+  serviceFee: number;
+  taxAmount: number;
+  deliveryFee: number;
+  totalAmount: number;
+}
+
 interface CheckoutCtx {
   listingId: string;
   listingTitle: string;
@@ -47,6 +59,7 @@ interface CheckoutCtx {
   roomTypeId?: string;
   roomTypeName?: string;
   roomType?: string;
+  pricingPreview?: PricingPreview;
 }
 
 interface WalletVoucher {
@@ -126,6 +139,23 @@ function calcPricing(ctx: CheckoutCtx) {
   return { base, discount, subtotal, serviceFee, taxes, total };
 }
 
+function getPricing(ctx: CheckoutCtx) {
+  if (ctx.pricingPreview) {
+    const pp = ctx.pricingPreview;
+    const totalDiscount = pp.promotionDiscount + (ctx.voucherDiscount ?? 0);
+    const subtotal = pp.baseAmount - totalDiscount;
+    return {
+      base: pp.baseAmount,
+      discount: totalDiscount,
+      subtotal,
+      serviceFee: pp.serviceFee,
+      taxes: pp.taxAmount,
+      total: subtotal + pp.serviceFee + pp.taxAmount + (pp.deliveryFee ?? 0),
+    };
+  }
+  return calcPricing(ctx);
+}
+
 function fmtDate(d?: string) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -189,7 +219,7 @@ export default function BookingReviewPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Derived pricing ──────────────────────────────────────────────────────────
-  const pricing = ctx ? calcPricing(ctx) : null;
+  const pricing = ctx ? getPricing(ctx) : null;
 
   // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
@@ -1117,7 +1147,7 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: ReturnType<
             <span>{fmt(pricing.subtotal)}</span>
           </div>
           <div className="flex justify-between text-slate-600">
-            <span>Service fee (5%)</span>
+            <span>Service fee</span>
             <span>{fmt(pricing.serviceFee)}</span>
           </div>
           {pricing.taxes > 0 && (
@@ -1322,7 +1352,7 @@ function VoucherLayout({
       <VoucherSection title="Itemised Receipt">
         <VoucherRow label="Base amount" value={`${confirmed.currency} ${fmt(confirmed.baseAmount)}`} />
         {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${fmt(confirmed.discount)}`} />}
-        <VoucherRow label="Service fee (5%)" value={`${confirmed.currency} ${fmt(confirmed.serviceFee)}`} />
+        <VoucherRow label="Service fee" value={`${confirmed.currency} ${fmt(confirmed.serviceFee)}`} />
         {confirmed.taxes > 0 && <VoucherRow label="Taxes" value={`${confirmed.currency} ${fmt(confirmed.taxes)}`} />}
         <VoucherRow label="Total Paid" value={`${confirmed.currency} ${fmt(confirmed.totalAmount)}`} bold />
       </VoucherSection>
