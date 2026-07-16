@@ -356,6 +356,7 @@
       const body = req.body as {
         paymentId: string;
         status: string;
+        transactionCode?: string;
         businessId?: string;
         productId?: string;
         amount?: string;
@@ -367,18 +368,19 @@
 
       app.log.info({ payload: body }, "[tara-webhook] Raw payload received");
 
-      const reference = body.paymentId;
+      const rawProductId = body.productId ?? body.paymentId;
+      const idempotencyKey = rawProductId.replace(/^prod_/, "");
       const isSuccess = body.status === "SUCCESS";
 
-      app.log.info(`[tara-webhook] Received status: ${body.status} for paymentId: ${reference}`);
+      app.log.info(`[tara-webhook] Received status: ${body.status} | transactionCode: ${body.transactionCode} | productId: ${rawProductId}`);
 
       try {
         const payment = await prisma.payment.findFirst({
-          where: { providerPaymentId: reference },
+          where: { idempotencyKey },
         });
 
         if (!payment) {
-          app.log.warn(`[tara-webhook] Payment not found for paymentId ${reference}`);
+          app.log.warn(`[tara-webhook] Payment not found for idempotencyKey ${idempotencyKey} (raw productId: ${rawProductId})`);
           return reply.status(200).send({ received: true });
         }
 
@@ -413,13 +415,18 @@
 
           return reply.status(200).send({ received: true });
         } else {
-          app.log.info(`[tara-webhook] Updating payment ${payment.id} from ${payment.status} → failed (code: ${body.status})`);
+          const failureCode = body.transactionCode ?? body.status;
+          const failureMessage = body.transactionCode
+            ? `Tara payment failed: ${body.transactionCode}`
+            : `Tara payment failed with status: ${body.status}`;
+
+          app.log.info(`[tara-webhook] Updating payment ${payment.id} from ${payment.status} → failed (code: ${failureCode})`);
           await prisma.payment.update({
             where: { id: payment.id },
             data: {
               status: "failed",
-              failureCode: body.status,
-              failureMessage: `Tara payment failed with status: ${body.status}`,
+              failureCode,
+              failureMessage,
             },
           });
 
