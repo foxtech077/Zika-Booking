@@ -1,5 +1,3 @@
-import { createHmac } from "crypto";
-
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const TARA_BASE_URL =
@@ -174,18 +172,4 @@ export async function initiateTaraReversal(opts: {
   return { reversalId: `TREV-${Date.now()}` };
 }
 
-// ── Webhook signature verification ───────────────────────────────────────────
-// Exported so the webhook route can reuse without duplicating logic.
 
-export function verifyTaraWebhookSignature(
-  rawBody: string,
-  signature: string,
-  secret: string,
-): boolean {
-  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
-  // Constant-time compare to prevent timing attacks
-  return (
-    expected.length === signature.length &&
-    createHmac("sha256", secret).update(rawBody).digest("hex") === signature
-  );
-}
