@@ -368,11 +368,11 @@
 
       app.log.info({ payload: body }, "[tara-webhook] Raw payload received");
 
-      const rawPaymentId = body.paymentId;
-      const idempotencyKey = rawPaymentId.replace(/^prod_/, "");
+      const rawProductId = body.productId ?? body.paymentId;
+      const idempotencyKey = rawProductId.replace(/^prod_/, "");
       const isSuccess = body.status === "SUCCESS";
 
-      app.log.info(`[tara-webhook] Received status: ${body.status} | transactionCode: ${body.transactionCode} | paymentId: ${rawPaymentId}`);
+      app.log.info(`[tara-webhook] Received status: ${body.status} | transactionCode: ${body.transactionCode} | productId: ${rawProductId}`);
 
       try {
         const payment = await prisma.payment.findFirst({
@@ -380,7 +380,7 @@
         });
 
         if (!payment) {
-          app.log.warn(`[tara-webhook] Payment not found for idempotencyKey ${idempotencyKey} (raw paymentId: ${rawPaymentId})`);
+          app.log.warn(`[tara-webhook] Payment not found for idempotencyKey ${idempotencyKey} (raw productId: ${rawProductId})`);
           return reply.status(200).send({ received: true });
         }
 
