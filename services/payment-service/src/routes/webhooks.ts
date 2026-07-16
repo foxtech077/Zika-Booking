@@ -2,7 +2,6 @@
   import { prisma } from "../lib/prisma.js";
   import { stripe } from "../lib/stripe.js";
   import { sendError } from "../lib/errors.js";
-  import { verifyTaraWebhookSignature } from "../lib/tara.js";
   import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
   import { PaymentStatus, RefundStatus } from "../generated/index.js";
   import { notifyBookingServiceOfRefund, queueFailedRefundNotification, calculateAlreadyRefunded } from "../services/refund.service.js";
@@ -12,7 +11,6 @@
 
   const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
   const STRIPE_WEBHOOK_SECRET = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
-  const TARA_WEBHOOK_SECRET = process.env["TARA_WEBHOOK_SECRET"] ?? "";
 
   // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -354,19 +352,6 @@
       },
     }, async (req: FastifyRequest, reply: FastifyReply) => {
       app.log.info({ headers: req.headers, body: req.body }, "[tara-webhook] Incoming request — headers & body");
-
-      const signature = req.headers["x-tara-signature"];
-      if (!signature || typeof signature !== "string") {
-        app.log.warn("[tara-webhook] Rejected — missing x-tara-signature header");
-        return sendError(reply, 400, "MISSING_SIGNATURE", "Missing X-Tara-Signature header.");
-      }
-
-      const rawBodyStr = JSON.stringify(req.body);
-
-      if (!verifyTaraWebhookSignature(rawBodyStr, signature, TARA_WEBHOOK_SECRET)) {
-        app.log.warn({ signature }, "[tara-webhook] Rejected — signature verification failed");
-        return sendError(reply, 400, "INVALID_SIGNATURE", "Tara signature verification failed.");
-      }
 
       const body = req.body as {
         paymentId: string;
