@@ -355,13 +355,14 @@
     }, async (req: FastifyRequest, reply: FastifyReply) => {
       const signature = req.headers["x-tara-signature"];
       if (!signature || typeof signature !== "string") {
+        app.log.warn({ headers: req.headers }, "[tara-webhook] Rejected — missing x-tara-signature header");
         return sendError(reply, 400, "MISSING_SIGNATURE", "Missing X-Tara-Signature header.");
       }
 
       const rawBodyStr = JSON.stringify(req.body);
 
       if (!verifyTaraWebhookSignature(rawBodyStr, signature, TARA_WEBHOOK_SECRET)) {
-        app.log.warn("[tara-webhook] Signature verification failed");
+        app.log.warn({ signature, payload: req.body }, "[tara-webhook] Rejected — signature verification failed");
         return sendError(reply, 400, "INVALID_SIGNATURE", "Tara signature verification failed.");
       }
 
