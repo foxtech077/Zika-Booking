@@ -22,6 +22,8 @@ interface PricingPreview {
   taxAmount: number;
   deliveryFee: number;
   totalAmount: number;
+  commissionRate?: number;
+  taxRate?: number;
 }
 
 interface CheckoutCtx {
@@ -82,6 +84,8 @@ interface ConfirmedBooking {
   serviceFee: number;
   taxes: number;
   discount: number;
+  commissionRate?: number;
+  taxRate?: number;
 }
 
 type PayStep = "review" | "payment" | "stripe_card" | "polling" | "confirmed";
@@ -125,13 +129,14 @@ const TARA_COUNTRIES = new Set(Object.keys(COUNTRY_NETWORKS));
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n: number) {
+  if (typeof n !== "number" || isNaN(n)) return "0";
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 function calcPricing(ctx: CheckoutCtx) {
-  const base = ctx.pricePerNight * ctx.nightsOrDays;
+  const base = (ctx.pricePerNight ?? 0) * (ctx.nightsOrDays ?? 1);
   const discount = ctx.voucherDiscount ?? 0;
-  const subtotal = base - discount;
+  const subtotal = Math.max(0, base - discount);
   const serviceFee = Math.round(subtotal * 0.05);
   const taxRate = TAX_RATES[ctx.listingCountry] ?? 0;
   const taxes = Math.round(subtotal * taxRate);
@@ -142,16 +147,16 @@ function calcPricing(ctx: CheckoutCtx) {
 function getPricing(ctx: CheckoutCtx) {
   if (ctx.pricingPreview) {
     const pp = ctx.pricingPreview;
-    const totalDiscount = pp.promotionDiscount + (ctx.voucherDiscount ?? 0);
-    const subtotal = pp.baseAmount - totalDiscount;
-    return {
-      base: pp.baseAmount,
-      discount: totalDiscount,
-      subtotal,
-      serviceFee: pp.serviceFee,
-      taxes: pp.taxAmount,
-      total: subtotal + pp.serviceFee + pp.taxAmount + (pp.deliveryFee ?? 0),
-    };
+    const base = pp.baseAmount ?? 0;
+    const serviceFee = pp.serviceFee ?? 0;
+    const taxAmount = pp.taxAmount ?? 0;
+    const deliveryFee = pp.deliveryFee ?? 0;
+    const totalDiscount = ctx.discountSource === "voucher"
+      ? (ctx.voucherDiscount ?? 0)
+      : (pp.promotionDiscount ?? 0);
+    const subtotal = Math.max(0, base - totalDiscount);
+    const total = subtotal + serviceFee + taxAmount + deliveryFee;
+    return { base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount, total };
   }
   return calcPricing(ctx);
 }
@@ -336,6 +341,8 @@ export default function BookingReviewPage() {
     tax: number,
     disc: number,
     method: string,
+    commissionRate?: number,
+    taxRate?: number,
   ) {
     if (pollRef.current) clearInterval(pollRef.current);
     const startedAt = Date.now();
@@ -367,6 +374,7 @@ export default function BookingReviewPage() {
             currency: ctx!.currency,
             paymentId: pmId, paymentMethod: method, transactionId: txId,
             baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
+            commissionRate, taxRate,
           });
           sessionStorage.removeItem("zika:checkout");
           setStep("confirmed");
@@ -462,7 +470,7 @@ export default function BookingReviewPage() {
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
         setStep("polling");
-        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money");
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
@@ -484,7 +492,7 @@ export default function BookingReviewPage() {
         setPayError(result.error.message ?? "Card payment failed. Please check your details.");
       } else {
         setStep("polling");
-        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card");
+        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       setPayError(err?.message ?? "Card payment failed.");
@@ -1133,27 +1141,27 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: ReturnType<
         {/* Line items */}
         <div className="space-y-2.5 text-sm">
           <div className="flex justify-between text-slate-600">
-            <span>{ctx.currency} {fmt(ctx.pricePerNight)} × {ctx.nightsOrDays} {isCar ? "day" : "night"}{ctx.nightsOrDays !== 1 ? "s" : ""}</span>
-            <span>{fmt(pricing.base)}</span>
+            <span>{ctx.currency} {fmt(ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight)} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
+            <span>{ctx.currency} {fmt(pricing.base)}</span>
           </div>
           {pricing.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-              <span>−{fmt(pricing.discount)}</span>
+              <span>−{ctx.currency} {fmt(pricing.discount)}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600 border-t border-slate-100 pt-2">
             <span>Subtotal</span>
-            <span>{fmt(pricing.subtotal)}</span>
+            <span>{ctx.currency} {fmt(pricing.subtotal)}</span>
           </div>
           <div className="flex justify-between text-slate-600">
-            <span>Service fee</span>
-            <span>{fmt(pricing.serviceFee)}</span>
+            <span>Service fee{ctx.pricingPreview?.commissionRate ? ` (${Math.round(ctx.pricingPreview.commissionRate * 100)}%)` : ''}</span>
+            <span>{ctx.currency} {fmt(pricing.serviceFee)}</span>
           </div>
           {pricing.taxes > 0 && (
             <div className="flex justify-between text-slate-600">
-              <span>Taxes</span>
-              <span>{fmt(pricing.taxes)}</span>
+              <span>Taxes{ctx.pricingPreview?.taxRate ? ` (${Math.round(ctx.pricingPreview.taxRate * 100)}%)` : ''}</span>
+              <span>{ctx.currency} {fmt(pricing.taxes)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
@@ -1231,16 +1239,16 @@ function ConfirmedView({
           {confirmed.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-              <span>−{fmt(confirmed.discount)}</span>
+              <span>−{confirmed.currency} {fmt(confirmed.discount)}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600">
-            <span>Service fee</span>
+            <span>Service fee{confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}</span>
             <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
           </div>
           {confirmed.taxes > 0 && (
             <div className="flex justify-between text-slate-600">
-              <span>Taxes</span>
+              <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
               <span>{confirmed.currency} {fmt(confirmed.taxes)}</span>
             </div>
           )}
@@ -1351,9 +1359,9 @@ function VoucherLayout({
       {/* Receipt */}
       <VoucherSection title="Itemised Receipt">
         <VoucherRow label="Base amount" value={`${confirmed.currency} ${fmt(confirmed.baseAmount)}`} />
-        {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${fmt(confirmed.discount)}`} />}
-        <VoucherRow label="Service fee" value={`${confirmed.currency} ${fmt(confirmed.serviceFee)}`} />
-        {confirmed.taxes > 0 && <VoucherRow label="Taxes" value={`${confirmed.currency} ${fmt(confirmed.taxes)}`} />}
+        {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${confirmed.currency} ${fmt(confirmed.discount)}`} />}
+        <VoucherRow label={`Service fee${confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.serviceFee)}`} />
+        {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.taxes)}`} />}
         <VoucherRow label="Total Paid" value={`${confirmed.currency} ${fmt(confirmed.totalAmount)}`} bold />
       </VoucherSection>
 

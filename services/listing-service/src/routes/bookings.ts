@@ -525,7 +525,98 @@ export async function bookingRoutes(app: FastifyInstance) {
       req.log.error({ err }, "Failed to update internal booking refund status");
       return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while updating the booking refund status.");
     }
-  });  // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
+  });  // ── Shared pricing calculator (no lock) ────────────────────────────────────
+  async function computePricingPreview(body: {
+    listingId: string;
+    roomTypeId?: string;
+    checkIn?: string;
+    checkOut?: string;
+    pickupDatetime?: string;
+    returnDatetime?: string;
+    guests?: number;
+  }) {
+    const listing = await prisma.listing.findUnique({
+      where: { id: body.listingId, deletedAt: null },
+    });
+    if (!listing) return null;
+
+    let roomTypeRecord: any = null;
+    if (listing.category === "hotel" && body.roomTypeId) {
+      roomTypeRecord = await prisma.hotelRoomType.findFirst({
+        where: { id: body.roomTypeId, listingId: listing.id, isActive: true },
+      });
+      if (body.guests && roomTypeRecord?.maxGuests && body.guests > roomTypeRecord.maxGuests) return null;
+    }
+
+    const baseRate = roomTypeRecord
+      ? Number(roomTypeRecord.pricePerNight)
+      : Number(listing.pricePerNight ?? listing.pricePerDay ?? 0);
+
+    let units = 1;
+    if (listing.category === "car" && body.pickupDatetime && body.returnDatetime) {
+      units = Math.max(1, Math.ceil((new Date(body.returnDatetime).getTime() - new Date(body.pickupDatetime).getTime()) / 86_400_000));
+    } else if (body.checkIn && body.checkOut) {
+      units = Math.max(1, Math.ceil((new Date(body.checkOut).getTime() - new Date(body.checkIn).getTime()) / 86_400_000));
+    }
+    const baseAmount = baseRate * units;
+
+    const now = new Date();
+    const activePromo = await (prisma as any).activityPromotion.findFirst({
+      where: {
+        activity: listing.category,
+        status: "active",
+        validFrom: { lte: now },
+        validUntil: { gte: now },
+        applyToBooking: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    let promotionDiscount = 0;
+    if (activePromo) {
+      promotionDiscount = activePromo.discountType === "percentage"
+        ? baseAmount * (Number(activePromo.discountValue) / 100)
+        : Number(activePromo.discountValue);
+    }
+    promotionDiscount = Number(promotionDiscount.toFixed(2));
+
+    const commissionRate = await getCommissionRate(listing.country ?? null);
+
+    const billing = calculateBilling({
+      listingCategory: listing.category,
+      checkIn: body.checkIn,
+      checkOut: body.checkOut,
+      pickupDatetime: body.pickupDatetime,
+      returnDatetime: body.returnDatetime,
+      rate: baseRate,
+      deliveryFee: Number(listing.deliveryFee ?? 0),
+      promotionDiscount,
+      voucherAmount: 0,
+      taxRate: getTaxRate(listing.country),
+      commissionRate,
+    });
+
+    return {
+      units: billing.units,
+      baseAmount: billing.baseAmount,
+      nightlyRate: baseRate,
+      promotionDiscount: billing.promotionDiscount,
+      voucherDiscount: billing.voucherDiscount,
+      serviceFee: billing.serviceFee,
+      taxAmount: billing.taxAmount,
+      deliveryFee: billing.deliveryFee,
+      totalAmount: billing.totalAmount,
+      currency: listing.currency,
+      commissionRate,
+      taxRate: getTaxRate(listing.country),
+      ...(roomTypeRecord && {
+        roomType: roomTypeRecord.roomType,
+        roomTypeName: roomTypeRecord.name,
+      }),
+    };
+  }
+
+  // ── POST /bookings/initiate — acquire reservation lock ──────────────────────
   app.post(
     "/bookings/initiate",
     {
@@ -849,6 +940,8 @@ export async function bookingRoutes(app: FastifyInstance) {
           deliveryFee: billing.deliveryFee,
           totalAmount: billing.totalAmount,
           currency: listing.currency,
+          commissionRate,
+          taxRate: getTaxRate(listing.country),
           // Room type info (if applicable)
           ...(roomTypeRecord && {
             roomType: roomTypeRecord.roomType,
@@ -865,6 +958,67 @@ export async function bookingRoutes(app: FastifyInstance) {
       } catch (err) {
         req.log.error({ err }, "Failed to initiate booking");
         return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while initiating the booking.");
+      }
+    }
+  );
+
+  // ── POST /bookings/pricing-estimate — read-only price preview (no lock) ────
+  app.post(
+    "/bookings/pricing-estimate",
+    {
+      schema: {
+        tags: ["Bookings"],
+        summary: "Get a read-only price estimate without creating a reservation lock",
+        body: {
+          type: "object",
+          required: ["listingId"],
+          properties: {
+            listingId: { type: "string" },
+            roomTypeId: { type: "string" },
+            checkIn: { type: "string", format: "date" },
+            checkOut: { type: "string", format: "date" },
+            pickupDatetime: { type: "string", format: "date-time" },
+            returnDatetime: { type: "string", format: "date-time" },
+            guests: { type: "integer", minimum: 1 },
+          },
+        },
+        response: {
+          200: {
+            type: "object",
+            properties: {
+              success: { type: "boolean" },
+              data: {
+                type: "object",
+                properties: {
+                  pricingPreview: { type: "object", additionalProperties: true },
+                },
+              },
+            },
+          },
+        },
+      },
+      preHandler: [requireProvider],
+    },
+    async (req: FastifyRequest, reply: FastifyReply) => {
+      const body = req.body as {
+        listingId: string;
+        roomTypeId?: string;
+        checkIn?: string;
+        checkOut?: string;
+        pickupDatetime?: string;
+        returnDatetime?: string;
+        guests?: number;
+      };
+
+      try {
+        const pricingPreview = await computePricingPreview(body);
+        if (!pricingPreview) {
+          return sendError(reply, 404, "NOT_FOUND", "Listing not found or room type unavailable.");
+        }
+        return sendSuccess(reply, 200, { pricingPreview });
+      } catch (err) {
+        req.log.error({ err }, "Failed to compute pricing estimate");
+        return sendError(reply, 500, "INTERNAL_ERROR", "An unexpected error occurred while computing the pricing estimate.");
       }
     }
   );
@@ -1593,7 +1747,14 @@ export async function bookingRoutes(app: FastifyInstance) {
             pickupDatetime: booking.pickupDatetime?.toISOString(),
             returnDatetime: booking.returnDatetime?.toISOString(),
             nightsOrDays: booking.nightsOrDays,
+            nightlyRate: Number(booking.nightlyRate ?? booking.dailyRate ?? 0),
+            baseAmount: Number((Number(booking.subtotal) + Number(booking.discountAmount)).toFixed(2)),
+            discount: Number(booking.discountAmount),
+            serviceFee: Number(booking.serviceFee),
+            taxAmount: Number(booking.taxAmount),
+            deliveryFee: Number(booking.deliveryFee),
             totalAmount: Number(booking.totalAmount),
+            commissionRate: Number(booking.commissionRate),
             currency: booking.currency,
           },
         ).catch(() => { });
