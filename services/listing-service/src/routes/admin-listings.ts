@@ -3511,7 +3511,15 @@ export async function adminListingRoutes(app: FastifyInstance) {
           listingType: booking.listingType, checkIn: booking.checkIn?.toISOString(),
           checkOut: booking.checkOut?.toISOString(), pickupDatetime: booking.pickupDatetime?.toISOString(),
           returnDatetime: booking.returnDatetime?.toISOString(), nightsOrDays: booking.nightsOrDays,
-          totalAmount: Number(booking.totalAmount), currency: booking.currency,
+          nightlyRate: Number(booking.nightlyRate ?? booking.dailyRate ?? 0),
+          baseAmount: Number((Number(booking.subtotal) + Number(booking.discountAmount)).toFixed(2)),
+          discount: Number(booking.discountAmount),
+          serviceFee: Number(booking.serviceFee),
+          taxAmount: Number(booking.taxAmount),
+          deliveryFee: Number(booking.deliveryFee),
+          totalAmount: Number(booking.totalAmount),
+          commissionRate: Number(booking.commissionRate),
+          currency: booking.currency,
         }
       ).catch(() => { });
 
