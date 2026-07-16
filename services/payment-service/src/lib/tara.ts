@@ -96,7 +96,6 @@ export async function initiateTaraPayment(opts: {
     businessId: TARA_BUSINESS_ID,
     productId: `prod_${idempotencyKey}`,
     productName: opts.description,
-    network: opts.network ?? "wave",
     productPrice: opts.amount,
     phoneNumber: opts.mobileNumber.replace("+", ""),
     webHookUrl: TARA_WEBHOOK_URL,

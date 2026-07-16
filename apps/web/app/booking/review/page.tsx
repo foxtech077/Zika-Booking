@@ -101,30 +101,10 @@ const TAX_RATES: Record<string, number> = {
 
 const CARD_LOGOS = ["Visa", "Mastercard", "Amex", "UnionPay", "Apple Pay", "Google Pay", "PayPal", "Bank Debit", "Klarna"];
 
-const COUNTRY_NETWORKS: Record<string, { value: string; label: string }[]> = {
-  BJ: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
-  BF: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
-  CM: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }],
-  CG: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
-  CD: [{ value: "airtel", label: "Airtel Money" }],
-  CI: [{ value: "wave", label: "Wave Money" }, { value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
-  GA: [{ value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
-  KE: [{ value: "airtel", label: "Airtel Money" }],
-  RW: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
-  SN: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }],
-  SL: [{ value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }],
-  UG: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
-  TZ: [{ value: "airtel", label: "Airtel Money" }, { value: "orange", label: "Orange Money" }],
-  GH: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
-  ZM: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
-};
-
-function getNetworksForCountry(countryCode: string): { value: string; label: string }[] {
-  if (!countryCode) return [];
-  return COUNTRY_NETWORKS[countryCode.toUpperCase()] ?? [];
-}
-
-const TARA_COUNTRIES = new Set(Object.keys(COUNTRY_NETWORKS));
+const TARA_COUNTRIES = new Set([
+  "BJ", "BF", "CM", "CG", "CD", "CI", "GA", "KE",
+  "RW", "SN", "SL", "UG", "TZ", "GH", "ZM",
+]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -207,7 +187,7 @@ export default function BookingReviewPage() {
   // ── Payment State ────────────────────────────────────────────────────────────
   const [mobileNumber, setMobileNumber] = useState("");
   const [phoneCountry, setPhoneCountry] = useState("");
-  const [network, setNetwork] = useState("");
+  
   const [submitting, setSubmitting] = useState(false);
   const [payError, setPayError] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
@@ -461,7 +441,6 @@ export default function BookingReviewPage() {
           bookingId: bId,
           paymentProvider: "tara",
           mobileNumber: mobileNumber.trim(),
-          network: network.trim() || undefined,
         });
         if (!payRes.data.success) {
           setPayError(payRes.data?.error?.message ?? "Payment initiation failed.");
@@ -954,17 +933,6 @@ export default function BookingReviewPage() {
                           className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F]"
                         />
                         <p className="text-xs text-slate-400 mt-2">You will receive a payment prompt on this number.</p>
-                        <label className="block text-sm font-medium text-slate-700 mb-1.5 mt-4">Network</label>
-                        <select
-                          value={network}
-                          onChange={(e) => setNetwork(e.target.value)}
-                          className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F] bg-white"
-                        >
-                          <option value="">Select Network</option>
-                          {getNetworksForCountry(phoneCountry).map((n) => (
-                            <option key={n.value} value={n.value}>{n.label}</option>
-                          ))}
-                        </select>
                       </SectionCard>
                     )}
 
