@@ -18,6 +18,11 @@ export const registerSchema = z
     confirmPassword: z.string(),
     userType: z.enum(["guest", "provider"]),
     businessName: z.string().min(1, "Business name is required").max(255).optional(),
+    phone: z
+      .string()
+      .min(1, "Phone number is required")
+      .regex(/^\+[1-9]\d{6,14}$/, "Phone number must be in international format (e.g. +254712345678)")
+      .optional(),
     country: z
       .string()
       .length(2, "Please select your country")
@@ -45,6 +50,13 @@ export const registerSchema = z
           code: z.ZodIssueCode.custom,
           message: "Please select your country",
           path: ["country"],
+        });
+      }
+      if (!data.phone) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Phone number is required",
+          path: ["phone"],
         });
       }
     }
@@ -99,6 +111,10 @@ export const googleOAuthSchema = z.object({
   userType: z.enum(["guest", "provider"]).optional(),
   businessName: z.string().max(255).optional(),
   country: z.string().length(2).toUpperCase().optional(),
+  phone: z
+    .string()
+    .regex(/^\+[1-9]\d{6,14}$/, "Phone must be in international format")
+    .optional(),
 });
 
 export type GoogleOAuthInput = z.infer<typeof googleOAuthSchema>;
@@ -110,6 +126,10 @@ export const appleOAuthSchema = z.object({
   userType: z.enum(["guest", "provider"]).optional(),
   businessName: z.string().max(255).optional(),
   country: z.string().length(2).toUpperCase().optional(),
+  phone: z
+    .string()
+    .regex(/^\+[1-9]\d{6,14}$/, "Phone must be in international format")
+    .optional(),
 });
 
 export type AppleOAuthInput = z.infer<typeof appleOAuthSchema>;
@@ -144,6 +164,10 @@ export const accountTypeSchema = z
     userType: z.enum(["guest", "provider"]),
     businessName: z.string().min(1).max(255).optional(),
     country: z.string().length(2).toUpperCase().optional(),
+    phone: z
+      .string()
+      .regex(/^\+[1-9]\d{6,14}$/, "Phone must be in international format")
+      .optional(),
   })
   .superRefine((data, ctx) => {
     if (data.userType === "provider") {
@@ -159,6 +183,13 @@ export const accountTypeSchema = z
           code: z.ZodIssueCode.custom,
           message: "Please select your country",
           path: ["country"],
+        });
+      }
+      if (!data.phone) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Phone number is required",
+          path: ["phone"],
         });
       }
     }
