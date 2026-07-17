@@ -1041,6 +1041,7 @@ export async function authRoutes(app: FastifyInstance) {
             currentTier: true,
             businessName: true,
             country: true,
+            phone: true,
           }
         });
 
@@ -1060,6 +1061,7 @@ export async function authRoutes(app: FastifyInstance) {
             currentTier: user.currentTier,
             businessName: user.businessName,
             country: user.country,
+            phone: user.phone,
           }
         });
       } catch (err: any) {
