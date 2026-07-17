@@ -1499,6 +1499,8 @@ export async function bookingRoutes(app: FastifyInstance) {
             totalAmount,
             discountAmount,
             deliveryFee,
+            serviceFee: finalBilling.serviceFee,
+            taxAmount: finalBilling.taxAmount,
 
             currency: listing.currency ?? "USD",
 
