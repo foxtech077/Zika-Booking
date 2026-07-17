@@ -53,6 +53,11 @@ export const patchProfileSchema = z.object({
   photoUrl: z.string().url("Invalid photo URL").optional().nullable(),
   businessName: z.string().max(255).optional().nullable(),
   country: z.string().length(2).toUpperCase().optional().nullable(),
+  phone: z
+    .string()
+    .regex(/^\+[1-9]\d{6,14}$/, "Phone number must be in international format (e.g. +254712345678)")
+    .optional()
+    .nullable(),
 });
 
 // ── Helper: issue tokens and set cookie ─────────────────────────────────────
@@ -79,13 +84,13 @@ async function issueTokens(
 function publicUser(u: {
   id: string; firstName: string; lastName: string; email: string;
   status: string; userType: string; businessName: string | null;
-  country: string | null; emailVerified: boolean; currentTier: string;
-  loyaltyPoints: number;
+  country: string | null; phone: string | null; emailVerified: boolean;
+  currentTier: string; loyaltyPoints: number;
 }) {
   return {
     id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email,
     status: u.status, userType: u.userType, businessName: u.businessName,
-    country: u.country, emailVerified: u.emailVerified,
+    country: u.country, phone: u.phone, emailVerified: u.emailVerified,
     currentTier: u.currentTier, loyaltyPoints: u.loyaltyPoints,
   };
 }
@@ -115,6 +120,7 @@ export async function authRoutes(app: FastifyInstance) {
           confirmPassword: { type: "string" },
           userType: { type: "string", enum: ["guest", "provider"] },
           businessName: { type: "string" },
+          phone: { type: "string", description: "International format, required for providers" },
           country: {
             type: "string",
             minLength: 2,
@@ -144,7 +150,8 @@ export async function authRoutes(app: FastifyInstance) {
       password,
       userType,
       businessName,
-      country
+      country,
+      phone
     } = parsed.data;
 
     try {
@@ -252,6 +259,7 @@ export async function authRoutes(app: FastifyInstance) {
           userType: userType as "guest" | "provider",
           businessName: businessName ?? null,
           country: country ?? null,
+          phone: phone ?? null,
           ...(skipVerification
             ? {
               status: "active",
@@ -1136,7 +1144,7 @@ export async function authRoutes(app: FastifyInstance) {
           );
         }
 
-        const { firstName, lastName, photoUrl, businessName, country } = parsed.data;
+        const { firstName, lastName, photoUrl, businessName, country, phone } = parsed.data;
 
         // Fetch current user type to validate business name restriction
         const userRecord = await prisma.user.findUnique({
@@ -1158,6 +1166,7 @@ export async function authRoutes(app: FastifyInstance) {
         if (photoUrl !== undefined) updateData.photoUrl = photoUrl;
         if (businessName !== undefined) updateData.businessName = businessName;
         if (country !== undefined) updateData.country = country;
+        if (phone !== undefined) updateData.phone = phone;
         
         // Split name into firstName & lastName
          if (firstName !== undefined) updateData.firstName = firstName;
@@ -1173,6 +1182,7 @@ export async function authRoutes(app: FastifyInstance) {
             photoUrl: true,
             businessName: true,
             country: true,
+            phone: true,
           }
         });
 
@@ -1185,6 +1195,7 @@ export async function authRoutes(app: FastifyInstance) {
             photoUrl: signedPhotoUrl,
             businessName: updatedUser.businessName,
             country: updatedUser.country,
+            phone: updatedUser.phone,
           },
           user: {
             id: updatedUser.id,
@@ -1193,6 +1204,7 @@ export async function authRoutes(app: FastifyInstance) {
             photoUrl: signedPhotoUrl,
             businessName: updatedUser.businessName,
             country: updatedUser.country,
+            phone: updatedUser.phone,
           },
         });
       } catch (err: any) {
@@ -1427,7 +1439,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
     }
-    const { identityToken, userType, businessName, country } = parsed.data;
+    const { identityToken, userType, businessName, country, phone } = parsed.data;
 
     let appleSub: string;
     let appleEmail: string;
@@ -1465,6 +1477,7 @@ export async function authRoutes(app: FastifyInstance) {
             userType: (userType ?? "guest") as "guest" | "provider",
             businessName: businessName ?? null,
             country: country ?? null,
+            phone: phone ?? null,
           },
         });
         await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
@@ -1505,6 +1518,10 @@ export async function authRoutes(app: FastifyInstance) {
             maxLength: 2,
             description: "2-letter ISO country code (e.g. IN, US)",
           },
+          phone: {
+            type: "string",
+            description: "International format, required for providers",
+          },
         },
       },
     },
@@ -1524,7 +1541,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       const userId = (req as FastifyRequest & { userId: string }).userId;
-      const { userType, businessName, country } = parsed.data;
+      const { userType, businessName, country, phone } = parsed.data;
 
       try {
         const updated = await prisma.user.update({
@@ -1533,6 +1550,7 @@ export async function authRoutes(app: FastifyInstance) {
             userType,
             businessName: businessName ?? null,
             country: country ?? null,
+            phone: phone ?? null,
           },
         });
 

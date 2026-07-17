@@ -63,6 +63,7 @@ export default function RegisterScreen() {
     confirmPassword: "",
     businessName:    "",
     country:         "",
+    phone:           "",
   });
   const [errors,             setErrors]             = useState<FieldErrors>({});
   const [showPass,           setShowPass]           = useState(false);
@@ -90,6 +91,7 @@ export default function RegisterScreen() {
         userType,
         businessName:    userType === "provider" ? form.businessName.trim() || undefined : undefined,
         country:         form.country || undefined,
+        phone:           userType === "provider" ? form.phone.trim() || undefined : undefined,
       };
       const res = await api.post<ApiResponse<{
         message?: string;
@@ -335,6 +337,26 @@ export default function RegisterScreen() {
                 <Ionicons name="chevron-down" size={14} color={MUTED} style={{ marginLeft: 4 }} />
               </TouchableOpacity>
               {errors.country ? <Text style={ss.fieldErr}>{errors.country}</Text> : null}
+            </View>
+
+            <View style={ss.field}>
+              <Text style={ss.label}>Phone number</Text>
+              <View style={[ss.inputRow, errors.phone ? ss.inputErr : null]}>
+                <Ionicons name="call-outline" size={17} color={MUTED} style={ss.inputIcon} />
+                <TextInput
+                  style={ss.input}
+                  value={form.phone}
+                  onChangeText={(v) => {
+                    const cleaned = v.replace(/[^+\d\s-]/g, "");
+                    set("phone")(cleaned);
+                    clearErr("phone");
+                  }}
+                  placeholder="+254 712 345 678"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="phone-pad"
+                />
+              </View>
+              {errors.phone ? <Text style={ss.fieldErr}>{errors.phone}</Text> : null}
             </View>
           </>
         )}

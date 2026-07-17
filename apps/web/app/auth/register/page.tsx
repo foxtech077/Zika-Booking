@@ -28,7 +28,7 @@ export default function RegisterPage() {
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "",
     password: "", confirmPassword: "",
-    businessName: "", country: "",
+    businessName: "", country: "", phone: "",
   });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
@@ -311,6 +311,29 @@ export default function RegisterPage() {
                       className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.country ? "border-red-400" : "border-gray-200"}`}
                     />
                     {errors.country && <p className="text-xs text-red-500 mt-1">{errors.country}</p>}
+                  </div>
+                </div>
+                <div className="col-span-2">
+                  <label htmlFor="reg-phone" className="block text-xs font-medium text-gray-700 mb-1.5">Phone number</label>
+                  <div className="relative">
+                    <InputIcon>
+                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                      </svg>
+                    </InputIcon>
+                    <input
+                      id="reg-phone"
+                      value={form.phone}
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[^+\d\s-]/g, "");
+                        setForm((p) => ({ ...p, phone: cleaned }));
+                        setErrors((p) => ({ ...p, phone: undefined }));
+                      }}
+                      placeholder="+254 712 345 678"
+                      type="tel"
+                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.phone ? "border-red-400" : "border-gray-200"}`}
+                    />
+                    {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                   </div>
                 </div>
               </div>
