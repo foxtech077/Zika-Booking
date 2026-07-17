@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { parsePhoneNumber } from "libphonenumber-js";
 import { paymentApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
 import { storeLatestReviewContext } from "@/services/traveller";
@@ -10,6 +11,20 @@ import { useAuthStore } from "@/stores/auth";
 import { capitalize } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+interface PricingPreview {
+  units: number;
+  baseAmount: number;
+  nightlyRate: number;
+  promotionDiscount: number;
+  voucherDiscount: number;
+  serviceFee: number;
+  taxAmount: number;
+  deliveryFee: number;
+  totalAmount: number;
+  commissionRate?: number;
+  taxRate?: number;
+}
 
 interface CheckoutCtx {
   listingId: string;
@@ -46,6 +61,7 @@ interface CheckoutCtx {
   roomTypeId?: string;
   roomTypeName?: string;
   roomType?: string;
+  pricingPreview?: PricingPreview;
 }
 
 interface WalletVoucher {
@@ -68,22 +84,14 @@ interface ConfirmedBooking {
   serviceFee: number;
   taxes: number;
   discount: number;
+  commissionRate?: number;
+  taxRate?: number;
 }
 
 type PayStep = "review" | "payment" | "stripe_card" | "polling" | "confirmed";
 type PayProvider = "stripe" | "tara";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const AFRICAN_COUNTRIES = new Set([
-  "Kenya", "Nigeria", "Ghana", "Tanzania", "Uganda", "South Africa", "Rwanda",
-  "Ethiopia", "Zambia", "Zimbabwe", "Cameroon", "Ivory Coast", "Senegal",
-  "Mali", "Burkina Faso", "Niger", "Chad", "Somalia", "Sudan", "Egypt",
-  "Morocco", "Algeria", "Tunisia", "Libya", "Angola", "Mozambique",
-  "Madagascar", "Malawi", "Botswana", "Namibia", "Lesotho", "Eswatini",
-  "Mauritius", "Seychelles", "Burundi", "Djibouti", "Eritrea", "Gabon",
-  "Guinea", "Liberia", "Sierra Leone", "Gambia", "Cape Verde",
-]);
 
 const TAX_RATES: Record<string, number> = {
   Kenya: 0.16, Nigeria: 0.075, Ghana: 0.125, Tanzania: 0.18,
@@ -93,21 +101,44 @@ const TAX_RATES: Record<string, number> = {
 
 const CARD_LOGOS = ["Visa", "Mastercard", "Amex", "UnionPay", "Apple Pay", "Google Pay", "PayPal", "Bank Debit", "Klarna"];
 
+const TARA_COUNTRIES = new Set([
+  "BJ", "BF", "CM", "CG", "CD", "CI", "GA", "KE",
+  "RW", "SN", "SL", "UG", "TZ", "GH", "ZM",
+]);
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(n: number) {
+  if (typeof n !== "number" || isNaN(n)) return "0";
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 function calcPricing(ctx: CheckoutCtx) {
-  const base = ctx.pricePerNight * ctx.nightsOrDays;
+  const base = (ctx.pricePerNight ?? 0) * (ctx.nightsOrDays ?? 1);
   const discount = ctx.voucherDiscount ?? 0;
-  const subtotal = base - discount;
+  const subtotal = Math.max(0, base - discount);
   const serviceFee = Math.round(subtotal * 0.05);
   const taxRate = TAX_RATES[ctx.listingCountry] ?? 0;
   const taxes = Math.round(subtotal * taxRate);
   const total = subtotal + serviceFee + taxes;
   return { base, discount, subtotal, serviceFee, taxes, total };
+}
+
+function getPricing(ctx: CheckoutCtx) {
+  if (ctx.pricingPreview) {
+    const pp = ctx.pricingPreview;
+    const base = pp.baseAmount ?? 0;
+    const serviceFee = pp.serviceFee ?? 0;
+    const taxAmount = pp.taxAmount ?? 0;
+    const deliveryFee = pp.deliveryFee ?? 0;
+    const totalDiscount = ctx.discountSource === "voucher"
+      ? (ctx.voucherDiscount ?? 0)
+      : (pp.promotionDiscount ?? 0);
+    const subtotal = Math.max(0, base - totalDiscount);
+    const total = subtotal + serviceFee + taxAmount + deliveryFee;
+    return { base, discount: totalDiscount, subtotal, serviceFee, taxes: taxAmount, total };
+  }
+  return calcPricing(ctx);
 }
 
 function fmtDate(d?: string) {
@@ -155,6 +186,8 @@ export default function BookingReviewPage() {
 
   // ── Payment State ────────────────────────────────────────────────────────────
   const [mobileNumber, setMobileNumber] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState("");
+  
   const [submitting, setSubmitting] = useState(false);
   const [payError, setPayError] = useState("");
   const [paymentId, setPaymentId] = useState<string | null>(null);
@@ -171,7 +204,7 @@ export default function BookingReviewPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Derived pricing ──────────────────────────────────────────────────────────
-  const pricing = ctx ? calcPricing(ctx) : null;
+  const pricing = ctx ? getPricing(ctx) : null;
 
   // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
@@ -182,8 +215,22 @@ export default function BookingReviewPage() {
       const data: CheckoutCtx = JSON.parse(raw);
       setCtx(data);
       if (data.voucherCode) setReviewVoucherCode(data.voucherCode);
-      setProvider(AFRICAN_COUNTRIES.has(data.listingCountry) ? "tara" : "stripe");
       if ((data as any).mobileNumber) setMobileNumber((data as any).mobileNumber ?? "");
+      if (data.phone) {
+        try {
+          const parsed = parsePhoneNumber(data.phone);
+          if (parsed?.country) {
+            setPhoneCountry(parsed.country);
+            setProvider(TARA_COUNTRIES.has(parsed.country) ? "tara" : "stripe");
+          } else {
+            setProvider("stripe");
+          }
+        } catch {
+          setProvider("stripe");
+        }
+      } else {
+        setProvider("stripe");
+      }
 
       // Resume timer from lockExpiresAt
       const expiresAt = new Date(data.lockExpiresAt).getTime();
@@ -274,9 +321,19 @@ export default function BookingReviewPage() {
     tax: number,
     disc: number,
     method: string,
+    commissionRate?: number,
+    taxRate?: number,
   ) {
     if (pollRef.current) clearInterval(pollRef.current);
+    const startedAt = Date.now();
     pollRef.current = setInterval(async () => {
+      if (Date.now() - startedAt > 120_000) {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+        setPayError("Payment took too long. Please try again.");
+        setStep("payment");
+        return;
+      }
       try {
         const res = await paymentApi.get(`/payments/${pmId}/status`);
         const status = res.data?.data?.status as string | undefined;
@@ -297,6 +354,7 @@ export default function BookingReviewPage() {
             currency: ctx!.currency,
             paymentId: pmId, paymentMethod: method, transactionId: txId,
             baseAmount: base, serviceFee: fee, taxes: tax, discount: disc,
+            commissionRate, taxRate,
           });
           sessionStorage.removeItem("zika:checkout");
           setStep("confirmed");
@@ -391,7 +449,7 @@ export default function BookingReviewPage() {
         pmId = payRes.data.data.paymentId as string;
         setPaymentId(pmId);
         setStep("polling");
-        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money");
+        startPolling(pmId, bRef, bId, total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Mobile Money", ctx.pricingPreview?.commissionRate, ctx.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? err?.response?.data?.message ?? err?.message ?? "Something went wrong.";
@@ -413,7 +471,7 @@ export default function BookingReviewPage() {
         setPayError(result.error.message ?? "Card payment failed. Please check your details.");
       } else {
         setStep("polling");
-        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card");
+        if (paymentId) startPolling(paymentId, bookingRef, bookingId, pricing.total, pricing.base, pricing.serviceFee, pricing.taxes, pricing.discount, "Card", ctx!.pricingPreview?.commissionRate, ctx!.pricingPreview?.taxRate);
       }
     } catch (err: any) {
       setPayError(err?.message ?? "Card payment failed.");
@@ -486,7 +544,7 @@ export default function BookingReviewPage() {
   }
 
   const isCar = ctx.listingCategory === "car";
-  const isAfrican = AFRICAN_COUNTRIES.has(ctx.listingCountry);
+  const hasTara = TARA_COUNTRIES.has(phoneCountry);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -840,7 +898,7 @@ export default function BookingReviewPage() {
                     {/* Payment method selector */}
                     <SectionCard title="Payment Method">
                       <div className="grid grid-cols-2 gap-3">
-                        {(isAfrican ? (["tara", "stripe"] as PayProvider[]) : (["stripe", "tara"] as PayProvider[])).map((p) => (
+                        {(hasTara ? (["tara", "stripe"] as PayProvider[]) : (["stripe", "tara"] as PayProvider[])).map((p) => (
                           <button
                             key={p}
                             onClick={() => setProvider(p)}
@@ -848,8 +906,8 @@ export default function BookingReviewPage() {
                           >
                             <span className="text-2xl">{p === "tara" ? "📱" : "💳"}</span>
                             <span>{p === "tara" ? "Mobile Money" : "Card & Digital Wallets"}</span>
-                            {isAfrican && p === "tara" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
-                            {!isAfrican && p === "stripe" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
+                            {hasTara && p === "tara" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
+                            {!hasTara && p === "stripe" && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">Recommended</span>}
                           </button>
                         ))}
                       </div>
@@ -862,7 +920,15 @@ export default function BookingReviewPage() {
                         <input
                           type="tel"
                           value={mobileNumber}
-                          onChange={(e) => setMobileNumber(e.target.value)}
+                          onChange={(e) => {
+                            setMobileNumber(e.target.value);
+                            try {
+                              const parsed = parsePhoneNumber(e.target.value);
+                              setPhoneCountry(parsed?.country ?? "");
+                            } catch {
+                              setPhoneCountry("");
+                            }
+                          }}
                           placeholder="+254 700 000 000"
                           className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#0B1E3F]/20 focus:border-[#0B1E3F]"
                         />
@@ -1043,27 +1109,27 @@ function PriceSummary({ ctx, pricing }: { ctx: CheckoutCtx; pricing: ReturnType<
         {/* Line items */}
         <div className="space-y-2.5 text-sm">
           <div className="flex justify-between text-slate-600">
-            <span>{ctx.currency} {fmt(ctx.pricePerNight)} × {ctx.nightsOrDays} {isCar ? "day" : "night"}{ctx.nightsOrDays !== 1 ? "s" : ""}</span>
-            <span>{fmt(pricing.base)}</span>
+            <span>{ctx.currency} {fmt(ctx.pricingPreview?.nightlyRate ?? ctx.pricePerNight)} × {ctx.pricingPreview?.units ?? ctx.nightsOrDays} {isCar ? "day" : "night"}{(ctx.pricingPreview?.units ?? ctx.nightsOrDays) !== 1 ? "s" : ""}</span>
+            <span>{ctx.currency} {fmt(pricing.base)}</span>
           </div>
           {pricing.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-              <span>−{fmt(pricing.discount)}</span>
+              <span>−{ctx.currency} {fmt(pricing.discount)}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600 border-t border-slate-100 pt-2">
             <span>Subtotal</span>
-            <span>{fmt(pricing.subtotal)}</span>
+            <span>{ctx.currency} {fmt(pricing.subtotal)}</span>
           </div>
           <div className="flex justify-between text-slate-600">
-            <span>Service fee (5%)</span>
-            <span>{fmt(pricing.serviceFee)}</span>
+            <span>Service fee{ctx.pricingPreview?.commissionRate ? ` (${Math.round(ctx.pricingPreview.commissionRate * 100)}%)` : ''}</span>
+            <span>{ctx.currency} {fmt(pricing.serviceFee)}</span>
           </div>
           {pricing.taxes > 0 && (
             <div className="flex justify-between text-slate-600">
-              <span>Taxes</span>
-              <span>{fmt(pricing.taxes)}</span>
+              <span>Taxes{ctx.pricingPreview?.taxRate ? ` (${Math.round(ctx.pricingPreview.taxRate * 100)}%)` : ''}</span>
+              <span>{ctx.currency} {fmt(pricing.taxes)}</span>
             </div>
           )}
           <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-3 text-base">
@@ -1141,16 +1207,16 @@ function ConfirmedView({
           {confirmed.discount > 0 && (
             <div className="flex justify-between text-emerald-600">
               <span>{ctx.discountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-              <span>−{fmt(confirmed.discount)}</span>
+              <span>−{confirmed.currency} {fmt(confirmed.discount)}</span>
             </div>
           )}
           <div className="flex justify-between text-slate-600">
-            <span>Service fee</span>
+            <span>Service fee{confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}</span>
             <span>{confirmed.currency} {fmt(confirmed.serviceFee)}</span>
           </div>
           {confirmed.taxes > 0 && (
             <div className="flex justify-between text-slate-600">
-              <span>Taxes</span>
+              <span>Taxes{confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}</span>
               <span>{confirmed.currency} {fmt(confirmed.taxes)}</span>
             </div>
           )}
@@ -1261,9 +1327,9 @@ function VoucherLayout({
       {/* Receipt */}
       <VoucherSection title="Itemised Receipt">
         <VoucherRow label="Base amount" value={`${confirmed.currency} ${fmt(confirmed.baseAmount)}`} />
-        {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${fmt(confirmed.discount)}`} />}
-        <VoucherRow label="Service fee (5%)" value={`${confirmed.currency} ${fmt(confirmed.serviceFee)}`} />
-        {confirmed.taxes > 0 && <VoucherRow label="Taxes" value={`${confirmed.currency} ${fmt(confirmed.taxes)}`} />}
+        {confirmed.discount > 0 && <VoucherRow label="Discount" value={`−${confirmed.currency} ${fmt(confirmed.discount)}`} />}
+        <VoucherRow label={`Service fee${confirmed.commissionRate ? ` (${Math.round(confirmed.commissionRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.serviceFee)}`} />
+        {confirmed.taxes > 0 && <VoucherRow label={`Taxes${confirmed.taxRate ? ` (${Math.round(confirmed.taxRate * 100)}%)` : ''}`} value={`${confirmed.currency} ${fmt(confirmed.taxes)}`} />}
         <VoucherRow label="Total Paid" value={`${confirmed.currency} ${fmt(confirmed.totalAmount)}`} bold />
       </VoucherSection>
 

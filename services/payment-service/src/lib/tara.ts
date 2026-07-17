@@ -1,9 +1,8 @@
-import { createHmac } from "crypto";
-
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const TARA_BASE_URL    = process.env["TARA_BASE_URL"]    ?? "https://api.taramoney.com";
-const TARA_API_KEY     = process.env["TARA_API_KEY"]     ?? "";
+const TARA_BASE_URL =
+  process.env["TARA_BASE_URL"] ?? "https://api.taramoney.com";
+const TARA_API_KEY = process.env["TARA_API_KEY"] ?? "";
 const TARA_BUSINESS_ID = process.env["TARA_BUSINESS_ID"] ?? "";
 const TARA_WEBHOOK_URL = process.env["TARA_WEBHOOK_URL"] ?? "";
 
@@ -55,7 +54,7 @@ async function taraFetch(
 function authHeaders(): Record<string, string> {
   return {
     "Content-Type": "application/json",
-    "Authorization": `Bearer ${TARA_API_KEY}`,
+    Authorization: `Bearer ${TARA_API_KEY}`,
   };
 }
 
@@ -72,7 +71,8 @@ function extractReference(json: TaraApiResponse, fallback: string): string {
 
 function normaliseStatus(raw?: string): TaraPaymentResult["status"] {
   const s = (raw ?? "").toLowerCase();
-  if (["successful", "success", "completed", "paid"].includes(s)) return "successful";
+  if (["successful", "success", "completed", "paid"].includes(s))
+    return "successful";
   if (["failed", "rejected", "cancelled", "error"].includes(s)) return "failed";
   return "pending";
 }
@@ -84,21 +84,21 @@ export async function initiateTaraPayment(opts: {
   amount: number;
   currency: string;
   mobileNumber: string;
-  reference: string;   // booking reference, e.g. ZIKA-001234-KE
+  reference: string; // booking reference, e.g. ZIKA-001234-KE
   description: string;
   attemptNumber?: number;
+  network?: string;
 }): Promise<TaraPaymentResult> {
   const idempotencyKey = `${opts.reference}-${opts.attemptNumber ?? 1}`;
 
   const payload = JSON.stringify({
-    apiKey:      TARA_API_KEY,
-    businessId:  TARA_BUSINESS_ID,
-    productId:   `prod-${idempotencyKey}`,
+    apiKey: TARA_API_KEY,
+    businessId: TARA_BUSINESS_ID,
+    productId: `prod_${idempotencyKey}`,
     productName: opts.description,
-    network:     "wave",
     productPrice: opts.amount,
     phoneNumber: opts.mobileNumber.replace("+", ""),
-    webhookUrl:  TARA_WEBHOOK_URL,
+    webHookUrl: TARA_WEBHOOK_URL,
   });
 
   let lastError: unknown;
@@ -111,7 +111,7 @@ export async function initiateTaraPayment(opts: {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: payload
+          body: payload,
         },
         STK_TIMEOUT_MS,
       );
@@ -171,16 +171,4 @@ export async function initiateTaraReversal(opts: {
   return { reversalId: `TREV-${Date.now()}` };
 }
 
-// ── Webhook signature verification ───────────────────────────────────────────
-// Exported so the webhook route can reuse without duplicating logic.
 
-export function verifyTaraWebhookSignature(
-  rawBody: string,
-  signature: string,
-  secret: string,
-): boolean {
-  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
-  // Constant-time compare to prevent timing attacks
-  return expected.length === signature.length &&
-    createHmac("sha256", secret).update(rawBody).digest("hex") === signature;
-}

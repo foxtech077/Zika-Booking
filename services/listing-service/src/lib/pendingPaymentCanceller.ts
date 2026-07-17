@@ -1,6 +1,6 @@
 import { prisma } from "./prisma.js";
 
-const CUTOFF_MS = 5 * 60 * 1000;
+const CUTOFF_MS = 4 * 60 * 60 * 1000;
 
 export async function cancelStalePendingPayments(): Promise<void> {
   const cutoff = new Date(Date.now() - CUTOFF_MS);
@@ -31,7 +31,7 @@ export async function cancelStalePendingPayments(): Promise<void> {
             where: { id: booking.id },
             data: {
               status: "cancelled_by_system",
-              cancellationReason: "Payment not completed within 5 minutes.",
+              cancellationReason: "Payment not completed within 4 hours.",
               cancelledAt: new Date(),
               cancelledBy: "system",
             },
@@ -43,7 +43,7 @@ export async function cancelStalePendingPayments(): Promise<void> {
               fromStatus: "pending_payment",
               toStatus: "cancelled_by_system",
               actorType: "system",
-              reason: "Payment timeout — no payment received within 5 minutes.",
+              reason: "Payment timeout — no payment received within 4 hours.",
             },
           });
 

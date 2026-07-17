@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
+import { parsePhoneNumber } from "libphonenumber-js";
 import { prisma } from "../lib/prisma.js";
 import { stripe } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
@@ -7,6 +8,7 @@ import { requireUser, requireAdmin, requireInternalService, type GuestRequest } 
 import { cancelPayout } from "../services/payout.service.js";
 import { calculateAlreadyRefunded } from "../services/refund.service.js";
 import { initiateTaraPayment, initiateTaraReversal } from "../lib/tara.js";
+import { getCurrencyForCountry } from "../lib/countryCurrency.js";
 import { sendPaymentLinkEmail } from "../services/email.services.js";
 import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
 
@@ -50,6 +52,7 @@ const initiatePaymentSchema = z.object({
   paymentProvider: z.enum(["stripe", "tara"]),
   paymentMethodId: z.string().optional(),
   mobileNumber: z.string().optional(),
+  network: z.string().optional(),
 });
 
 const refundSchema = z.object({
@@ -211,14 +214,20 @@ export async function paymentRoutes(app: FastifyInstance) {
     return sendSuccess(reply, 200, { paymentUrl: triggerUrl });
   });
 
-  // ── GET /payments/tara/trigger/:bookingId ──────────────────────────────────
-  app.get("/payments/tara/trigger/:bookingId", {
+  // ── POST /payments/tara/trigger/:bookingId ─────────────────────────────────
+  app.post("/payments/tara/trigger/:bookingId", {
     schema: {
       tags: ["Payments"],
       summary: "Trigger STK push for Tara payment link",
+      body: {
+        type: "object",
+        properties: {},
+      },
     },
   }, async (req, reply) => {
     const { bookingId } = req.params as { bookingId: string };
+    const { network } = (req.body ?? {}) as { network?: string };
+
     const booking = await fetchBookingInternal(bookingId);
     if (!booking) return sendError(reply, 404, "NOT_FOUND", "Booking not found.");
 
@@ -226,8 +235,37 @@ export async function paymentRoutes(app: FastifyInstance) {
       return sendError(reply, 409, "INVALID_STATUS", "Booking is not awaiting payment.");
     }
 
-    if (!booking["guestPhone"]) {
+    const rawPhone = booking["guestPhone"] as string | undefined;
+    if (!rawPhone) {
       return sendError(reply, 400, "MISSING_PHONE", "Guest phone number is required for Tara STK push.");
+    }
+
+    let phoneCountry: string | undefined;
+    try {
+      const parsed = parsePhoneNumber(rawPhone);
+      if (parsed && parsed.country) {
+        phoneCountry = parsed.country;
+      }
+    } catch {
+      // parsing failed — will be caught by the check below
+    }
+
+    if (!phoneCountry) {
+      return sendError(reply, 400, "INVALID_PHONE", "Guest phone number is invalid or unrecognised.");
+    }
+
+    const bookingCurrency = (booking["currency"] as string).toUpperCase();
+    const expectedCurrency = getCurrencyForCountry(phoneCountry);
+
+    if (!expectedCurrency) {
+      return sendError(reply, 400, "UNSUPPORTED_COUNTRY", `Could not determine currency for country ${phoneCountry}.`);
+    }
+
+    if (expectedCurrency !== bookingCurrency) {
+      return sendError(
+        reply, 409, "CURRENCY_MISMATCH",
+        `Phone number country (${phoneCountry}, ${expectedCurrency}) does not match booking currency (${bookingCurrency}). Payment cannot proceed.`
+      );
     }
 
     // Find the existing initiated payment record (created by /payments/tara/payment-link)
@@ -255,6 +293,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       reference: booking["reference"] as string,
       description: `Booking ${booking["reference"]}`,
       attemptNumber: 1,
+      network,
     });
 
     // Update the existing payment record instead of creating a duplicate
@@ -504,7 +543,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       return sendError(reply, 422, "VALIDATION_ERROR", "Invalid request body.");
     }
 
-    const { bookingId, paymentProvider, paymentMethodId, mobileNumber } = parsed.data;
+    const { bookingId, paymentProvider, paymentMethodId, mobileNumber, network } = parsed.data;
 
     // ── 2. Fetch booking ──────────────────────────────────────────────────
     const authHeader = req.headers.authorization ?? "";
@@ -656,9 +695,10 @@ export async function paymentRoutes(app: FastifyInstance) {
           amount: Number(amount),
           currency,
           mobileNumber,
-          reference: bookingReference,   // booking ref, e.g. ZIKA-001234-KE
+          reference: bookingReference,
           description: `Booking ${bookingReference}`,
-          attemptNumber,                     // idempotency key = reference + attemptNumber
+          attemptNumber,
+          network,
         });
 
         await prisma.payment.update({

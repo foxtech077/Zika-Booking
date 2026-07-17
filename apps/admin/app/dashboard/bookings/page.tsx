@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { parsePhoneNumber } from "libphonenumber-js";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
@@ -40,6 +41,29 @@ const COUNTRY_OPTIONS = [
     label: found ? `${found.flag} ${found.name}` : code,
   };
 });
+
+const COUNTRY_NETWORKS: Record<string, { value: string; label: string }[]> = {
+  BJ: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
+  BF: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  CM: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }],
+  CG: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  CD: [{ value: "airtel", label: "Airtel Money" }],
+  CI: [{ value: "wave", label: "Wave Money" }, { value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
+  GA: [{ value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  KE: [{ value: "airtel", label: "Airtel Money" }],
+  RW: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  SN: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }],
+  SL: [{ value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }],
+  UG: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  TZ: [{ value: "airtel", label: "Airtel Money" }, { value: "orange", label: "Orange Money" }],
+  GH: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  ZM: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+};
+
+function getNetworksForCountry(countryCode?: string | null): { value: string; label: string }[] {
+  if (!countryCode) return [];
+  return COUNTRY_NETWORKS[countryCode.toUpperCase()] ?? [];
+}
 
 const fetchBookings = (params: Record<string, string>) =>
   listingApi.get(`/admin/bookings?${new URLSearchParams(params)}`).then((r) => r.data.data ?? r.data);
@@ -86,6 +110,7 @@ export default function BookingsPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [resendModal, setResendModal] = useState<Booking | null>(null);
   const [resendGateway, setResendGateway] = useState<"stripe" | "tara">("stripe");
+  const [resendNetwork, setResendNetwork] = useState("");
   const [resendError, setResendError] = useState("");
   const [resendSuccess, setResendSuccess] = useState(false);
 
@@ -212,13 +237,23 @@ export default function BookingsPage() {
   });
 
   // Resend payment link for draft bookings
+  const resendPhoneCountry = useMemo(() => {
+    if (!resendModal?.guestPhone) return "";
+    try {
+      const parsed = parsePhoneNumber(resendModal.guestPhone);
+      return parsed?.country ?? "";
+    } catch {
+      return "";
+    }
+  }, [resendModal]);
+
   const resendLinkMut = useMutation({
     mutationFn: async ({ id, gateway }: { id: string; gateway: "stripe" | "tara" }) => {
       setResendError("");
       setResendSuccess(false);
       const res = await paymentApi.post(`/${gateway}/payment-link`, { bookingId: id });
       if (gateway === "tara") {
-        await paymentApi.get(`/tara/trigger/${id}`);
+        await paymentApi.post(`/tara/trigger/${id}`, { network: resendNetwork || undefined });
       }
       return res.data;
     },
@@ -1013,6 +1048,7 @@ export default function BookingsPage() {
           setResendModal(null);
           setResendError("");
           setResendSuccess(false);
+          setResendNetwork("");
         }}
         title="Send/Resend Payment Link"
         description={
@@ -1098,6 +1134,22 @@ export default function BookingsPage() {
                 ))}
               </div>
             </div>
+
+            {resendGateway === "tara" && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Network</label>
+                <select
+                  value={resendNetwork}
+                  onChange={(e) => setResendNetwork(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
+                >
+                  <option value="">Select Network</option>
+                  {getNetworksForCountry(resendPhoneCountry).map((n) => (
+                    <option key={n.value} value={n.value}>{n.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         )}
 

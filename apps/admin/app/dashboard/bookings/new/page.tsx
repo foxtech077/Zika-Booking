@@ -94,6 +94,28 @@ function getCurrencyForCountry(countryCode: string): string {
   return map[countryCode] || "USD";
 }
 
+const COUNTRY_NETWORKS: Record<string, { value: string; label: string }[]> = {
+  BJ: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
+  BF: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  CM: [{ value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }],
+  CG: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  CD: [{ value: "airtel", label: "Airtel Money" }],
+  CI: [{ value: "wave", label: "Wave Money" }, { value: "mtn", label: "MTN MoMo" }, { value: "orange", label: "Orange Money" }, { value: "moov", label: "Moov Money" }],
+  GA: [{ value: "airtel", label: "Airtel Money" }, { value: "moov", label: "Moov Money" }],
+  KE: [{ value: "airtel", label: "Airtel Money" }],
+  RW: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  SN: [{ value: "wave", label: "Wave Money" }, { value: "orange", label: "Orange Money" }],
+  SL: [{ value: "orange", label: "Orange Money" }, { value: "airtel", label: "Airtel Money" }],
+  UG: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  TZ: [{ value: "airtel", label: "Airtel Money" }, { value: "orange", label: "Orange Money" }],
+  GH: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+  ZM: [{ value: "mtn", label: "MTN MoMo" }, { value: "airtel", label: "Airtel Money" }],
+};
+
+function getNetworksForCountry(countryCode: string): { value: string; label: string }[] {
+  return COUNTRY_NETWORKS[countryCode?.toUpperCase()] ?? [];
+}
+
 function SectionCard({
   step,
   title,
@@ -479,6 +501,7 @@ export default function ManualBookingPage() {
 
   // ── Section 5: Payment ────────────────────────────────────────────────────────
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("stripe");
+  const [network, setNetwork] = useState("");
   const [linkSent, setLinkSent] = useState(false);
   const [paymentLink, setPaymentLink] = useState<string>("");
 
@@ -926,7 +949,7 @@ export default function ManualBookingPage() {
       const endpoint = paymentMethod === "stripe" ? "/stripe/payment-link" : "/tara/payment-link";
       const res = await paymentApi.post(endpoint, { bookingId });
       if (paymentMethod === "tara") {
-        await paymentApi.get(`/tara/trigger/${bookingId}`);
+        await paymentApi.post(`/tara/trigger/${bookingId}`, { network: network || undefined });
       }
       return res.data as { paymentLink: string };
     },
@@ -950,7 +973,7 @@ export default function ManualBookingPage() {
       }
       await paymentApi.post(`/${paymentMethod}/payment-link`, { bookingId });
       if (paymentMethod === "tara") {
-        await paymentApi.get(`/tara/trigger/${bookingId}`);
+        await paymentApi.post(`/tara/trigger/${bookingId}`, { network: network || undefined });
       }
       setSubmitted(true);
       setLinkSent(true);
@@ -979,7 +1002,7 @@ export default function ManualBookingPage() {
           <InfoRow label="Booking Reference" value={bookingRef} />
           <InfoRow label="Guest" value={`${firstName} ${lastName}`} />
           <InfoRow label="Payment Method" value={paymentMethod === "stripe" ? "Stripe" : "Tara"} />
-
+          {paymentMethod === "tara" && <InfoRow label="Network" value={network || "wave"} />}
           <InfoRow label="Created By" value={user?.name ?? "—"} />
         </div>
         <div className="flex gap-3">
@@ -991,7 +1014,7 @@ export default function ManualBookingPage() {
               setSelectedCountry((COUNTRIES.find((c) => c.code === "KE") || COUNTRIES[0]) as Country);
               setNationality(""); setNotes(""); setListingName(""); setListingId("");
               setCountry(""); setCheckIn(""); setCheckOut(""); setPickup(""); setReturnDt("");
-              setGuests(1); setRooms(1); setUnits(1);
+              setGuests(1); setRooms(1); setUnits(1); setNetwork("");
               setAvailStatus("idle"); setPrice(null); setAvailability(null);
             }}
           >
@@ -1593,6 +1616,22 @@ export default function ManualBookingPage() {
                 <strong>the guest's email</strong> via{" "}
                 {paymentMethod === "stripe" ? "Stripe" : "Tara"}.
               </p>
+
+              {paymentMethod === "tara" && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Network</label>
+                  <select
+                    value={network}
+                    onChange={(e) => setNetwork(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary"
+                  >
+                    <option value="">Select Network</option>
+                    {getNetworksForCountry(selectedCountry.code).map((n) => (
+                      <option key={n.value} value={n.value}>{n.label}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Price summary (shown when available) */}
               {price && computedPricing && (

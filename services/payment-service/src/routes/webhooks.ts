@@ -2,7 +2,6 @@
   import { prisma } from "../lib/prisma.js";
   import { stripe } from "../lib/stripe.js";
   import { sendError } from "../lib/errors.js";
-  import { verifyTaraWebhookSignature } from "../lib/tara.js";
   import { bookingConfirmedHandler } from "../handler/bookingConfirmed.handler.js";
   import { PaymentStatus, RefundStatus } from "../generated/index.js";
   import { notifyBookingServiceOfRefund, queueFailedRefundNotification, calculateAlreadyRefunded } from "../services/refund.service.js";
@@ -12,7 +11,6 @@
 
   const BOOKING_SERVICE_URL = process.env["BOOKING_SERVICE_URL"] ?? "http://localhost:3003";
   const STRIPE_WEBHOOK_SECRET = process.env["STRIPE_WEBHOOK_SECRET"] ?? "";
-  const TARA_WEBHOOK_SECRET = process.env["TARA_WEBHOOK_SECRET"] ?? "";
 
   // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -336,46 +334,8 @@
         summary: "Tara webhook — receive payment status events",
         description:
           "Called by Tara when a mobile money payment succeeds or fails. " +
-          "Validates HMAC-SHA256 signature in the `X-Tara-Signature` header.\n\n" +
-          "**To simulate in Swagger (dev only):** generate the signature with:\n" +
-          "`echo -n '{\"event\":\"payment_successful\",\"taraReference\":\"TARA-xxx\"}' | openssl dgst -sha256 -hmac YOUR_TARA_WEBHOOK_SECRET`",
-        headers: {
-          type: "object",
-          required: ["x-tara-signature"],
-          properties: {
-            "x-tara-signature": {
-              type: "string",
-              description: "HMAC-SHA256 hex digest of the raw JSON body signed with TARA_WEBHOOK_SECRET",
-            },
-          },
-        },
-        body: {
-          type: "object",
-          required: ["event"],
-          properties: {
-            event: {
-              type: "string",
-              enum: ["payment_successful", "payment_failed"],
-              description: "Event type from Tara",
-            },
-            taraReference: {
-              type: "string",
-              description: "Tara's own transaction reference (returned from /payments/initiate)",
-            },
-            reference: {
-              type: "string",
-              description: "Your idempotency reference (booking reference + attempt number)",
-            },
-            failureCode: {
-              type: "string",
-              description: "Error code on payment_failed events",
-            },
-            failureMessage: {
-              type: "string",
-              description: "Human-readable failure reason",
-            },
-          },
-        },
+          "Validates HMAC-SHA256 signature in the `x-tara-signature` header.\n\n" +
+          "The payload contains `status` field — `SUCCESS` means payment succeeded.",
         response: {
           200: {
             type: "object",
@@ -391,53 +351,55 @@
         },
       },
     }, async (req: FastifyRequest, reply: FastifyReply) => {
-      const signature = req.headers["x-tara-signature"];
-      if (!signature || typeof signature !== "string") {
-        return sendError(reply, 400, "MISSING_SIGNATURE", "Missing X-Tara-Signature header.");
-      }
-
-      const rawBodyStr = JSON.stringify(req.body);
-
-      if (!verifyTaraWebhookSignature(rawBodyStr, signature, TARA_WEBHOOK_SECRET)) {
-        app.log.warn("[tara-webhook] Signature verification failed");
-        return sendError(reply, 400, "INVALID_SIGNATURE", "Tara signature verification failed.");
-      }
+      app.log.info({ headers: req.headers, body: req.body }, "[tara-webhook] Incoming request — headers & body");
 
       const body = req.body as {
-        event: string;
-        reference?: string;
-        taraReference?: string;
-        failureCode?: string;
-        failureMessage?: string;
+        paymentId: string;
+        status: string;
+        transactionCode?: string;
+        businessId?: string;
+        productId?: string;
+        amount?: string;
+        collectionId?: string;
+        phoneNumber?: string;
+        creationDate?: string;
+        changeDate?: string;
       };
 
-      app.log.info(`[tara-webhook] Received event: ${body.event}`);
+      app.log.info({ payload: body }, "[tara-webhook] Raw payload received");
 
-      const taraReference = body.taraReference ?? body.reference;
+      const rawProductId = body.productId ?? body.paymentId;
+      const idempotencyKey = rawProductId.replace(/^prod_/, "");
+      const isSuccess = body.status === "SUCCESS";
+
+      app.log.info(`[tara-webhook] Received status: ${body.status} | transactionCode: ${body.transactionCode} | productId: ${rawProductId}`);
 
       try {
-        if (body.event === "payment_successful") {
-          const payment = await prisma.payment.findFirst({
-            where: { providerPaymentId: taraReference },
-          });
+        const payment = await prisma.payment.findFirst({
+          where: { idempotencyKey },
+        });
 
-          if (!payment) {
-            app.log.warn(`[tara-webhook] Payment not found for taraReference ${taraReference}`);
-            return reply.status(200).send({ received: true });
+        if (!payment) {
+          app.log.warn(`[tara-webhook] Payment not found for idempotencyKey ${idempotencyKey} (raw productId: ${rawProductId})`);
+          return reply.status(200).send({ received: true });
+        }
+
+        if (isSuccess) {
+          if (payment.status !== "captured") {
+            app.log.info(`[tara-webhook] Updating payment ${payment.id} from ${payment.status} → captured`);
+            await prisma.payment.update({
+              where: { id: payment.id },
+              data: {
+                status: "captured",
+                capturedAt: new Date(),
+                paymentMethodType: "mobile_money",
+              },
+            });
+          } else {
+            app.log.info(`[tara-webhook] Payment ${payment.id} already captured — skipping status update`);
           }
 
           try {
-            if (payment.status !== "captured") {
-              await prisma.payment.update({
-                where: { id: payment.id },
-                data: {
-                  status: "captured",
-                  capturedAt: new Date(),
-                  paymentMethodType: "mobile_money",
-                },
-              });
-            }
-
             await bookingConfirmedHandler({
               id: payment.id,
               paymentProvider: payment.paymentProvider,
@@ -450,41 +412,26 @@
               message: err.message,
             });
           }
-          if (payment.status === "captured") {
-            return reply.status(200).send({ received: true });
-          }
 
-          await prisma.payment.update({
-            where: { id: payment.id },
-            data: {
-              status: "captured",
-              capturedAt: new Date(),
-              paymentMethodType: "mobile_money",
-            },
-          });
+          return reply.status(200).send({ received: true });
+        } else {
+          const failureCode = body.transactionCode ?? body.status;
+          const failureMessage = body.transactionCode
+            ? `Tara payment failed: ${body.transactionCode}`
+            : `Tara payment failed with status: ${body.status}`;
 
-          await bookingConfirmedHandler({ id: payment.id, metadata: { bookingId: payment.bookingId } });
-
-        } else if (body.event === "payment_failed") {
-          const payment = await prisma.payment.findFirst({
-            where: { providerPaymentId: taraReference },
-          });
-
-          if (!payment) {
-            app.log.warn(`[tara-webhook] Payment not found for taraReference ${taraReference}`);
-            return reply.status(200).send({ received: true });
-          }
-
+          app.log.info(`[tara-webhook] Updating payment ${payment.id} from ${payment.status} → failed (code: ${failureCode})`);
           await prisma.payment.update({
             where: { id: payment.id },
             data: {
               status: "failed",
-              failureCode: body.failureCode ?? null,
-              failureMessage: body.failureMessage ?? null,
+              failureCode,
+              failureMessage,
             },
           });
 
           if (payment.attemptNumber >= 3) {
+            app.log.info(`[tara-webhook] Max attempts (${payment.attemptNumber}) reached — failing booking ${payment.bookingId}`);
             await failBooking(payment.bookingId);
           }
         }

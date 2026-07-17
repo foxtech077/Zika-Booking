@@ -183,14 +183,24 @@ export async function sendBookingConfirmationEmail(
     pickupDatetime?: string;
     returnDatetime?: string;
     nightsOrDays: number;
+    nightlyRate: number;
+    baseAmount: number;
+    discount: number;
+    serviceFee: number;
+    taxAmount: number;
+    deliveryFee: number;
     totalAmount: number;
+    commissionRate: number;
     currency: string;
   },
 ): Promise<void> {
   const isCar = opts.listingType === "car";
+  const unitLabel = isCar ? "day" : "night";
   const dateLabel = isCar
     ? `Pick-up: ${opts.pickupDatetime ? new Date(opts.pickupDatetime).toLocaleString("en-GB") : "—"}<br>Return: ${opts.returnDatetime ? new Date(opts.returnDatetime).toLocaleString("en-GB") : "—"}`
-    : `Check-in: ${opts.checkIn ? new Date(opts.checkIn).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}<br>Check-out: ${opts.checkOut ? new Date(opts.checkOut).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}<br>${opts.nightsOrDays} night${opts.nightsOrDays !== 1 ? "s" : ""}`;
+    : `Check-in: ${opts.checkIn ? new Date(opts.checkIn).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}<br>Check-out: ${opts.checkOut ? new Date(opts.checkOut).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }) : "—"}`;
+  const commissionPct = Math.round(opts.commissionRate * 100);
+  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
   await sendWithRetry({
     to,
@@ -204,7 +214,18 @@ export async function sendBookingConfirmationEmail(
           <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Booking Reference</td><td style="padding:8px;border-bottom:1px solid #e5e7eb;font-weight:bold;font-family:monospace">${opts.reference}</td></tr>
           <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Property</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${opts.listingName}</td></tr>
           <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Dates</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${dateLabel}</td></tr>
-          <tr><td style="padding:8px;color:#6b7280">Total Paid</td><td style="padding:8px;font-weight:bold">${opts.currency} ${opts.totalAmount.toLocaleString()}</td></tr>
+          <tr><td style="padding:8px;border-bottom:1px solid #e5e7eb;color:#6b7280">Duration</td><td style="padding:8px;border-bottom:1px solid #e5e7eb">${opts.nightsOrDays} ${unitLabel}${opts.nightsOrDays !== 1 ? "s" : ""}</td></tr>
+        </table>
+
+        <h3 style="color:#1e293b;font-size:14px;margin:20px 0 8px">Receipt</h3>
+        <table style="width:100%;border-collapse:collapse;margin:8px 0">
+          <tr><td style="padding:6px 8px;color:#6b7280">${opts.currency} ${fmt(opts.nightlyRate)} × ${opts.nightsOrDays} ${unitLabel}${opts.nightsOrDays !== 1 ? "s" : ""}</td><td style="padding:6px 8px;text-align:right">${opts.currency} ${fmt(opts.baseAmount)}</td></tr>
+          ${opts.discount > 0 ? `<tr><td style="padding:6px 8px;color:#15803d">Discount</td><td style="padding:6px 8px;text-align:right;color:#15803d">−${opts.currency} ${fmt(opts.discount)}</td></tr>` : ''}
+          <tr><td style="padding:6px 8px;border-top:1px solid #e5e7eb;color:#6b7280">Subtotal</td><td style="padding:6px 8px;border-top:1px solid #e5e7eb;text-align:right">${opts.currency} ${fmt(opts.baseAmount - opts.discount)}</td></tr>
+          <tr><td style="padding:6px 8px;color:#6b7280">Service fee${commissionPct > 0 ? ` (${commissionPct}%)` : ''}</td><td style="padding:6px 8px;text-align:right">${opts.currency} ${fmt(opts.serviceFee)}</td></tr>
+          ${opts.taxAmount > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Taxes</td><td style="padding:6px 8px;text-align:right">${opts.currency} ${fmt(opts.taxAmount)}</td></tr>` : ''}
+          ${opts.deliveryFee > 0 ? `<tr><td style="padding:6px 8px;color:#6b7280">Delivery fee</td><td style="padding:6px 8px;text-align:right">${opts.currency} ${fmt(opts.deliveryFee)}</td></tr>` : ''}
+          <tr><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;color:#1e293b">Total Paid</td><td style="padding:8px;border-top:2px solid #1e293b;font-weight:bold;text-align:right">${opts.currency} ${fmt(opts.totalAmount)}</td></tr>
         </table>
         <p>You can view your booking details at any time in the Kainook app.</p>
         <p>Enjoy your stay!<br>The Kainook Team</p>`),

@@ -334,6 +334,9 @@ export default function TravellerDashboard() {
   const [paymentProvider, setPaymentProvider] = useState<"stripe" | "tara">("stripe");
   const [mobileNumber, setMobileNumber] = useState("");
   const [checkoutStep, setCheckoutStep] = useState<"review" | "details" | "stripe_card" | "polling">("review");
+  const [pricingPreview, setPricingPreview] = useState<any>(null);
+  const [estimatedPricing, setEstimatedPricing] = useState<any>(null);
+  const [estimatingPricing, setEstimatingPricing] = useState(false);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [stripeClientSecret, setStripeClientSecret] = useState("");
   const [stripeInstance, setStripeInstance] = useState<any>(null);
@@ -727,7 +730,8 @@ export default function TravellerDashboard() {
       const end = isCar ? detailReturnDate : detailCheckOut;
       const days = calcDays(start, end);
       const baseTotal = pricePerNight * days;
-      const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
+      const discountedTotal = Math.max(0, baseTotal - bestDiscount);
+      const serviceFee = days > 0 ? Math.ceil(discountedTotal * 0.05) : 0;
       const taxRate = TAX_RATES[detailListing.country] ?? 0;
       const taxAmount = Math.ceil(baseTotal * taxRate);
       const grandTotal = Math.max(0, baseTotal + serviceFee + taxAmount - bestDiscount);
@@ -1275,13 +1279,45 @@ export default function TravellerDashboard() {
     }
   }
 
-  // Re-check availability whenever dates change on the detail view.
+  async function fetchPricingEstimate() {
+    if (!detailListing || lockToken) return;
+    const isCar = detailListing.category === "car";
+    const start = isCar ? detailPickupDate : detailCheckIn;
+    const end = isCar ? detailReturnDate : detailCheckOut;
+    if (!start || !end || !detailListing.id) { setEstimatedPricing(null); setEstimatingPricing(false); return; }
+
+    setEstimatedPricing(null);
+    setEstimatingPricing(true);
+    try {
+      const res = await listingApi.post<any>("/bookings/pricing-estimate", {
+        listingId: detailListing.id,
+        roomTypeId: selectedRoomTypeId || undefined,
+        checkIn: isCar ? undefined : detailCheckIn || undefined,
+        checkOut: isCar ? undefined : detailCheckOut || undefined,
+        pickupDatetime: isCar ? detailPickupDate || undefined : undefined,
+        returnDatetime: isCar ? detailReturnDate || undefined : undefined,
+        guests: searchAdults + searchChildren,
+      });
+      if (res.data?.success && res.data.data?.pricingPreview) {
+        setEstimatedPricing(res.data.data.pricingPreview);
+      } else {
+        setEstimatedPricing(null);
+      }
+    } catch {
+      setEstimatedPricing(null);
+    } finally {
+      setEstimatingPricing(false);
+    }
+  }
+
+  // Re-check availability + fetch pricing estimate whenever dates change.
   // GET /listings/:id/availability is PUBLIC — no auth guard needed.
   useEffect(() => {
     if (!detailListing || lockToken) return;
     setBookingError("");
     checkAvailability(detailListing.id, detailListing.category);
-  }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId]);
+    fetchPricingEstimate();
+  }, [detailCheckIn, detailCheckOut, detailPickupDate, detailReturnDate, detailListing?.id, selectedRoomTypeId, searchAdults, searchChildren]);
 
   // Recompute promotion discount whenever dates or active promotion changes.
   // effectiveDiscountSource is derived — no state mutation needed here.
@@ -1358,6 +1394,9 @@ export default function TravellerDashboard() {
       const res = await listingApi.post<any>("/bookings/initiate", body);
       if (res.data.success && res.data.data?.lockToken) {
         setLockToken(res.data.data.lockToken);
+        if (res.data.data.pricingPreview) {
+          setPricingPreview(res.data.data.pricingPreview);
+        }
         setSecondsLeft(300);
         setBookingError("");
         setCheckoutStep("review");
@@ -1779,6 +1818,7 @@ export default function TravellerDashboard() {
       roomTypeId: selectedRoomTypeId ?? undefined,
       roomTypeName: selectedRt ? selectedRt.name : undefined,
       roomType: selectedRt ? selectedRt.roomType : undefined,
+      pricingPreview: pricingPreview ?? undefined,
     };
     sessionStorage.setItem("zika:checkout", JSON.stringify(ctx));
     router.push("/booking/review");
@@ -2099,9 +2139,7 @@ export default function TravellerDashboard() {
                       const end = isCar ? detailReturnDate : detailCheckOut;
                       const days = calcDays(start, end);
                       const baseTotal = pricePerNight * days;
-                      const serviceFee = days > 0 ? Math.ceil(baseTotal * 0.05) : 0;
                       const sidebarDiscount = bestDiscount;
-                      const grandTotal = Math.max(0, baseTotal + serviceFee - sidebarDiscount);
 
                       return (
                         <div className="space-y-4">
@@ -2259,26 +2297,51 @@ export default function TravellerDashboard() {
 
                           {/* Dynamic price breakdown */}
                           {days > 0 && (
-                            <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
-                              <div className="flex justify-between">
-                                <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-                                <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
+                            estimatingPricing && !estimatedPricing ? (
+                              <div className="space-y-3 pt-2 border-t border-slate-100 animate-pulse">
+                                <div className="h-4 bg-slate-200 rounded w-3/4" />
+                                <div className="h-4 bg-slate-200 rounded w-1/2" />
+                                <div className="h-4 bg-slate-200 rounded w-5/6" />
+                                <div className="h-5 bg-slate-200 rounded w-2/3 mt-2" />
                               </div>
-                              <div className="flex justify-between">
-                                <span>Service fee (5%)</span>
-                                <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
-                              </div>
-                              {sidebarDiscount > 0 && (
-                                <div className="flex justify-between text-emerald-600 font-semibold">
-                                  <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-                                  <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
+                            ) : estimatedPricing ? (
+                              <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
+                                <div className="flex justify-between">
+                                  <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
+                                  <span>{detailListing.currency} {estimatedPricing.baseAmount.toLocaleString()}</span>
                                 </div>
-                              )}
-                              <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
-                                <span>Total</span>
-                                <span>{detailListing.currency} {grandTotal.toLocaleString()}</span>
+                                <div className="flex justify-between">
+                                  <span>Service fee{estimatedPricing.commissionRate ? ` (${Math.round(estimatedPricing.commissionRate * 100)}%)` : ''}</span>
+                                  <span>{detailListing.currency} {estimatedPricing.serviceFee.toLocaleString()}</span>
+                                </div>
+                                {sidebarDiscount > 0 && (
+                                  <div className="flex justify-between text-emerald-600 font-semibold">
+                                    <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
+                                    <span>−{detailListing.currency} {sidebarDiscount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                {estimatedPricing.taxAmount > 0 && (
+                                  <div className="flex justify-between text-slate-500">
+                                    <span>Taxes{estimatedPricing.taxRate ? ` (${Math.round(estimatedPricing.taxRate * 100)}%)` : ''}</span>
+                                    <span>{detailListing.currency} {estimatedPricing.taxAmount.toLocaleString()}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 mt-1">
+                                  <span>Total</span>
+                                  <span>{detailListing.currency} {estimatedPricing.totalAmount.toLocaleString()}</span>
+                                </div>
                               </div>
-                            </div>
+                            ) : days > 0 && (
+                              <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
+                                <div className="flex justify-between">
+                                  <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
+                                  <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between text-slate-400 text-xs italic">
+                                  <span>Pricing estimate unavailable</span>
+                                </div>
+                              </div>
+                            )
                           )}
                         </div>
                       );
@@ -2335,12 +2398,17 @@ export default function TravellerDashboard() {
                           const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
                           const start = isCar ? detailPickupDate : detailCheckIn;
                           const end = isCar ? detailReturnDate : detailCheckOut;
-                          const days = calcDays(start, end);
-                          const base = pricePerNight * days;
-                          const serviceFee = Math.ceil(base * 0.05);
-                          const taxRate = TAX_RATES[detailListing.country] ?? 0;
-                          const taxAmount = Math.ceil(base * taxRate);
-                          const grandTotal = Math.max(0, base + serviceFee + taxAmount - bestDiscount);
+                          const days = pricingPreview ? pricingPreview.units : calcDays(start, end);
+                          const base = pricingPreview ? pricingPreview.baseAmount : pricePerNight * days;
+                          const discount = pricingPreview
+                            ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
+                            : bestDiscount;
+                          const subtotal = base - discount;
+                          const serviceFee = pricingPreview ? pricingPreview.serviceFee : Math.ceil(subtotal * 0.05);
+                          const taxAmount = pricingPreview ? pricingPreview.taxAmount : 0;
+                          const grandTotal = pricingPreview
+                            ? base - discount + serviceFee + taxAmount + (pricingPreview.deliveryFee ?? 0)
+                            : Math.max(0, base + serviceFee + taxAmount - bestDiscount);
                           const fmt = (d: string | null | undefined) =>
                             d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "—";
                           return (
@@ -2388,19 +2456,19 @@ export default function TravellerDashboard() {
                                   <span>{detailListing.currency} {base.toLocaleString()}</span>
                                 </div>
                                 <div className="flex justify-between text-slate-500">
-                                  <span>Service fee (5%)</span>
+                                  <span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span>
                                   <span>{detailListing.currency} {serviceFee.toLocaleString()}</span>
                                 </div>
-                                {taxRate > 0 && (
+                                {taxAmount > 0 && (
                                   <div className="flex justify-between text-slate-500">
-                                    <span>Taxes & VAT ({(taxRate * 100).toFixed(0)}%)</span>
+                                    <span>Taxes & VAT{pricingPreview?.taxRate ? ` (${Math.round(pricingPreview.taxRate * 100)}%)` : ''}</span>
                                     <span>{detailListing.currency} {taxAmount.toLocaleString()}</span>
                                   </div>
                                 )}
-                                {bestDiscount > 0 && (
+                                {discount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
                                     <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-                                    <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
+                                    <span>−{detailListing.currency} {discount.toLocaleString()}</span>
                                   </div>
                                 )}
 
@@ -2414,7 +2482,7 @@ export default function TravellerDashboard() {
                               {/* Countdown */}
                               <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold border ${(secondsLeft ?? 0) < 60 ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
                                 <span className="flex items-center gap-1.5">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 018 0z" /></svg>
                                   {(secondsLeft ?? 0) < 60 ? "Expiring soon!" : "Hold expires in"}
                                 </span>
                                 <span className="font-mono tracking-wider">
@@ -2468,100 +2536,6 @@ export default function TravellerDashboard() {
                             {renderVoucherSelector()}
                           </div>
 
-                          {/* Payment method selector */}
-                          <div className="border border-slate-200 rounded-xl overflow-hidden">
-                            <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex items-center gap-2">
-                              <svg className="w-3.5 h-3.5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                              <p className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment Method</p>
-                            </div>
-                            <div className="p-4 space-y-3">
-                              {/* Saved methods */}
-                              {loadingMethods ? (
-                                <div className="flex items-center gap-2 text-xs text-slate-400 py-1">
-                                  <div className="w-3 h-3 border-2 border-slate-300 border-t-[#166534] rounded-full animate-spin" />
-                                  Loading saved methods…
-                                </div>
-                              ) : savedMethods.length > 0 && (
-                                <div className="space-y-2">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Saved</p>
-                                  {savedMethods.map((m) => {
-                                    const isSelected = selectedMethodId === m.id;
-                                    const label = m.paymentProvider === "stripe"
-                                      ? `${m.cardBrand ?? "Card"} •••• ${m.cardLast4} (${m.cardExpMonth}/${m.cardExpYear})`
-                                      : `M-Pesa ••••${m.mobileNumberMasked}`;
-                                    return (
-                                      <button
-                                        key={m.id}
-                                        type="button"
-                                        onClick={() => {
-                                          setSelectedMethodId(m.id);
-                                          setPaymentProvider(m.paymentProvider);
-                                        }}
-                                        className={`w-full flex items-center gap-3 px-3 py-2.5 border rounded-xl text-xs font-semibold transition ${isSelected ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"}`}
-                                      >
-                                        {m.paymentProvider === "stripe" ? (
-                                          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
-                                        ) : (
-                                          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                                        )}
-                                        <span className="flex-1 text-left">{label}</span>
-                                        {m.isDefault && <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${isSelected ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}>Default</span>}
-                                        {isSelected && <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
-                                      </button>
-                                    );
-                                  })}
-                                  <button
-                                    type="button"
-                                    onClick={() => { setSelectedMethodId(null); setPaymentProvider("stripe"); }}
-                                    className={`w-full flex items-center gap-2 px-3 py-2 border rounded-xl text-xs font-semibold transition ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-dashed border-slate-300 hover:border-slate-500"}`}
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
-                                    Add new card
-                                  </button>
-                                </div>
-                              )}
-
-                              {/* New method buttons — shown when no saved methods or adding new */}
-                              {(savedMethods.length === 0 || (!selectedMethodId && paymentProvider === "stripe") || (!selectedMethodId && paymentProvider === "tara")) && (
-                                <div className="space-y-2">
-                                  {savedMethods.length === 0 && (
-                                    <div className="flex gap-2">
-                                      <button type="button" onClick={() => { setPaymentProvider("stripe"); setSelectedMethodId(null); }}
-                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${!selectedMethodId && paymentProvider === "stripe" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
-                                        Card
-                                      </button>
-                                      <button type="button" onClick={() => { setPaymentProvider("tara"); setSelectedMethodId(null); }}
-                                        className={`flex-1 py-2.5 border rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition ${!selectedMethodId && paymentProvider === "tara" ? "bg-[#0c2614] text-white border-[#1D8D2B]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                                        M-Pesa
-                                      </button>
-                                    </div>
-                                  )}
-                                  {paymentProvider === "tara" && !selectedMethodId && (
-                                    <input type="tel" required placeholder="Mobile number e.g. +254712345678" value={mobileNumber}
-                                      onChange={(e) => setMobileNumber(e.target.value)}
-                                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#1D8D2B]" />
-                                  )}
-                                  {paymentProvider === "stripe" && !selectedMethodId && (
-                                    <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                                      <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                                      You will enter card details on the next step
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* M-Pesa input for saved tara method that needs number override */}
-                              {selectedMethodId && paymentProvider === "tara" && (
-                                <p className="text-[10px] text-slate-400 flex items-center gap-1.5">
-                                  <svg className="w-3 h-3 text-emerald-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                                  Payment prompt will be sent to your saved M-Pesa number
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
                           {/* Price summary */}
                           {(() => {
                             const isCar = detailListing.category === "car";
@@ -2572,21 +2546,27 @@ export default function TravellerDashboard() {
                             const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
                             const start = isCar ? detailPickupDate : detailCheckIn;
                             const end = isCar ? detailReturnDate : detailCheckOut;
-                            const days = calcDays(start, end);
-                            const baseTotal = pricePerNight * days;
-                            const serviceFee = Math.ceil(baseTotal * 0.05);
-                            const grandTotal = Math.max(0, baseTotal + serviceFee - bestDiscount);
+                            const days = pricingPreview ? pricingPreview.units : calcDays(start, end);
+                            const baseTotal = pricingPreview ? pricingPreview.baseAmount : pricePerNight * days;
+                            const discount = pricingPreview
+                              ? (pricingPreview.promotionDiscount + (effectiveDiscountSource === "voucher" ? bestDiscount : 0))
+                              : bestDiscount;
+                            const subtotal = baseTotal - discount;
+                            const serviceFee = pricingPreview ? pricingPreview.serviceFee : Math.ceil(subtotal * 0.05);
+                            const grandTotal = pricingPreview
+                              ? baseTotal - discount + serviceFee + (pricingPreview.deliveryFee ?? 0)
+                              : Math.max(0, baseTotal + serviceFee - bestDiscount);
                             return (
                               <div className="space-y-2 text-sm text-slate-600 border-t border-slate-100 pt-3">
                                 <div className="flex justify-between">
                                   <span>{detailListing.currency} {pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
                                   <span>{detailListing.currency} {baseTotal.toLocaleString()}</span>
                                 </div>
-                                <div className="flex justify-between"><span>Service fee (5%)</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
-                                {bestDiscount > 0 && (
+                                <div className="flex justify-between"><span>Service fee{pricingPreview?.commissionRate ? ` (${Math.round(pricingPreview.commissionRate * 100)}%)` : ''}</span><span>{detailListing.currency} {serviceFee.toLocaleString()}</span></div>
+                                {discount > 0 && (
                                   <div className="flex justify-between text-emerald-600 font-semibold">
                                     <span>{effectiveDiscountSource === "promotion" ? "Promotion discount" : "Voucher discount"}</span>
-                                    <span>−{detailListing.currency} {bestDiscount.toLocaleString()}</span>
+                                    <span>−{detailListing.currency} {discount.toLocaleString()}</span>
                                   </div>
                                 )}
                                 <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
