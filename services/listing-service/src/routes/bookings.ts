@@ -357,6 +357,14 @@ export async function bookingRoutes(app: FastifyInstance) {
           pickupDatetime: true,
           returnDatetime: true,
           paymentId: true,
+          subtotal: true,
+          discountAmount: true,
+          serviceFee: true,
+          taxAmount: true,
+          deliveryFee: true,
+          nightsOrDays: true,
+          voucherDiscount: true,
+          voucherCode: true,
           listing: {
             select: {
               name: true,
