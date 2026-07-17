@@ -2084,15 +2084,42 @@ export default function TravellerDashboard() {
                       const selectedRt = isHotel
                         ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
                         : null;
-                      const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+                      const basePrice = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+
+                      // Calculate discount
+                      const hasLongStay = detailListing.longStayDiscountEnabled;
+                      const longStayPct = hasLongStay ? 15 : 0;
+                      let displayPrice = basePrice;
+                      const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
+
+                      if (isValidPromo) {
+                        const promoDiscount = activePromotion.discountType === "percentage"
+                          ? Math.round(basePrice * (Number(activePromotion.discountValue) / 100))
+                          : Math.round(Number(activePromotion.discountValue));
+                        displayPrice = Math.max(0, basePrice - promoDiscount);
+                      } else if (hasLongStay) {
+                        displayPrice = Math.round(basePrice * (1 - longStayPct / 100));
+                      }
+
                       return (
-                        <div className="flex justify-between items-baseline mb-3">
-                          <div className="text-2xl font-bold text-slate-900">
-                            {detailListing.currency} {pricePerNight.toLocaleString()}
-                            <span className="text-sm font-normal text-slate-500 ml-1">/ {detailListing.category === "car" ? "day" : "night"}</span>
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-2xl font-extrabold text-slate-900">
+                                {detailListing.currency} {displayPrice.toLocaleString()}
+                              </span>
+                              {basePrice > displayPrice && (
+                                <span className="text-sm font-semibold line-through text-slate-400">
+                                  {detailListing.currency} {basePrice.toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400 font-medium mt-0.5">
+                              / {detailListing.category === "car" ? "day" : "night"}
+                            </div>
                           </div>
                           {detailListing.starRating && (
-                            <div className="text-sm font-semibold flex items-center gap-1 text-slate-800">
+                            <div className="text-sm font-semibold flex items-center gap-1 text-slate-800 bg-slate-50 border border-slate-100 rounded-full px-2.5 py-1">
                               ⭐ {detailListing.starRating}
                             </div>
                           )}
@@ -2210,11 +2237,28 @@ export default function TravellerDashboard() {
                                     >
                                       {detailListing.roomTypes
                                         .filter((rt) => rt.isActive !== false)
-                                        .map((rt) => (
-                                          <option key={rt.id} value={rt.id}>
-                                            {rt.name} — {detailListing.currency} {Number(rt.pricePerNight).toLocaleString()}/night
-                                          </option>
-                                        ))}
+                                        .map((rt) => {
+                                          const baseRtPrice = rt.pricePerNight;
+                                          let displayRtPrice = baseRtPrice;
+                                          const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
+                                          const hasLongStay = detailListing.longStayDiscountEnabled;
+                                          const longStayPct = hasLongStay ? 15 : 0;
+                                          
+                                          if (isValidPromo) {
+                                            const promoDiscount = activePromotion.discountType === "percentage"
+                                              ? Math.round(baseRtPrice * (Number(activePromotion.discountValue) / 100))
+                                              : Math.round(Number(activePromotion.discountValue));
+                                            displayRtPrice = Math.max(0, baseRtPrice - promoDiscount);
+                                          } else if (hasLongStay) {
+                                            displayRtPrice = Math.round(baseRtPrice * (1 - longStayPct / 100));
+                                          }
+
+                                          return (
+                                            <option key={rt.id} value={rt.id}>
+                                              {rt.name} — {detailListing.currency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${detailListing.currency} ${baseRtPrice.toLocaleString()})` : ""}
+                                            </option>
+                                          );
+                                        })}
                                     </select>
                                   </div>
                                 )}
