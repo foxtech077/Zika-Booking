@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, LogOut, User, ChevronDown, HelpCircle } from "lucide-react";
+import { Bell, LogOut, User, ChevronDown, HelpCircle, Menu } from "lucide-react";
 import { listingsService } from "@/services/listings";
 import { useAuthStore } from "@/stores/auth";
 import { Avatar } from "@/components/ui/Avatar";
@@ -46,7 +46,11 @@ function formatUnreadCount(count: number) {
 //   return map[last] ?? last.charAt(0).toUpperCase() + last.slice(1);
 // }
 
-export function TopBar() {
+interface TopBarProps {
+  onToggleSidebar?: () => void;
+}
+
+export function TopBar({ onToggleSidebar }: TopBarProps) {
   const { user, clearSession } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
@@ -76,13 +80,33 @@ export function TopBar() {
         to-[#1a5a45]
         border-b border-[#2d7a61]
         flex items-center justify-between
-        px-6 shrink-0 z-10
+        px-4 sm:px-6 shrink-0 z-10
         shadow-[0_1px_4px_rgba(0,0,0,0.04)]
       "
     >
-      {/* Left — page title */}
-      <div>
-        {/* <h1 className="text-base font-bold text-white leading-none">{pageTitle}</h1> */}
+      {/* Left — Hamburger & Mobile Logo */}
+      <div className="flex items-center gap-3">
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="md:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all"
+            aria-label="Open navigation menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        
+        {/* Logo - Mobile Only */}
+        <Link href="/dashboard" className="flex md:hidden items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 shrink-0 overflow-hidden">
+            <img
+              src="/images/kainook-logo.jpeg"
+              alt="Kainook logo"
+              className="h-7 w-7 object-contain"
+            />
+          </div>
+          <span className="text-sm font-bold text-white tracking-wide">Kainook</span>
+        </Link>
       </div>
 
       {/* Right — notification + user */}

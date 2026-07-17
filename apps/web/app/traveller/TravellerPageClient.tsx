@@ -376,21 +376,27 @@ export default function TravellerDashboard() {
     }
   }, [user?.id]);
 
-  // Handle ?tab=bookings and ?listing=<id> URL params on first mount
-  const urlTabHandled = useRef(false);
+  // Sync URL search parameters (tab, listing) with component state
   useEffect(() => {
-    if (!ready || urlTabHandled.current) return;
+    if (!ready) return;
     const tab = searchParams.get("tab");
     const listingId = searchParams.get("listing");
+
     if (tab === "bookings") {
-      urlTabHandled.current = true;
-      setActiveTab("bookings");
-      if (user) fetchGuestBookings();
-    } else if (listingId) {
-      urlTabHandled.current = true;
+      if (activeTab !== "bookings") {
+        setActiveTab("bookings");
+        if (user) {
+          fetchGuestBookings();
+        }
+      }
+    } else if (!tab && activeTab === "bookings") {
+      setActiveTab("home");
+    }
+
+    if (listingId && listingId !== selectedListingId) {
       handleSelectListing(listingId);
     }
-  }, [ready, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, searchParams, user?.id, activeTab, selectedListingId]);
 
   // Success state
   const [bookingSuccessModal, setBookingSuccessModal] = useState<{
@@ -454,12 +460,12 @@ export default function TravellerDashboard() {
   // Neither stacks with the other; we always pick the higher value.
   const effectiveDiscountSource: "voucher" | "promotion" | null =
     voucherApplied ? "voucher"
-    : promotionDiscount > 0 ? "promotion"
-    : null;
+      : promotionDiscount > 0 ? "promotion"
+        : null;
   const bestDiscount =
     effectiveDiscountSource === "voucher" ? voucherDiscount
-    : effectiveDiscountSource === "promotion" ? promotionDiscount
-    : 0;
+      : effectiveDiscountSource === "promotion" ? promotionDiscount
+        : 0;
 
   // Red badge shown on every listing card when an active activity promotion matches the active tab
   const promotionBadge = activePromotion && isPromotionValid(activePromotion) ? {
@@ -514,10 +520,10 @@ export default function TravellerDashboard() {
           instantBooking: false,
         }))
       );
-    }).catch(() => {});
+    }).catch(() => { });
     fetchFavourites().then((res) => {
       setFavouritedIds(new Set(res.favourites.map((f) => f.listingId)));
-    }).catch(() => {});
+    }).catch(() => { });
   }, [isAuthenticated]);
 
 
@@ -1082,13 +1088,13 @@ export default function TravellerDashboard() {
       // Apply the same client-side text filter so appended pages are also accurate
       const filtered = activeQuery
         ? mapped.filter((listing) => {
-            const term = activeQuery.toLowerCase();
-            const fields: (string | undefined | null)[] = [
-              listing.name, listing.town, listing.country, listing.address, listing.description,
-            ];
-            if (searchCategory === "car") fields.push(listing.carMake, listing.carModel);
-            return fields.some((f) => f && String(f).toLowerCase().includes(term));
-          })
+          const term = activeQuery.toLowerCase();
+          const fields: (string | undefined | null)[] = [
+            listing.name, listing.town, listing.country, listing.address, listing.description,
+          ];
+          if (searchCategory === "car") fields.push(listing.carMake, listing.carModel);
+          return fields.some((f) => f && String(f).toLowerCase().includes(term));
+        })
         : mapped;
       if (filtered.length > 0) {
         setListings((prev) => [...prev, ...filtered]);
@@ -1289,13 +1295,13 @@ export default function TravellerDashboard() {
     const end = isCar ? detailReturnDate : detailCheckOut;
     const days = calcDays(start, end);
     if (days <= 0) { setPromotionDiscount(0); return; }
-    
+
     const isHotel = detailListing.category === "hotel";
     const selectedRt = isHotel
       ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
       : null;
     const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
-    
+
     const base = pricePerNight * days;
     const pDiscount = activePromotion.discountType === "percentage"
       ? Math.round(base * activePromotion.discountValue / 100)
@@ -2146,7 +2152,7 @@ export default function TravellerDashboard() {
                                         </p>
                                         <input id={id} type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
                                           className="sr-only" />
-                                    </div>
+                                      </div>
                                     );
                                   })}
                                 </div>
@@ -2196,12 +2202,12 @@ export default function TravellerDashboard() {
                           )}
                           {availabilityStatus === "unavailable" && (
                             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-700">
-                               Selected dates are no longer available. Please choose different dates.
+                              Selected dates are no longer available. Please choose different dates.
                             </div>
                           )}
                           {availabilityStatus === "available" && (
                             <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs font-semibold text-emerald-700">
-                               Dates are available — reserve now!
+                              Dates are available — reserve now!
                             </div>
                           )}
 
@@ -2801,11 +2807,10 @@ export default function TravellerDashboard() {
                     <button
                       key={key}
                       onClick={() => { setSearchCategory(key); }}
-                      className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition border ${
-                        searchCategory === key
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition border ${searchCategory === key
                           ? "bg-white text-[#0c2614] border-white shadow-md"
                           : "bg-white/15 text-white border-white/30 hover:bg-white/25 backdrop-blur-sm"
-                      }`}
+                        }`}
                     >
                       {icon}
                       {label}
@@ -3313,7 +3318,7 @@ export default function TravellerDashboard() {
                     { rating: 5, text: "Travelling across Africa has never been this organised. The car rental feature integrated with my hotel booking saved me so much time.", name: "Sarah Louw", location: "Cape Town, SA", initials: "SL" },
                   ].map((t) => (
                     <div key={t.name} className="bg-white rounded-2xl p-6 space-y-4 border border-slate-100 shadow-sm">
-                      <div className="flex gap-0.5">{[1,2,3,4,5].map(s => <span key={s} className="text-amber-400 text-base">★</span>)}</div>
+                      <div className="flex gap-0.5">{[1, 2, 3, 4, 5].map(s => <span key={s} className="text-amber-400 text-base">★</span>)}</div>
                       <p className="text-slate-600 text-sm leading-relaxed font-light">&ldquo;{t.text}&rdquo;</p>
                       <div className="flex items-center gap-3 pt-1 border-t border-slate-100">
                         <div className="w-9 h-9 rounded-full bg-[#0c2614] text-white flex items-center justify-center text-[10px] font-bold shrink-0">{t.initials}</div>
@@ -3477,9 +3482,8 @@ export default function TravellerDashboard() {
                               onClick={() => setFilterPropertyTypes((prev) =>
                                 active ? prev.filter((t) => t !== type) : [...prev, type]
                               )}
-                              className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${
-                                active ? "bg-[#0c2614] border-[#0c2614]" : "border-slate-300 group-hover:border-[#1D8D2B]"
-                              }`}
+                              className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition ${active ? "bg-[#0c2614] border-[#0c2614]" : "border-slate-300 group-hover:border-[#1D8D2B]"
+                                }`}
                             >
                               {active && (
                                 <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
@@ -3517,11 +3521,10 @@ export default function TravellerDashboard() {
                             onClick={() => setSelectedAmenities((prev) =>
                               active ? prev.filter((a) => a !== key) : [...prev, key]
                             )}
-                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
-                              active
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${active
                                 ? "bg-[#0c2614] text-white border-[#0c2614]"
                                 : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                            }`}
+                              }`}
                           >
                             {label}
                           </button>
@@ -3544,9 +3547,8 @@ export default function TravellerDashboard() {
                             onClick={() => setSelectedAmenities((prev) =>
                               active ? prev.filter((a) => a !== t) : [...prev, t]
                             )}
-                            className={`flex-1 py-2 border rounded-xl text-xs font-semibold capitalize transition ${
-                              active ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                            }`}
+                            className={`flex-1 py-2 border rounded-xl text-xs font-semibold capitalize transition ${active ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                              }`}
                           >
                             {t}
                           </button>
@@ -3565,9 +3567,8 @@ export default function TravellerDashboard() {
                         <button
                           key={star}
                           onClick={() => setSelectedRating(star === selectedRating ? null : star)}
-                          className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${
-                            star === selectedRating ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                          }`}
+                          className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${star === selectedRating ? "bg-[#0c2614] text-white border-[#0c2614]" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                            }`}
                         >
                           ★ {star}+
                         </button>
@@ -3945,14 +3946,14 @@ export default function TravellerDashboard() {
                     ? "Book your next stay or car rental to see it here."
                     : "Try switching to a different filter tab."}
                 </p>
-                {reservationStatusFilter === "all" && (
+                {/* {reservationStatusFilter === "all" && (
                   <button
                     onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
                     className="mt-6 inline-flex items-center gap-2 bg-[#0c2614] text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-[#081b0d] transition shadow-md"
                   >
                     Explore Listings
                   </button>
-                )}
+                )} */}
               </div>
             ) : (
               // Reservation cards
