@@ -1517,6 +1517,9 @@ export async function bookingRoutes(app: FastifyInstance) {
           },
         });
 
+        // Consume the lock token — prevent reuse for duplicate bookings
+        await redis.del(`rlk:ctx:${body.lockToken}`).catch(() => {});
+
         if (appliedVoucher) {
           await Promise.all([
             prisma.voucher.update({
