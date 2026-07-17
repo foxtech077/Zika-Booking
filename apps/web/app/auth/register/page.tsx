@@ -175,7 +175,7 @@ export default function RegisterPage() {
         </div>
 
         {/* ── Right Panel: Form ── */}
-        <div className="flex-1 bg-white flex flex-col justify-center px-8 py-8 md:px-12 rounded-r-3xl rounded-l-3xl md:rounded-l-none overflow-y-auto">
+        <div className="flex-1 bg-white flex flex-col justify-start px-8 py-6 md:px-12 rounded-r-3xl rounded-l-3xl md:rounded-l-none overflow-y-auto">
 
           {/* Logo */}
           {/* <div className="flex flex-col items-center mb-3">
@@ -272,7 +272,7 @@ export default function RegisterPage() {
 
             {/* Provider-only fields */}
             {userType === "provider" && (
-              <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <label htmlFor="reg-business" className="block text-xs font-medium text-gray-700 mb-1.5">Business name</label>
                   <div className="relative">
