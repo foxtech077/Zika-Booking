@@ -2328,6 +2328,8 @@ export async function adminListingRoutes(app: FastifyInstance) {
           totalAmount: billing.totalAmount,
           discountAmount: 0,
           deliveryFee: 0,
+          serviceFee: billing.serviceFee,
+          taxAmount: billing.taxAmount,
 
           currency: listing.currency ?? "USD",
 
