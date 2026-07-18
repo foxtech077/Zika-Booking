@@ -15,9 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface NavItem {
   label: string;
@@ -32,119 +33,170 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Bookings",     href: "/dashboard/bookings",  icon: <BookOpen /> },
   { label: "Calendar",     href: "/dashboard/calendar",  icon: <CalendarDays /> },
   { label: "Reviews",      href: "/dashboard/reviews",   icon: <Star /> },
-  { label: "Payments",     href: "/dashboard/payments",           icon: <CreditCard /> },
+  { label: "Payments",     href: "/dashboard/payments",  icon: <CreditCard /> },
   { label: "Messages",     href: "/dashboard/messaging", icon: <MessageSquare /> },
   { label: "Earnings",     href: "/dashboard/earnings",  icon: <DollarSign /> },
   { label: "Channel Sync", href: "/dashboard/channel",   icon: <Globe2 /> },
   { label: "Settings",     href: "/dashboard/settings",  icon: <Settings /> },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
+}
+
+export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
   const pathname = usePathname();
+  const prevPathname = useRef(pathname);
   const [collapsed, setCollapsed] = useState(false);
 
+  // Close sidebar only when the route actually changes (not when mobileOpen toggles)
+  useEffect(() => {
+    if (prevPathname.current !== pathname) {
+      prevPathname.current = pathname;
+      if (mobileOpen && onCloseMobile) {
+        onCloseMobile();
+      }
+    }
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <aside
-      className={cn(
-        "flex flex-col h-screen shrink-0 transition-all duration-300 overflow-hidden",
-        "bg-gradient-to-b from-[#0f3d2e] via-[#134a37] to-[#0d3326]",
-        collapsed ? "w-[68px]" : "w-64"
-      )}
-    >
-      {/* Logo */}
+    <>
+      {/* Mobile Backdrop - only on small screens */}
       <div
         className={cn(
-          "flex items-center h-16 px-4 shrink-0 border-b border-white/10",
-          collapsed && "justify-center px-0"
+          "fixed inset-0 bg-black/40 backdrop-blur-sm z-40 md:hidden transition-opacity duration-300",
+          mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        )}
+        onClick={onCloseMobile}
+      />
+
+      <aside
+        className={cn(
+          "flex flex-col h-screen shrink-0 bg-gradient-to-b from-[#0f3d2e] via-[#134a37] to-[#0d3326]",
+          // Mobile: fixed drawer, slides in/out
+          "fixed inset-y-0 left-0 z-50 w-64 transition-transform duration-300 ease-in-out",
+          // Desktop: relative, always visible, no translate — width controlled by collapsed
+          "md:relative md:translate-x-0 md:z-0 md:transition-all md:duration-300",
+          collapsed ? "md:w-[68px]" : "md:w-64",
+          // Mobile slide state
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {!collapsed ? (
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 shrink-0 overflow-hidden">
+        {/* Logo */}
+        <div
+          className={cn(
+            "flex items-center h-16 px-4 shrink-0 border-b border-white/10",
+            collapsed ? "md:justify-center md:px-0" : "justify-between"
+          )}
+        >
+          {/* Full logo — hidden when collapsed on desktop */}
+          <div className={cn("flex items-center gap-3", collapsed && "md:hidden")}>
+            <Link href="/dashboard" className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 shrink-0 overflow-hidden">
+                <img
+                  src="/images/kainook-logo.jpeg"
+                  alt="Kainook logo"
+                  className="h-8 w-8 object-contain"
+                />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white leading-none tracking-wide">Kainook</p>
+                <p className="text-[11px] text-green-300/80 mt-0.5 font-medium">Partner Portal</p>
+              </div>
+            </Link>
+          </div>
+
+          {/* Icon-only logo — shown when collapsed on desktop */}
+          {collapsed && (
+            <Link
+              href="/dashboard"
+              className="hidden md:flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 overflow-hidden"
+            >
               <img
                 src="/images/kainook-logo.jpeg"
                 alt="Kainook logo"
                 className="h-8 w-8 object-contain"
               />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-white leading-none tracking-wide">Kainook</p>
-              <p className="text-[11px] text-green-300/80 mt-0.5 font-medium">Partner Portal</p>
-            </div>
-          </Link>
-        ) : (
-          <Link href="/dashboard" className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 overflow-hidden">
-            <img
-              src="/images/kainook-logo.jpeg"
-              alt="Kainook logo"
-              className="h-8 w-8 object-contain"
-            />
-          </Link>
-        )}
-      </div>
+            </Link>
+          )}
 
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 scrollbar-hide">
-        <ul className={cn("space-y-0.5", collapsed ? "px-2" : "px-3")}>
-          {NAV_ITEMS.map((item) => {
-            const isActive =
-              item.href === "/dashboard"
-                ? pathname === "/dashboard"
-                : pathname.startsWith(item.href);
+          {/* Close Button - Mobile Only */}
+          <button
+            onClick={onCloseMobile}
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-xl text-green-200 hover:bg-white/10 hover:text-white transition-all ml-auto"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  title={collapsed ? item.label : undefined}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-150",
-                    isActive
-                      ? "bg-white/15 text-white shadow-sm"
-                      : "text-green-100/70 hover:bg-white/8 hover:text-white",
-                    collapsed && "justify-center px-0 py-3"
-                  )}
-                >
-                  <span
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 scrollbar-hide">
+          <ul className={cn("space-y-0.5", collapsed ? "px-2" : "px-3")}>
+            {NAV_ITEMS.map((item) => {
+              const isActive =
+                item.href === "/dashboard"
+                  ? pathname === "/dashboard"
+                  : pathname.startsWith(item.href);
+
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={onCloseMobile}
+                    title={collapsed ? item.label : undefined}
                     className={cn(
-                      "shrink-0 [&>svg]:w-[18px] [&>svg]:h-[18px]",
-                      isActive ? "text-white" : "text-green-300/70"
+                      "flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-all duration-150",
+                      isActive
+                        ? "bg-white/15 text-white shadow-sm"
+                        : "text-green-100/70 hover:bg-white/8 hover:text-white",
+                      collapsed && "md:justify-center md:px-0 md:py-3"
                     )}
                   >
-                    {item.icon}
-                  </span>
-                  {!collapsed && (
-                    <span className="truncate">{item.label}</span>
-                  )}
-                  {!collapsed && item.badge && (
-                    <span className="ml-auto bg-white/20 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                      {item.badge}
+                    <span
+                      className={cn(
+                        "shrink-0 [&>svg]:w-[18px] [&>svg]:h-[18px]",
+                        isActive ? "text-white" : "text-green-300/70"
+                      )}
+                    >
+                      {item.icon}
                     </span>
-                  )}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
+                    <span className={cn("truncate", collapsed && "md:hidden")}>
+                      {item.label}
+                    </span>
+                    {item.badge && !collapsed && (
+                      <span className="ml-auto bg-white/20 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        {item.badge}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
 
-      {/* Collapse toggle */}
-      <div className="shrink-0 border-t border-white/10 p-2">
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          className={cn(
-            "w-full flex items-center gap-2 px-3 py-2 rounded-xl text-green-200/60 hover:bg-white/10 hover:text-white text-xs transition-all duration-150",
-            collapsed && "justify-center"
-          )}
-        >
-          {collapsed ? <ChevronRight className="w-4 h-4" /> : (
-            <>
-              <ChevronLeft className="w-4 h-4" />
-              <span className="font-medium">Collapse</span>
-            </>
-          )}
-        </button>
-      </div>
-    </aside>
+        {/* Collapse toggle - Desktop Only */}
+        <div className="shrink-0 border-t border-white/10 p-2 hidden md:block">
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            className={cn(
+              "w-full flex items-center gap-2 px-3 py-2 rounded-xl text-green-200/60 hover:bg-white/10 hover:text-white text-xs transition-all duration-150",
+              collapsed && "justify-center"
+            )}
+          >
+            {collapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <>
+                <ChevronLeft className="w-4 h-4" />
+                <span className="font-medium">Collapse</span>
+              </>
+            )}
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }
