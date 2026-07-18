@@ -1121,11 +1121,10 @@ export default function TravellerDashboard() {
   }
 
   async function handleToggleFavourite(listingId: string) {
-    if (!hasAuthToken) {
+    const res = await toggleFavourite(listingId);
+    if (res === "auth_required") {
       setShowFavAuthPrompt(true);
-      return;
     }
-    await toggleFavourite(listingId);
   }
 
   // 4. Fetch details callback `/listings/:id/public`
@@ -1994,9 +1993,14 @@ export default function TravellerDashboard() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                         Share
                       </button>
-                      <button className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
-                        Save
+                      <button
+                        onClick={() => handleToggleFavourite(detailListing.id)}
+                        className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white"
+                      >
+                        <svg className={`w-4 h-4 ${isFavourited(detailListing.id) ? "text-red-500 fill-current" : "text-slate-500"}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                        </svg>
+                        {isFavourited(detailListing.id) ? "Saved" : "Save"}
                       </button>
                     </div>
                   </div>
