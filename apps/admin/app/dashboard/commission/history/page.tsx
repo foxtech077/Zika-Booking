@@ -5,10 +5,26 @@ import { History, Search, Globe, Calendar, Info, Download } from "lucide-react";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { useMockFinanceStore, type CommissionHistoryEntry } from "@/lib/mock-finance-store";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/DatePicker";
+import { useQuery } from "@tanstack/react-query";
+import { listingApi } from "@/lib/listing-api";
+
+interface CommissionHistoryEntry {
+  id: string;
+  scope: string;
+  countryCode: string | null;
+  oldRate: number;
+  newRate: number;
+  effectiveFrom: string;
+  changedBy: string;
+  changedByRole: string;
+  reason: string;
+  applyToAll: boolean;
+  providersNotified: boolean;
+  createdAt: string;
+}
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "MT" },
@@ -24,7 +40,6 @@ const COUNTRY_OPTIONS = [
 
 export default function CommissionHistoryPage() {
   const { user } = useAuthStore();
-  const { commissionHistory } = useMockFinanceStore();
 
   const [mounted, setMounted] = useState(false);
   const [page, setPage] = useState(1);
@@ -38,62 +53,49 @@ export default function CommissionHistoryPage() {
     setMounted(true);
   }, []);
 
-  // Filter history entries based on search query, date, country scope, and role scope
+  // Fetch commission history from real API
+  const { data: historyData, isLoading } = useQuery({
+    queryKey: ["admin-commission-history", page, limit, countryFilter, startDate, endDate],
+    queryFn: async () => {
+      const params: Record<string, string> = {
+        page: String(page),
+        limit: String(limit),
+      };
+      if (countryFilter) params.country = countryFilter;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      const res = await listingApi.get(`/admin/commission-rates/history?${new URLSearchParams(params)}`);
+      return res.data.data;
+    },
+  });
+
+  const commissionHistory: CommissionHistoryEntry[] = historyData?.history ?? [];
+  const total = historyData?.pagination?.total ?? 0;
+
+  // Client-side search filtering (server does date/country filtering)
   const filteredHistory = useMemo(() => {
+    if (!searchQuery) return commissionHistory;
+    
+    const q = searchQuery.toLowerCase();
     return commissionHistory.filter((entry) => {
-      // 1. Role Scope Filter
-      const role = user?.role;
-      if (role === "super_admin" || role === "finance" || role === "support") {
-        // Can view all
-      } else if (role === "country_manager" || role === "sales") {
-        // Can only view own countries
-        const hasScope = user?.countryScope?.includes(entry.country);
-        if (!hasScope) return false;
-      } else if (role === "admin") {
-        // Can only view Global history
-        if (entry.country !== "Global") return false;
-      } else {
-        // Any other role cannot view anything
-        return false;
-      }
-
-      // 2. Country Dropdown Filter
-      if (countryFilter && entry.country !== countryFilter) return false;
-
-      // 3. Date Range Filter
-      if (startDate && new Date(entry.effectiveDate) < new Date(startDate)) return false;
-      if (endDate && new Date(entry.effectiveDate) > new Date(endDate)) return false;
-
-      // 4. Search Filter (match changer, change reason)
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        const matchesChanger = entry.changedBy.toLowerCase().includes(q);
-        const matchesReason = entry.changeReason.toLowerCase().includes(q);
-        const matchesCountry = entry.country.toLowerCase().includes(q);
-        if (!matchesChanger && !matchesReason && !matchesCountry) return false;
-      }
-
-      return true;
+      const matchesChangedBy = entry.changedBy?.toLowerCase().includes(q);
+      const matchesReason = entry.reason?.toLowerCase().includes(q);
+      const matchesCountry = entry.countryCode?.toLowerCase().includes(q);
+      return matchesChangedBy || matchesReason || matchesCountry;
     });
-  }, [commissionHistory, user, countryFilter, startDate, endDate, searchQuery]);
-
-  // Paginate records
-  const paginatedHistory = useMemo(() => {
-    const start = (page - 1) * limit;
-    return filteredHistory.slice(start, start + limit);
-  }, [filteredHistory, page, limit]);
+  }, [commissionHistory, searchQuery]);
 
   const canExport = user?.role === "super_admin" || user?.role === "finance" || user?.role === "support";
 
   const handleExport = () => {
     const headers = ["Scope", "Previous Rate (%)", "New Rate (%)", "Effective Date", "Authorized By", "Reason", "Logged At"];
     const rows = filteredHistory.map(h => [
-      h.country,
-      h.previousRate,
+      h.countryCode ?? h.scope,
+      h.oldRate,
       h.newRate,
-      h.effectiveDate,
+      h.effectiveFrom,
       h.changedBy,
-      `"${h.changeReason.replace(/"/g, '""')}"`,
+      `"${(h.reason ?? "").replace(/"/g, '""')}"`,
       h.createdAt
     ]);
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -114,7 +116,7 @@ export default function CommissionHistoryPage() {
       render: (h) => (
         <div className="flex items-center gap-1.5 font-semibold text-slate-800">
           <Globe className="h-3.5 w-3.5 text-slate-400" />
-          <span>{h.country}</span>
+          <span>{h.countryCode ?? h.scope}</span>
         </div>
       ),
     },
@@ -123,9 +125,9 @@ export default function CommissionHistoryPage() {
       label: "Rate Transition",
       render: (h) => (
         <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
-          <span className="line-through text-slate-400 tabular">{h.previousRate}%</span>
+          <span className="line-through text-slate-400 tabular">{(h.oldRate * 100).toFixed(1)}%</span>
           <span>→</span>
-          <span className="text-primary font-bold text-sm tabular">{h.newRate}%</span>
+          <span className="text-primary font-bold text-sm tabular">{(h.newRate * 100).toFixed(1)}%</span>
         </div>
       ),
     },
@@ -134,7 +136,7 @@ export default function CommissionHistoryPage() {
       label: "Effective Date",
       render: (h) => (
         <span className="text-xs text-slate-600 font-medium">
-          {formatDate(h.effectiveDate)}
+          {formatDate(h.effectiveFrom)}
         </span>
       ),
     },
@@ -146,7 +148,7 @@ export default function CommissionHistoryPage() {
     {
       key: "reason",
       label: "Reason for Adjustment",
-      render: (h) => <p className="text-xs text-slate-500 italic leading-snug">{h.changeReason}</p>,
+      render: (h) => <p className="text-xs text-slate-500 italic leading-snug">{h.reason}</p>,
     },
     {
       key: "createdAt",
@@ -235,8 +237,8 @@ export default function CommissionHistoryPage() {
 
         <DataTable
           columns={columns}
-          data={paginatedHistory}
-          loading={false}
+          data={filteredHistory}
+          loading={isLoading}
           emptyTitle="No audit logs recorded"
           emptyDescription="There are no commission history adjustments matching your active criteria."
           emptyIcon={<History className="h-10 w-10 text-slate-300" />}
@@ -245,7 +247,7 @@ export default function CommissionHistoryPage() {
         <Pagination
           page={page}
           limit={limit}
-          total={filteredHistory.length}
+          total={total}
           onPageChange={setPage}
         />
       </Card>

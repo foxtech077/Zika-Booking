@@ -5,19 +5,24 @@ import {
   BarChart3, Calendar, Globe, DollarSign, TrendingUp, 
   Download, Printer, FileSpreadsheet, Eye, Info,
   BadgeCheck, Clock, RotateCcw, Landmark, Percent,
-  CreditCard, XCircle
+  CreditCard, XCircle, Tag
 } from "lucide-react";
 import { Card, SectionHeader, CardHeader } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { StatCard, RevenueBarChart, DonutChart } from "@/components/charts/Charts";
 import { DataTable, type Column } from "@/components/tables/DataTable";
-import { useMockFinanceStore, type Transaction, type Refund, type CommissionRule } from "@/lib/mock-finance-store";
 import { useAuthStore } from "@/stores/auth";
 import { formatDate, formatCurrency, slugToLabel } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { paymentPayoutApi } from "@/lib/payment-api";
 import { listingApi } from "@/lib/listing-api";
+import type { 
+  FinancialTransaction, 
+  FinancialSummary, 
+  FinancialReportsResponse,
+  CommissionRate 
+} from "@/types/admin";
 
 const COUNTRY_OPTIONS = [
   { value: "MT", label: "Malta (MT)" },
@@ -35,7 +40,6 @@ type ReportTab = "revenue" | "payment" | "payout" | "refund" | "commission";
 
 export default function FinancialReportsPage() {
   const { user } = useAuthStore();
-  const { payouts } = useMockFinanceStore();
 
   const { data: commissionData } = useQuery({
     queryKey: ["admin-commission-rates-reports"],
@@ -47,11 +51,11 @@ export default function FinancialReportsPage() {
 
   const dbCommissionRules = commissionData?.rates ?? [];
 
-  const commissionRules: CommissionRule[] = useMemo(() => {
-    const rules: CommissionRule[] = dbCommissionRules.map((r: any) => ({
+  const commissionRules = useMemo(() => {
+    const rules = dbCommissionRules.map((r: any) => ({
       id: r.id,
       country: r.country,
-      rate: Number(r.rate) * 100, // convert decimal to percentage
+      rate: Number(r.rate) * 100,
       setBy: r.setBy,
       updatedAt: r.updatedAt,
       effectiveDate: r.pendingEffectiveFrom ?? undefined,
@@ -64,46 +68,39 @@ export default function FinancialReportsPage() {
       rate: globalRate,
       setBy: "System",
       updatedAt: new Date().toISOString(),
+      effectiveDate: undefined,
+      isScheduled: false,
     });
     return rules;
   }, [dbCommissionRules, commissionData]);
 
-  const { data: paymentsData, isLoading: isPaymentsLoading } = useQuery({
-    queryKey: ["admin-payments-reports"],
+  const { data: payoutsData } = useQuery({
+    queryKey: ["admin-payouts-reports"],
     queryFn: async () => {
-      const res = await paymentPayoutApi.get(`/admin/payments`, {
+      const res = await paymentPayoutApi.get(`/admin/payouts`, {
         params: { page: "1", limit: "100" },
       });
       return res.data;
     },
   });
 
-  const payments = paymentsData?.data ?? [];
-
-  const transactions: Transaction[] = useMemo(() => {
-    return payments.map((p: any) => ({
+  const payouts = useMemo(() => {
+    const payoutList = payoutsData?.data ?? [];
+    return payoutList.map((p: any) => ({
       id: p.id,
-      reference: p.bookingId,
-      date: p.capturedAt ?? p.createdAt,
+      bookingId: p.bookingId,
+      bookingReference: p.bookingReference ?? p.bookingId,
+      providerId: p.providerId,
+      providerName: p.merchant?.businessName ?? p.providerId,
       amount: Number(p.amount),
       currency: p.currency,
-      status: (p.status === "captured" ? "successful" : p.status) as any,
-      commissionAmount: Number(p.amount) * 0.1,
-      commissionRate: 10,
+      status: p.status as "pending" | "scheduled" | "completed" | "failed",
+      method: "bank_transfer",
+      scheduledDate: p.scheduledAt,
+      processedDate: p.processedAt,
       country: "Global",
-      gateway: (p.paymentProvider === "stripe" ? "Stripe" : p.paymentProvider === "tara" ? "Tara" : "Stripe") as any,
-      transactionId: p.providerPaymentId ?? p.id,
-      travellerName: "Guest",
-      travellerEmail: "guest@test.com",
-      listingId: "listing-id",
-      listingName: "Listing",
-      listingType: "hotel" as const,
-      providerId: "provider-id",
-      providerName: "Provider",
-      providerPayout: Number(p.amount) * 0.9,
-      logs: [],
     }));
-  }, [payments]);
+  }, [payoutsData]);
 
   const { data: refundsData } = useQuery({
     queryKey: ["admin-refunds-pending-reports"],
@@ -115,7 +112,7 @@ export default function FinancialReportsPage() {
 
   const refundsList = refundsData?.data ?? [];
 
-  const refunds: Refund[] = useMemo(() => {
+  const refunds = useMemo(() => {
     return refundsList.map((r: any) => ({
       id: r.id,
       bookingId: r.bookingId,
@@ -145,19 +142,39 @@ export default function FinancialReportsPage() {
     setMounted(true);
   }, []);
 
+  // Fetch financial reports data from real API
+  const { data: reportsData, isLoading: isReportsLoading } = useQuery({
+    queryKey: ["admin-financial-reports", startDate, endDate, countryFilter],
+    queryFn: async () => {
+      const params: Record<string, string> = { page: "1", limit: "1000" };
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      if (countryFilter) params.country = countryFilter;
+      const res = await listingApi.get(`/admin/financial-reports?${new URLSearchParams(params)}`);
+      return res.data.data as FinancialReportsResponse;
+    },
+  });
+
+  const transactions: FinancialTransaction[] = reportsData?.transactions ?? [];
+  const summary: FinancialSummary = reportsData?.summary ?? {
+    grossRevenue: 0,
+    totalVoucherDiscounts: 0,
+    netRevenue: 0,
+    totalCommission: 0,
+    totalPayout: 0,
+    totalBookings: 0,
+  };
+
   // Filter datasets based on dates and country scopes
   const filteredTxs = useMemo(() => {
     return transactions.filter((tx) => {
-      if (user?.role === "country_manager" && !user.countryScope?.includes(tx.country)) return false;
-      if (countryFilter && tx.country !== countryFilter) return false;
-      if (startDate && new Date(tx.date) < new Date(startDate)) return false;
-      if (endDate && new Date(tx.date) > new Date(endDate + "T23:59:59")) return false;
+      if (user?.role === "country_manager" && tx.country && !user.countryScope?.includes(tx.country)) return false;
       return true;
     });
-  }, [transactions, user, countryFilter, startDate, endDate]);
+  }, [transactions, user]);
 
   const filteredPayouts = useMemo(() => {
-    return payouts.filter((p) => {
+    return payouts.filter((p: any) => {
       if (user?.role === "country_manager" && !user.countryScope?.includes(p.country)) return false;
       if (countryFilter && p.country !== countryFilter) return false;
       if (startDate && new Date(p.scheduledDate) < new Date(startDate)) return false;
@@ -167,7 +184,7 @@ export default function FinancialReportsPage() {
   }, [payouts, user, countryFilter, startDate, endDate]);
 
   const filteredRefunds = useMemo(() => {
-    return refunds.filter((r) => {
+    return refunds.filter((r: any) => {
       if (user?.role === "country_manager" && !user.countryScope?.includes(r.country)) return false;
       if (countryFilter && r.country !== countryFilter) return false;
       if (startDate && new Date(r.requestedDate) < new Date(startDate)) return false;
@@ -181,21 +198,39 @@ export default function FinancialReportsPage() {
     switch (activeReport) {
       case "revenue":
         // Group by Month
-        const revMap: Record<string, { id: string; period: string; gross: number; bookingsCount: number; avgValue: number; country: string }> = {};
+        const revMap: Record<string, { 
+          id: string; 
+          period: string; 
+          gross: number; 
+          voucherDiscounts: number;
+          netRevenue: number;
+          bookingsCount: number; 
+          avgValue: number; 
+          country: string 
+        }> = {};
         filteredTxs.forEach((tx) => {
-          if (tx.status === "successful") {
-            const dateObj = new Date(tx.date);
-            const key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}`;
-            if (!revMap[key]) {
-              revMap[key] = { id: key, period: key, gross: 0, bookingsCount: 0, avgValue: 0, country: countryFilter || "All" };
-            }
-            revMap[key].gross += tx.amount;
-            revMap[key].bookingsCount += 1;
+          const dateObj = new Date(tx.date);
+          const key = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, "0")}`;
+          if (!revMap[key]) {
+            revMap[key] = { 
+              id: key, 
+              period: key, 
+              gross: 0, 
+              voucherDiscounts: 0,
+              netRevenue: 0,
+              bookingsCount: 0, 
+              avgValue: 0, 
+              country: countryFilter || "All" 
+            };
           }
+          revMap[key].gross += tx.subtotal;
+          revMap[key].voucherDiscounts += tx.voucherDiscount;
+          revMap[key].netRevenue += tx.amount;
+          revMap[key].bookingsCount += 1;
         });
         return Object.values(revMap).map((m) => ({
           ...m,
-          avgValue: m.bookingsCount ? m.gross / m.bookingsCount : 0,
+          avgValue: m.bookingsCount ? m.netRevenue / m.bookingsCount : 0,
         })).sort((a, b) => b.period.localeCompare(a.period));
 
       case "payment":
@@ -204,18 +239,20 @@ export default function FinancialReportsPage() {
           id: t.id,
           reference: t.reference,
           traveller: t.travellerName,
-          gateway: t.gateway,
-          transactionId: t.transactionId,
+          gateway: t.paymentGateway ?? "Unknown",
+          transactionId: t.id,
+          voucherCode: t.voucherCode,
+          voucherDiscount: t.voucherDiscount,
           amount: t.amount,
           currency: t.currency,
           date: t.date,
-          status: t.status,
+          status: t.paymentStatus ?? "unknown",
         }));
 
       case "payout":
         // Group by provider
         const payMap: Record<string, { id: string; providerName: string; totalPaid: number; pendingCount: number; completedCount: number; failedCount: number }> = {};
-        filteredPayouts.forEach((p) => {
+        filteredPayouts.forEach((p: any) => {
           const key = p.providerId;
           if (!payMap[key]) {
             payMap[key] = { id: key, providerName: p.providerName, totalPaid: 0, pendingCount: 0, completedCount: 0, failedCount: 0 };
@@ -233,7 +270,7 @@ export default function FinancialReportsPage() {
 
       case "refund":
         // List individual refunds
-        return filteredRefunds.map((r) => ({
+        return filteredRefunds.map((r: any) => ({
           id: r.id,
           reference: r.bookingReference,
           traveller: r.travellerName,
@@ -246,19 +283,21 @@ export default function FinancialReportsPage() {
 
       case "commission":
         // Group by country
-        const commMap: Record<string, { id: string; country: string; totalRevenue: number; commissionEarned: number; bookingsCount: number }> = {};
+        const commMap: Record<string, { id: string; country: string; totalRevenue: number; commissionEarned: number; bookingsCount: number; avgRate: number }> = {};
         filteredTxs.forEach((tx) => {
-          if (tx.status === "successful") {
-            const key = tx.country;
-            if (!commMap[key]) {
-              commMap[key] = { id: key, country: key, totalRevenue: 0, commissionEarned: 0, bookingsCount: 0 };
-            }
-            commMap[key].totalRevenue += tx.amount;
-            commMap[key].commissionEarned += tx.commissionAmount;
-            commMap[key].bookingsCount += 1;
+          const key = tx.country ?? "Unknown";
+          if (!commMap[key]) {
+            commMap[key] = { id: key, country: key, totalRevenue: 0, commissionEarned: 0, bookingsCount: 0, avgRate: 0 };
           }
+          commMap[key].totalRevenue += tx.amount;
+          commMap[key].commissionEarned += tx.commissionAmount;
+          commMap[key].bookingsCount += 1;
         });
-        return Object.values(commMap);
+        // Calculate average rate per country
+        return Object.values(commMap).map((m) => ({
+          ...m,
+          avgRate: m.totalRevenue > 0 ? (m.commissionEarned / m.totalRevenue) * 100 : 0,
+        }));
 
       default:
         return [];
@@ -271,18 +310,39 @@ export default function FinancialReportsPage() {
       case "revenue":
         return [
           { key: "period", label: "Month/Year", render: (r) => <span className="font-semibold text-slate-800">{r.period}</span> },
-          { key: "bookingsCount", label: "Successful Bookings", render: (r) => <span>{r.bookingsCount}</span> },
+          { key: "bookingsCount", label: "Bookings", render: (r) => <span>{r.bookingsCount}</span> },
+          { key: "gross", label: "Gross Revenue", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.gross)}</span> },
+          { key: "voucherDiscounts", label: "Voucher Discounts", align: "right", render: (r) => (
+            <span className="tabular font-medium text-amber-600">
+              {r.voucherDiscounts > 0 ? `- ${formatCurrency(r.voucherDiscounts)}` : "—"}
+            </span>
+          )},
+          { key: "netRevenue", label: "Net Revenue", align: "right", render: (r) => <span className="tabular font-bold text-slate-900">{formatCurrency(r.netRevenue)}</span> },
           { key: "avgValue", label: "Avg Booking Value", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.avgValue)}</span> },
-          { key: "gross", label: "Gross Volume", align: "right", render: (r) => <span className="tabular font-bold text-slate-900">{formatCurrency(r.gross)}</span> },
         ];
       case "payment":
         return [
           { key: "ref", label: "Booking Ref", render: (r) => <span className="font-mono font-medium text-primary">{r.reference}</span> },
           { key: "traveller", label: "Traveller", render: (r) => <span>{r.traveller}</span> },
           { key: "gateway", label: "Gateway", render: (r) => <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">{r.gateway}</span> },
+          { key: "voucherCode", label: "Voucher", render: (r) => (
+            r.voucherCode ? (
+              <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded bg-amber-100 text-amber-700">
+                <Tag className="h-3 w-3" />
+                {r.voucherCode}
+              </span>
+            ) : (
+              <span className="text-xs text-slate-400">—</span>
+            )
+          )},
+          { key: "voucherDiscount", label: "Discount", align: "right", render: (r) => (
+            <span className={`tabular font-medium ${r.voucherDiscount > 0 ? "text-amber-600" : "text-slate-400"}`}>
+              {r.voucherDiscount > 0 ? `-${formatCurrency(r.voucherDiscount)}` : "—"}
+            </span>
+          )},
           { key: "date", label: "Date", render: (r) => <span className="text-xs text-slate-500">{formatDate(r.date)}</span> },
           { key: "amount", label: "Amount", align: "right", render: (r) => <span className="tabular font-semibold">{formatCurrency(r.amount, r.currency)}</span> },
-          { key: "status", label: "Status", render: (r) => <Badge label={r.status} status={r.status === "successful" ? "confirmed" : r.status === "failed" ? "cancelled_by_system" : r.status === "refunded" ? "suspended" : "pending_payment"} /> },
+          { key: "status", label: "Status", render: (r) => <Badge label={r.status} status={r.status === "captured" ? "confirmed" : r.status === "failed" ? "cancelled_by_system" : r.status === "refunded" ? "suspended" : "pending_payment"} /> },
         ];
       case "payout":
         return [
@@ -306,6 +366,7 @@ export default function FinancialReportsPage() {
           { key: "country", label: "Country", render: (r) => <span className="font-semibold text-slate-800">{r.country}</span> },
           { key: "bookingsCount", label: "Bookings", render: (r) => <span>{r.bookingsCount}</span> },
           { key: "totalRevenue", label: "Total Volume", align: "right", render: (r) => <span className="tabular font-medium">{formatCurrency(r.totalRevenue)}</span> },
+          { key: "avgRate", label: "Avg Rate", align: "right", render: (r) => <span className="tabular font-medium">{r.avgRate.toFixed(1)}%</span> },
           { key: "commissionEarned", label: "Commission Earned", align: "right", render: (r) => <span className="tabular font-bold text-blue-600">{formatCurrency(r.commissionEarned)}</span> },
         ];
       default:
@@ -320,11 +381,11 @@ export default function FinancialReportsPage() {
     const fileName = `financial-${activeReport}-report-${new Date().toISOString().split("T")[0]}`;
 
     if (activeReport === "revenue") {
-      headers = ["Period", "Successful Bookings", "Avg Booking Value", "Gross Volume"];
-      rows = reportTableData.map((r: any) => [r.period, r.bookingsCount, r.avgValue, r.gross]);
+      headers = ["Period", "Bookings", "Gross Revenue", "Voucher Discounts", "Net Revenue", "Avg Booking Value"];
+      rows = reportTableData.map((r: any) => [r.period, r.bookingsCount, r.gross, r.voucherDiscounts, r.netRevenue, r.avgValue]);
     } else if (activeReport === "payment") {
-      headers = ["Booking Ref", "Traveller", "Gateway", "Transaction ID", "Amount", "Currency", "Date", "Status"];
-      rows = reportTableData.map((r: any) => [r.reference, r.traveller, r.gateway, r.transactionId, r.amount, r.currency, r.date, r.status]);
+      headers = ["Booking Ref", "Traveller", "Gateway", "Voucher Code", "Discount", "Amount", "Currency", "Date", "Status"];
+      rows = reportTableData.map((r: any) => [r.reference, r.traveller, r.gateway, r.voucherCode ?? "", r.voucherDiscount, r.amount, r.currency, r.date, r.status]);
     } else if (activeReport === "payout") {
       headers = ["Provider", "Settled Count", "Pending Count", "Failed Count", "Total Settled Amount"];
       rows = reportTableData.map((r: any) => [r.providerName, r.completedCount, r.pendingCount, r.failedCount, r.totalPaid]);
@@ -332,8 +393,8 @@ export default function FinancialReportsPage() {
       headers = ["Refund ID", "Booking Ref", "Traveller", "Original Paid", "Refund Amount", "Reason", "Status", "Requested Date"];
       rows = reportTableData.map((r: any) => [r.id, r.reference, r.traveller, r.originalAmount, r.refundAmount, r.reason, r.status, r.date]);
     } else if (activeReport === "commission") {
-      headers = ["Country", "Bookings Count", "Total Revenue Volume", "Commission Earned"];
-      rows = reportTableData.map((r: any) => [r.country, r.bookingsCount, r.totalRevenue, r.commissionEarned]);
+      headers = ["Country", "Bookings Count", "Total Volume", "Avg Rate", "Commission Earned"];
+      rows = reportTableData.map((r: any) => [r.country, r.bookingsCount, r.totalRevenue, r.avgRate, r.commissionEarned]);
     }
 
     if (format === "csv") {
@@ -366,34 +427,32 @@ export default function FinancialReportsPage() {
   const currentSummaryCards = useMemo(() => {
     switch (activeReport) {
       case "revenue":
-        const totGross = filteredTxs.filter(t => t.status === "successful").reduce((sum, t) => sum + t.amount, 0);
-        const count = filteredTxs.filter(t => t.status === "successful").length;
-        const avg = count ? totGross / count : 0;
         return (
           <>
-            <StatCard title="Gross Transaction Volume" value={totGross} currency="USD" icon={<DollarSign className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
-            <StatCard title="Successful Bookings" value={count} icon={<BadgeCheck className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
-            <StatCard title="Avg Booking Checkout" value={avg} currency="USD" icon={<TrendingUp className="text-purple-600 h-4 w-4" />} iconBg="bg-purple-100" />
+            <StatCard title="Gross Revenue" value={summary.grossRevenue} currency="USD" icon={<DollarSign className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
+            <StatCard title="Total Voucher Discounts" value={summary.totalVoucherDiscounts} currency="USD" icon={<Tag className="text-amber-600 h-4 w-4" />} iconBg="bg-amber-100" />
+            <StatCard title="Net Revenue" value={summary.netRevenue} currency="USD" icon={<TrendingUp className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
           </>
         );
 
       case "payment":
         const attempts = filteredTxs.length;
-        const successCount = filteredTxs.filter(t => t.status === "successful").length;
-        const failCount = filteredTxs.filter(t => t.status === "failed").length;
-        const successRate = attempts ? (successCount / (attempts - filteredTxs.filter(t => t.status === "pending").length || 1)) * 100 : 100;
+        const successCount = filteredTxs.filter(t => t.paymentStatus === "captured").length;
+        const failCount = filteredTxs.filter(t => t.paymentStatus === "failed").length;
+        const successRate = attempts ? (successCount / (attempts - filteredTxs.filter(t => t.paymentStatus === "pending").length || 1)) * 100 : 100;
+        const totalVoucherDiscounts = filteredTxs.reduce((sum, t) => sum + t.voucherDiscount, 0);
         return (
           <>
             <StatCard title="Payment Attempts" value={attempts} icon={<CreditCard className="text-indigo-600 h-4 w-4" />} iconBg="bg-indigo-100" />
             <StatCard title="Gateway Success Rate" value={successRate} icon={<BadgeCheck className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
-            <StatCard title="Failed Checkout Attempts" value={failCount} icon={<XCircle className="text-red-600 h-4 w-4" />} iconBg="bg-red-100" />
+            <StatCard title="Total Voucher Discounts" value={totalVoucherDiscounts} currency="USD" icon={<Tag className="text-amber-600 h-4 w-4" />} iconBg="bg-amber-100" />
           </>
         );
 
       case "payout":
-        const settledAmount = filteredPayouts.filter(p => p.status === "completed").reduce((sum, p) => sum + p.amount, 0);
-        const pendingAmount = filteredPayouts.filter(p => p.status === "pending").reduce((sum, p) => sum + p.amount, 0);
-        const failedPayoutsCount = filteredPayouts.filter(p => p.status === "failed").length;
+        const settledAmount = filteredPayouts.filter((p: any) => p.status === "completed").reduce((sum: number, p: any) => sum + p.amount, 0);
+        const pendingAmount = filteredPayouts.filter((p: any) => p.status === "scheduled").reduce((sum: number, p: any) => sum + p.amount, 0);
+        const failedPayoutsCount = filteredPayouts.filter((p: any) => p.status === "failed").length;
         return (
           <>
             <StatCard title="Total Payouts Settled" value={settledAmount} currency="USD" icon={<Landmark className="text-emerald-600 h-4 w-4" />} iconBg="bg-emerald-100" />
@@ -403,9 +462,9 @@ export default function FinancialReportsPage() {
         );
 
       case "refund":
-        const totRefunded = filteredRefunds.filter(r => r.status === "processed").reduce((sum, r) => sum + r.refundAmount, 0);
-        const pendingRefsCount = filteredRefunds.filter(r => r.status === "pending_approval").length;
-        const approvedRefsCount = filteredRefunds.filter(r => r.status === "approved").length;
+        const totRefunded = filteredRefunds.filter((r: any) => r.status === "processed").reduce((sum: number, r: any) => sum + r.refundAmount, 0);
+        const pendingRefsCount = filteredRefunds.filter((r: any) => r.status === "pending_approval").length;
+        const approvedRefsCount = filteredRefunds.filter((r: any) => r.status === "approved").length;
         return (
           <>
             <StatCard title="Total Cleared Refunds" value={totRefunded} currency="USD" icon={<RotateCcw className="text-danger h-4 w-4" />} iconBg="bg-red-100" />
@@ -415,20 +474,20 @@ export default function FinancialReportsPage() {
         );
 
       case "commission":
-        const commEarned = filteredTxs.filter(t => t.status === "successful").reduce((sum, t) => sum + t.commissionAmount, 0);
-        const avgRate = commissionRules.find(r => r.country === "Global")?.rate || 10;
+        const commEarned = summary.totalCommission;
+        const avgRate = commissionRules.find((r: any) => r.country === "Global")?.rate || 10;
         return (
           <>
             <StatCard title="Platform Commission Earned" value={commEarned} currency="USD" icon={<TrendingUp className="text-blue-600 h-4 w-4" />} iconBg="bg-blue-100" />
             <StatCard title="Standard Global Rate" value={avgRate} icon={<Percent className="text-purple-600 h-4 w-4" />} iconBg="bg-purple-100" />
-            <StatCard title="Active Country Overrides" value={commissionRules.filter(r => r.country !== "Global").length} icon={<Globe className="text-indigo-600 h-4 w-4" />} iconBg="bg-indigo-100" />
+            <StatCard title="Active Country Overrides" value={commissionRules.filter((r: any) => r.country !== "Global").length} icon={<Globe className="text-indigo-600 h-4 w-4" />} iconBg="bg-indigo-100" />
           </>
         );
 
       default:
         return null;
     }
-  }, [activeReport, filteredTxs, filteredPayouts, filteredRefunds, commissionRules]);
+  }, [activeReport, filteredTxs, filteredPayouts, filteredRefunds, commissionRules, summary]);
 
   const CM_OPTIONS = useMemo(() => {
     if (user?.role === "country_manager") {
@@ -581,7 +640,7 @@ export default function FinancialReportsPage() {
         <DataTable
           columns={tableColumns}
           data={reportTableData}
-          loading={false}
+          loading={isReportsLoading}
           emptyTitle={`No report data matches selected filters`}
           emptyDescription={`Try widening your date ranges or verifying user scope variables.`}
           emptyIcon={<BarChart3 className="h-10 w-10 text-slate-300" />}

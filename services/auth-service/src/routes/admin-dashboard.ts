@@ -518,6 +518,13 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
     schema: {
       tags: ["Admin Dashboard"],
       description: "Get dashboard summary for Finance Agents",
+      querystring: {
+        type: "object",
+        properties: {
+          startDate: { type: "string", format: "date-time" },
+          endDate: { type: "string", format: "date-time" },
+        }
+      },
       response: {
         200: {
           type: "object",
@@ -527,7 +534,11 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
               type: "object",
               properties: {
                 totalRevenue: { type: "number" },
-                totalPayments: { type: "number" },
+                totalVoucherDiscounts: { type: "number" },
+                netRevenue: { type: "number" },
+                totalCommission: { type: "number" },
+                totalPayout: { type: "number" },
+                totalBookings: { type: "number" },
                 totalReports: { type: "number" },
               }
             }
@@ -543,11 +554,38 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         return sendError(reply, 403, "FORBIDDEN", "Only Finance Agents can access this summary.");
       }
 
-      const [revenueData] = await prisma.$queryRaw<[{ total: number | null, count: bigint }]>`
-        SELECT SUM(amount) as total, COUNT(*) as count FROM payments."Payment" WHERE status = 'captured'
+      const q = req.query as { startDate?: string; endDate?: string };
+      const dateFilter: any = {};
+      if (q.startDate) dateFilter.gte = new Date(q.startDate);
+      if (q.endDate) dateFilter.lte = new Date(q.endDate);
+      const hasDateFilter = Object.keys(dateFilter).length > 0;
+
+      // Query from bookings instead of payments for accurate financial data
+      // This includes voucher discounts in the totals
+      const [revenueData] = await prisma.$queryRaw<[{ 
+        total_revenue: number | null, 
+        total_voucher_discounts: number | null,
+        total_commission: number | null,
+        total_payout: number | null,
+        count: bigint 
+      }]>`
+        SELECT 
+          SUM("totalAmount") as total_revenue,
+          SUM("voucherDiscount") as total_voucher_discounts,
+          SUM("commissionAmount") as total_commission,
+          SUM("providerPayout") as total_payout,
+          COUNT(*) as count
+        FROM listing.bookings
+        WHERE status IN ('confirmed', 'completed')
+        ${hasDateFilter ? prisma.$queryRaw`AND "createdAt" >= ${dateFilter.gte} AND "createdAt" <= ${dateFilter.lte}` : prisma.$queryRaw``}
       `;
-      const totalRevenue = Number(revenueData?.total || 0);
-      const totalPayments = Number(revenueData?.count || 0);
+      
+      const totalRevenue = Number(revenueData?.total_revenue || 0);
+      const totalVoucherDiscounts = Number(revenueData?.total_voucher_discounts || 0);
+      const netRevenue = totalRevenue; // totalAmount already has voucher discounts applied
+      const totalCommission = Number(revenueData?.total_commission || 0);
+      const totalPayout = Number(revenueData?.total_payout || 0);
+      const totalBookings = Number(revenueData?.count || 0);
 
       const [reportData] = await prisma.$queryRaw<[{ count: bigint }]>`
         SELECT COUNT(*) as count FROM listing.reports
@@ -556,7 +594,11 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
 
       return sendSuccess(reply, 200, {
         totalRevenue,
-        totalPayments,
+        totalVoucherDiscounts,
+        netRevenue,
+        totalCommission,
+        totalPayout,
+        totalBookings,
         totalReports,
       });
     } catch (err: any) {

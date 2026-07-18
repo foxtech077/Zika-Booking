@@ -2504,6 +2504,210 @@ export async function adminListingRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── GET /admin/financial-reports ──────────────────────────────────────────
+  app.get("/admin/financial-reports", {
+    preHandler: [requireAdmin],
+    schema: {
+      tags: ["Admin Financial Reports"],
+      summary: "Get financial report data with voucher details (admin)",
+      security: [{ bearerAuth: [] }],
+      querystring: {
+        type: "object",
+        properties: {
+          startDate: { type: "string", format: "date-time", description: "Filter bookings from this date" },
+          endDate: { type: "string", format: "date-time", description: "Filter bookings up to this date" },
+          country: { type: "string", description: "Filter by listing country code" },
+          status: { type: "string", description: "Filter by booking status" },
+          ...PageQuery,
+        },
+      },
+      response: {
+        200: ok({
+          type: "object",
+          properties: {
+            transactions: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  reference: { type: "string" },
+                  listingName: { type: "string", nullable: true },
+                  listingType: { type: "string" },
+                  travellerName: { type: "string" },
+                  travellerEmail: { type: "string" },
+                  providerId: { type: "string" },
+                  subtotal: { type: "number" },
+                  voucherCode: { type: "string", nullable: true },
+                  voucherDiscount: { type: "number" },
+                  amount: { type: "number" },
+                  currency: { type: "string" },
+                  commissionRate: { type: "number" },
+                  commissionAmount: { type: "number" },
+                  providerPayout: { type: "number" },
+                  paymentStatus: { type: "string", nullable: true },
+                  paymentGateway: { type: "string", nullable: true },
+                  date: { type: "string" },
+                  country: { type: "string", nullable: true },
+                },
+              },
+            },
+            summary: {
+              type: "object",
+              properties: {
+                grossRevenue: { type: "number" },
+                totalVoucherDiscounts: { type: "number" },
+                netRevenue: { type: "number" },
+                totalCommission: { type: "number" },
+                totalPayout: { type: "number" },
+                totalBookings: { type: "number" },
+              },
+            },
+            total: { type: "integer" },
+            page: { type: "integer" },
+            limit: { type: "integer" },
+          },
+        }),
+        401: ErrorResponse,
+        403: ErrorResponse,
+      },
+    },
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!checkAdminRole(req, reply)) return;
+    const admin = req as AdminRequest;
+    const { startDate, endDate, country, status, page = "1", limit = "50" } = req.query as Record<string, string>;
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const take = Math.min(parseInt(limit, 10), 100);
+
+    const isCountryManager = admin.adminRole === "country_manager" || admin.adminRole === "sales";
+
+    const dateFilter: any = {};
+    if (startDate) dateFilter.gte = new Date(startDate);
+    if (endDate) dateFilter.lte = new Date(endDate);
+    const hasDateFilter = Object.keys(dateFilter).length > 0;
+
+    const countryFilter: any = isCountryManager
+      ? (country
+        ? (admin.countryScope.includes(country)
+          ? { listing: { country } }
+          : { listing: { country: { in: [] } } })
+        : { listing: { country: { in: admin.countryScope } } })
+      : (country ? { listing: { country } } : {});
+
+    const where: any = {
+      AND: [
+        hasDateFilter ? { createdAt: dateFilter } : {},
+        status ? { status } : {},
+        countryFilter,
+        // Only include confirmed/completed bookings for financial reports
+        { status: { in: ["confirmed", "completed"] } },
+      ],
+    };
+
+    try {
+      const [total, bookings] = await Promise.all([
+        prisma.booking.count({ where }),
+        prisma.booking.findMany({
+          where, skip, take,
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            reference: true,
+            listingType: true,
+            guestFirstName: true,
+            guestLastName: true,
+            guestEmail: true,
+            providerId: true,
+            subtotal: true,
+            voucherCode: true,
+            voucherDiscount: true,
+            totalAmount: true,
+            currency: true,
+            commissionRate: true,
+            commissionAmount: true,
+            providerPayout: true,
+            createdAt: true,
+            paymentId: true,
+            listing: { select: { name: true, country: true } },
+          },
+        }),
+      ]);
+
+      // Fetch payment data for these bookings
+      const bookingIds = bookings.map((b) => b.id);
+      let paymentMap = new Map<string, { status: string; paymentProvider: string }>();
+      
+      if (bookingIds.length > 0) {
+        try {
+          const AUTH_SERVICE_URL = process.env["AUTH_SERVICE_URL"] ?? "http://localhost:3001";
+          const PAYMENT_SERVICE_URL = process.env["PAYMENT_SERVICE_URL"] ?? "http://localhost:3003";
+          
+          // Fetch payments from payment service
+          const paymentRes = await fetch(`${PAYMENT_SERVICE_URL}/admin/payments?bookingIds=${bookingIds.join(",")}`, {
+            headers: { "Content-Type": "application/json" },
+          });
+          
+          if (paymentRes.ok) {
+            const paymentData = await paymentRes.json() as { data?: any[] };
+            const payments = paymentData?.data ?? [];
+            for (const p of payments) {
+              if (p.bookingId) {
+                paymentMap.set(p.bookingId, {
+                  status: p.status,
+                  paymentProvider: p.paymentProvider,
+                });
+              }
+            }
+          }
+        } catch {
+          // Payment service unavailable — continue without payment details
+        }
+      }
+
+      // Build transaction list
+      const transactions = bookings.map((b) => {
+        const payment = paymentMap.get(b.id);
+        const guestName = `${b.guestFirstName} ${b.guestLastName}`.trim();
+        
+        return {
+          id: b.id,
+          reference: b.reference,
+          listingName: b.listing?.name ?? "Unknown Listing",
+          listingType: b.listingType,
+          travellerName: guestName || "Guest",
+          travellerEmail: b.guestEmail,
+          providerId: b.providerId,
+          subtotal: Number(b.subtotal),
+          voucherCode: b.voucherCode ?? null,
+          voucherDiscount: Number(b.voucherDiscount),
+          amount: Number(b.totalAmount),
+          currency: b.currency,
+          commissionRate: Number(b.commissionRate) * 100, // Convert to percentage
+          commissionAmount: Number(b.commissionAmount),
+          providerPayout: Number(b.providerPayout),
+          paymentStatus: payment?.status ?? null,
+          paymentGateway: payment?.paymentProvider ?? null,
+          date: b.createdAt.toISOString(),
+          country: b.listing?.country ?? null,
+        };
+      });
+
+      // Calculate summary
+      const summary = {
+        grossRevenue: transactions.reduce((sum, t) => sum + t.subtotal, 0),
+        totalVoucherDiscounts: transactions.reduce((sum, t) => sum + t.voucherDiscount, 0),
+        netRevenue: transactions.reduce((sum, t) => sum + t.amount, 0),
+        totalCommission: transactions.reduce((sum, t) => sum + t.commissionAmount, 0),
+        totalPayout: transactions.reduce((sum, t) => sum + t.providerPayout, 0),
+        totalBookings: transactions.length,
+      };
+
+      return sendSuccess(reply, 200, { transactions, summary, total, page: parseInt(page, 10), limit: take });
+    } catch (err: any) {
+      return sendError(reply, 400, "BAD_REQUEST", err?.message ?? "Failed to fetch financial reports.");
+    }
+  });
+
   // ── GET /admin/bookings/availability ─────────────────────────────────────
   // MUST be registered BEFORE /admin/bookings/:id to prevent Fastify from
   // matching the static segment "availability" as the :id parameter.
