@@ -34,11 +34,14 @@ function shortId(value?: string | null) {
 }
 
 function conversationSummary(conversation: TravellerConversation) {
-  const pieces = [`Listing ${shortId(conversation.listingId)}`];
-  if (conversation.bookingId) {
+  const pieces: string[] = [];
+  if (conversation.providerName) pieces.push(conversation.providerName);
+  if (conversation.bookingReference) {
+    pieces.push(`Booking #${conversation.bookingReference}`);
+  } else if (conversation.bookingId) {
     pieces.push(`Booking ${shortId(conversation.bookingId)}`);
   }
-  return pieces.join(" · ");
+  return pieces.length ? pieces.join(" · ") : `Listing ${shortId(conversation.listingId)}`;
 }
 
 function ConversationSkeleton() {
@@ -102,7 +105,7 @@ function EmptyState({
   );
 }
 
-function MessageBubble({ message }: { message: ConversationMessage }) {
+function MessageBubble({ message, providerName }: { message: ConversationMessage; providerName?: string }) {
   const isMine = message.senderType === "guest";
   const isSystem = message.senderType === "system";
 
@@ -115,7 +118,7 @@ function MessageBubble({ message }: { message: ConversationMessage }) {
             isMine ? "border-[#0c2614] bg-[#0c2614] text-white" : "border-emerald-200 bg-emerald-50 text-emerald-700",
           )}
         >
-          {isMine ? "Me" : "Pr"}
+          {isMine ? "Me" : (providerName ? providerName.slice(0, 2).toUpperCase() : "Pr")}
         </div>
       )}
       <div className={cn("max-w-[82%] space-y-2", isMine && "flex flex-col items-end", isSystem && "max-w-[92%]")}>
@@ -381,7 +384,7 @@ export default function TravellerMessagesPage() {
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className={cn("truncate text-sm font-semibold", isActive ? "text-white" : "text-slate-950")}>
-                                  Conversation {shortId(conversation.id)}
+                                  {conversation.providerName || `Provider ${shortId(conversation.providerId)}`}
                                 </p>
                                 <p className={cn("truncate text-xs", isActive ? "text-slate-300" : "text-slate-500")}>
                                   {conversationSummary(conversation)}
@@ -471,7 +474,7 @@ export default function TravellerMessagesPage() {
                         <MessageSquare className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-950">Conversation {shortId(activeConversation.id)}</p>
+                        <p className="truncate font-semibold text-slate-950">{activeConversation.providerName || `Provider ${shortId(activeConversation.providerId)}`}</p>
                         <p className="truncate text-xs text-slate-500">{conversationSummary(activeConversation)}</p>
                       </div>
                     </div>
@@ -514,7 +517,7 @@ export default function TravellerMessagesPage() {
                   ) : (
                     <div className="space-y-4">
                       {messages.map((message) => (
-                        <MessageBubble key={message.id} message={message} />
+                        <MessageBubble key={message.id} message={message} providerName={activeConversation?.providerName} />
                       ))}
                     </div>
                   )}

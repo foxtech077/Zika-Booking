@@ -50,6 +50,9 @@ interface ConversationDto {
   bookingId: string | null;
   guestId: string;
   providerId: string;
+  guestName: string;
+  providerName: string;
+  bookingReference?: string | null;
   status: "open" | "closed";
   lastMessage: LastMessageDto | null;
   updatedAt: string;
@@ -156,10 +159,10 @@ function normalizeConversation(item: ConversationDto, bookingLookup: Map<string,
   return {
     id: item.id,
     guestId: item.guestId,
-    guestName: booking?.guestName ?? `Guest ${shortId(item.guestId)}`,
+    guestName: item.guestName || booking?.guestName || `Guest ${shortId(item.guestId)}`,
     listingId: item.listingId,
     listingName: booking?.listingName ?? `Listing ${shortId(item.listingId)}`,
-    bookingId: booking?.bookingReference ?? item.bookingId ?? undefined,
+    bookingId: item.bookingReference ?? booking?.bookingReference ?? item.bookingId ?? undefined,
     lastMessage: item.lastMessage?.body ?? "",
     lastMessageAt: item.lastMessage?.createdAt ?? item.updatedAt,
     unreadCount: 0,
