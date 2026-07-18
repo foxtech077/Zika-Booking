@@ -4,11 +4,12 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User, HelpCircle, Shield, FileText } from "lucide-react";
+import { ChevronDown, Heart, LogOut, Menu, MessageSquare, Star, User, HelpCircle, Shield, FileText, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
 import { useAuthStore } from "@/stores/auth";
 import { fetchUnreadConversationCount } from "@/services/traveller";
+import { useUnreadNotificationCount } from "@/hooks/useNotifications";
 
 const TRAVELLER_ROUTES = {
   destinations: "/traveller",
@@ -54,6 +55,8 @@ export function TravellerHeader({
     staleTime: 15_000,
     enabled: !!user,
   });
+
+  const { data: unreadNotifData } = useUnreadNotificationCount(!!user);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -225,6 +228,20 @@ export function TravellerHeader({
             {/* Authenticated */}
             {user && (
               <>
+                {/* Notification bell */}
+                <Link
+                  href="/traveller/notifications"
+                  aria-label="Open notifications"
+                  className="relative w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all mr-1"
+                >
+                  <Bell className="w-[18px] h-[18px]" />
+                  {unreadNotifData && unreadNotifData.count > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white">
+                      {unreadNotifData.count > 99 ? "99+" : unreadNotifData.count}
+                    </span>
+                  )}
+                </Link>
+
                 {/* Avatar dropdown */}
                 <div className="relative" ref={dropdownRef}>
                   <button
@@ -320,6 +337,22 @@ export function TravellerHeader({
                         )}
                       </Link>
                       <Link
+                        href="/traveller/notifications"
+                        onClick={() => setMenuOpen(false)}
+                        className={cn(
+                          "flex w-full items-center gap-2.5 px-4 py-2 text-sm transition-all",
+                          pathname === "/traveller/notifications" ? "bg-slate-50 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                        )}
+                      >
+                        <Bell className="h-4 w-4 text-green-600" />
+                        <span className="flex-1">Notifications</span>
+                        {unreadNotifData && unreadNotifData.count > 0 && (
+                          <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-rose-100 px-1 text-[10px] font-bold text-rose-700">
+                            {unreadNotifData.count > 99 ? "99+" : unreadNotifData.count}
+                          </span>
+                        )}
+                      </Link>
+                      <Link
                         href={TRAVELLER_ROUTES.wishlist}
                         onClick={() => setMenuOpen(false)}
                         className={cn(
@@ -400,6 +433,26 @@ export function TravellerHeader({
                 {user ? (
                   <div className="grid gap-2">
                     {mobileNavBtn("Messages", TRAVELLER_ROUTES.messages, isMessagesActive)}
+                    <Link
+                      href="/traveller/notifications"
+                      className={cn(
+                        "flex items-center justify-between rounded-xl border px-4 py-3 text-sm font-semibold transition-all",
+                        pathname === "/traveller/notifications"
+                          ? "border-[#0c2614] bg-[#0c2614] text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-[#1D8D2B] hover:text-[#0c2614]",
+                      )}
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span>Notifications</span>
+                        {unreadNotifData && unreadNotifData.count > 0 && (
+                          <span className="inline-flex min-w-4 items-center justify-center rounded-full bg-rose-100 px-1 text-[10px] font-bold text-rose-700">
+                            {unreadNotifData.count > 99 ? "99+" : unreadNotifData.count}
+                          </span>
+                        )}
+                      </span>
+                      <Bell className={cn("h-4 w-4", pathname === "/traveller/notifications" ? "text-white" : "text-slate-400")} />
+                    </Link>
                     {mobileNavBtn("Wishlist", TRAVELLER_ROUTES.wishlist, isWishlistActive)}
                     {mobileNavBtn("My Reviews", TRAVELLER_ROUTES.reviews, isReviewsActive)}
                     {mobileNavBtn("Profile", TRAVELLER_ROUTES.profile, isProfileActive)}
