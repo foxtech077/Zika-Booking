@@ -84,7 +84,7 @@ export default function ProviderMessagesScreen() {
         }>(`/listings/${c.listingId}/public`);
         const d = res.data.data;
         const sorted = [...d.photos].sort((a, b) => a.position - b.position);
-        return { name: d.name, photoUrl: sorted[0]?.cdnUrl ?? null, category: d.category };
+        return { name: d.name, photoUrl: sorted[0]?.cdnUrl ?? null, category: d.category, isInactive: false };
       },
       enabled: !!c.listingId,
       staleTime: 5 * 60_000,

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import type { PublicUser } from "@zika/types";
 import { getCurrencyForCountry } from "../lib/currency";
 
@@ -64,11 +65,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user: merged });
   },
 
-  clearAuth: async () => {
-    await SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY);
-    await SecureStore.deleteItemAsync(USER_KEY);
-    set({ user: null, accessToken: null });
-  },
+clearAuth: async () => {
+  try {
+    await GoogleSignin.signOut();
+  } catch (error) {
+    console.warn("Google sign out failed:", error);
+  }
+
+  try {
+    await Promise.all([
+      SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
+      SecureStore.deleteItemAsync(USER_KEY),
+    ]);
+  } catch (error) {
+    console.warn("Failed to clear auth storage:", error);
+  } finally {
+    set({
+      user: null,
+      accessToken: null,
+    });
+  }
+},
 
   setCompletedOnboarding: async (completed: boolean) => {
     await SecureStore.setItemAsync(ONBOARDING_COMPLETED_KEY, completed ? "true" : "false");

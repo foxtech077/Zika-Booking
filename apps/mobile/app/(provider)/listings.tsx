@@ -21,6 +21,7 @@ import { listingApi } from "../../lib/listing-api";
 import { K } from "../../constants/theme";
 import { useAuthStore } from "../../store/auth";
 import { formatCurrency, getCurrencyForCountry } from "../../lib/currency";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ interface DashboardStats {
 const CAT_TABS = [
   { key: "",          label: "All" },
   { key: "hotel",     label: "Hotels" },
-  { key: "apartment", label: "Apartments" },
+  { key: "apartment", label: "Homes" },
   { key: "car",       label: "Car Rentals" },
 ];
 
@@ -68,7 +69,7 @@ const STATUS_TABS = [
   { key: "suspended",       label: "Suspended" },
 ];
 
-const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Apartment", car: "Car Rental" };
+const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Home", car: "Car Rental" };
 
 const STATUS_CFG: Record<string, { label: string; bg: string; text: string }> = {
   active:         { label: "Active",     bg: "#00A86B", text: "#fff" },
@@ -259,6 +260,12 @@ export default function ListingsScreen() {
     },
     enabled: !!user,
   });
+
+  useRefreshOnFocus(useCallback(() => {
+    void listingsQ.refetch();
+    void summaryQ.refetch();
+    void dashQ.refetch();
+  }, [listingsQ, summaryQ, dashQ]));
 
   // Mutations
   const deactivateMut = useMutation({

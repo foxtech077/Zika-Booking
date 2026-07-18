@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "kainook",
+    "name": "Kainook",
     "slug": "kainook",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,11 +10,12 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1a73e8"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.kainook.app",
+      "buildNumber": "1",
       "entitlements": {
         "com.apple.developer.applesignin": [
           "Default"
@@ -28,7 +29,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1a73e8"
+        "backgroundColor": "#FFFFFF"
       },
       "package": "com.kainook.app",
       "googleServicesFile": "./google-services.json",
@@ -69,7 +70,7 @@
       [
         "@react-native-google-signin/google-signin",
         {
-          "iosUrlScheme": "com.googleusercontent.apps.397191986681-40j0eqotdon89ogv4cgvfsfpb48ehc7h"
+          "iosUrlScheme": "com.googleusercontent.apps.1022728776661-6aucvg2l0r7suuogj2m9lgcjodetb2rn"
         }
       ],
       "expo-font",
@@ -89,9 +90,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "7115f44e-c149-4511-ae7b-b5c7514a464d"
+        "projectId": "eb02914a-9afa-4816-8d96-31d713f19022"
       }
     },
-    "owner": "abishekjoel"
+    "owner": "kainook.it"
   }
 }

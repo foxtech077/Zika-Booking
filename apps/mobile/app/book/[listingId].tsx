@@ -146,6 +146,7 @@ export default function BookingFlowScreen() {
   const user = useAuthStore((s) => s.user);
   const params = useLocalSearchParams<{
     listingId: string;
+    roomTypeId?: string;
     checkIn?: string;
     checkOut?: string;
     pickupDatetime?: string;
@@ -157,6 +158,7 @@ export default function BookingFlowScreen() {
 
   const {
     listingId,
+    roomTypeId,
     checkIn,
     checkOut,
     pickupDatetime,
@@ -229,10 +231,10 @@ export default function BookingFlowScreen() {
   // Derive timer state label
   const timerState: "green" | "amber" | "red" | null =
     msLeft < 0 || !lockState ? null
-    : msLeft > 120_000 ? "green"
-    : msLeft > 30_000 ? "amber"
-    : msLeft > 0 ? "red"
-    : null;
+      : msLeft > 120_000 ? "green"
+        : msLeft > 30_000 ? "amber"
+          : msLeft > 0 ? "red"
+            : null;
 
   // Record the lock start time once the lock is first set
   useEffect(() => {
@@ -282,13 +284,14 @@ export default function BookingFlowScreen() {
   const LOCK_TOTAL_MS = 300_000;
   const progressFraction =
     msLeft < 0 ? 1
-    : Math.max(0, Math.min(1, msLeft / LOCK_TOTAL_MS));
+      : Math.max(0, Math.min(1, msLeft / LOCK_TOTAL_MS));
 
   // ── Try to Rebook handler ─────────────────────────────────────────────────
   async function handleTryRebook() {
     setReBookingLoading(true);
     try {
       const body: Record<string, unknown> = { listingId, deliveryRequested: false };
+      if (roomTypeId) body.roomTypeId = roomTypeId;
       if (checkIn) body.checkIn = checkIn;
       if (checkOut) body.checkOut = checkOut;
       if (pickupDatetime) body.pickupDatetime = pickupDatetime;
@@ -421,7 +424,7 @@ export default function BookingFlowScreen() {
             cached.pickupDatetime === pickupDatetime &&
             cached.returnDatetime === returnDatetime &&
             (guests ? cached.guests === guests : !cached.guests);
-          
+
           const expiresAtMs = new Date(cached.expiresAt).getTime();
           if (isMatch && expiresAtMs > Date.now()) {
             lockStartMsRef.current = cached.lockStartMs ?? Date.now();
@@ -439,6 +442,7 @@ export default function BookingFlowScreen() {
           listingId,
           deliveryRequested: false,
         };
+        if (roomTypeId) body.roomTypeId = roomTypeId;
         if (checkIn) body.checkIn = checkIn;
         if (checkOut) body.checkOut = checkOut;
         if (pickupDatetime) body.pickupDatetime = pickupDatetime;
@@ -536,7 +540,7 @@ export default function BookingFlowScreen() {
       setLockState((prev) => {
         if (!prev) return prev;
         const updated = { ...prev, expiresAt: newExpiresAt };
-        
+
         // Update persisted lock
         SecureStore.getItemAsync("ZIKA_ACTIVE_LOCK").then((cachedLockRaw) => {
           if (cachedLockRaw) {
@@ -545,7 +549,7 @@ export default function BookingFlowScreen() {
             cached.lockState.expiresAt = newExpiresAt;
             SecureStore.setItemAsync("ZIKA_ACTIVE_LOCK", JSON.stringify(cached));
           }
-        }).catch(() => {});
+        }).catch(() => { });
 
         return updated;
       });
@@ -598,7 +602,7 @@ export default function BookingFlowScreen() {
     },
     onSuccess: (data) => {
       bookingCreatedRef.current = true;
-      SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => {});
+      SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => { });
       router.push({
         pathname: "/pay/[bookingId]",
         params: {
@@ -858,7 +862,7 @@ export default function BookingFlowScreen() {
       : null;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* Dynamic header title */}
       <Stack.Screen options={{ title: listingTitle ? listingTitle : "Book", headerBackTitle: "Back" }} />
 
@@ -910,8 +914,8 @@ export default function BookingFlowScreen() {
                   width: `${Math.round(progressFraction * 100)}%` as any,
                   backgroundColor:
                     timerState === "green" ? "#16a34a"
-                    : timerState === "amber" ? "#d97706"
-                    : "#dc2626",
+                      : timerState === "amber" ? "#d97706"
+                        : "#dc2626",
                 },
               ]}
             />
@@ -1130,7 +1134,7 @@ export default function BookingFlowScreen() {
 
                 {/* Best discount selection logic — promotion vs voucher, best discount wins */}
                 {(() => {
-                  const promoAmt = promoDiscountTotal;
+                  const promoAmt = pricing.discountAmount ?? promoDiscountTotal;
                   const voucherAmt = voucherDiscount ?? 0;
                   if (promoAmt > 0 || voucherAmt > 0) {
                     const bestIsVoucher = voucherAmt > 0 && voucherAmt >= promoAmt;
@@ -1143,8 +1147,8 @@ export default function BookingFlowScreen() {
                             {bestIsVoucher
                               ? `Voucher (${voucherCode})`
                               : promoBadgeLabel
-                              ? `Promotion (${promoBadgeLabel})`
-                              : "Promotion discount"}
+                                ? `Promotion (${promoBadgeLabel})`
+                                : "Promotion discount"}
                             {bothExist ? " ✓ Best deal" : ""}
                           </Text>
                           <Text style={[styles.priceValue, styles.discountValue]}>
@@ -1172,7 +1176,9 @@ export default function BookingFlowScreen() {
 
                 {pricing.serviceFee != null && pricing.serviceFee > 0 && (
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Service fee</Text>
+                    <Text style={styles.priceLabel}>
+                      Service fee ({Math.round((pricing.serviceFee / Math.max(1, pricing.subtotal - (pricing.discountAmount ?? promoDiscountTotal))) * 100)}%)
+                    </Text>
                     <Text style={styles.priceValue}>
                       + {formatCurrency(pricing.serviceFee, pricing.currency)}
                     </Text>
@@ -1198,14 +1204,16 @@ export default function BookingFlowScreen() {
                 )}
 
                 {(() => {
-                  const promoAmt   = promoDiscountTotal;
+                  const promoAmt = pricing.discountAmount ?? promoDiscountTotal;
                   const voucherAmt = voucherDiscount ?? 0;
-                  const bestAmt    = Math.max(promoAmt, voucherAmt);
-                  // pricing.total is computed server-side with no promotion discount
-                  // baked in (the backend's own promotion logic is a stub that always
-                  // returns 0 — see the comment above `promo` further up), so the full
-                  // best-of-promo-or-voucher amount is subtracted here on the frontend.
-                  const displayTotal = Math.max(0, pricing.total - bestAmt);
+                  const bestAmt = Math.max(promoAmt, voucherAmt);
+                  const subAfterDiscount = Math.max(0, pricing.subtotal - bestAmt);
+                  const sFee = pricing.serviceFee ?? 0;
+                  const tFee = pricing.taxAmount ?? 0;
+                  const dFee = pricing.deliveryFee ?? 0;
+
+                  // Total = Subtotal after discount + Service fee + Taxes + Delivery fee
+                  const displayTotal = subAfterDiscount + sFee + tFee + dFee;
                   return (
                     <View style={[styles.priceRow, styles.totalRow]}>
                       <Text style={styles.totalLabel}>Total</Text>
@@ -1280,17 +1288,17 @@ export default function BookingFlowScreen() {
             <TouchableOpacity
               style={[
                 styles.primaryBtn,
-                (!termsChecked || isExpired || msLeft < 10_000) && styles.primaryBtnDisabled,
+                (!termsChecked || isExpired) && styles.primaryBtnDisabled,
               ]}
               onPress={() => {
                 if (!termsChecked) return;
-                if (isExpired || msLeft < 10_000) {
+                if (isExpired) {
                   setExpiredModal(true);
                   return;
                 }
                 createBookingMutation.mutate();
               }}
-              disabled={!termsChecked || createBookingMutation.isPending || isExpired || msLeft < 10_000}
+              disabled={!termsChecked || createBookingMutation.isPending || isExpired}
             >
               {createBookingMutation.isPending ? (
                 <ActivityIndicator size="small" color="#fff" />
@@ -1308,9 +1316,8 @@ export default function BookingFlowScreen() {
             </TouchableOpacity>
           </View>
         )}
-
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1591,7 +1598,7 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: "#16a34a",
     borderRadius: 12,
-    paddingVertical: 14,
+    padding: 14,
     alignItems: "center",
     marginBottom: 12,
   },

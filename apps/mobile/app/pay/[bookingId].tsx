@@ -97,18 +97,18 @@ interface CountryOption {
 }
 
 const COUNTRY_OPTIONS: CountryOption[] = [
-  { prefix: "+254", name: "Kenya",        currency: "KES", flag: "🇰🇪" },
-  { prefix: "+256", name: "Uganda",       currency: "UGX", flag: "🇺🇬" },
-  { prefix: "+255", name: "Tanzania",     currency: "TZS", flag: "🇹🇿" },
-  { prefix: "+234", name: "Nigeria",      currency: "NGN", flag: "🇳🇬" },
-  { prefix: "+233", name: "Ghana",        currency: "GHS", flag: "🇬🇭" },
-  { prefix: "+27",  name: "South Africa", currency: "ZAR", flag: "🇿🇦" },
-  { prefix: "+91",  name: "India",        currency: "INR", flag: "🇮🇳" },
-  { prefix: "+1",   name: "USA / Canada", currency: "USD", flag: "🇺🇸" },
-  { prefix: "+44",  name: "UK",           currency: "GBP", flag: "🇬🇧" },
-  { prefix: "+971", name: "UAE",          currency: "AED", flag: "🇦🇪" },
+  { prefix: "+254", name: "Kenya", currency: "KES", flag: "🇰🇪" },
+  { prefix: "+256", name: "Uganda", currency: "UGX", flag: "🇺🇬" },
+  { prefix: "+255", name: "Tanzania", currency: "TZS", flag: "🇹🇿" },
+  { prefix: "+234", name: "Nigeria", currency: "NGN", flag: "🇳🇬" },
+  { prefix: "+233", name: "Ghana", currency: "GHS", flag: "🇬🇭" },
+  { prefix: "+27", name: "South Africa", currency: "ZAR", flag: "🇿🇦" },
+  { prefix: "+91", name: "India", currency: "INR", flag: "🇮🇳" },
+  { prefix: "+1", name: "USA / Canada", currency: "USD", flag: "🇺🇸" },
+  { prefix: "+44", name: "UK", currency: "GBP", flag: "🇬🇧" },
+  { prefix: "+971", name: "UAE", currency: "AED", flag: "🇦🇪" },
   { prefix: "+966", name: "Saudi Arabia", currency: "SAR", flag: "🇸🇦" },
-  { prefix: "+20",  name: "Egypt",        currency: "EGP", flag: "🇪🇬" },
+  { prefix: "+20", name: "Egypt", currency: "EGP", flag: "🇪🇬" },
 ];
 
 const COUNTRY_PREFIXES = COUNTRY_OPTIONS.map((c) => c.prefix);
@@ -1094,7 +1094,7 @@ export default function PaymentScreen() {
   const hasSavedMethods = savedMethods && savedMethods.length > 0;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Stack.Screen
         options={{
           headerBackVisible: !isProcessing,
@@ -1327,7 +1327,7 @@ export default function PaymentScreen() {
         </TouchableOpacity>
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1704,7 +1704,7 @@ const styles = StyleSheet.create({
     borderColor: "#16a34a",
   },
   termsLabel: { flex: 1, fontSize: 13, color: "#374151", lineHeight: 20 },
-  termsLink:  { color: "#16a34a", fontWeight: "700", textDecorationLine: "underline" },
+  termsLink: { color: "#16a34a", fontWeight: "700", textDecorationLine: "underline" },
   secondaryBtn: {
     borderWidth: 1,
     borderColor: "#d1d5db",

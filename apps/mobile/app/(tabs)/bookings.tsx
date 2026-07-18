@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { listingApi } from "../../lib/listing-api";
 import { ListingImage } from "../../components/ListingImage";
 import { K } from "../../constants/theme";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 
 const { width: W } = Dimensions.get("window");
 const PHOTO_H = Math.round(W * 0.56);
@@ -609,13 +610,13 @@ export default function BookingsScreen() {
       );
       return res.data.data;
     },
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   // "upcoming" is the only valid API filter for future/current bookings — split by date client-side
-  const { data: upcomingResult, isLoading: loadUpcoming } = useQuery(qOpts("upcoming"));
-  const { data: completedResult                         } = useQuery(qOpts("completed"));
-  const { data: cancelledResult                         } = useQuery(qOpts("cancelled"));
+  const { data: upcomingResult, isLoading: loadUpcoming, refetch: refetchUpcoming } = useQuery(qOpts("upcoming"));
+  const { data: completedResult, refetch: refetchCompleted                         } = useQuery(qOpts("completed"));
+  const { data: cancelledResult, refetch: refetchCancelled                         } = useQuery(qOpts("cancelled"));
 
   // Infinite query for specific filter chips (not "all")
   const [refreshing, setRefreshing] = useState(false);
@@ -626,6 +627,7 @@ export default function BookingsScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    refetch: refetchPaged,
   } = useInfiniteQuery<BookingsResponse>({
     queryKey: ["myBookings", "paged", activeChip],
     queryFn: async ({ pageParam }) => {
@@ -639,8 +641,15 @@ export default function BookingsScreen() {
     initialPageParam: 0,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: activeChip !== "all",
-    staleTime: 30_000,
+    staleTime: 0,
   });
+
+  useRefreshOnFocus(useCallback(() => {
+    void refetchUpcoming();
+    void refetchCompleted();
+    void refetchCancelled();
+    if (activeChip !== "all") void refetchPaged();
+  }, [refetchUpcoming, refetchCompleted, refetchCancelled, refetchPaged, activeChip]));
 
   const stats = {
     upcoming:  upcomingResult?.total  ?? 0,

@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useMemo, memo } from "react";
+import { useState, useCallback, useEffect, useMemo, memo, useRef } from "react";
 import {
   View,
   Text,
@@ -34,10 +34,14 @@ import { useAuthStore } from "../store/auth";
 import { ListingImage } from "../components/ListingImage";
 import { ActivePromotion, applyPromotion } from "../lib/promotions";
 import { useLocationStore } from "../store/location";
-
+import { useRefreshOnFocus } from "../hooks/useRefreshOnFocus";
 
 // Deterministic coordinates calculator from search center + distance
-function getListingCoordinates(item: SearchResult, centerLat: number, centerLng: number) {
+function getListingCoordinates(
+  item: SearchResult,
+  centerLat: number,
+  centerLng: number,
+) {
   if ((item as any).lat != null && (item as any).lng != null) {
     return {
       latitude: Number((item as any).lat),
@@ -56,7 +60,8 @@ function getListingCoordinates(item: SearchResult, centerLat: number, centerLng:
   // 1 degree latitude = 111.32 km
   const latOffset = (distance / 111.32) * Math.cos(angle);
   const radLat = (centerLat * Math.PI) / 180;
-  const lngOffset = (distance / (111.32 * Math.cos(radLat) || 1)) * Math.sin(angle);
+  const lngOffset =
+    (distance / (111.32 * Math.cos(radLat) || 1)) * Math.sin(angle);
 
   return {
     latitude: centerLat + latOffset,
@@ -64,7 +69,9 @@ function getListingCoordinates(item: SearchResult, centerLat: number, centerLng:
   };
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+import DateRangePickerModal, { calcNights, fmtDisplay } from "../components/ui/DateRangePickerModal";
+
+// ─── Constants & Types ────────────────────────────────────────────────────────────────
 
 const PRIMARY = "#1B5E20";
 const DANGER = "#dc2626";
@@ -75,30 +82,57 @@ const BORDER = "#e5e7eb";
 const BG = "#f9fafb";
 
 // Fallback coordinates for common cities (used when geocoding API fails due to auth)
-const CITY_COORDS: Record<string, { lat: number; lng: number; town: string; country: string }> = {
+const CITY_COORDS: Record<
+  string,
+  { lat: number; lng: number; town: string; country: string }
+> = {
   nairobi: { lat: -1.2921, lng: 36.8219, town: "Nairobi", country: "KE" },
   mombasa: { lat: -4.0435, lng: 39.6682, town: "Mombasa", country: "KE" },
   kisumu: { lat: -0.0917, lng: 34.7679, town: "Kisumu", country: "KE" },
   kampala: { lat: 0.3476, lng: 32.5825, town: "Kampala", country: "UG" },
-  "dar es salaam": { lat: -6.7924, lng: 39.2083, town: "Dar es Salaam", country: "TZ" },
+  "dar es salaam": {
+    lat: -6.7924,
+    lng: 39.2083,
+    town: "Dar es Salaam",
+    country: "TZ",
+  },
   lagos: { lat: 6.5244, lng: 3.3792, town: "Lagos", country: "NG" },
-  accra: { lat: 5.6037, lng: -0.1870, town: "Accra", country: "GH" },
+  accra: { lat: 5.6037, lng: -0.187, town: "Accra", country: "GH" },
   cairo: { lat: 30.0444, lng: 31.2357, town: "Cairo", country: "EG" },
   dubai: { lat: 25.2048, lng: 55.2708, town: "Dubai", country: "AE" },
   london: { lat: 51.5074, lng: -0.1278, town: "London", country: "GB" },
   paris: { lat: 48.8566, lng: 2.3522, town: "Paris", country: "FR" },
-  "new york": { lat: 40.7128, lng: -74.0060, town: "New York", country: "US" },
+  "new york": { lat: 40.7128, lng: -74.006, town: "New York", country: "US" },
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type SortOption = "recommended" | "price_asc" | "price_desc" | "distance" | "newest";
+type SortOption =
+  | "recommended"
+  | "price_asc"
+  | "price_desc"
+  | "distance"
+  | "newest";
 
 interface GeoResult {
   lat: number;
   lng: number;
   town: string;
   country: string;
+}
+
+interface PromoBadge {
+  labelText: string;
+  labelColour?: string;
+}
+
+interface RoomTypeSummary {
+  id: string;
+  name: string;
+  roomType: string;
+  pricePerNight: number | string;
+  unitCount?: number | null;
+  maxGuests?: number | null;
 }
 
 interface SearchResult {
@@ -116,6 +150,7 @@ interface SearchResult {
   starRating: number | null;
   isAccredited: boolean;
   roomType: string | null;
+  roomTypes?: RoomTypeSummary[] | null;
   bedrooms: number | null;
   bathrooms: number | null;
   maxGuests: number | null;
@@ -126,6 +161,7 @@ interface SearchResult {
   seats: number | null;
   isFavourited: boolean;
   longStayDiscountEnabled?: boolean;
+  promoBadge?: PromoBadge | null;
 }
 
 interface SearchResponse {
@@ -149,11 +185,15 @@ interface Promotion {
 
 // ─── Category tabs ────────────────────────────────────────────────────────────
 
-const CATEGORY_TABS: { key: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { key: "hotel", label: "Hotels", icon: "business-outline" },
-  { key: "apartment", label: "Apartments", icon: "home-outline" },
-  { key: "car", label: "Cars", icon: "car-outline" },
-];
+const CATEGORY_TABS: {
+  key: string;
+  label: string;
+  icon: keyof typeof Ionicons.glyphMap;
+}[] = [
+    { key: "hotel", label: "Hotels", icon: "business-outline" },
+    { key: "apartment", label: "Homes", icon: "home-outline" },
+    { key: "car", label: "Cars", icon: "car-outline" },
+  ];
 
 // ─── Sort options ─────────────────────────────────────────────────────────────
 
@@ -197,14 +237,22 @@ function CancellationBadge({ policy }: { policy: string }) {
   const bg = isGreen ? "#ecfdf5" : isAmber ? "#fffbeb" : "#fef2f2";
   const label = policy.charAt(0).toUpperCase() + policy.slice(1);
   return (
-    <View style={[badgeStyles.badge, { backgroundColor: bg, borderColor: color }]}>
+    <View
+      style={[badgeStyles.badge, { backgroundColor: bg, borderColor: color }]}
+    >
       <Text style={[badgeStyles.badgeText, { color }]}>{label}</Text>
     </View>
   );
 }
 
 const badgeStyles = StyleSheet.create({
-  badge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, alignSelf: "flex-start" },
+  badge: {
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    alignSelf: "flex-start",
+  },
   badgeText: { fontSize: 11, fontWeight: "600" },
 });
 
@@ -215,9 +263,21 @@ function SkeletonCard() {
     <View style={cardStyles.card}>
       <View style={[cardStyles.photo, skStyles.rect]} />
       <View style={cardStyles.body}>
-        <View style={[skStyles.rect, { height: 14, width: "70%", borderRadius: 4, marginBottom: 8 }]} />
-        <View style={[skStyles.rect, { height: 12, width: "45%", borderRadius: 4, marginBottom: 8 }]} />
-        <View style={[skStyles.rect, { height: 12, width: "55%", borderRadius: 4 }]} />
+        <View
+          style={[
+            skStyles.rect,
+            { height: 14, width: "70%", borderRadius: 4, marginBottom: 8 },
+          ]}
+        />
+        <View
+          style={[
+            skStyles.rect,
+            { height: 12, width: "45%", borderRadius: 4, marginBottom: 8 },
+          ]}
+        />
+        <View
+          style={[skStyles.rect, { height: 12, width: "55%", borderRadius: 4 }]}
+        />
       </View>
     </View>
   );
@@ -262,7 +322,25 @@ const ResultCard = memo(function ResultCard({
   const isCar = category === "car";
   const price = isCar ? item.dailyRate : item.nightlyRate;
   const priceLabel = isCar ? "/day" : "/night";
-  const promoted = applyPromotion(price, promotion ?? null);
+
+  // Derive promotion: item.promoBadge takes priority over global active promotion
+  const promoPercentFromBadge = item.promoBadge?.labelText
+    ? parseFloat(item.promoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
+
+  const effectivePromo: ActivePromotion | null = item.promoBadge && promoPercentFromBadge > 0
+    ? {
+      activity: isCar ? "car" : category === "apartment" ? "apartment" : "hotel",
+      discountType: "percentage",
+      discountValue: String(promoPercentFromBadge),
+      labelText: item.promoBadge.labelText,
+      bannerTitle: item.promoBadge.labelText,
+      status: "active",
+      applyToBooking: true,
+    }
+    : promotion ?? null;
+
+  const promoted = applyPromotion(price, effectivePromo);
 
   function handlePress() {
     const params: Record<string, string> = {};
@@ -277,17 +355,31 @@ const ResultCard = memo(function ResultCard({
     router.push({ pathname: `/listing/${item.id}` as any, params });
   }
 
-  // Prefer backend-provided voucher details if exposed, otherwise fall back to category default
-  const voucherCode = (item as any).voucherCode || (item as any).activeVoucher?.code || (isCar ? "SAFARI20" : "WELCOME10");
+  // Only display voucher badge if backend explicitly returns a voucher code
+  const voucherCode = (item as any).voucherCode || (item as any).activeVoucher?.code || null;
 
   return (
-    <TouchableOpacity style={cardStyles.card} onPress={handlePress} activeOpacity={0.88}>
+    <TouchableOpacity
+      style={cardStyles.card}
+      onPress={handlePress}
+      activeOpacity={0.88}
+    >
       {/* Photo */}
       <View style={cardStyles.photoWrapper}>
         {!imgError && signedPhotoUrl ? (
-          <ListingImage uri={signedPhotoUrl} style={cardStyles.photo} onError={() => setImgError(true)} />
+          <ListingImage
+            uri={signedPhotoUrl}
+            style={cardStyles.photo}
+            onError={() => setImgError(true)}
+          />
         ) : (
-          <View style={[cardStyles.photo, cardStyles.photoPlaceholder, { alignItems: "center", justifyContent: "center" }]}>
+          <View
+            style={[
+              cardStyles.photo,
+              cardStyles.photoPlaceholder,
+              { alignItems: "center", justifyContent: "center" },
+            ]}
+          >
             <Text style={{ fontSize: 36 }}>{isCar ? "🚗" : "🏨"}</Text>
           </View>
         )}
@@ -295,21 +387,42 @@ const ResultCard = memo(function ResultCard({
         {/* Badges Overlaid on Photo */}
         <View style={cardStyles.badgeOverlayContainer}>
           {item.isAccredited && (
-            <View style={[cardStyles.overlayBadge, { backgroundColor: SUCCESS }]}>
-              <Ionicons name="checkmark-circle" size={10} color="#fff" style={{ marginRight: 2 }} />
+            <View
+              style={[cardStyles.overlayBadge, { backgroundColor: SUCCESS }]}
+            >
+              <Ionicons
+                name="checkmark-circle"
+                size={10}
+                color="#fff"
+                style={{ marginRight: 2 }}
+              />
               <Text style={cardStyles.overlayBadgeText}>Verified</Text>
             </View>
           )}
           {item.longStayDiscountEnabled && (
-            <View style={[cardStyles.overlayBadge, { backgroundColor: DANGER }]}>
-              <Ionicons name="trending-down" size={10} color="#fff" style={{ marginRight: 2 }} />
-              <Text style={cardStyles.overlayBadgeText}>Promo</Text>
+            <View
+              style={[cardStyles.overlayBadge, { backgroundColor: DANGER }]}
+            >
+              <Ionicons
+                name="trending-down"
+                size={10}
+                color="#fff"
+                style={{ marginRight: 2 }}
+              />
+              <Text style={cardStyles.overlayBadgeText}>Long Stay Offer</Text>
             </View>
           )}
-          <View style={[cardStyles.overlayBadge, { backgroundColor: PRIMARY }]}>
-            <Ionicons name="pricetag" size={10} color="#fff" style={{ marginRight: 2 }} />
-            <Text style={cardStyles.overlayBadgeText}>{voucherCode}</Text>
-          </View>
+          {voucherCode && (
+            <View style={[cardStyles.overlayBadge, { backgroundColor: PRIMARY }]}>
+              <Ionicons
+                name="pricetag"
+                size={10}
+                color="#fff"
+                style={{ marginRight: 2 }}
+              />
+              <Text style={cardStyles.overlayBadgeText}>{voucherCode}</Text>
+            </View>
+          )}
         </View>
 
         {/* Favourite button */}
@@ -336,7 +449,9 @@ const ResultCard = memo(function ResultCard({
       {/* Body */}
       <View style={cardStyles.body}>
         {/* Title row */}
-        <Text style={cardStyles.title} numberOfLines={2}>{item.title}</Text>
+        <Text style={cardStyles.title} numberOfLines={2}>
+          {item.title}
+        </Text>
 
         {/* Location + distance + Rating Row */}
         <View style={cardStyles.metaRow}>
@@ -344,17 +459,27 @@ const ResultCard = memo(function ResultCard({
             <Ionicons name="location" size={13} color={PRIMARY} />
             <Text style={cardStyles.locationText} numberOfLines={1}>
               {item.city}
-              {item.distanceKm != null ? ` · ${item.distanceKm.toFixed(1)} km` : ""}
+              {item.distanceKm != null
+                ? ` · ${item.distanceKm.toFixed(1)} km`
+                : ""}
             </Text>
           </View>
 
           {/* Rating */}
           <View style={cardStyles.ratingRow}>
-            <Ionicons name="star" size={14} color="#f59e0b" style={{ marginRight: 3 }} />
+            <Ionicons
+              name="star"
+              size={14}
+              color="#f59e0b"
+              style={{ marginRight: 3 }}
+            />
             <Text style={cardStyles.ratingText}>
               {item.starRating ? item.starRating.toFixed(1) : "5.0"}
             </Text>
-            <Text style={cardStyles.reviewsCountText}> ({(item as any).reviewCount ?? (item as any).reviewsCount ?? 12})</Text>
+            <Text style={cardStyles.reviewsCountText}>
+              {" "}
+              ({(item as any).reviewCount ?? (item as any).reviewsCount ?? 12})
+            </Text>
           </View>
         </View>
 
@@ -363,11 +488,17 @@ const ResultCard = memo(function ResultCard({
           <View style={cardStyles.detailRow}>
             {item.roomType && (
               <Text style={cardStyles.detailText}>
-                {item.roomType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())} Room
+                {item.roomType
+                  .replace(/_/g, " ")
+                  .replace(/\b\w/g, (c) => c.toUpperCase())}{" "}
+                Room
               </Text>
             )}
             {item.isAccredited && (
-              <Text style={cardStyles.detailText}> · Kainook Accredited Stay</Text>
+              <Text style={cardStyles.detailText}>
+                {" "}
+                · Kainook Accredited Stay
+              </Text>
             )}
           </View>
         )}
@@ -375,10 +506,15 @@ const ResultCard = memo(function ResultCard({
         {category === "apartment" && (
           <View style={cardStyles.detailRow}>
             {item.bedrooms != null && item.bathrooms != null && (
-              <Text style={cardStyles.detailText}>{item.bedrooms} bed · {item.bathrooms} bath</Text>
+              <Text style={cardStyles.detailText}>
+                {item.bedrooms} bed · {item.bathrooms} bath
+              </Text>
             )}
             {item.maxGuests != null && (
-              <Text style={cardStyles.detailText}> · up to {item.maxGuests} guests</Text>
+              <Text style={cardStyles.detailText}>
+                {" "}
+                · up to {item.maxGuests} guests
+              </Text>
             )}
           </View>
         )}
@@ -387,11 +523,17 @@ const ResultCard = memo(function ResultCard({
           <View style={cardStyles.detailRow}>
             {(item.carMake || item.carModel || item.carYear) && (
               <Text style={cardStyles.detailText}>
-                {[item.carMake, item.carModel, item.carYear].filter(Boolean).join(" ")}
+                {[item.carMake, item.carModel, item.carYear]
+                  .filter(Boolean)
+                  .join(" ")}
               </Text>
             )}
-            {item.transmission && <Text style={cardStyles.detailText}> · {item.transmission}</Text>}
-            {item.seats != null && <Text style={cardStyles.detailText}> · {item.seats} seats</Text>}
+            {item.transmission && (
+              <Text style={cardStyles.detailText}> · {item.transmission}</Text>
+            )}
+            {item.seats != null && (
+              <Text style={cardStyles.detailText}> · {item.seats} seats</Text>
+            )}
           </View>
         )}
 
@@ -400,9 +542,20 @@ const ResultCard = memo(function ResultCard({
           {price != null ? (
             promoted.hasPromotion && promoted.discountedPrice != null ? (
               <View>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                  <Text style={cardStyles.originalPrice}>{item.currency} {price.toLocaleString()}</Text>
-                  <Text style={cardStyles.promoBadge}>🔥 {promoted.labelText}</Text>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    marginBottom: 2,
+                  }}
+                >
+                  <Text style={cardStyles.originalPrice}>
+                    {item.currency} {price.toLocaleString()}
+                  </Text>
+                  <Text style={cardStyles.promoBadge}>
+                    🔥 {promoted.labelText}
+                  </Text>
                 </View>
                 <Text style={cardStyles.price}>
                   <Text style={cardStyles.priceCurrency}>{item.currency} </Text>
@@ -412,6 +565,9 @@ const ResultCard = memo(function ResultCard({
               </View>
             ) : (
               <Text style={cardStyles.price}>
+                {item.roomTypes && item.roomTypes.length > 1 ? (
+                  <Text style={{ fontSize: 11, color: MUTED, fontWeight: "500" }}>From </Text>
+                ) : null}
                 <Text style={cardStyles.priceCurrency}>{item.currency} </Text>
                 {price.toLocaleString()}
                 <Text style={cardStyles.priceUnit}>{priceLabel}</Text>
@@ -420,7 +576,9 @@ const ResultCard = memo(function ResultCard({
           ) : (
             <Text style={cardStyles.priceUnavailable}>Price on request</Text>
           )}
-          {item.cancellationPolicy && <CancellationBadge policy={item.cancellationPolicy} />}
+          {item.cancellationPolicy && (
+            <CancellationBadge policy={item.cancellationPolicy} />
+          )}
         </View>
       </View>
     </TouchableOpacity>
@@ -458,20 +616,45 @@ const cardStyles = StyleSheet.create({
   },
   body: { padding: 14 },
   title: { fontSize: 15, fontWeight: "700", color: TEXT, marginBottom: 5 },
-  metaRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
-  locationRow: { flexDirection: "row", alignItems: "center", gap: 3, flex: 1, marginRight: 8 },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 6,
+  },
+  locationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    flex: 1,
+    marginRight: 8,
+  },
   locationText: { fontSize: 13, color: MUTED, flex: 1 },
   ratingRow: { flexDirection: "row", alignItems: "center" },
   ratingText: { fontSize: 13, fontWeight: "700", color: TEXT },
   reviewsCountText: { fontSize: 12, color: MUTED },
-  detailRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", marginBottom: 8 },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    marginBottom: 8,
+  },
   detailText: { fontSize: 13, color: MUTED },
-  footer: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
+  footer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 4,
+  },
   price: { fontSize: 16, fontWeight: "800", color: TEXT },
   priceCurrency: { fontSize: 12, fontWeight: "600", color: PRIMARY },
   priceUnit: { fontSize: 12, fontWeight: "400", color: MUTED },
   priceUnavailable: { fontSize: 13, color: MUTED, fontStyle: "italic" },
-  originalPrice: { fontSize: 13, color: MUTED, textDecorationLine: "line-through" },
+  originalPrice: {
+    fontSize: 13,
+    color: MUTED,
+    textDecorationLine: "line-through",
+  },
   promoBadge: { fontSize: 11, fontWeight: "800", color: "#DC2626" },
 
   // Overlay Badges
@@ -519,17 +702,38 @@ export default function SearchScreen() {
     detectedLng?: string;
   }>();
 
-  const { category: initialCategory = "hotel", placeName = "", checkIn, checkOut, guests, pickupDatetime, returnDatetime, detectedLat: rawDetectedLat, detectedLng: rawDetectedLng } = params;
+  const {
+    category: initialCategory = "hotel",
+    placeName = "",
+    checkIn,
+    checkOut,
+    guests,
+    pickupDatetime,
+    returnDatetime,
+    detectedLat: rawDetectedLat,
+    detectedLng: rawDetectedLng,
+  } = params;
 
   // Category is local state (not just a route param) so the user can switch
   // between Hotels/Apartments/Cars from within the Search screen itself,
   // instead of having to navigate back and re-enter with a different category.
   const [category, setCategory] = useState(initialCategory);
 
+  // Date Range state
+  const [localCheckIn, setLocalCheckIn] = useState<string | undefined>(checkIn);
+  const [localCheckOut, setLocalCheckOut] = useState<string | undefined>(checkOut);
+  const [localPickup, setLocalPickup] = useState<string | undefined>(pickupDatetime);
+  const [localReturn, setLocalReturn] = useState<string | undefined>(returnDatetime);
+  const [showRangePicker, setShowRangePicker] = useState(false);
+
   // IP-based detected location — used as default when user hasn't typed a place
   const detectedLoc = useLocationStore((s) => s.location);
-  const fallbackLat = rawDetectedLat ? Number(rawDetectedLat) : (detectedLoc?.lat ?? null);
-  const fallbackLng = rawDetectedLng ? Number(rawDetectedLng) : (detectedLoc?.lng ?? null);
+  const fallbackLat = rawDetectedLat
+    ? Number(rawDetectedLat)
+    : (detectedLoc?.lat ?? null);
+  const fallbackLng = rawDetectedLng
+    ? Number(rawDetectedLng)
+    : (detectedLoc?.lng ?? null);
 
   // Search destination refiner state
   const [searchInput, setSearchInput] = useState(placeName);
@@ -539,7 +743,9 @@ export default function SearchScreen() {
 
   // Map View toggle
   const [showMapView, setShowMapView] = useState(false);
-  const [selectedListing, setSelectedListing] = useState<SearchResult | null>(null);
+  const [selectedListing, setSelectedListing] = useState<SearchResult | null>(
+    null,
+  );
   const [mapRegion, setMapRegion] = useState<any>(null);
 
   // Dynamic filter state variables
@@ -547,7 +753,9 @@ export default function SearchScreen() {
   const [priceMax, setPriceMax] = useState("");
   const [radiusKm, setRadiusKm] = useState(25);
   const [onlyPromotions, setOnlyPromotions] = useState(false); // apartment-only: long_stay_discount
-  const [cancellationPolicy, setCancellationPolicy] = useState<string | null>(null);
+  const [cancellationPolicy, setCancellationPolicy] = useState<string | null>(
+    null,
+  );
 
   const [lastPlaceName, setLastPlaceName] = useState("");
 
@@ -574,6 +782,12 @@ export default function SearchScreen() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [allResults, setAllResults] = useState<SearchResult[]>([]);
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
+
+  // FlatList ref — used to programmatically scroll to the top when the user
+  // switches categories so they always see new-category results from the start.
+  const flatListRef = useRef<import("react-native").FlatList<SearchResult>>(null);
+  // Tracks the current vertical scroll offset for optional future restoration.
+  const scrollY = useRef(0);
   const [refreshing, setRefreshing] = useState(false);
 
   // Active filters calculation
@@ -634,6 +848,9 @@ export default function SearchScreen() {
     setAirConditioning(false);
     setSeatsMin(null);
     setDriverAge("");
+    // Scroll to the top immediately so the user sees the new category's
+    // results from the beginning rather than from a mid-list position.
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   }
 
   // ── Step 1: Geocode (falls back to local city map when API requires auth) ──
@@ -642,14 +859,18 @@ export default function SearchScreen() {
     queryFn: async () => {
       if (!placeName) return null;
       try {
-        const res = await listingApi.get<{ data: GeoResult }>(`/geocode?address=${encodeURIComponent(placeName)}`);
+        const res = await listingApi.get<{ data: GeoResult }>(
+          `/geocode?address=${encodeURIComponent(placeName)}`,
+        );
         return res.data.data;
       } catch {
         // Fall back to known city coordinates
         const key = placeName.trim().toLowerCase();
         const fallback = CITY_COORDS[key];
         if (fallback) return fallback;
-        const prefixMatch = Object.keys(CITY_COORDS).find(k => key.startsWith(k) || k.startsWith(key.split(",")[0].trim()));
+        const prefixMatch = Object.keys(CITY_COORDS).find(
+          (k) => key.startsWith(k) || k.startsWith(key.split(",")[0].trim()),
+        );
         if (prefixMatch) return CITY_COORDS[prefixMatch]!;
         // Return null → search.tsx will use global fallback (lat=0,lng=0,radius=20000)
         return null;
@@ -674,10 +895,12 @@ export default function SearchScreen() {
     }
   }, [geo, placeName, radiusKm]);
 
-  // Reset results and cursor when category changes (tab transition)
+  // Reset pagination cursor when category changes.
+  // We deliberately do NOT call setAllResults([]) here — keeping the previous
+  // category's items visible (via placeholderData) prevents a blank-screen flash
+  // while the next category's results are loading.
   useEffect(() => {
     setCursor(null);
-    setAllResults([]);
   }, [category]);
 
   // Center on user's current GPS location
@@ -696,12 +919,18 @@ export default function SearchScreen() {
           setSelectedListing(null);
         },
         () => {
-          Alert.alert("Location Error", "Could not get current location. Ensure location services are enabled.");
+          Alert.alert(
+            "Location Error",
+            "Could not get current location. Ensure location services are enabled.",
+          );
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
       );
     } else {
-      Alert.alert("Location Error", "Geolocation is not supported on this device.");
+      Alert.alert(
+        "Location Error",
+        "Geolocation is not supported on this device.",
+      );
     }
   };
 
@@ -714,11 +943,11 @@ export default function SearchScreen() {
     geo?.lat ?? fallbackLat,
     geo?.lng ?? fallbackLng,
     sort,
-    checkIn,
-    checkOut,
+    localCheckIn,
+    localCheckOut,
     guests,
-    pickupDatetime,
-    returnDatetime,
+    localPickup,
+    localReturn,
     cursor,
     priceMin,
     priceMax,
@@ -743,6 +972,7 @@ export default function SearchScreen() {
     isLoading: searchLoading,
     isError: searchError,
     isFetching: searchFetching,
+    isPlaceholderData,
     refetch: retrySearch,
   } = useQuery<SearchResponse["data"]>({
     queryKey: searchQueryKey,
@@ -751,7 +981,11 @@ export default function SearchScreen() {
       const effectiveLat = geo?.lat ?? fallbackLat ?? 0;
       const effectiveLng = geo?.lng ?? fallbackLng ?? 0;
       const hasSpatialContext = !!(geo || fallbackLat);
-      const effectiveRadius = geo ? radiusKm : hasSpatialContext ? radiusKm : 20000;
+      const effectiveRadius = geo
+        ? radiusKm
+        : hasSpatialContext
+          ? radiusKm
+          : 20000;
 
       const qp = new URLSearchParams({
         category,
@@ -767,9 +1001,11 @@ export default function SearchScreen() {
       if (cancellationPolicy) qp.set("cancellation_policy", cancellationPolicy);
       // long_stay_discount only makes sense for apartments (the field it filters,
       // listing.longStayEnabled, is an apartment long-stay-discount toggle)
-      if (onlyPromotions && category === "apartment") qp.set("long_stay_discount", "true");
+      if (onlyPromotions && category === "apartment")
+        qp.set("long_stay_discount", "true");
       // max_guests_min isn't category-gated server-side — offered for hotel + apartment
-      if (maxGuestsMin !== null && category !== "car") qp.set("max_guests_min", String(maxGuestsMin));
+      if (maxGuestsMin !== null && category !== "car")
+        qp.set("max_guests_min", String(maxGuestsMin));
 
       if (category === "hotel") {
         if (starRating.length) qp.set("star_rating", starRating.join(","));
@@ -788,75 +1024,106 @@ export default function SearchScreen() {
       }
 
       if (category === "hotel" || category === "apartment") {
-        if (checkIn) qp.set("check_in", checkIn);
-        if (checkOut) qp.set("check_out", checkOut);
+        if (localCheckIn) qp.set("check_in", localCheckIn);
+        if (localCheckOut) qp.set("check_out", localCheckOut);
         if (guests) qp.set("guests", guests);
       } else if (category === "car") {
-        if (pickupDatetime) qp.set("pickup_datetime", pickupDatetime);
-        if (returnDatetime) qp.set("return_datetime", returnDatetime);
+        if (localPickup) qp.set("pickup_datetime", localPickup);
+        if (localReturn) qp.set("return_datetime", localReturn);
       }
 
       if (cursor) qp.set("cursor", cursor);
 
-      const res = await listingApi.get<SearchResponse>(`/search?${qp.toString()}`);
+      const res = await listingApi.get<SearchResponse>(
+        `/search?${qp.toString()}`,
+      );
       const incoming = res.data.data;
 
-      let filteredResults = (incoming.results ?? []).filter((r) => r.listingType === category);
+      let filteredResults = (incoming.results ?? []).filter(
+        (r) => r.listingType === category,
+      );
 
       // When no geo (keyword/global search), apply client-side text filter
       if (!geo && searchInput.trim()) {
         const kw = searchInput.trim().toLowerCase();
-        filteredResults = filteredResults.filter((r) =>
-          (r.title ?? "").toLowerCase().includes(kw) ||
-          (r.city ?? "").toLowerCase().includes(kw) ||
-          (r.countryCode ?? "").toLowerCase().includes(kw) ||
-          (r.carMake ?? "").toLowerCase().includes(kw) ||
-          (r.carModel ?? "").toLowerCase().includes(kw)
+        filteredResults = filteredResults.filter(
+          (r) =>
+            (r.title ?? "").toLowerCase().includes(kw) ||
+            (r.city ?? "").toLowerCase().includes(kw) ||
+            (r.countryCode ?? "").toLowerCase().includes(kw) ||
+            (r.carMake ?? "").toLowerCase().includes(kw) ||
+            (r.carModel ?? "").toLowerCase().includes(kw),
         );
       }
 
-      if (!cursor) {
-        setAllResults(filteredResults);
-      } else {
-        setAllResults((prev) => {
-          const existingIds = new Set(prev.map((r) => r.id));
-          const fresh = filteredResults.filter((r) => !existingIds.has(r.id));
-          return [...prev, ...fresh];
-        });
-      }
-
-      return incoming;
+      // Return filtered results — allResults is synced via the useEffect below
+      // so that cache hits (where queryFn is NOT re-run) are also handled.
+      return { ...incoming, results: filteredResults };
     },
+    // Show the previous query's data while a new query is loading.
+    // This prevents the blank-screen flash when the user switches categories
+    // or changes filters — they continue to see the last visible list.
+    placeholderData: (previousData) => previousData,
     enabled: true,
     retry: 1,
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
-  // ── Favourite toggle ──
-  const handleFavouriteToggle = useCallback(async (id: string, current: boolean) => {
-    setFavouriteLoading(id);
-    try {
-      if (current) {
-        await listingApi.delete(`/guests/me/favourites/${id}`);
-      } else {
-        await listingApi.post("/guests/me/favourites", { listingId: id });
-      }
-      setAllResults((prev) =>
-        prev.map((r) => r.id === id ? { ...r, isFavourited: !current } : r),
-      );
-    } catch {
-      // silently ignore
-    } finally {
-      setFavouriteLoading(null);
+  useRefreshOnFocus(retrySearch);
+
+  // ── Sync React Query data → accumulated local state ──────────────────────────
+  // This useEffect replaces the old setAllResults() calls that lived inside
+  // queryFn.  Moving them here means cache hits (where queryFn is skipped
+  // entirely) still update allResults correctly.
+  useEffect(() => {
+    // Skip placeholder data — it belongs to a different query key and must not
+    // overwrite the accumulated list that is still valid for the current context.
+    if (isPlaceholderData || !searchData) return;
+
+    if (!cursor) {
+      // Page 1 — replace the entire list (new category, new filter, new sort).
+      setAllResults(searchData.results ?? []);
+    } else {
+      // Subsequent pages — append, deduplicating by id.
+      setAllResults((prev) => {
+        const existingIds = new Set(prev.map((r) => r.id));
+        const fresh = (searchData.results ?? []).filter(
+          (r) => !existingIds.has(r.id),
+        );
+        return [...prev, ...fresh];
+      });
     }
-  }, []);
+  }, [searchData, cursor, isPlaceholderData]);
+
+  // ── Favourite toggle ──
+  const handleFavouriteToggle = useCallback(
+    async (id: string, current: boolean) => {
+      setFavouriteLoading(id);
+      try {
+        if (current) {
+          await listingApi.delete(`/guests/me/favourites/${id}`);
+        } else {
+          await listingApi.post("/guests/me/favourites", { listingId: id });
+        }
+        setAllResults((prev) =>
+          prev.map((r) => (r.id === id ? { ...r, isFavourited: !current } : r)),
+        );
+      } catch {
+        // silently ignore
+      } finally {
+        setFavouriteLoading(null);
+      }
+    },
+    [],
+  );
 
   // ── Sort change ──
   function handleSortChange(newSort: SortOption) {
     if (newSort === sort) return;
     setSort(newSort);
     setCursor(null);
-    setAllResults([]);
+    // Do NOT call setAllResults([]) — the previous sorted list stays visible
+    // (via placeholderData) until the freshly sorted results arrive.
   }
 
   // ── Load more ──
@@ -869,13 +1136,15 @@ export default function SearchScreen() {
   // ── Checkbox Toggles ──
   const toggleStarRating = (star: string) => {
     setStarRating((prev) =>
-      prev.includes(star) ? prev.filter((s) => s !== star) : [...prev, star]
+      prev.includes(star) ? prev.filter((s) => s !== star) : [...prev, star],
     );
   };
 
   const toggleAmenity = (amenity: string) => {
     setAmenityIds((prev) =>
-      prev.includes(amenity) ? prev.filter((a) => a !== amenity) : [...prev, amenity]
+      prev.includes(amenity)
+        ? prev.filter((a) => a !== amenity)
+        : [...prev, amenity],
     );
   };
 
@@ -888,42 +1157,82 @@ export default function SearchScreen() {
   }
 
   // ── Active filter badges (shown above results, each individually removable) ──
-  const currencyPrefix = allResults[0]?.currency ? `${allResults[0].currency} ` : "";
-  interface FilterBadge { key: string; label: string; onRemove: () => void }
+  const currencyPrefix = allResults[0]?.currency
+    ? `${allResults[0].currency} `
+    : "";
+  interface FilterBadge {
+    key: string;
+    label: string;
+    onRemove: () => void;
+  }
   const activeFilterBadges: FilterBadge[] = useMemo(() => {
     const badges: FilterBadge[] = [];
     if (priceMin || priceMax) {
-      const label = priceMin && priceMax
-        ? `${currencyPrefix}${priceMin}-${priceMax}`
-        : priceMin
-        ? `${currencyPrefix}${priceMin}+`
-        : `Up to ${currencyPrefix}${priceMax}`;
-      badges.push({ key: "price", label, onRemove: () => { setPriceMin(""); setPriceMax(""); } });
+      const label =
+        priceMin && priceMax
+          ? `${currencyPrefix}${priceMin}-${priceMax}`
+          : priceMin
+            ? `${currencyPrefix}${priceMin}+`
+            : `Up to ${currencyPrefix}${priceMax}`;
+      badges.push({
+        key: "price",
+        label,
+        onRemove: () => {
+          setPriceMin("");
+          setPriceMax("");
+        },
+      });
     }
     if (cancellationPolicy) {
       badges.push({
         key: "cancellation",
-        label: cancellationPolicy.charAt(0).toUpperCase() + cancellationPolicy.slice(1),
+        label:
+          cancellationPolicy.charAt(0).toUpperCase() +
+          cancellationPolicy.slice(1),
         onRemove: () => setCancellationPolicy(null),
       });
     }
     if (starRating.length) {
-      badges.push({ key: "stars", label: `★${starRating.join(",")}+`, onRemove: () => setStarRating([]) });
+      badges.push({
+        key: "stars",
+        label: `★${starRating.join(",")}+`,
+        onRemove: () => setStarRating([]),
+      });
     }
     for (const a of amenityIds) {
-      badges.push({ key: `amenity-${a}`, label: a.replace(/_/g, " "), onRemove: () => toggleAmenity(a) });
+      badges.push({
+        key: `amenity-${a}`,
+        label: a.replace(/_/g, " "),
+        onRemove: () => toggleAmenity(a),
+      });
     }
     if (bedroomsMin !== null) {
-      badges.push({ key: "bedrooms", label: `${bedroomsMin}+ bed`, onRemove: () => setBedroomsMin(null) });
+      badges.push({
+        key: "bedrooms",
+        label: `${bedroomsMin}+ bed`,
+        onRemove: () => setBedroomsMin(null),
+      });
     }
     if (maxGuestsMin !== null) {
-      badges.push({ key: "guests", label: `${maxGuestsMin}+ guests`, onRemove: () => setMaxGuestsMin(null) });
+      badges.push({
+        key: "guests",
+        label: `${maxGuestsMin}+ guests`,
+        onRemove: () => setMaxGuestsMin(null),
+      });
     }
     if (onlyPromotions) {
-      badges.push({ key: "longstay", label: "Long-stay discount", onRemove: () => setOnlyPromotions(false) });
+      badges.push({
+        key: "longstay",
+        label: "Long-stay discount",
+        onRemove: () => setOnlyPromotions(false),
+      });
     }
     if (carCategory) {
-      badges.push({ key: "carcat", label: carCategory, onRemove: () => setCarCategory(null) });
+      badges.push({
+        key: "carcat",
+        label: carCategory,
+        onRemove: () => setCarCategory(null),
+      });
     }
     if (transmission) {
       badges.push({
@@ -940,33 +1249,76 @@ export default function SearchScreen() {
       });
     }
     if (driveType) {
-      badges.push({ key: "drivetype", label: driveType, onRemove: () => setDriveType(null) });
+      badges.push({
+        key: "drivetype",
+        label: driveType,
+        onRemove: () => setDriveType(null),
+      });
     }
     if (airConditioning) {
-      badges.push({ key: "ac", label: "A/C", onRemove: () => setAirConditioning(false) });
+      badges.push({
+        key: "ac",
+        label: "A/C",
+        onRemove: () => setAirConditioning(false),
+      });
     }
     if (seatsMin !== null) {
-      badges.push({ key: "seats", label: `${seatsMin}+ seats`, onRemove: () => setSeatsMin(null) });
+      badges.push({
+        key: "seats",
+        label: `${seatsMin}+ seats`,
+        onRemove: () => setSeatsMin(null),
+      });
     }
     if (driverAge) {
-      badges.push({ key: "driverage", label: `Age ${driverAge}`, onRemove: () => setDriverAge("") });
+      badges.push({
+        key: "driverage",
+        label: `Age ${driverAge}`,
+        onRemove: () => setDriverAge(""),
+      });
     }
     return badges;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    priceMin, priceMax, cancellationPolicy, starRating, amenityIds, bedroomsMin, maxGuestsMin,
-    onlyPromotions, carCategory, transmission, mileagePolicy, driveType, airConditioning, seatsMin, driverAge,
+    priceMin,
+    priceMax,
+    cancellationPolicy,
+    starRating,
+    amenityIds,
+    bedroomsMin,
+    maxGuestsMin,
+    onlyPromotions,
+    carCategory,
+    transmission,
+    mileagePolicy,
+    driveType,
+    airConditioning,
+    seatsMin,
+    driverAge,
   ]);
 
-  // Any filter change (including removing a badge) starts a fresh page-1 search
-  // instead of appending onto whatever page was already loaded before the change.
+  // Any filter change resets pagination to page 1.
+  // We deliberately do NOT call setAllResults([]) here — the previous list
+  // stays visible (via placeholderData) while the fresh filtered page loads.
   useEffect(() => {
     setCursor(null);
-    setAllResults([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    priceMin, priceMax, radiusKm, onlyPromotions, cancellationPolicy, starRating, amenityIds,
-    bedroomsMin, maxGuestsMin, carCategory, transmission, mileagePolicy, driveType, airConditioning, seatsMin, driverAge,
+    priceMin,
+    priceMax,
+    radiusKm,
+    onlyPromotions,
+    cancellationPolicy,
+    starRating,
+    amenityIds,
+    bedroomsMin,
+    maxGuestsMin,
+    carCategory,
+    transmission,
+    mileagePolicy,
+    driveType,
+    airConditioning,
+    seatsMin,
+    driverAge,
   ]);
 
   // Geo is optional — if unavailable, search falls back to global (lat=0,lng=0,radius=20000)
@@ -980,26 +1332,40 @@ export default function SearchScreen() {
   const { data: categoryPromotions } = useQuery<Promotion[]>({
     queryKey: ["promotions-active", category],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: Promotion[] }>(`/promotions/active?activity=${category}`);
+      const res = await listingApi.get<{ data: Promotion[] }>(
+        `/promotions/active?activity=${category}`,
+      );
       return res.data.data ?? [];
     },
     staleTime: 5 * 60_000,
     retry: false,
   });
-  const activePromotion = categoryPromotions?.[0] ?? null;
+  const activePromotion = categoryPromotions?.find((p) => p && p.title && p.title.trim().length > 0) ?? null;
 
   // Fetch signed photo URLs for all search results via /listings/:id/public
-  const searchResultIds = useMemo(() => allResults.map((r) => r.id), [allResults]);
+  const searchResultIds = useMemo(
+    () => allResults.map((r) => r.id),
+    [allResults],
+  );
   const signedPhotoQueries = useQueries({
     queries: searchResultIds.map((id) => ({
       queryKey: ["public-photo", id],
       queryFn: async (): Promise<string | null> => {
         try {
           const res = await listingApi.get<{
-            data: { primaryPhotoUrl?: string | null; photos?: Array<{ cdnUrl: string }> };
+            data: {
+              primaryPhotoUrl?: string | null;
+              photos?: Array<{ cdnUrl: string }>;
+            };
           }>(`/listings/${id}/public`);
-          return res.data.data?.primaryPhotoUrl ?? res.data.data?.photos?.[0]?.cdnUrl ?? null;
-        } catch { return null; }
+          return (
+            res.data.data?.primaryPhotoUrl ??
+            res.data.data?.photos?.[0]?.cdnUrl ??
+            null
+          );
+        } catch {
+          return null;
+        }
       },
       staleTime: 5 * 60_000,
       gcTime: 10 * 60_000,
@@ -1007,20 +1373,34 @@ export default function SearchScreen() {
     })),
   });
   const signedPhotoMap = useMemo<Record<string, string | null>>(
-    () => Object.fromEntries(searchResultIds.map((id, i) => [id, signedPhotoQueries[i]?.data ?? null])),
+    () =>
+      Object.fromEntries(
+        searchResultIds.map((id, i) => [
+          id,
+          signedPhotoQueries[i]?.data ?? null,
+        ]),
+      ),
     [searchResultIds, signedPhotoQueries],
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       {/* ── Search header refiner bar ── */}
       <View style={styles.searchHeader}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.searchBackBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.searchBackBtn}
+        >
           <Ionicons name="arrow-back" size={24} color={TEXT} />
         </TouchableOpacity>
 
         <View style={styles.searchInputContainer}>
-          <Ionicons name="search" size={18} color={MUTED} style={{ marginRight: 6 }} />
+          <Ionicons
+            name="search"
+            size={18}
+            color={MUTED}
+            style={{ marginRight: 6 }}
+          />
           <TextInput
             style={styles.searchTextInput}
             placeholder="Where to? (e.g. Nairobi, Mombasa)"
@@ -1041,7 +1421,11 @@ export default function SearchScreen() {
           style={[styles.filterBtn, hasActiveFilters && styles.filterBtnActive]}
           activeOpacity={0.8}
         >
-          <Ionicons name="funnel-outline" size={20} color={hasActiveFilters ? "#fff" : TEXT} />
+          <Ionicons
+            name="funnel-outline"
+            size={20}
+            color={hasActiveFilters ? "#fff" : TEXT}
+          />
           {hasActiveFilters && <View style={styles.filterDot} />}
         </TouchableOpacity>
       </View>
@@ -1057,23 +1441,79 @@ export default function SearchScreen() {
               onPress={() => handleCategoryChange(tab.key)}
               activeOpacity={0.85}
             >
-              <Ionicons name={tab.icon} size={16} color={active ? "#fff" : MUTED} />
-              <Text style={[styles.categoryTabText, active && styles.categoryTabTextActive]}>{tab.label}</Text>
+              <Ionicons
+                name={tab.icon}
+                size={16}
+                color={active ? "#fff" : MUTED}
+              />
+              <Text
+                style={[
+                  styles.categoryTabText,
+                  active && styles.categoryTabTextActive,
+                ]}
+              >
+                {tab.label}
+              </Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
+      {/* ── Date Range Bar ── */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 2 }}>
+        <TouchableOpacity
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            backgroundColor: "#F3F4F6",
+            borderRadius: 12,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            borderWidth: 1,
+            borderColor: "#E5E7EB",
+          }}
+          onPress={() => setShowRangePicker(true)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1 }}>
+            <Ionicons name="calendar-outline" size={16} color={PRIMARY} />
+            <Text style={{ fontSize: 13, fontWeight: "700", color: TEXT }} numberOfLines={1}>
+              {category !== "car"
+                ? (localCheckIn && localCheckOut
+                  ? `${fmtDisplay(localCheckIn)} – ${fmtDisplay(localCheckOut)} (${calcNights(localCheckIn, localCheckOut)} night${calcNights(localCheckIn, localCheckOut) !== 1 ? "s" : ""})`
+                  : "Select Dates (Min 1 night)")
+                : (localPickup && localReturn
+                  ? `${fmtDisplay(localPickup)} – ${fmtDisplay(localReturn)}`
+                  : "Select Rental Dates")}
+            </Text>
+          </View>
+          <Ionicons name="chevron-down" size={16} color={MUTED} />
+        </TouchableOpacity>
+      </View>
+
       {/* ── Sort bar ── */}
       <View style={styles.sortBar}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortScroll}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.sortScroll}
+        >
           {SORT_OPTIONS.map((opt) => (
             <TouchableOpacity
               key={opt.key}
-              style={[styles.sortChip, sort === opt.key && styles.sortChipActive]}
+              style={[
+                styles.sortChip,
+                sort === opt.key && styles.sortChipActive,
+              ]}
               onPress={() => handleSortChange(opt.key)}
             >
-              <Text style={[styles.sortChipText, sort === opt.key && styles.sortChipTextActive]}>
+              <Text
+                style={[
+                  styles.sortChipText,
+                  sort === opt.key && styles.sortChipTextActive,
+                ]}
+              >
                 {opt.label}
               </Text>
             </TouchableOpacity>
@@ -1102,36 +1542,52 @@ export default function SearchScreen() {
           style={styles.badgesScroll}
         >
           {activeFilterBadges.map((b) => (
-            <TouchableOpacity key={b.key} style={styles.filterBadge} onPress={b.onRemove} activeOpacity={0.75}>
-              <Text style={styles.filterBadgeText} numberOfLines={1}>{b.label}</Text>
+            <TouchableOpacity
+              key={b.key}
+              style={styles.filterBadge}
+              onPress={b.onRemove}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.filterBadgeText} numberOfLines={1}>
+                {b.label}
+              </Text>
               <Ionicons name="close-circle" size={15} color={PRIMARY} />
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={styles.clearAllBadge} onPress={handleResetFilters} activeOpacity={0.75}>
+          <TouchableOpacity
+            style={styles.clearAllBadge}
+            onPress={handleResetFilters}
+            activeOpacity={0.75}
+          >
             <Text style={styles.clearAllBadgeText}>Clear all</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
 
       {/* ── Active promotion banner ── */}
-      {activePromotion && !isFirstLoad && !searchError && (
+      {activePromotion && activePromotion.title && activePromotion.title.trim().length > 0 && !isFirstLoad && !searchError && (
         <View style={promoBannerStyles.wrap}>
           <Text style={promoBannerStyles.fire}>🔥</Text>
           <View style={{ flex: 1 }}>
-            <Text style={promoBannerStyles.text} numberOfLines={1}>{activePromotion.title}</Text>
+            <Text style={promoBannerStyles.text} numberOfLines={1}>
+              {activePromotion.title}
+            </Text>
             {activePromotion.description ? (
-              <Text style={promoBannerStyles.sub} numberOfLines={1}>{activePromotion.description}</Text>
+              <Text style={promoBannerStyles.sub} numberOfLines={1}>
+                {activePromotion.description}
+              </Text>
             ) : null}
           </View>
-          {(activePromotion.discountPercent != null || activePromotion.discountAmount != null) && (
-            <View style={promoBannerStyles.discBadge}>
-              <Text style={promoBannerStyles.discText}>
-                {activePromotion.discountPercent != null
-                  ? `-${activePromotion.discountPercent}%`
-                  : `-${activePromotion.discountAmount}`}
-              </Text>
-            </View>
-          )}
+          {(activePromotion.discountPercent != null ||
+            activePromotion.discountAmount != null) && (
+              <View style={promoBannerStyles.discBadge}>
+                <Text style={promoBannerStyles.discText}>
+                  {activePromotion.discountPercent != null
+                    ? `-${activePromotion.discountPercent}%`
+                    : `-${activePromotion.discountAmount}`}
+                </Text>
+              </View>
+            )}
         </View>
       )}
 
@@ -1140,8 +1596,13 @@ export default function SearchScreen() {
         <View style={styles.center}>
           <Ionicons name="wifi-outline" size={48} color={BORDER} />
           <Text style={styles.errorTitle}>Search failed</Text>
-          <Text style={styles.errorSub}>Please check your connection and try again.</Text>
-          <TouchableOpacity style={styles.retryBtn} onPress={() => void retrySearch()}>
+          <Text style={styles.errorSub}>
+            Please check your connection and try again.
+          </Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => void retrySearch()}
+          >
             <Text style={styles.retryBtnText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -1149,14 +1610,20 @@ export default function SearchScreen() {
 
       {/* ── Skeleton loading state ── */}
       {isFirstLoad && !searchError && (
-        <ScrollView style={styles.list} contentContainerStyle={styles.listContent}>
-          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+        <ScrollView
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+        >
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </ScrollView>
       )}
 
       {/* ── Results List or Map View ── */}
-      {!isFirstLoad && !searchError && (
-        showMapView ? (
+      {!isFirstLoad &&
+        !searchError &&
+        (showMapView ? (
           <View style={styles.mapContainer}>
             {MapView ? (
               <>
@@ -1174,16 +1641,24 @@ export default function SearchScreen() {
                   {/* Center Search Marker */}
                   {geo && Marker && (
                     <Marker
-                      coordinate={{ latitude: Number(geo.lat), longitude: Number(geo.lng) }}
+                      coordinate={{
+                        latitude: Number(geo.lat),
+                        longitude: Number(geo.lng),
+                      }}
                       title="Search Center"
-                      pinColor="#dc2626"
+                      pinColor="#15803D"
                     />
                   )}
 
                   {/* Listings Markers */}
                   {allResults.map((item) => {
-                    const coords = getListingCoordinates(item, geo ? Number(geo.lat) : -1.286389, geo ? Number(geo.lng) : 36.817223);
-                    const itemPrice = category === "car" ? item.dailyRate : item.nightlyRate;
+                    const coords = getListingCoordinates(
+                      item,
+                      geo ? Number(geo.lat) : -1.286389,
+                      geo ? Number(geo.lng) : 36.817223,
+                    );
+                    const itemPrice =
+                      category === "car" ? item.dailyRate : item.nightlyRate;
                     if (!Marker) return null;
                     return (
                       <Marker
@@ -1193,7 +1668,8 @@ export default function SearchScreen() {
                       >
                         <View style={styles.priceMarker}>
                           <Text style={styles.priceMarkerText}>
-                            {item.currency} {itemPrice ? itemPrice.toLocaleString() : ""}
+                            {item.currency}{" "}
+                            {itemPrice ? itemPrice.toLocaleString() : ""}
                           </Text>
                         </View>
                       </Marker>
@@ -1202,18 +1678,42 @@ export default function SearchScreen() {
                 </MapView>
 
                 {/* My Location Button */}
-                <TouchableOpacity style={styles.myLocationBtn} onPress={centerOnUserLocation}>
+                <TouchableOpacity
+                  style={styles.myLocationBtn}
+                  onPress={centerOnUserLocation}
+                >
                   <Ionicons name="locate" size={22} color={PRIMARY} />
                 </TouchableOpacity>
               </>
             ) : (
-              <View style={[styles.map, styles.center, { backgroundColor: "#fff", paddingHorizontal: 24 }]}>
-                <View style={{ backgroundColor: "#eff6ff", width: 80, height: 80, borderRadius: 40, alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+              <View
+                style={[
+                  styles.map,
+                  styles.center,
+                  { backgroundColor: "#fff", paddingHorizontal: 24 },
+                ]}
+              >
+                <View
+                  style={{
+                    backgroundColor: "#eff6ff",
+                    width: 80,
+                    height: 80,
+                    borderRadius: 40,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 20,
+                  }}
+                >
                   <Ionicons name="map-outline" size={40} color={PRIMARY} />
                 </View>
-                <Text style={[styles.errorTitle, { fontSize: 20 }]}>Interactive Map Unavailable</Text>
-                <Text style={[styles.errorSub, { maxWidth: 300, marginBottom: 24 }]}>
-                  The native map module is missing on this client. Switch to List View to browse all properties.
+                <Text style={[styles.errorTitle, { fontSize: 20 }]}>
+                  Interactive Map Unavailable
+                </Text>
+                <Text
+                  style={[styles.errorSub, { maxWidth: 300, marginBottom: 24 }]}
+                >
+                  The native map module is missing on this client. Switch to
+                  List View to browse all properties.
                 </Text>
                 <TouchableOpacity
                   style={[styles.retryBtn, { marginTop: 0 }]}
@@ -1238,7 +1738,9 @@ export default function SearchScreen() {
                   onFavouriteToggle={handleFavouriteToggle}
                   favouriteLoading={favouriteLoading}
                   signedPhotoUrl={signedPhotoMap[selectedListing.id] ?? null}
-                  promotion={activePromotion as unknown as ActivePromotion | null}
+                  promotion={
+                    activePromotion as unknown as ActivePromotion | null
+                  }
                 />
                 <TouchableOpacity
                   style={styles.closePreviewBtn}
@@ -1251,13 +1753,21 @@ export default function SearchScreen() {
           </View>
         ) : (
           <FlatList
+            ref={flatListRef}
             data={allResults}
             keyExtractor={(item) => item.id}
             style={styles.list}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
+            // Track scroll position so handleCategoryChange can scroll to top.
+            onScroll={(e) => { scrollY.current = e.nativeEvent.contentOffset.y; }}
+            scrollEventThrottle={150}
             refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} tintColor={PRIMARY} />
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => void handleRefresh()}
+                tintColor={PRIMARY}
+              />
             }
             windowSize={7}
             maxToRenderPerBatch={8}
@@ -1282,9 +1792,13 @@ export default function SearchScreen() {
                 <Ionicons name="home-outline" size={52} color={BORDER} />
                 <Text style={styles.emptyTitle}>No listings found</Text>
                 <Text style={styles.emptySub}>
-                  No listings match your filter criteria or search radius. Try resetting filters.
+                  No listings match your filter criteria or search radius. Try
+                  resetting filters.
                 </Text>
-                <TouchableOpacity style={styles.backBtn} onPress={handleResetFilters}>
+                <TouchableOpacity
+                  style={styles.backBtn}
+                  onPress={handleResetFilters}
+                >
                   <Text style={styles.backBtnText}>Reset all filters</Text>
                 </TouchableOpacity>
               </View>
@@ -1293,10 +1807,17 @@ export default function SearchScreen() {
               allResults.length > 0 ? (
                 <View style={styles.footer}>
                   {isLoadingMore && (
-                    <ActivityIndicator size="small" color={PRIMARY} style={{ marginBottom: 12 }} />
+                    <ActivityIndicator
+                      size="small"
+                      color={PRIMARY}
+                      style={{ marginBottom: 12 }}
+                    />
                   )}
                   {hasNextPage && !isLoadingMore && (
-                    <TouchableOpacity style={styles.loadMoreBtn} onPress={handleLoadMore}>
+                    <TouchableOpacity
+                      style={styles.loadMoreBtn}
+                      onPress={handleLoadMore}
+                    >
                       <Text style={styles.loadMoreText}>Load more</Text>
                     </TouchableOpacity>
                   )}
@@ -1307,8 +1828,7 @@ export default function SearchScreen() {
               ) : null
             }
           />
-        )
-      )}
+        ))}
 
       {/* Floating Map/List Toggle Button */}
       {!isFirstLoad && !searchError && (
@@ -1320,28 +1840,64 @@ export default function SearchScreen() {
           }}
           activeOpacity={0.9}
         >
-          <Ionicons name={showMapView ? "list" : "map"} size={18} color="#fff" style={{ marginRight: 6 }} />
-          <Text style={styles.floatingToggleBtnText}>{showMapView ? "Show List" : "Show Map"}</Text>
+          <Ionicons
+            name={showMapView ? "list" : "map"}
+            size={18}
+            color="#fff"
+            style={{ marginRight: 6 }}
+          />
+          <Text style={styles.floatingToggleBtnText}>
+            {showMapView ? "Show List" : "Show Map"}
+          </Text>
         </TouchableOpacity>
       )}
 
+      {/* ─── Date Range Picker Modal ─── */}
+      <DateRangePickerModal
+        visible={showRangePicker}
+        isCar={category === "car"}
+        initialStartDate={category !== "car" ? localCheckIn : (localPickup ? localPickup.slice(0, 10) : null)}
+        initialEndDate={category !== "car" ? localCheckOut : (localReturn ? localReturn.slice(0, 10) : null)}
+        onConfirm={(start, end) => {
+          if (category !== "car") {
+            setLocalCheckIn(start);
+            setLocalCheckOut(end);
+          } else {
+            setLocalPickup(start);
+            setLocalReturn(end);
+          }
+          setCursor(null);
+        }}
+        onClose={() => setShowRangePicker(false)}
+      />
+
       {/* ─── Premium Filter Sheet Modal ─── */}
-      <Modal visible={filterVisible} animationType="slide" transparent={false} onRequestClose={() => setFilterVisible(false)}>
+      <Modal
+        visible={filterVisible}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setFilterVisible(false)}
+      >
         <SafeAreaView style={filterStyles.container}>
           {/* Header */}
           <View style={filterStyles.header}>
             <TouchableOpacity onPress={() => setFilterVisible(false)}>
               <Ionicons name="close" size={24} color={TEXT} />
             </TouchableOpacity>
-            <Text style={filterStyles.headerTitle}>Filters ({category.toUpperCase()})</Text>
+            <Text style={filterStyles.headerTitle}>
+              Filters ({category.toUpperCase()})
+            </Text>
             <TouchableOpacity onPress={handleResetFilters}>
               <Text style={filterStyles.resetText}>Reset All</Text>
             </TouchableOpacity>
           </View>
 
           {/* Scrollable Filters */}
-          <ScrollView style={filterStyles.scroll} contentContainerStyle={filterStyles.scrollContent} showsVerticalScrollIndicator={false}>
-
+          <ScrollView
+            style={filterStyles.scroll}
+            contentContainerStyle={filterStyles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             {/* PRICE RANGE */}
             <Text style={filterStyles.sectionTitle}>Price Range</Text>
             <View style={filterStyles.row}>
@@ -1370,29 +1926,50 @@ export default function SearchScreen() {
             {/* CANCELLATION POLICY */}
             <Text style={filterStyles.sectionTitle}>Cancellation Policy</Text>
             <View style={filterStyles.rowChips}>
-              {[(null as any), "flexible", "moderate", "strict"].map((policy) => (
+              {[null as any, "flexible", "moderate", "strict"].map((policy) => (
                 <TouchableOpacity
                   key={policy ?? "any"}
-                  style={[filterStyles.chip, cancellationPolicy === policy && filterStyles.chipActive]}
+                  style={[
+                    filterStyles.chip,
+                    cancellationPolicy === policy && filterStyles.chipActive,
+                  ]}
                   onPress={() => setCancellationPolicy(policy)}
                 >
-                  <Text style={[filterStyles.chipText, cancellationPolicy === policy && filterStyles.chipTextActive]}>
-                    {policy === null ? "Any" : policy.charAt(0).toUpperCase() + policy.slice(1)}
+                  <Text
+                    style={[
+                      filterStyles.chipText,
+                      cancellationPolicy === policy &&
+                      filterStyles.chipTextActive,
+                    ]}
+                  >
+                    {policy === null
+                      ? "Any"
+                      : policy.charAt(0).toUpperCase() + policy.slice(1)}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
             {/* SEARCH RADIUS */}
-            <Text style={filterStyles.sectionTitle}>Search Radius (Distance)</Text>
+            <Text style={filterStyles.sectionTitle}>
+              Search Radius (Distance)
+            </Text>
             <View style={filterStyles.rowChips}>
               {[25, 100, 500, 2000].map((radius) => (
                 <TouchableOpacity
                   key={radius}
-                  style={[filterStyles.chip, radiusKm === radius && filterStyles.chipActive]}
+                  style={[
+                    filterStyles.chip,
+                    radiusKm === radius && filterStyles.chipActive,
+                  ]}
                   onPress={() => setRadiusKm(radius)}
                 >
-                  <Text style={[filterStyles.chipText, radiusKm === radius && filterStyles.chipTextActive]}>
+                  <Text
+                    style={[
+                      filterStyles.chipText,
+                      radiusKm === radius && filterStyles.chipTextActive,
+                    ]}
+                  >
                     {radius} km
                   </Text>
                 </TouchableOpacity>
@@ -1403,14 +1980,26 @@ export default function SearchScreen() {
             {category === "apartment" && (
               <View style={filterStyles.rowToggle}>
                 <View style={{ flex: 1 }}>
-                  <Text style={filterStyles.toggleTitle}>Long-stay discount</Text>
-                  <Text style={filterStyles.toggleSub}>Show listings offering a long-stay discount</Text>
+                  <Text style={filterStyles.toggleTitle}>
+                    Long-stay discount
+                  </Text>
+                  <Text style={filterStyles.toggleSub}>
+                    Show listings offering a long-stay discount
+                  </Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => setOnlyPromotions(!onlyPromotions)}
-                  style={[filterStyles.toggleSwitch, onlyPromotions && filterStyles.toggleSwitchActive]}
+                  style={[
+                    filterStyles.toggleSwitch,
+                    onlyPromotions && filterStyles.toggleSwitchActive,
+                  ]}
                 >
-                  <View style={[filterStyles.toggleDot, onlyPromotions && filterStyles.toggleDotActive]} />
+                  <View
+                    style={[
+                      filterStyles.toggleDot,
+                      onlyPromotions && filterStyles.toggleDotActive,
+                    ]}
+                  />
                 </TouchableOpacity>
               </View>
             )}
@@ -1418,15 +2007,25 @@ export default function SearchScreen() {
             {/* Max Guests — hotel + apartment (backend's max_guests_min isn't category-gated) */}
             {(category === "hotel" || category === "apartment") && (
               <>
-                <Text style={filterStyles.sectionTitle}>Min Guest Capacity</Text>
+                <Text style={filterStyles.sectionTitle}>
+                  Min Guest Capacity
+                </Text>
                 <View style={filterStyles.rowChips}>
-                  {[(null as any), 2, 4, 6].map((cap) => (
+                  {[null as any, 2, 4, 6].map((cap) => (
                     <TouchableOpacity
                       key={cap ?? "any"}
-                      style={[filterStyles.chip, maxGuestsMin === cap && filterStyles.chipActive]}
+                      style={[
+                        filterStyles.chip,
+                        maxGuestsMin === cap && filterStyles.chipActive,
+                      ]}
                       onPress={() => setMaxGuestsMin(cap)}
                     >
-                      <Text style={[filterStyles.chipText, maxGuestsMin === cap && filterStyles.chipTextActive]}>
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          maxGuestsMin === cap && filterStyles.chipTextActive,
+                        ]}
+                      >
                         {cap === null ? "Any" : `${cap}+ guests`}
                       </Text>
                     </TouchableOpacity>
@@ -1444,10 +2043,19 @@ export default function SearchScreen() {
                   {["3", "4", "5"].map((star) => (
                     <TouchableOpacity
                       key={star}
-                      style={[filterStyles.chip, starRating.includes(star) && filterStyles.chipActive]}
+                      style={[
+                        filterStyles.chip,
+                        starRating.includes(star) && filterStyles.chipActive,
+                      ]}
                       onPress={() => toggleStarRating(star)}
                     >
-                      <Text style={[filterStyles.chipText, starRating.includes(star) && filterStyles.chipTextActive]}>
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          starRating.includes(star) &&
+                          filterStyles.chipTextActive,
+                        ]}
+                      >
                         {star} Star
                       </Text>
                     </TouchableOpacity>
@@ -1457,13 +2065,31 @@ export default function SearchScreen() {
                 {/* Amenities */}
                 <Text style={filterStyles.sectionTitle}>Amenities</Text>
                 <View style={filterStyles.groupedChips}>
-                  {["wifi", "pool", "gym", "spa", "restaurant", "bar", "parking", "air_conditioning"].map((a) => (
+                  {[
+                    "wifi",
+                    "pool",
+                    "gym",
+                    "spa",
+                    "restaurant",
+                    "bar",
+                    "parking",
+                    "air_conditioning",
+                  ].map((a) => (
                     <TouchableOpacity
                       key={a}
-                      style={[filterStyles.chip, amenityIds.includes(a) && filterStyles.chipActive, { marginBottom: 8 }]}
+                      style={[
+                        filterStyles.chip,
+                        amenityIds.includes(a) && filterStyles.chipActive,
+                        { marginBottom: 8 },
+                      ]}
                       onPress={() => toggleAmenity(a)}
                     >
-                      <Text style={[filterStyles.chipText, amenityIds.includes(a) && filterStyles.chipTextActive]}>
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          amenityIds.includes(a) && filterStyles.chipTextActive,
+                        ]}
+                      >
                         {a.replace("_", " ")}
                       </Text>
                     </TouchableOpacity>
@@ -1478,13 +2104,21 @@ export default function SearchScreen() {
                 {/* Bedrooms */}
                 <Text style={filterStyles.sectionTitle}>Min Bedrooms</Text>
                 <View style={filterStyles.rowChips}>
-                  {[(null as any), 1, 2, 3].map((beds) => (
+                  {[null as any, 1, 2, 3].map((beds) => (
                     <TouchableOpacity
                       key={beds ?? "any"}
-                      style={[filterStyles.chip, bedroomsMin === beds && filterStyles.chipActive]}
+                      style={[
+                        filterStyles.chip,
+                        bedroomsMin === beds && filterStyles.chipActive,
+                      ]}
                       onPress={() => setBedroomsMin(beds)}
                     >
-                      <Text style={[filterStyles.chipText, bedroomsMin === beds && filterStyles.chipTextActive]}>
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          bedroomsMin === beds && filterStyles.chipTextActive,
+                        ]}
+                      >
                         {beds === null ? "Any" : `${beds}+ bed`}
                       </Text>
                     </TouchableOpacity>
@@ -1494,13 +2128,31 @@ export default function SearchScreen() {
                 {/* Amenities */}
                 <Text style={filterStyles.sectionTitle}>Amenities</Text>
                 <View style={filterStyles.groupedChips}>
-                  {["wifi", "kitchen", "parking", "air_conditioning", "smart_tv", "work_desk", "security_24h", "elevator"].map((a) => (
+                  {[
+                    "wifi",
+                    "kitchen",
+                    "parking",
+                    "air_conditioning",
+                    "smart_tv",
+                    "work_desk",
+                    "security_24h",
+                    "elevator",
+                  ].map((a) => (
                     <TouchableOpacity
                       key={a}
-                      style={[filterStyles.chip, amenityIds.includes(a) && filterStyles.chipActive, { marginBottom: 8 }]}
+                      style={[
+                        filterStyles.chip,
+                        amenityIds.includes(a) && filterStyles.chipActive,
+                        { marginBottom: 8 },
+                      ]}
                       onPress={() => toggleAmenity(a)}
                     >
-                      <Text style={[filterStyles.chipText, amenityIds.includes(a) && filterStyles.chipTextActive]}>
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          amenityIds.includes(a) && filterStyles.chipTextActive,
+                        ]}
+                      >
                         {a.replace("_", " ")}
                       </Text>
                     </TouchableOpacity>
@@ -1515,13 +2167,36 @@ export default function SearchScreen() {
                 {/* Vehicle Category */}
                 <Text style={filterStyles.sectionTitle}>Vehicle Category</Text>
                 <View style={filterStyles.groupedChips}>
-                  {["Economy", "Compact", "SUV", "Minivan", "Pickup", "Luxury", "Electric", "Convertible"].map((catOption) => (
+                  {[
+                    "Economy",
+                    "Compact",
+                    "SUV",
+                    "Minivan",
+                    "Pickup",
+                    "Luxury",
+                    "Electric",
+                    "Convertible",
+                  ].map((catOption) => (
                     <TouchableOpacity
                       key={catOption}
-                      style={[filterStyles.chip, carCategory === catOption && filterStyles.chipActive, { marginBottom: 8 }]}
-                      onPress={() => setCarCategory(carCategory === catOption ? null : catOption)}
+                      style={[
+                        filterStyles.chip,
+                        carCategory === catOption && filterStyles.chipActive,
+                        { marginBottom: 8 },
+                      ]}
+                      onPress={() =>
+                        setCarCategory(
+                          carCategory === catOption ? null : catOption,
+                        )
+                      }
                     >
-                      <Text style={[filterStyles.chipText, carCategory === catOption && filterStyles.chipTextActive]}>
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          carCategory === catOption &&
+                          filterStyles.chipTextActive,
+                        ]}
+                      >
                         {catOption}
                       </Text>
                     </TouchableOpacity>
@@ -1531,14 +2206,24 @@ export default function SearchScreen() {
                 {/* Transmission */}
                 <Text style={filterStyles.sectionTitle}>Transmission</Text>
                 <View style={filterStyles.rowChips}>
-                  {[(null as any), "automatic", "manual"].map((trans) => (
+                  {[null as any, "automatic", "manual"].map((trans) => (
                     <TouchableOpacity
                       key={trans ?? "any"}
-                      style={[filterStyles.chip, transmission === trans && filterStyles.chipActive]}
+                      style={[
+                        filterStyles.chip,
+                        transmission === trans && filterStyles.chipActive,
+                      ]}
                       onPress={() => setTransmission(trans)}
                     >
-                      <Text style={[filterStyles.chipText, transmission === trans && filterStyles.chipTextActive]}>
-                        {trans === null ? "Any" : trans.charAt(0).toUpperCase() + trans.slice(1)}
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          transmission === trans && filterStyles.chipTextActive,
+                        ]}
+                      >
+                        {trans === null
+                          ? "Any"
+                          : trans.charAt(0).toUpperCase() + trans.slice(1)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -1547,14 +2232,25 @@ export default function SearchScreen() {
                 {/* Mileage Policy */}
                 <Text style={filterStyles.sectionTitle}>Mileage Policy</Text>
                 <View style={filterStyles.rowChips}>
-                  {[(null as any), "unlimited", "limited"].map((policy) => (
+                  {[null as any, "unlimited", "limited"].map((policy) => (
                     <TouchableOpacity
                       key={policy ?? "any"}
-                      style={[filterStyles.chip, mileagePolicy === policy && filterStyles.chipActive]}
+                      style={[
+                        filterStyles.chip,
+                        mileagePolicy === policy && filterStyles.chipActive,
+                      ]}
                       onPress={() => setMileagePolicy(policy)}
                     >
-                      <Text style={[filterStyles.chipText, mileagePolicy === policy && filterStyles.chipTextActive]}>
-                        {policy === null ? "Any" : policy.charAt(0).toUpperCase() + policy.slice(1)}
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          mileagePolicy === policy &&
+                          filterStyles.chipTextActive,
+                        ]}
+                      >
+                        {policy === null
+                          ? "Any"
+                          : policy.charAt(0).toUpperCase() + policy.slice(1)}
                       </Text>
                     </TouchableOpacity>
                   ))}
@@ -1563,13 +2259,21 @@ export default function SearchScreen() {
                 {/* Drive Type */}
                 <Text style={filterStyles.sectionTitle}>Drive Type</Text>
                 <View style={filterStyles.rowChips}>
-                  {[(null as any), "2WD", "4WD", "AWD"].map((dt) => (
+                  {[null as any, "2WD", "4WD", "AWD"].map((dt) => (
                     <TouchableOpacity
                       key={dt ?? "any"}
-                      style={[filterStyles.chip, driveType === dt && filterStyles.chipActive]}
+                      style={[
+                        filterStyles.chip,
+                        driveType === dt && filterStyles.chipActive,
+                      ]}
                       onPress={() => setDriveType(dt)}
                     >
-                      <Text style={[filterStyles.chipText, driveType === dt && filterStyles.chipTextActive]}>
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          driveType === dt && filterStyles.chipTextActive,
+                        ]}
+                      >
                         {dt === null ? "Any" : dt}
                       </Text>
                     </TouchableOpacity>
@@ -1579,13 +2283,21 @@ export default function SearchScreen() {
                 {/* Seats */}
                 <Text style={filterStyles.sectionTitle}>Min Seats</Text>
                 <View style={filterStyles.rowChips}>
-                  {[(null as any), 2, 4, 5, 7].map((n) => (
+                  {[null as any, 2, 4, 5, 7].map((n) => (
                     <TouchableOpacity
                       key={n ?? "any"}
-                      style={[filterStyles.chip, seatsMin === n && filterStyles.chipActive]}
+                      style={[
+                        filterStyles.chip,
+                        seatsMin === n && filterStyles.chipActive,
+                      ]}
                       onPress={() => setSeatsMin(n)}
                     >
-                      <Text style={[filterStyles.chipText, seatsMin === n && filterStyles.chipTextActive]}>
+                      <Text
+                        style={[
+                          filterStyles.chipText,
+                          seatsMin === n && filterStyles.chipTextActive,
+                        ]}
+                      >
                         {n === null ? "Any" : `${n}+ seats`}
                       </Text>
                     </TouchableOpacity>
@@ -1596,7 +2308,9 @@ export default function SearchScreen() {
                 <Text style={filterStyles.sectionTitle}>Your Age</Text>
                 <View style={filterStyles.row}>
                   <View style={filterStyles.priceInputBox}>
-                    <Text style={filterStyles.priceLabel}>Excludes cars requiring an older minimum driver age</Text>
+                    <Text style={filterStyles.priceLabel}>
+                      Excludes cars requiring an older minimum driver age
+                    </Text>
                     <TextInput
                       style={filterStyles.priceInput}
                       placeholder="Any"
@@ -1611,24 +2325,38 @@ export default function SearchScreen() {
                 {/* Air Conditioning */}
                 <View style={filterStyles.rowToggle}>
                   <View style={{ flex: 1 }}>
-                    <Text style={filterStyles.toggleTitle}>Air Conditioning</Text>
-                    <Text style={filterStyles.toggleSub}>Only show cars with air conditioning</Text>
+                    <Text style={filterStyles.toggleTitle}>
+                      Air Conditioning
+                    </Text>
+                    <Text style={filterStyles.toggleSub}>
+                      Only show cars with air conditioning
+                    </Text>
                   </View>
                   <TouchableOpacity
                     onPress={() => setAirConditioning(!airConditioning)}
-                    style={[filterStyles.toggleSwitch, airConditioning && filterStyles.toggleSwitchActive]}
+                    style={[
+                      filterStyles.toggleSwitch,
+                      airConditioning && filterStyles.toggleSwitchActive,
+                    ]}
                   >
-                    <View style={[filterStyles.toggleDot, airConditioning && filterStyles.toggleDotActive]} />
+                    <View
+                      style={[
+                        filterStyles.toggleDot,
+                        airConditioning && filterStyles.toggleDotActive,
+                      ]}
+                    />
                   </TouchableOpacity>
                 </View>
               </>
             )}
-
           </ScrollView>
 
           {/* Apply Button */}
           <View style={filterStyles.footer}>
-            <TouchableOpacity style={filterStyles.applyBtn} onPress={() => setFilterVisible(false)}>
+            <TouchableOpacity
+              style={filterStyles.applyBtn}
+              onPress={() => setFilterVisible(false)}
+            >
               <Text style={filterStyles.applyBtnText}>Apply Filters</Text>
             </TouchableOpacity>
           </View>
@@ -1659,11 +2387,16 @@ const promoBannerStyles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 1,
   },
-  fire:      { fontSize: 18 },
-  text:      { fontSize: 13, fontWeight: "700", color: "#92400e" },
-  sub:       { fontSize: 11, color: "#b45309", marginTop: 2 },
-  discBadge: { backgroundColor: "#dc2626", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
-  discText:  { color: "#fff", fontSize: 11, fontWeight: "800" },
+  fire: { fontSize: 18 },
+  text: { fontSize: 13, fontWeight: "700", color: "#92400e" },
+  sub: { fontSize: 11, color: "#b45309", marginTop: 2 },
+  discBadge: {
+    backgroundColor: "#dc2626",
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  discText: { color: "#fff", fontSize: 11, fontWeight: "800" },
 });
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -1779,7 +2512,12 @@ const styles = StyleSheet.create({
 
   // Active filter badges
   badgesScroll: { maxHeight: 44 },
-  badgesRow: { paddingHorizontal: 16, paddingBottom: 10, gap: 8, alignItems: "center" },
+  badgesRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    gap: 8,
+    alignItems: "center",
+  },
   filterBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -1791,24 +2529,58 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  filterBadgeText: { fontSize: 12, fontWeight: "600", color: PRIMARY, maxWidth: 140 },
+  filterBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: PRIMARY,
+    maxWidth: 140,
+  },
   clearAllBadge: { paddingHorizontal: 8, paddingVertical: 6 },
-  clearAllBadgeText: { fontSize: 12, fontWeight: "700", color: DANGER, textDecorationLine: "underline" },
+  clearAllBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: DANGER,
+    textDecorationLine: "underline",
+  },
 
   // List
   list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 32 },
 
   // Center states (loading/error/empty)
-  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
   centerText: { fontSize: 15, color: MUTED, marginTop: 12 },
-  errorTitle: { fontSize: 18, fontWeight: "700", color: TEXT, marginTop: 16, textAlign: "center" },
-  errorSub: { fontSize: 14, color: MUTED, marginTop: 8, textAlign: "center", lineHeight: 20 },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: TEXT,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  errorSub: {
+    fontSize: 14,
+    color: MUTED,
+    marginTop: 8,
+    textAlign: "center",
+    lineHeight: 20,
+  },
 
   // Empty state
   emptyState: { alignItems: "center", paddingTop: 60, paddingHorizontal: 16 },
   emptyTitle: { fontSize: 18, fontWeight: "700", color: TEXT, marginTop: 16 },
-  emptySub: { fontSize: 14, color: MUTED, marginTop: 8, textAlign: "center", lineHeight: 20, marginBottom: 24 },
+  emptySub: {
+    fontSize: 14,
+    color: MUTED,
+    marginTop: 8,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
 
   // Buttons
   retryBtn: {
@@ -1895,7 +2667,7 @@ const styles = StyleSheet.create({
   },
   floatingToggleBtn: {
     position: "absolute",
-    bottom: 24,
+    bottom: 49,
     alignSelf: "center",
     backgroundColor: TEXT,
     borderRadius: 24,
@@ -1932,11 +2704,22 @@ const filterStyles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 16, paddingVertical: 20 },
 
-  sectionTitle: { fontSize: 15, fontWeight: "700", color: TEXT, marginTop: 18, marginBottom: 12 },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: TEXT,
+    marginTop: 18,
+    marginBottom: 12,
+  },
 
   row: { flexDirection: "row", gap: 12 },
   priceInputBox: { flex: 1 },
-  priceLabel: { fontSize: 11, color: MUTED, fontWeight: "500", marginBottom: 5 },
+  priceLabel: {
+    fontSize: 11,
+    color: MUTED,
+    fontWeight: "500",
+    marginBottom: 5,
+  },
   priceInput: {
     borderWidth: 1.5,
     borderColor: BORDER,

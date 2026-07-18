@@ -14,6 +14,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import { useKeyboard } from "../../hooks/useKeyboard";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 import * as DocumentPicker from "expo-document-picker";
@@ -257,6 +258,7 @@ function TimeRangePicker({
 export default function CarListingScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const qc = useQueryClient();
+  const isKeyboardOpen = useKeyboard();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [countryModalOpen, setCountryModalOpen] = useState(false);
@@ -739,7 +741,13 @@ export default function CarListingScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
       >
       <ScrollView
         contentContainerStyle={s.scroll}

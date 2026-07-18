@@ -1,5 +1,5 @@
 "use no memo";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   View, Text, FlatList, TouchableOpacity, StyleSheet,
   ActivityIndicator, TextInput, Dimensions,
@@ -12,6 +12,7 @@ import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { useActivePromotion, ActivePromotion, applyPromotion } from "../../lib/promotions";
+import { useRefreshOnFocus } from "../../hooks/useRefreshOnFocus";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const GREEN = "#1B5E20";
@@ -53,6 +54,8 @@ interface Listing {
   isFavourited?: boolean;
   cancellationPolicy?: string;
   longStayDiscountEnabled?: boolean;
+  promoBadge?: { labelText: string; labelColour?: string } | null;
+  roomTypes?: Array<{ id: string; name: string; roomType: string; pricePerNight: number }> | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -74,7 +77,7 @@ function fmtPrice(n: number | null, currency: string): string {
 
 // ── Category Badge ────────────────────────────────────────────────────────────
 function CategoryBadge({ type }: { type: string }) {
-  const label = type === "hotel" ? "🏨 Hotel" : type === "apartment" ? "🏠 Apartment" : "🚗 Car";
+  const label = type === "hotel" ? "🏨 Hotel" : type === "apartment" ? "🏠 Home" : "🚗 Car";
   const bg = type === "hotel" ? "#EFF6FF" : type === "apartment" ? "#F0FDF4" : "#FFF7ED";
   const color = type === "hotel" ? "#1D4ED8" : type === "apartment" ? "#15803D" : "#C2410C";
   return (
@@ -97,7 +100,24 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
   const isCar = apiCategory === "car";
   const price = isCar ? item.dailyRate : item.nightlyRate;
   const unit = isCar ? "/day" : "/night";
-  const promoted = applyPromotion(price, promotion ?? null);
+
+  const promoPercentFromBadge = item.promoBadge?.labelText
+    ? parseFloat(item.promoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
+
+  const effectivePromo: ActivePromotion | null = item.promoBadge && promoPercentFromBadge > 0
+    ? {
+        activity: apiCategory,
+        discountType: "percentage",
+        discountValue: String(promoPercentFromBadge),
+        labelText: item.promoBadge.labelText,
+        bannerTitle: item.promoBadge.labelText,
+        status: "active",
+        applyToBooking: true,
+      }
+    : promotion ?? null;
+
+  const promoted = applyPromotion(price, effectivePromo);
 
   return (
     <TouchableOpacity style={card.wrap} onPress={onPress} activeOpacity={0.88}>
@@ -167,6 +187,9 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
               </View>
             ) : (
               <Text style={card.price}>
+                {item.roomTypes && item.roomTypes.length > 1 ? (
+                  <Text style={{ fontSize: 11, color: MUTED, fontWeight: "500" }}>From </Text>
+                ) : null}
                 <Text style={card.currency}>{item.currency} </Text>
                 {price.toLocaleString()}
                 <Text style={card.unit}>{unit}</Text>
@@ -239,7 +262,7 @@ export default function BrowseCategoryScreen() {
 
   // Map URL segment to API category value
   const apiCategory = category === "apartments" ? "apartment" : category === "cars" ? "car" : "hotel";
-  const screenTitle = category === "apartments" ? "All Apartments" : category === "cars" ? "All Cars" : "All Hotels";
+  const screenTitle = category === "apartments" ? "All Homes" : category === "cars" ? "All Cars" : "All Hotels";
   const icon = category === "cars" ? "🚗" : category === "apartments" ? "🏠" : "🏨";
 
   const browsePromo = useActivePromotion(apiCategory);
@@ -250,7 +273,7 @@ export default function BrowseCategoryScreen() {
   const [allResults, setAllResults] = useState<Listing[]>([]);
   const [favouriteLoading, setFavouriteLoading] = useState<string | null>(null);
 
-  const { data, isLoading, isFetching, isError, refetch } = useQuery({
+  const { data, isLoading, isFetching, isError, isPlaceholderData, refetch } = useQuery({
     queryKey: ["browse", apiCategory, sort, cursor],
     queryFn: async () => {
       const qp = new URLSearchParams({
@@ -267,18 +290,31 @@ export default function BrowseCategoryScreen() {
       const incoming: { totalCount: number; nextCursor: string | null; results: Listing[] } = res.data.data;
       const fresh = (incoming.results ?? []).filter((r) => r.listingType === apiCategory);
 
-      if (cursor === 0) {
-        setAllResults(fresh);
-      } else {
-        setAllResults((prev) => {
-          const seen = new Set(prev.map((r) => r.id));
-          return [...prev, ...fresh.filter((r) => !seen.has(r.id))];
-        });
-      }
-      return incoming;
+      // Return filtered results — allResults is synced via the useEffect below
+      // so that cache hits (where queryFn is NOT re-run) are handled correctly.
+      return { ...incoming, results: fresh };
     },
-    staleTime: 30_000,
+    // Keep the previous page visible while a new sort / load-more is in flight.
+    placeholderData: (previousData) => previousData,
+    staleTime: 0,
   });
+
+  useRefreshOnFocus(refetch);
+
+  // ── Sync React Query data → accumulated local list ────────────────────────
+  // Moving this logic out of queryFn means cache hits (where queryFn is never
+  // called) also correctly populate / append the displayed list.
+  useEffect(() => {
+    if (isPlaceholderData || !data) return;
+    if (cursor === 0) {
+      setAllResults(data.results ?? []);
+    } else {
+      setAllResults((prev) => {
+        const seen = new Set(prev.map((r) => r.id));
+        return [...prev, ...(data.results ?? []).filter((r) => !seen.has(r.id))];
+      });
+    }
+  }, [data, cursor, isPlaceholderData]);
 
   // Client-side keyword filter — applied to all loaded results
   const displayResults = keyword.trim()
@@ -317,7 +353,8 @@ export default function BrowseCategoryScreen() {
     if (newSort === sort) return;
     setSort(newSort);
     setCursor(0);
-    setAllResults([]);
+    // Do NOT call setAllResults([]) — the previous sorted list stays visible
+    // (via placeholderData) until the freshly sorted results arrive.
   }
 
   function handleLoadMore() {
@@ -402,7 +439,7 @@ export default function BrowseCategoryScreen() {
           <Ionicons name="wifi-outline" size={48} color={BORDER} />
           <Text style={s.errTitle}>Failed to load listings</Text>
           <Text style={s.errSub}>Please check your connection and try again.</Text>
-          <TouchableOpacity style={s.retryBtn} onPress={() => { setCursor(0); setAllResults([]); void refetch(); }}>
+          <TouchableOpacity style={s.retryBtn} onPress={() => { setCursor(0); void refetch(); }}>
             <Text style={s.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>

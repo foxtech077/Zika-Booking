@@ -35,7 +35,7 @@ const CATEGORIES: Array<{
   {
     key: "apartment",
     emoji: "🏠",
-    title: "Apartment / Villa",
+    title: "Home / Villa",
     subtitle: "Self-contained residential unit. Auto-activates once all required fields are complete.",
     flow: "Auto-activates",
     flowColor: K.colors.accent,

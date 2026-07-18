@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useFavourites } from "@/hooks/useFavourites";
 import dynamic from "next/dynamic";
 import ListingCard from "./ListingCard";
+import DateRangePicker from "./DateRangePicker";
 import type { PublicListingDetail } from "@/types";
 import { ActivityPromoBanner } from "./PromoBanner";
 import { isPromotionValid, type ActivePromotion } from "../utils/promo-utils";
@@ -245,11 +246,10 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${
-        active
+      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${active
           ? "bg-[#0c2614] text-white border-[#0c2614]"
           : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-      }`}
+        }`}
     >
       {children}
     </button>
@@ -277,10 +277,10 @@ function StyledDateInput({
 }) {
   const display = value
     ? new Date(value + "T00:00:00").toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    })
     : null;
   return (
     <div>
@@ -311,9 +311,8 @@ function StyledDateInput({
           min={min}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`flex-1 bg-transparent border-none outline-none text-xs font-bold cursor-pointer min-w-0 ${
-            display ? "text-slate-700" : "text-transparent"
-          }`}
+          className={`flex-1 bg-transparent border-none outline-none text-xs font-bold cursor-pointer min-w-0 ${display ? "text-slate-700" : "text-transparent"
+            }`}
         />
       </div>
     </div>
@@ -443,11 +442,10 @@ function FilterPanel({
                 key={s}
                 type="button"
                 onClick={() => onChange({ rating: s === filters.rating ? null : s })}
-                className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${
-                  s === filters.rating
+                className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${s === filters.rating
                     ? "bg-[#0c2614] text-white border-[#0c2614]"
                     : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                }`}
+                  }`}
               >
                 ★ {s}+
               </button>
@@ -527,11 +525,10 @@ function FilterPanel({
                 <button
                   type="button"
                   onClick={() => onChange({ cancellation: value })}
-                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition ${
-                    filters.cancellation === value
+                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition ${filters.cancellation === value
                       ? "bg-[#0c2614] border-[#0c2614]"
                       : "border-slate-300 group-hover:border-[#1D8D2B]"
-                  }`}
+                    }`}
                 >
                   {filters.cancellation === value && (
                     <span className="w-1.5 h-1.5 bg-white rounded-full" />
@@ -591,11 +588,10 @@ function FilterPanel({
                 key={t}
                 type="button"
                 onClick={() => onChange({ transmission: filters.transmission === t ? "" : t })}
-                className={`flex-1 py-2 border rounded-xl text-xs font-semibold capitalize transition ${
-                  filters.transmission === t
+                className={`flex-1 py-2 border rounded-xl text-xs font-semibold capitalize transition ${filters.transmission === t
                     ? "bg-[#0c2614] text-white border-[#0c2614]"
                     : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                }`}
+                  }`}
               >
                 {t}
               </button>
@@ -632,11 +628,10 @@ function FilterPanel({
                 key={s}
                 type="button"
                 onClick={() => onChange({ seats: filters.seats === s ? null : s })}
-                className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${
-                  filters.seats === s
+                className={`flex-1 py-2 border rounded-xl text-xs font-semibold transition ${filters.seats === s
                     ? "bg-[#0c2614] text-white border-[#0c2614]"
                     : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                }`}
+                  }`}
               >
                 {s}+
               </button>
@@ -711,13 +706,13 @@ function FilterPanel({
       )}
 
       {/* Instant Book */}
-      <div className="flex items-center justify-between py-1">
+      {/* <div className="flex items-center justify-between py-1">
         <div>
           <p className="text-xs font-semibold text-slate-700">⚡ Instant Book</p>
           <p className="text-[10px] text-slate-400">No approval needed</p>
         </div>
         <Toggle on={filters.instantOnly} onToggle={() => onChange({ instantOnly: !filters.instantOnly })} />
-      </div>
+      </div> */}
 
       {/* Action buttons */}
       <button
@@ -1264,15 +1259,32 @@ export default function CategoryListingsClient({ category }: Props) {
 
             {/* Dates */}
             {!isCar ? (
-              <>
-                <StyledDateInput label="Check-in" value={checkIn} onChange={setCheckIn} min={today()} />
-                <StyledDateInput label="Check-out" value={checkOut} onChange={setCheckOut} min={checkIn || today()} />
-              </>
+              <div className="md:col-span-2">
+                <DateRangePicker
+                  label="Select Dates"
+                  startDate={checkIn}
+                  endDate={checkOut}
+                  onChange={(start, end) => {
+                    setCheckIn(start);
+                    setCheckOut(end);
+                  }}
+                  minDate={today()}
+                />
+              </div>
             ) : (
-              <>
-                <StyledDateInput label="Pickup Date" value={pickupDate} onChange={setPickupDate} min={today()} />
-                <StyledDateInput label="Return Date" value={returnDate} onChange={setReturnDate} min={pickupDate || today()} />
-              </>
+              <div className="md:col-span-2">
+                <DateRangePicker
+                  label="Select Rental Period"
+                  isCar
+                  startDate={pickupDate}
+                  endDate={returnDate}
+                  onChange={(start, end) => {
+                    setPickupDate(start);
+                    setReturnDate(end);
+                  }}
+                  minDate={today()}
+                />
+              </div>
             )}
 
             {/* Guests / Search */}
@@ -1399,11 +1411,10 @@ export default function CategoryListingsClient({ category }: Props) {
               <button
                 type="button"
                 onClick={() => setShowMap((v) => !v)}
-                className={`hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-semibold transition ${
-                  showMap
+                className={`hidden lg:flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-semibold transition ${showMap
                     ? "bg-[#0c2614] text-white border-[#0c2614]"
                     : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                }`}
+                  }`}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -1496,11 +1507,10 @@ export default function CategoryListingsClient({ category }: Props) {
               ) : (
                 <>
                   <div
-                    className={`grid gap-5 ${
-                      showMap
+                    className={`grid gap-5 ${showMap
                         ? "grid-cols-1 sm:grid-cols-2"
                         : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-                    }`}
+                      }`}
                   >
                     {listings.map((listing) => (
                       <ListingCard

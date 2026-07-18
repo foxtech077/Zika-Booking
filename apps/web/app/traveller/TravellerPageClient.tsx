@@ -20,6 +20,7 @@ import { isPromotionValid } from "./utils/promo-utils";
 import PhotoGallery from "./components/PhotoGallery";
 import ReservationCard from "./components/ReservationCard";
 import MapView from "./components/MapView";
+import DateRangePicker from "./components/DateRangePicker";
 import type { PublicListingDetail } from "@/types";
 
 const AMENITY_CATEGORY: Record<string, string> = {
@@ -379,11 +380,21 @@ export default function TravellerDashboard() {
     }
   }, [user?.id]);
 
-  // Sync URL search parameters (tab, listing) with component state
+  // Handle ?tab=bookings, ?listing=<id>, and date query params on first mount
+  const urlTabHandled = useRef(false);
   useEffect(() => {
     if (!ready) return;
     const tab = searchParams.get("tab");
     const listingId = searchParams.get("listing");
+    const checkin = searchParams.get("checkin") || searchParams.get("checkIn");
+    const checkout = searchParams.get("checkout") || searchParams.get("checkOut");
+    const pickup = searchParams.get("pickup") || searchParams.get("pickupDate");
+    const ret = searchParams.get("return") || searchParams.get("returnDate");
+
+    if (checkin) { setSearchCheckIn(checkin); setDetailCheckIn(checkin); }
+    if (checkout) { setSearchCheckOut(checkout); setDetailCheckOut(checkout); }
+    if (pickup) { setSearchPickupDate(pickup); setDetailPickupDate(pickup); }
+    if (ret) { setSearchReturnDate(ret); setDetailReturnDate(ret); }
 
     if (tab === "bookings") {
       if (activeTab !== "bookings") {
@@ -1132,10 +1143,10 @@ export default function TravellerDashboard() {
     setPromotionDiscount(0);
     setApplicableVouchers([]);
     setWalletVouchers([]);
-    setDetailCheckIn("");
-    setDetailCheckOut("");
-    setDetailPickupDate("");
-    setDetailReturnDate("");
+    setDetailCheckIn(searchCheckIn || "");
+    setDetailCheckOut(searchCheckOut || "");
+    setDetailPickupDate(searchPickupDate || "");
+    setDetailReturnDate(searchReturnDate || "");
 
     try {
       const res = await listingApi.get<any>(`/listings/${id}/public`);
@@ -1348,8 +1359,25 @@ export default function TravellerDashboard() {
   // Helper: calculate nights/days between two date strings
   function calcDays(start: string, end: string): number {
     if (!start || !end) return 0;
-    const diff = new Date(end).getTime() - new Date(start).getTime();
-    return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
+    try {
+      const [sy, sm, sd] = start.split("-").map(Number);
+      const [ey, em, ed] = end.split("-").map(Number);
+      if (
+        sy !== undefined && sm !== undefined && sd !== undefined &&
+        ey !== undefined && em !== undefined && ed !== undefined &&
+        !isNaN(sy) && !isNaN(sm) && !isNaN(sd) &&
+        !isNaN(ey) && !isNaN(em) && !isNaN(ed)
+      ) {
+        const s = new Date(sy, sm - 1, sd).getTime();
+        const e = new Date(ey, em - 1, ed).getTime();
+        const diff = Math.round((e - s) / (1000 * 60 * 60 * 24));
+        return Math.max(1, diff);
+      }
+      const diff = new Date(end).getTime() - new Date(start).getTime();
+      return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
+    } catch {
+      return 0;
+    }
   }
 
   // 5. Locking stays/cars date locking `/bookings/initiate`
@@ -1581,7 +1609,7 @@ export default function TravellerDashboard() {
           setBookingSuccessModal({
             reference: bookingRef,
             amount,
-            currency: detailListing!.currency,
+            currency: detailListing?.currency || "USD",
             pointsAwarded: Math.round(amount * 0.1),
           });
           if (user) updateUser({ loyaltyPoints: user.loyaltyPoints + Math.round(amount * 0.1) });
@@ -2069,14 +2097,26 @@ export default function TravellerDashboard() {
                   <div className="pb-6">
                     <h2 className="text-2xl font-semibold mb-3">Where you'll be</h2>
                     {detailListing.address && <p className="text-slate-500 text-sm mb-4">{detailListing.address}</p>}
-                    <div className="w-full h-[300px] bg-slate-100 rounded-2xl flex items-center justify-center border border-slate-200">
-                      <div className="text-center space-y-2 text-slate-400">
-                        <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-                        </svg>
-                        <p className="text-sm font-semibold text-slate-600">{detailListing.neighborhood ? `${detailListing.neighborhood}, ` : ""}{detailListing.town}{detailListing.country ? `, ${detailListing.country}` : ""}</p>
-                      </div>
+                    <div className="w-full h-[300px] rounded-2xl overflow-hidden border border-slate-200 relative z-0">
+                      {detailListing.lat && detailListing.lng ? (
+                        <MapView
+                          listings={[detailListing]}
+                          hoveredId={detailListing.id}
+                          onHover={() => { }}
+                          onSelect={() => { }}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-slate-100 flex items-center justify-center">
+                          <div className="text-center space-y-2 text-slate-400">
+                            <svg className="w-8 h-8 mx-auto" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+                            </svg>
+                            <p className="text-sm font-semibold text-slate-600">{detailListing.town}{detailListing.country ? `, ${detailListing.country}` : ""}</p>
+                            <p className="text-xs text-slate-400 mt-1">Location coordinates not available</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2090,15 +2130,42 @@ export default function TravellerDashboard() {
                       const selectedRt = isHotel
                         ? (detailListing.roomTypes ?? []).find((r) => r.id === selectedRoomTypeId)
                         : null;
-                      const pricePerNight = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+                      const basePrice = selectedRt ? selectedRt.pricePerNight : detailListing.pricePerNight;
+
+                      // Calculate discount
+                      const hasLongStay = detailListing.longStayDiscountEnabled;
+                      const longStayPct = hasLongStay ? 15 : 0;
+                      let displayPrice = basePrice;
+                      const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
+
+                      if (isValidPromo) {
+                        const promoDiscount = activePromotion.discountType === "percentage"
+                          ? Math.round(basePrice * (Number(activePromotion.discountValue) / 100))
+                          : Math.round(Number(activePromotion.discountValue));
+                        displayPrice = Math.max(0, basePrice - promoDiscount);
+                      } else if (hasLongStay) {
+                        displayPrice = Math.round(basePrice * (1 - longStayPct / 100));
+                      }
+
                       return (
-                        <div className="flex justify-between items-baseline mb-3">
-                          <div className="text-2xl font-bold text-slate-900">
-                            {detailListing.currency} {pricePerNight.toLocaleString()}
-                            <span className="text-sm font-normal text-slate-500 ml-1">/ {detailListing.category === "car" ? "day" : "night"}</span>
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <div className="flex items-baseline gap-2 flex-wrap">
+                              <span className="text-2xl font-extrabold text-slate-900">
+                                {detailListing.currency} {displayPrice.toLocaleString()}
+                              </span>
+                              {basePrice > displayPrice && (
+                                <span className="text-sm font-semibold line-through text-slate-400">
+                                  {detailListing.currency} {basePrice.toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-400 font-medium mt-0.5">
+                              / {detailListing.category === "car" ? "day" : "night"}
+                            </div>
                           </div>
                           {detailListing.starRating && (
-                            <div className="text-sm font-semibold flex items-center gap-1 text-slate-800">
+                            <div className="text-sm font-semibold flex items-center gap-1 text-slate-800 bg-slate-50 border border-slate-100 rounded-full px-2.5 py-1">
                               ⭐ {detailListing.starRating}
                             </div>
                           )}
@@ -2143,90 +2210,82 @@ export default function TravellerDashboard() {
 
                       return (
                         <div className="space-y-4">
-                          {/* Date inputs — absolute overlay, always hides native text, clickable */}
-                          <div className="border border-slate-300 rounded-xl overflow-hidden divide-y divide-slate-300">
+                          {/* Date inputs */}
+                          <div className="space-y-3">
                             {isCar ? (
-                              <div className="grid grid-cols-2 divide-x divide-slate-300">
-                                {([
-                                  { label: "Pickup", id: "dp-pickup", val: detailPickupDate, set: (v: string) => { setDetailPickupDate(v); if (detailReturnDate && v > detailReturnDate) setDetailReturnDate(v); }, minVal: getTodayString() },
-                                  { label: "Return", id: "dp-return", val: detailReturnDate, set: (v: string) => { setDetailReturnDate(v); if (detailPickupDate && v < detailPickupDate) setDetailPickupDate(v); }, minVal: detailPickupDate || getTodayString() },
-                                ] as const).map(({ label, id, val, set, minVal }) => {
-                                  const fmt = val ? new Date(val + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
-                                  return (
-                                    <div key={label} className="p-3 cursor-pointer hover:bg-slate-50 transition-colors"
-                                      onClick={() => {
-                                        const inp = document.getElementById(id) as HTMLInputElement | null;
-                                        if (!inp) return;
-                                        try { (inp as any).showPicker?.(); } catch { inp.focus(); }
-                                      }}>
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-                                      <p className={`text-sm font-semibold mt-0.5 ${fmt ? "text-slate-800" : "text-slate-400 font-normal"}`}>
-                                        {fmt ?? "Add date"}
-                                      </p>
-                                      <input id={id} type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
-                                        className="sr-only" />
-                                    </div>
-                                  );
-                                })}
-                              </div>
+                              <DateRangePicker
+                                label="Rental Dates"
+                                isCar
+                                startDate={detailPickupDate}
+                                endDate={detailReturnDate}
+                                onChange={(start, end) => {
+                                  setDetailPickupDate(start);
+                                  setDetailReturnDate(end);
+                                }}
+                                minDate={getTodayString()}
+                              />
                             ) : (
                               <>
-                                <div className="grid grid-cols-2 divide-x divide-slate-300">
-                                  {([
-                                    { label: "Check-in", id: "dp-checkin", val: detailCheckIn, set: (v: string) => { setDetailCheckIn(v); if (detailCheckOut && v > detailCheckOut) setDetailCheckOut(v); }, minVal: getTodayString() },
-                                    { label: "Check-out", id: "dp-checkout", val: detailCheckOut, set: (v: string) => { setDetailCheckOut(v); if (detailCheckIn && v < detailCheckIn) setDetailCheckIn(v); }, minVal: detailCheckIn || getTodayString() },
-                                  ] as const).map(({ label, id, val, set, minVal }) => {
-                                    const fmt = val ? new Date(val + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null;
-                                    return (
-                                      <div key={label} className="p-3 cursor-pointer hover:bg-slate-50 transition-colors"
-                                        onClick={() => {
-                                          const inp = document.getElementById(id) as HTMLInputElement | null;
-                                          if (!inp) return;
-                                          try { (inp as any).showPicker?.(); } catch { inp.focus(); }
-                                        }}>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
-                                        <p className={`text-sm font-semibold mt-0.5 ${fmt ? "text-slate-800" : "text-slate-400 font-normal"}`}>
-                                          {fmt ?? "Add date"}
-                                        </p>
-                                        <input id={id} type="date" min={minVal} value={val} onChange={(e) => set(e.target.value)}
-                                          className="sr-only" />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <div className="p-3 border-t border-slate-300">
+                                <DateRangePicker
+                                  label="Check-in – Check-out"
+                                  startDate={detailCheckIn}
+                                  endDate={detailCheckOut}
+                                  onChange={(start, end) => {
+                                    setDetailCheckIn(start);
+                                    setDetailCheckOut(end);
+                                  }}
+                                  minDate={getTodayString()}
+                                />
+                                <div className="border border-slate-200 rounded-xl p-3 bg-slate-50">
                                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Guests</p>
                                   <select
                                     value={searchAdults}
                                     onChange={(e) => setSearchAdults(Number(e.target.value))}
-                                    className="w-full mt-1 text-sm bg-transparent outline-none"
+                                    className="w-full mt-1 text-sm bg-transparent outline-none font-bold text-slate-700"
                                   >
                                     {[1, 2, 3, 4, 5, 6].map((n) => (
                                       <option key={n} value={n}>{n} guest{n > 1 ? "s" : ""}</option>
                                     ))}
                                   </select>
                                 </div>
-                                {detailListing.category === "hotel" && detailListing.roomTypes && detailListing.roomTypes.length > 0 && (
-                                  <div className="p-3 border-t border-slate-200">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Type</p>
-                                    <select
-                                      value={selectedRoomTypeId || ""}
-                                      onChange={(e) => setSelectedRoomTypeId(e.target.value || null)}
-                                      className="w-full mt-1 text-sm bg-transparent outline-none font-semibold text-slate-800"
-                                    >
-                                      {detailListing.roomTypes
-                                        .filter((rt) => rt.isActive !== false)
-                                        .map((rt) => (
-                                          <option key={rt.id} value={rt.id}>
-                                            {rt.name} — {detailListing.currency} {Number(rt.pricePerNight).toLocaleString()}/night
-                                          </option>
-                                        ))}
-                                    </select>
-                                  </div>
-                                )}
                               </>
                             )}
                           </div>
+                          {detailListing.category === "hotel" && detailListing.roomTypes && detailListing.roomTypes.length > 0 && (
+                            <div className="p-3 border-t border-slate-200">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Type</p>
+                              <select
+                                value={selectedRoomTypeId || ""}
+                                onChange={(e) => setSelectedRoomTypeId(e.target.value || null)}
+                                className="w-full mt-1 text-sm bg-transparent outline-none font-semibold text-slate-800"
+                              >
+                                {detailListing.roomTypes
+                                  .filter((rt) => rt.isActive !== false)
+                                  .map((rt) => {
+                                    const baseRtPrice = rt.pricePerNight;
+                                    let displayRtPrice = baseRtPrice;
+                                    const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
+                                    const hasLongStay = detailListing.longStayDiscountEnabled;
+                                    const longStayPct = hasLongStay ? 15 : 0;
+
+                                    if (isValidPromo) {
+                                      const promoDiscount = activePromotion.discountType === "percentage"
+                                        ? Math.round(baseRtPrice * (Number(activePromotion.discountValue) / 100))
+                                        : Math.round(Number(activePromotion.discountValue));
+                                      displayRtPrice = Math.max(0, baseRtPrice - promoDiscount);
+                                    } else if (hasLongStay) {
+                                      displayRtPrice = Math.round(baseRtPrice * (1 - longStayPct / 100));
+                                    }
+
+                                    return (
+                                      <option key={rt.id} value={rt.id}>
+                                        {rt.name} — {detailListing.currency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${detailListing.currency} ${baseRtPrice.toLocaleString()})` : ""}
+                                      </option>
+                                    );
+                                  })}
+                              </select>
+                            </div>
+                          )}
 
                           {/* Voucher / Promo code selector */}
                           {renderVoucherSelector()}
@@ -2760,18 +2819,21 @@ export default function TravellerDashboard() {
           // VIEW 1: FULL HOME PAGE
           <div>
             {/* Hero */}
-            <div className="relative w-full flex items-center justify-center overflow-hidden" style={{ height: "85vh", minHeight: "480px" }}>
-              <img
-                src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1920&q=95"
-                alt="Lakeside hotel at evening"
-                className="absolute inset-0 w-full h-full object-cover object-center"
-              />
-              {/* Dark cinematic overlay */}
-              <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/35 to-black/75" />
-              {/* Bottom blend — fades hero into the dark-green ticker below */}
-              <div className="absolute bottom-0 left-0 right-0 h-36 bg-gradient-to-t from-[#0c2614] to-transparent pointer-events-none" />
+            <div className="relative w-full flex items-center justify-center z-20" style={{ minHeight: "85vh" }}>
+              {/* Background image & gradient overlays — overflow clipped strictly here */}
+              <div className="absolute inset-0 overflow-hidden">
+                <img
+                  src="https://images.unsplash.com/photo-1566073771259-6a8506099945?w=1920&q=95"
+                  alt="Lakeside hotel at evening"
+                  className="absolute inset-0 w-full h-full object-cover object-center"
+                />
+                {/* Dark cinematic overlay */}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/35 to-black/75" />
+                {/* Bottom blend — fades hero into the dark-green ticker below */}
+                <div className="absolute bottom-0 left-0 right-0 h-36 bg-gradient-to-t from-[#0c2614] to-transparent pointer-events-none" />
+              </div>
 
-              <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center">
+              <div className="relative z-10 w-full max-w-4xl mx-auto px-6 text-center py-12 md:py-20">
                 <p className="text-white/55 text-[10px] font-semibold tracking-[0.4em] uppercase mb-3">Private Collections 2026</p>
                 <h1 className="text-4xl md:text-6xl lg:text-7xl font-serif italic font-light text-white leading-tight drop-shadow-xl mb-5 md:mb-7">
                   Extraordinary Stays,<br />Unforgettable Journeys
@@ -2788,8 +2850,8 @@ export default function TravellerDashboard() {
                       key={key}
                       onClick={() => { setSearchCategory(key); }}
                       className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition border ${searchCategory === key
-                          ? "bg-white text-[#0c2614] border-white shadow-md"
-                          : "bg-white/15 text-white border-white/30 hover:bg-white/25 backdrop-blur-sm"
+                        ? "bg-white text-[#0c2614] border-white shadow-md"
+                        : "bg-white/15 text-white border-white/30 hover:bg-white/25 backdrop-blur-sm"
                         }`}
                     >
                       {icon}
@@ -2865,94 +2927,79 @@ export default function TravellerDashboard() {
                     </div>
 
                     {/* Date fields */}
-                    {searchCategory === "car" ? (
-                      <>
-                        <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
-                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { const el = document.getElementById("hero-pickup") as HTMLInputElement; el?.showPicker?.(); el?.focus(); }}>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Pickup</p>
-                            <p className={`text-sm font-semibold ${searchPickupDate ? "text-slate-800" : "text-slate-400"}`}>
-                              {searchPickupDate ? new Date(searchPickupDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "Add date"}
-                            </p>
-                            <input id="hero-pickup" type="date" min={getTodayString()} value={searchPickupDate} onChange={e => setSearchPickupDate(e.target.value)} className="sr-only" />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
-                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { const el = document.getElementById("hero-return") as HTMLInputElement; el?.showPicker?.(); el?.focus(); }}>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Return</p>
-                            <p className={`text-sm font-semibold ${searchReturnDate ? "text-slate-800" : "text-slate-400"}`}>
-                              {searchReturnDate ? new Date(searchReturnDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "Add date"}
-                            </p>
-                            <input id="hero-return" type="date" min={searchPickupDate || getTodayString()} value={searchReturnDate} onChange={e => setSearchReturnDate(e.target.value)} className="sr-only" />
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
-                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { const el = document.getElementById("hero-checkin") as HTMLInputElement; el?.showPicker?.(); el?.focus(); }}>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Check-in</p>
-                            <p className={`text-sm font-semibold ${searchCheckIn ? "text-slate-800" : "text-slate-400"}`}>
-                              {searchCheckIn ? new Date(searchCheckIn + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "Add date"}
-                            </p>
-                            <input id="hero-checkin" type="date" min={getTodayString()} value={searchCheckIn} onChange={e => setSearchCheckIn(e.target.value)} className="sr-only" />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
-                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => { const el = document.getElementById("hero-checkout") as HTMLInputElement; el?.showPicker?.(); el?.focus(); }}>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Check-out</p>
-                            <p className={`text-sm font-semibold ${searchCheckOut ? "text-slate-800" : "text-slate-400"}`}>
-                              {searchCheckOut ? new Date(searchCheckOut + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "Add date"}
-                            </p>
-                            <input id="hero-checkout" type="date" min={searchCheckIn || getTodayString()} value={searchCheckOut} onChange={e => setSearchCheckOut(e.target.value)} className="sr-only" />
-                          </div>
-                        </div>
+                    <div className="relative flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-[220px]">
+                      {searchCategory === "car" ? (
+                        <DateRangePicker
+                          label="Rental Dates"
+                          isCar
+                          startDate={searchPickupDate}
+                          endDate={searchReturnDate}
+                          onChange={(start, end) => {
+                            setSearchPickupDate(start);
+                            setSearchReturnDate(end);
+                          }}
+                          minDate={getTodayString()}
+                          variant="searchBar"
+                          className="w-full"
+                        />
+                      ) : (
+                        <DateRangePicker
+                          label="Check-in – Check-out"
+                          startDate={searchCheckIn}
+                          endDate={searchCheckOut}
+                          onChange={(start, end) => {
+                            setSearchCheckIn(start);
+                            setSearchCheckOut(end);
+                          }}
+                          minDate={getTodayString()}
+                          variant="searchBar"
+                          className="w-full"
+                        />
+                      )}
+                    </div>
 
-                        {/* Guests */}
-                        <div className="relative flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
-                          <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                          <button type="button" onClick={() => setShowGuestPicker((v) => !v)} className="flex-1 min-w-0 text-left">
-                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Guests</p>
-                            <p className="text-sm font-semibold text-slate-800 truncate">
-                              {searchAdults} Adult{searchAdults !== 1 ? "s" : ""}{searchChildren > 0 ? `, ${searchChildren} Child${searchChildren !== 1 ? "ren" : ""}` : ""}
-                            </p>
-                          </button>
-                          {showGuestPicker && (
-                            <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 w-72 p-4 space-y-1">
-                              <div className="flex items-center justify-between py-3 border-b border-slate-100">
-                                <div><p className="text-sm font-semibold text-slate-800">Adults</p><p className="text-[10px] text-slate-400">Age 13+</p></div>
-                                <div className="flex items-center gap-3">
-                                  <button type="button" onClick={() => setSearchAdults((a) => Math.max(1, a - 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-light" disabled={searchAdults <= 1}>−</button>
-                                  <span className="w-5 text-center text-sm font-bold text-slate-900">{searchAdults}</span>
-                                  <button type="button" onClick={() => setSearchAdults((a) => Math.min(16, a + 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 text-lg font-light">+</button>
-                                </div>
+                    {/* Guests */}
+                    {searchCategory !== "car" && (
+                      <div className="relative flex items-center gap-2 px-5 py-4 md:border-r border-slate-200 flex-1 min-w-0">
+                        <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        <button type="button" onClick={() => setShowGuestPicker((v) => !v)} className="flex-1 min-w-0 text-left">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Guests</p>
+                          <p className="text-sm font-semibold text-slate-800 truncate">
+                            {searchAdults} Adult{searchAdults !== 1 ? "s" : ""}{searchChildren > 0 ? `, ${searchChildren} Child${searchChildren !== 1 ? "ren" : ""}` : ""}
+                          </p>
+                        </button>
+                        {showGuestPicker && (
+                          <div className="absolute top-full left-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 w-72 p-4 space-y-1">
+                            <div className="flex items-center justify-between py-3 border-b border-slate-100">
+                              <div><p className="text-sm font-semibold text-slate-800">Adults</p><p className="text-[10px] text-slate-400">Age 13+</p></div>
+                              <div className="flex items-center gap-3">
+                                <button type="button" onClick={() => setSearchAdults((a) => Math.max(1, a - 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-light" disabled={searchAdults <= 1}>−</button>
+                                <span className="w-5 text-center text-sm font-bold text-slate-900">{searchAdults}</span>
+                                <button type="button" onClick={() => setSearchAdults((a) => Math.min(16, a + 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 text-lg font-light">+</button>
                               </div>
-                              <div className="flex items-center justify-between py-3 border-b border-slate-100">
-                                <div><p className="text-sm font-semibold text-slate-800">Children</p><p className="text-[10px] text-slate-400">Ages 2–12</p></div>
-                                <div className="flex items-center gap-3">
-                                  <button type="button" onClick={() => setSearchChildren((c) => Math.max(0, c - 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-light" disabled={searchChildren <= 0}>−</button>
-                                  <span className="w-5 text-center text-sm font-bold text-slate-900">{searchChildren}</span>
-                                  <button type="button" onClick={() => setSearchChildren((c) => Math.min(10, c + 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 text-lg font-light">+</button>
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between py-3">
-                                <div><p className="text-sm font-semibold text-slate-800">Rooms</p><p className="text-[10px] text-slate-400">Number of rooms</p></div>
-                                <div className="flex items-center gap-3">
-                                  <button type="button" onClick={() => setSearchRooms((r) => Math.max(1, r - 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-light" disabled={searchRooms <= 1}>−</button>
-                                  <span className="w-5 text-center text-sm font-bold text-slate-900">{searchRooms}</span>
-                                  <button type="button" onClick={() => setSearchRooms((r) => Math.min(8, r + 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 text-lg font-light">+</button>
-                                </div>
-                              </div>
-                              <button type="button" onClick={() => setShowGuestPicker(false)} className="w-full py-2 bg-[#0c2614] text-white text-xs font-bold rounded-xl mt-2">Done</button>
                             </div>
-                          )}
-                        </div>
-                      </>
+                            <div className="flex items-center justify-between py-3 border-b border-slate-100">
+                              <div><p className="text-sm font-semibold text-slate-800">Children</p><p className="text-[10px] text-slate-400">Ages 2–12</p></div>
+                              <div className="flex items-center gap-3">
+                                <button type="button" onClick={() => setSearchChildren((c) => Math.max(0, c - 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-light" disabled={searchChildren <= 0}>−</button>
+                                <span className="w-5 text-center text-sm font-bold text-slate-900">{searchChildren}</span>
+                                <button type="button" onClick={() => setSearchChildren((c) => Math.min(10, c + 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 text-lg font-light">+</button>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between py-3">
+                              <div><p className="text-sm font-semibold text-slate-800">Rooms</p><p className="text-[10px] text-slate-400">Number of rooms</p></div>
+                              <div className="flex items-center gap-3">
+                                <button type="button" onClick={() => setSearchRooms((r) => Math.max(1, r - 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30 text-lg font-light" disabled={searchRooms <= 1}>−</button>
+                                <span className="w-5 text-center text-sm font-bold text-slate-900">{searchRooms}</span>
+                                <button type="button" onClick={() => setSearchRooms((r) => Math.min(8, r + 1))} className="w-7 h-7 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-50 text-lg font-light">+</button>
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => setShowGuestPicker(false)} className="w-full py-2 bg-[#0c2614] text-white text-xs font-bold rounded-xl mt-2">Done</button>
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {/* Explore Now button */}
@@ -3502,8 +3549,8 @@ export default function TravellerDashboard() {
                               active ? prev.filter((a) => a !== key) : [...prev, key]
                             )}
                             className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${active
-                                ? "bg-[#0c2614] text-white border-[#0c2614]"
-                                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                              ? "bg-[#0c2614] text-white border-[#0c2614]"
+                              : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
                               }`}
                           >
                             {label}
@@ -4055,7 +4102,7 @@ export default function TravellerDashboard() {
             </div>
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
               {/* Instant Book */}
-              <div className="flex items-center justify-between">
+              {/* <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-slate-700">Instant Book</p>
                   <p className="text-xs text-slate-400">No approval needed</p>
@@ -4066,7 +4113,7 @@ export default function TravellerDashboard() {
                 >
                   <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInstantOnly ? "translate-x-5" : ""}`} />
                 </button>
-              </div>
+              </div> */}
               {/* Price range */}
               <div className="space-y-2">
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -4205,7 +4252,7 @@ export default function TravellerDashboard() {
               </div>
               <div className="flex justify-between border-b border-slate-100 pb-2">
                 <span className="text-slate-400 font-semibold uppercase tracking-wider">Paid Amount</span>
-                <span className="text-[#1D8D2B] font-bold">${bookingSuccessModal.amount.toLocaleString()} {bookingSuccessModal.currency}</span>
+                <span className="text-[#1D8D2B] font-bold">{bookingSuccessModal.currency} {bookingSuccessModal.amount?.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-400 font-semibold uppercase tracking-wider">Loyalty Points Earned</span>

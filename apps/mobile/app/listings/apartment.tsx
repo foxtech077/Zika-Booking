@@ -11,6 +11,7 @@ import {
   BackHandler,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
+import { useKeyboard } from "../../hooks/useKeyboard";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 import { listingApi, uploadToS3 } from "../../lib/listing-api";
@@ -94,6 +95,7 @@ type FormErrors = Partial<Record<keyof ApartmentForm | "photos", string>>;
 export default function ApartmentListingScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const qc = useQueryClient();
+  const isKeyboardOpen = useKeyboard();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [countryModalOpen, setCountryModalOpen] = useState(false);
@@ -452,7 +454,7 @@ export default function ApartmentListingScreen() {
   return (
     <View style={s.container}>
       <WizardHeader
-        title="Apartment Listing"
+        title="Home Listing"
         step={step}
         steps={STEPS}
         onBack={handleBack}
@@ -460,7 +462,13 @@ export default function ApartmentListingScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
       >
       <ScrollView
         contentContainerStyle={s.scroll}
@@ -472,15 +480,15 @@ export default function ApartmentListingScreen() {
         {step === 0 && (
           <View>
             <InfoBanner
-              message="Apartments auto-activate once all required fields are complete and at least 3 photos are uploaded. No admin review needed."
+              message="Homes auto-activate once all required fields are complete and at least 3 photos are uploaded. No admin review needed."
               variant="success"
             />
             <View style={s.gap} />
 
-            <SectionHeader title="Apartment Details" icon="home" />
+            <SectionHeader title="Home Details" icon="home" />
 
             <FormField
-              label="Apartment Name"
+              label="Home Name"
               required
               value={form.name}
               onChangeText={(t) => set("name", t)}
@@ -557,12 +565,12 @@ export default function ApartmentListingScreen() {
             <SectionHeader title="Description" icon="align-left" />
 
             <FormField
-              label="About this apartment"
+              label="About this home"
               required
               hint={`${form.description.length}/1000 characters`}
               value={form.description}
               onChangeText={(t) => set("description", t.slice(0, 1000))}
-              placeholder="Describe your apartment, neighbourhood, and what makes it special…"
+              placeholder="Describe your home, neighbourhood, and what makes it special…"
               multiline
               numberOfLines={5}
               error={errors.description}
