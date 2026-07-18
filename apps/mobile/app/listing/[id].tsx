@@ -12,6 +12,8 @@ import { listingApi } from "../../lib/listing-api";
 import { useAuthStore } from "../../store/auth";
 import { ListingImage } from "../../components/ListingImage";
 import { ActivePromotion, applyPromotion } from "../../lib/promotions";
+import { RoomTypeSelector } from "../../components/listing/RoomTypeSelector";
+import type { RoomType } from "../../components/listing/RoomTypeCard";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -23,7 +25,7 @@ try {
 
 const { width: W, height: H } = Dimensions.get("window");
 const PHOTO_H = Math.round(H * 0.42);
-const GREEN = "#1B5E20";
+const GREEN = "#15803D";
 const GREEN_LIGHT = "#F0FDF4";
 const TEXT = "#111827";
 const MUTED = "#6B7280";
@@ -44,11 +46,17 @@ interface Review {
   body?: string | null; createdAt: string; providerReply?: string | null;
 }
 interface ReviewsData { reviews: Review[]; total: number; averageRating: number; }
+interface PromoBadge {
+  labelText: string;
+  labelColour?: string;
+}
+
 interface PublicListing {
-  id: string; name: string | null; category: "hotel" | "apartment" | "car"; providerId: string | null;
+  id: string; name: string | null; title?: string | null; category: "hotel" | "apartment" | "car"; providerId: string | null;
   status: string; description: string | null; address: string | null;
   town: string | null; country: string | null; lat: number | null; lng: number | null;
   pricePerNight: number | null; pricePerDay: number | null; currency: string | null;
+  nightlyRate?: number | null; dailyRate?: number | null;
   cancellationPolicy: string | null; minStayNights: number | null;
   checkinTime: string | null; checkoutTime: string | null;
   smokingAllowed: boolean | null; petsAllowed: boolean | null;
@@ -63,6 +71,10 @@ interface PublicListing {
   deliveryFee: number | null; deliveryRadiusKm: number | null;
   amenities: Amenity[]; customAmenities: CustomAmenity[]; photos: Photo[];
   isFavourited: boolean | undefined;
+  isAccredited?: boolean;
+  promoBadge?: PromoBadge | null;
+  roomTypes?: RoomType[];
+  hotelRoomTypes?: RoomType[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -249,7 +261,7 @@ function GalleryModal({ photos, photoIdx, setPhotoIdx, onClose }: GalleryModalPr
           <Text style={{ color: "#fff", fontSize: 14, fontWeight: "700" }}>{photoIdx + 1} / {photos.length}</Text>
         </View>
       </View>
-      {/* Close button — absolutely positioned so it never gets covered */}
+      {/* Close button */}
       <TouchableOpacity
         onPress={onClose}
         activeOpacity={0.8}
@@ -559,6 +571,9 @@ export default function ListingDetailScreen() {
   const [msgDraft, setMsgDraft] = useState("");
   const [msgSending, setMsgSending] = useState(false);
 
+  // Room type selection state
+  const [selectedRoomTypeId, setSelectedRoomTypeId] = useState<string | null>(null);
+
   // ── Data ──
   const { data: listing, isLoading, isError } = useQuery<PublicListing>({
     queryKey: ["listing-full", id],
@@ -603,10 +618,20 @@ export default function ListingDetailScreen() {
     retry: false,
   });
 
+  // Room types collection
+  const roomTypes = listing?.roomTypes ?? listing?.hotelRoomTypes ?? [];
+
+  // Auto select first room type when data loads
+  useEffect(() => {
+    if (roomTypes.length > 0 && !selectedRoomTypeId) {
+      setSelectedRoomTypeId(roomTypes[0].id);
+    }
+  }, [roomTypes, selectedRoomTypeId]);
+
   useEffect(() => {
     if (!listing) return;
     if (user) {
-      void listingApi.post("/guests/me/recently-viewed", { listingId: listing.id }).catch(() => {});
+      void listingApi.post("/guests/me/recently-viewed", { listingId: listing.id }).catch(() => { });
     } else {
       void (async () => {
         try {
@@ -617,10 +642,10 @@ export default function ListingDetailScreen() {
             const updated = [listing.id, ...ids].slice(0, 20);
             await SecureStore.setItemAsync("zika:anon_views", JSON.stringify(updated));
           }
-        } catch {}
+        } catch { }
       })();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listing?.id]);
 
   const favMut = useMutation({
@@ -653,11 +678,31 @@ export default function ListingDetailScreen() {
   const isProvider = user?.userType === "provider";
 
   const photos = [...(listing.photos ?? [])].sort((a, b) => a.position - b.position);
-  const rate = isCar ? Number(listing.pricePerDay ?? 0) : Number(listing.pricePerNight ?? 0);
+
+  // Selected room type object if hotel has room types
+  const selectedRoomType = roomTypes.find((r) => r.id === selectedRoomTypeId) ?? roomTypes[0];
+
+  // Derive active rate per night/day
+  const rate = isCar
+    ? Number(listing.dailyRate ?? listing.pricePerDay ?? 0)
+    : selectedRoomType
+      ? Number(selectedRoomType.pricePerNight || 0)
+      : Number(listing.nightlyRate ?? listing.pricePerNight ?? 0);
+
   const rateLabel = isCar ? "per day" : "per night";
   const isFav = listing.isFavourited ?? false;
   const activePromo = (activePromotions?.[0] as unknown) as ActivePromotion | null | undefined;
   const promoted = applyPromotion(rate || null, activePromo ?? null);
+
+  // Derive MRP / Original Rack Price (when minStayNights > 100 or when promo discount applies)
+  const mrpPrice = (listing.minStayNights && listing.minStayNights > 100)
+    ? listing.minStayNights
+    : (promoted.hasPromotion && promoted.originalPrice != null && promoted.originalPrice > rate)
+      ? promoted.originalPrice
+      : null;
+
+  // Custom Promo Badge from API
+  const customPromoBadge = listing.promoBadge;
 
   // Locally selected dates take priority over URL params
   const effectivePU = localStart ?? pickupDatetime;
@@ -734,7 +779,9 @@ export default function ListingDetailScreen() {
         { icon: "🏨", label: "Hotel", accent: true },
       ];
       if (listing.starRating) chips.push({ icon: "⭐", label: `${listing.starRating} Stars` });
-      if (listing.roomType) chips.push({ icon: "🛏️", label: listing.roomType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) });
+      if (selectedRoomType?.name || listing.roomType) {
+        chips.push({ icon: "🛏️", label: (selectedRoomType?.name ?? listing.roomType ?? "").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) });
+      }
       if (listing.unitCount) chips.push({ icon: "🏢", label: `${listing.unitCount} Units` });
       return chips;
     }
@@ -791,9 +838,27 @@ export default function ListingDetailScreen() {
       return;
     }
     if (isCar) {
-      router.push({ pathname: "/book/[listingId]", params: { listingId: id, pickupDatetime: effectivePU, returnDatetime: effectiveRT, listingCategory: listing.category } });
+      router.push({
+        pathname: "/book/[listingId]",
+        params: {
+          listingId: id,
+          pickupDatetime: effectivePU,
+          returnDatetime: effectiveRT,
+          listingCategory: listing.category,
+        },
+      });
     } else {
-      router.push({ pathname: "/book/[listingId]", params: { listingId: id, checkIn: effectiveCI, checkOut: effectiveCO, guests, listingCategory: listing.category } });
+      router.push({
+        pathname: "/book/[listingId]",
+        params: {
+          listingId: id,
+          checkIn: effectiveCI,
+          checkOut: effectiveCO,
+          guests,
+          listingCategory: listing.category,
+          ...(selectedRoomType?.id ? { roomTypeId: selectedRoomType.id } : {}),
+        },
+      });
     }
   }
 
@@ -801,13 +866,11 @@ export default function ListingDetailScreen() {
     if (!msgDraft.trim() || !id) return;
     setMsgSending(true);
     try {
-      // Step 1: start or retrieve conversation for this listing
       const r1 = await listingApi.post<{ data: { conversationId: string; isNew: boolean } }>(
         "/conversations",
         { listingId: id }
       );
       const convId = r1.data.data.conversationId;
-      // Step 2: send the first message
       await listingApi.post(`/conversations/${convId}/messages`, { body: msgDraft.trim() });
       setShowMsgModal(false);
       setMsgDraft("");
@@ -820,12 +883,12 @@ export default function ListingDetailScreen() {
     }
   }
 
-  const curr = listing.currency ?? "USD";
+  const curr = listing.currency ?? "XAF";
 
   return (
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
 
-      {/* ══ OVERLAY BUTTONS — outside ScrollView so FlatList never blocks them ══ */}
+      {/* ══ OVERLAY BUTTONS ══ */}
       <View style={[s.overlayTop, { paddingTop: insets.top > 0 ? insets.top + 12 : 12 }]} pointerEvents="box-none">
         <TouchableOpacity style={s.circleBtn} onPress={() => router.back()} activeOpacity={0.85}>
           <Ionicons name="arrow-back" size={20} color={TEXT} />
@@ -849,7 +912,7 @@ export default function ListingDetailScreen() {
       </View>
 
       {/* ══ CONTENT ══ */}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 130 }}>
 
         {/* ── Hero Photos ── */}
         <View style={{ height: PHOTO_H, backgroundColor: "#E5E7EB" }}>
@@ -886,12 +949,20 @@ export default function ListingDetailScreen() {
 
         {/* ── Title card ── */}
         <View style={s.titleCard}>
-          {/* Category + location row */}
+          {/* Category + rating row */}
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <View style={[s.catBadge, isCar && { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" }, isApartment && { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" }]}>
-              <Text style={[s.catBadgeText, isCar && { color: "#C2410C" }, isApartment && { color: GREEN }]}>
-                {isCar ? "🚗 Car" : isApartment ? "🏠 Apartment" : "🏨 Hotel"}
-              </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <View style={[s.catBadge, isCar && { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" }, isApartment && { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" }]}>
+                <Text style={[s.catBadgeText, isCar && { color: "#C2410C" }, isApartment && { color: GREEN }]}>
+                  {isCar ? "🚗 Car" : isApartment ? "🏠 Apartment" : "🏨 Hotel"}
+                </Text>
+              </View>
+              {listing.isAccredited && (
+                <View style={s.accreditedBadge}>
+                  <Ionicons name="checkmark-circle" size={12} color={GREEN} />
+                  <Text style={s.accreditedText}>Accredited</Text>
+                </View>
+              )}
             </View>
             {avgRating != null && totalReviews > 0 && (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -902,7 +973,7 @@ export default function ListingDetailScreen() {
             )}
           </View>
 
-          <Text style={s.title}>{listing.name ?? "Untitled listing"}</Text>
+          <Text style={s.title}>{listing.title ?? listing.name ?? "Untitled listing"}</Text>
 
           {locationStr ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 6, marginBottom: 14 }}>
@@ -918,27 +989,34 @@ export default function ListingDetailScreen() {
             ))}
           </ScrollView>
 
-          {/* Price */}
+          {/* MRP & Discounted Price Display */}
           <View style={s.priceRow}>
-            <View>
-              {promoted.hasPromotion && promoted.discountedPrice != null ? (
-                <>
-                  <Text style={s.priceOriginal}>{curr} {rate.toLocaleString()}</Text>
-                  <Text style={s.priceAmount}>{curr} {Math.round(promoted.discountedPrice).toLocaleString()}</Text>
-                </>
-              ) : (
-                <Text style={s.priceAmount}>{curr} {rate.toLocaleString()}</Text>
-              )}
-              <Text style={s.priceUnit}>{rateLabel}</Text>
+            <View style={{ flex: 1 }}>
+              {mrpPrice != null && mrpPrice > rate ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                  <Text style={s.priceOriginal}>{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
+                </View>
+              ) : null}
+
+              <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
+                <Text style={s.priceAmount}>{curr} {Math.round(rate).toLocaleString()}</Text>
+                <Text style={s.priceUnit}>{rateLabel}</Text>
+              </View>
             </View>
-            {promoted.hasPromotion ? (
+
+            {/* Promo Badges */}
+            {customPromoBadge ? (
+              <View style={[s.promoDealBadge, { backgroundColor: customPromoBadge.labelColour ?? "#C84B2F" }]}>
+                <Text style={s.promoDealText}>{customPromoBadge.labelText}</Text>
+              </View>
+            ) : promoted.hasPromotion ? (
               <View style={s.promoDealBadge}>
                 <Text style={s.promoDealText}>🔥 {promoted.labelText}</Text>
               </View>
             ) : (
               <View style={s.bestDeal}>
                 <Ionicons name="pricetag" size={11} color={GREEN} />
-                <Text style={s.bestDealText}>Best Price</Text>
+                <Text style={s.bestDealText}>Best Rate</Text>
               </View>
             )}
           </View>
@@ -949,6 +1027,18 @@ export default function ListingDetailScreen() {
             </Text>
           ) : null}
         </View>
+
+        {/* ── Room Types Feature (for Hotels) ── */}
+        {isHotel && roomTypes.length > 0 && (
+          <View style={s.section}>
+            <RoomTypeSelector
+              roomTypes={roomTypes}
+              selectedRoomTypeId={selectedRoomTypeId}
+              onSelectRoomType={(rtId) => setSelectedRoomTypeId(rtId)}
+              currency={curr}
+            />
+          </View>
+        )}
 
         {/* ── Long-stay promo ── */}
         {listing.longStayEnabled && (
@@ -1015,32 +1105,34 @@ export default function ListingDetailScreen() {
             <Text style={s.sectionTitle}>Price Breakdown</Text>
             <View style={s.breakCard}>
               <View style={s.breakRow}>
-                <Text style={s.breakLabel}>{curr} {pricingBreakout.rate.toLocaleString()} × {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}</Text>
-                <Text style={s.breakVal}>{curr} {pricingBreakout.base.toLocaleString()}</Text>
+                <Text style={s.breakLabel}>
+                  {curr} {Math.round(pricingBreakout.rate).toLocaleString()} × {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}
+                </Text>
+                <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.base).toLocaleString()}</Text>
               </View>
               {pricingBreakout.discount > 0 && (
                 <View style={s.breakRow}>
                   <Text style={[s.breakLabel, { color: "#DC2626" }]}>Long-stay discount</Text>
-                  <Text style={[s.breakVal, { color: "#DC2626" }]}>−{curr} {pricingBreakout.discount.toLocaleString()}</Text>
+                  <Text style={[s.breakVal, { color: "#DC2626" }]}>−{curr} {Math.round(pricingBreakout.discount).toLocaleString()}</Text>
                 </View>
               )}
               {pricingBreakout.delivery > 0 && (
                 <View style={s.breakRow}>
                   <Text style={s.breakLabel}>Delivery fee</Text>
-                  <Text style={s.breakVal}>{curr} {pricingBreakout.delivery.toLocaleString()}</Text>
+                  <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.delivery).toLocaleString()}</Text>
                 </View>
               )}
               <View style={s.breakRow}>
                 <Text style={s.breakLabel}>Service fee (5%)</Text>
-                <Text style={s.breakVal}>{curr} {pricingBreakout.serviceFee.toLocaleString()}</Text>
+                <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.serviceFee).toLocaleString()}</Text>
               </View>
               <View style={s.breakRow}>
                 <Text style={s.breakLabel}>Local taxes (10%)</Text>
-                <Text style={s.breakVal}>{curr} {pricingBreakout.tax.toLocaleString()}</Text>
+                <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.tax).toLocaleString()}</Text>
               </View>
               <View style={[s.breakRow, { borderTopWidth: 1, borderTopColor: BORDER, marginTop: 4, paddingTop: 12 }]}>
                 <Text style={s.breakTotal}>Total</Text>
-                <Text style={s.breakTotalVal}>{curr} {pricingBreakout.total.toLocaleString()}</Text>
+                <Text style={s.breakTotalVal}>{curr} {Math.round(pricingBreakout.total).toLocaleString()}</Text>
               </View>
             </View>
           </View>
@@ -1088,7 +1180,7 @@ export default function ListingDetailScreen() {
               <Ionicons name="person" size={24} color={GREEN} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.hostName}>Kainook Verified Host</Text>
+              <Text style={s.hostName}>Verified Property Partner</Text>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
                   <Ionicons name="star" size={12} color="#F59E0B" />
@@ -1233,7 +1325,7 @@ export default function ListingDetailScreen() {
               </TouchableOpacity>
             </View>
             <Text style={s.msgCardSub} numberOfLines={1}>
-              About: {listing.name ?? "this listing"}
+              About: {listing.title ?? listing.name ?? "this listing"}
             </Text>
             <TextInput
               style={s.msgCardInput}
@@ -1289,20 +1381,25 @@ export default function ListingDetailScreen() {
 
       {/* ══ STICKY BOTTOM BAR ══ */}
       <View style={s.stickyBar}>
-        <View>
-          {promoted.hasPromotion && promoted.discountedPrice != null ? (
-            <>
-              <Text style={s.stickyOriginal}>{curr} {rate.toLocaleString()}</Text>
-              <Text style={s.stickyRate}>{curr} {Math.round(promoted.discountedPrice).toLocaleString()}</Text>
-              <Text style={s.stickyUnit}>{rateLabel} · 🔥 {promoted.labelText}</Text>
-            </>
-          ) : (
-            <>
-              <Text style={s.stickyRate}>{curr} {rate.toLocaleString()}</Text>
-              <Text style={s.stickyUnit}>{rateLabel}</Text>
-            </>
-          )}
+        <View style={{ flex: 1, paddingRight: 12 }}>
+          {mrpPrice != null && mrpPrice > rate ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={s.stickyOriginal}>{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
+              {customPromoBadge ? (
+                <Text style={{ fontSize: 10, fontWeight: "800", color: customPromoBadge.labelColour ?? "#C84B2F" }}>
+                  {customPromoBadge.labelText}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+
+          <Text style={s.stickyRate}>{curr} {Math.round(rate).toLocaleString()}</Text>
+          <Text style={s.stickyUnit} numberOfLines={1}>
+            {rateLabel}
+            {selectedRoomType ? ` · ${selectedRoomType.name}` : ""}
+          </Text>
         </View>
+
         {isProvider ? (
           <View style={s.providerBtn}>
             <Text style={s.providerBtnText}>Provider view</Text>
@@ -1324,7 +1421,6 @@ export default function ListingDetailScreen() {
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  // Overlay buttons — live OUTSIDE the ScrollView
   overlayTop: {
     position: "absolute", top: 0, left: 0, right: 0,
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
@@ -1339,7 +1435,6 @@ const s = StyleSheet.create({
     shadowOpacity: 0.15, shadowRadius: 4, elevation: 4,
   },
 
-  // Photo counter
   photoPill: {
     position: "absolute", bottom: 14, right: 14,
     flexDirection: "row", alignItems: "center", gap: 4,
@@ -1348,7 +1443,6 @@ const s = StyleSheet.create({
   },
   photoPillText: { color: "#fff", fontSize: 12, fontWeight: "700" },
 
-  // Title card
   titleCard: {
     backgroundColor: "#fff", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8,
   },
@@ -1360,31 +1454,35 @@ const s = StyleSheet.create({
     alignSelf: "flex-start",
   },
   catBadgeText: { fontSize: 12, fontWeight: "700", color: "#1D4ED8" },
-  priceRow: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 8 },
-  priceOriginal: { fontSize: 16, fontWeight: "500", color: MUTED, textDecorationLine: "line-through", marginBottom: 2 },
+  accreditedBadge: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    backgroundColor: GREEN_LIGHT, borderWidth: 1, borderColor: "#BBF7D0",
+    borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
+  },
+  accreditedText: { fontSize: 11, fontWeight: "700", color: GREEN },
+
+  priceRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
+  priceOriginal: { fontSize: 15, fontWeight: "600", color: MUTED, textDecorationLine: "line-through" },
+  mrpLabel: { fontSize: 11, fontWeight: "700", color: MUTED },
   priceAmount: { fontSize: 28, fontWeight: "900", color: GREEN },
-  priceUnit: { fontSize: 13, color: MUTED, fontWeight: "500", marginTop: 2 },
+  priceUnit: { fontSize: 13, color: MUTED, fontWeight: "500" },
   bestDeal: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: GREEN_LIGHT, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: "#BBF7D0" },
   bestDealText: { fontSize: 11, fontWeight: "700", color: GREEN },
-  promoDealBadge: { backgroundColor: "#FEF2F2", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: "#FECACA", alignSelf: "flex-end" },
-  promoDealText: { fontSize: 12, fontWeight: "800", color: "#DC2626" },
+  promoDealBadge: { backgroundColor: "#C84B2F", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, alignSelf: "center" },
+  promoDealText: { fontSize: 12, fontWeight: "800", color: "#FFFFFF" },
 
-  // Promo
   promoBanner: { flexDirection: "row", alignItems: "center", gap: 12, marginHorizontal: 20, marginVertical: 12, backgroundColor: "#FEF2F2", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#FECACA" },
   promoIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center", flexShrink: 0 },
   promoTitle: { fontSize: 14, fontWeight: "800", color: "#DC2626", marginBottom: 2 },
   promoSub: { fontSize: 12, color: "#991B1B", lineHeight: 17 },
 
-  // Sections
   section: { paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: BORDER },
   sectionTitle: { fontSize: 18, fontWeight: "800", color: TEXT, marginBottom: 14, letterSpacing: -0.3 },
 
-  // Dates
   datesPill: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: GREEN_LIGHT, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#BBF7D0" },
   datesText: { fontSize: 13, fontWeight: "600", color: GREEN, flex: 1 },
   selectDatesCard: { flexDirection: "row", alignItems: "center", backgroundColor: BG, borderRadius: 14, padding: 16, borderWidth: 1.5, borderColor: GREEN, borderStyle: "dashed" },
 
-  // Price breakdown
   breakCard: { backgroundColor: BG, borderRadius: 16, padding: 18, borderWidth: 1, borderColor: BORDER },
   breakRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
   breakLabel: { fontSize: 13, color: "#4B5563", fontWeight: "500" },
@@ -1392,25 +1490,21 @@ const s = StyleSheet.create({
   breakTotal: { fontSize: 15, fontWeight: "800", color: TEXT },
   breakTotalVal: { fontSize: 16, fontWeight: "900", color: GREEN },
 
-  // Description
   descText: { fontSize: 14, color: "#374151", lineHeight: 22 },
   readMore: { marginTop: 10 },
   readMoreText: { fontSize: 14, color: GREEN, fontWeight: "700" },
 
-  // Host
   hostCard: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: BG, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: BORDER },
   hostAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: GREEN_LIGHT, alignItems: "center", justifyContent: "center" },
   hostName: { fontSize: 15, fontWeight: "700", color: TEXT },
   verifiedBadge: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: GREEN_LIGHT, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   verifiedText: { fontSize: 11, fontWeight: "700", color: GREEN },
 
-  // Cancellation
   cancelCard: { backgroundColor: BG, borderRadius: 14, padding: 16, borderLeftWidth: 4, borderWidth: 1, borderColor: BORDER },
   cancelDot: { width: 10, height: 10, borderRadius: 5 },
   cancelPolicyName: { fontSize: 14, fontWeight: "700" },
   cancelDesc: { fontSize: 13, color: "#374151", lineHeight: 20 },
 
-  // Sticky bar
   stickyBar: {
     position: "absolute", bottom: 0, left: 0, right: 0,
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
@@ -1428,7 +1522,6 @@ const s = StyleSheet.create({
   providerBtn: { backgroundColor: BG, borderRadius: 16, paddingHorizontal: 18, paddingVertical: 13, borderWidth: 1, borderColor: BORDER },
   providerBtnText: { color: MUTED, fontWeight: "600", fontSize: 13 },
 
-  // Message Host
   msgHostBtn: {
     flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14,
     backgroundColor: GREEN_LIGHT, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12,
@@ -1436,7 +1529,6 @@ const s = StyleSheet.create({
   },
   msgHostBtnText: { fontSize: 14, fontWeight: "700", color: GREEN },
 
-  // Message Host Modal
   msgBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.52)", justifyContent: "flex-end" },
   msgCard: {
     backgroundColor: "#fff",
@@ -1462,15 +1554,14 @@ const s = StyleSheet.create({
   msgSendText: { color: "#fff", fontWeight: "700", fontSize: 15 },
 });
 
-// ── Promotion card styles ─────────────────────────────────────────────────────
 const pr = StyleSheet.create({
-  card:      { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F0FDF4", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#BBF7D0", marginBottom: 10 },
-  iconWrap:  { width: 38, height: 38, borderRadius: 10, backgroundColor: GREEN, alignItems: "center", justifyContent: "center", flexShrink: 0 },
-  title:     { fontSize: 14, fontWeight: "800", color: "#065F46", marginBottom: 3 },
-  desc:      { fontSize: 12, color: "#047857", lineHeight: 17, marginBottom: 4 },
-  expiry:    { fontSize: 11, color: MUTED },
-  savings:   { fontSize: 13, fontWeight: "700", color: "#DC2626", marginBottom: 3 },
+  card: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#F0FDF4", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#BBF7D0", marginBottom: 10 },
+  iconWrap: { width: 38, height: 38, borderRadius: 10, backgroundColor: GREEN, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  title: { fontSize: 14, fontWeight: "800", color: "#065F46", marginBottom: 3 },
+  desc: { fontSize: 12, color: "#047857", lineHeight: 17, marginBottom: 4 },
+  expiry: { fontSize: 11, color: MUTED },
+  savings: { fontSize: 13, fontWeight: "700", color: "#DC2626", marginBottom: 3 },
   origPrice: { fontSize: 12, color: "#047857" },
   discBadge: { minWidth: 52, borderRadius: 10, backgroundColor: "#DC2626", alignItems: "center", justifyContent: "center", flexShrink: 0, paddingHorizontal: 8, paddingVertical: 8 },
-  discText:  { fontSize: 11, fontWeight: "800", color: "#fff", textAlign: "center", lineHeight: 15 },
+  discText: { fontSize: 11, fontWeight: "800", color: "#fff", textAlign: "center", lineHeight: 15 },
 });

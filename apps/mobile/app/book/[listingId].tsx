@@ -146,6 +146,7 @@ export default function BookingFlowScreen() {
   const user = useAuthStore((s) => s.user);
   const params = useLocalSearchParams<{
     listingId: string;
+    roomTypeId?: string;
     checkIn?: string;
     checkOut?: string;
     pickupDatetime?: string;
@@ -157,6 +158,7 @@ export default function BookingFlowScreen() {
 
   const {
     listingId,
+    roomTypeId,
     checkIn,
     checkOut,
     pickupDatetime,
@@ -289,6 +291,7 @@ export default function BookingFlowScreen() {
     setReBookingLoading(true);
     try {
       const body: Record<string, unknown> = { listingId, deliveryRequested: false };
+      if (roomTypeId) body.roomTypeId = roomTypeId;
       if (checkIn) body.checkIn = checkIn;
       if (checkOut) body.checkOut = checkOut;
       if (pickupDatetime) body.pickupDatetime = pickupDatetime;
@@ -439,6 +442,7 @@ export default function BookingFlowScreen() {
           listingId,
           deliveryRequested: false,
         };
+        if (roomTypeId) body.roomTypeId = roomTypeId;
         if (checkIn) body.checkIn = checkIn;
         if (checkOut) body.checkOut = checkOut;
         if (pickupDatetime) body.pickupDatetime = pickupDatetime;
