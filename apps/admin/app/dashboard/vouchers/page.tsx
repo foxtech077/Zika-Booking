@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ticket, Plus, ToggleLeft, ToggleRight, Trash2, Edit2 } from "lucide-react";
+import { Ticket, Plus, ToggleLeft, ToggleRight, Trash2, Edit2, DollarSign } from "lucide-react";
 import { listingApi } from "@/lib/listing-api";
 import { DataTable, FilterBar, Pagination, type Column } from "@/components/tables/DataTable";
 import { Card, SectionHeader } from "@/components/ui/Card";
@@ -14,7 +14,7 @@ import enLocale from "i18n-iso-countries/langs/en.json";
 import { ActionModal, ConfirmModal } from "@/components/modals/Modals";
 import { SlideDrawer } from "@/components/drawers/SlideDrawer";
 import { formatDate, formatCurrency, formatRelativeTime } from "@/lib/utils";
-import type { Voucher } from "@/types/admin";
+import type { VoucherWithFinancials } from "@/types/admin";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { useAuthStore } from "@/stores/auth";
 import { canAccess } from "@/permissions/rbac";
@@ -71,7 +71,7 @@ export default function VouchersPage() {
   const canCreateVoucher = role === "super_admin";
   const hasManagePermission = canAccess(role, "manage_vouchers");
   const [page, setPage] = useState(1);
-  const getVoucherStatus = (v: Voucher) => {
+  const getVoucherStatus = (v: VoucherWithFinancials) => {
     const now = new Date();
     const nowYMD = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
     const expiry = new Date(v.validUntil);
@@ -87,7 +87,7 @@ export default function VouchersPage() {
   const [limit, setLimit] = useState(10);
   const [statusFilter, setStatusFilter] = useState("");
   const [addModal, setAddModal] = useState(false);
-  const [selected, setSelected] = useState<Voucher | null>(null);
+  const [selected, setSelected] = useState<VoucherWithFinancials | null>(null);
   const [form, setForm] = useState({
     id: "",
     title: "",
@@ -121,7 +121,7 @@ export default function VouchersPage() {
     },
   });
 
-  const vouchersList: Voucher[] = (data?.vouchers ?? []).filter((v) => {
+  const vouchersList: VoucherWithFinancials[] = (data?.vouchers ?? []).filter((v) => {
     if (!statusFilter) return true;
     const { status } = getVoucherStatus(v);
     if (statusFilter === "active") return status === "active";
@@ -165,7 +165,7 @@ export default function VouchersPage() {
     }
   });
 
-  const openEdit = (v: Voucher, e: React.MouseEvent) => {
+  const openEdit = (v: VoucherWithFinancials, e: React.MouseEvent) => {
     e.stopPropagation();
     
     // Parse ISO dates back to YYYY-MM-DD
@@ -247,7 +247,7 @@ export default function VouchersPage() {
     }
   };
 
-  const [deleteConfirm, setDeleteConfirm] = useState<Voucher | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<VoucherWithFinancials | null>(null);
 
   const toggleMut = useMutation({
     mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
@@ -272,7 +272,7 @@ export default function VouchersPage() {
     deleteMut.mutate(deleteConfirm.id);
   };
 
-  const columns: Column<Voucher>[] = [
+  const columns: Column<VoucherWithFinancials>[] = [
     {
       key: "code",
       label: "Code",
@@ -348,7 +348,7 @@ export default function VouchersPage() {
         };
         return (
           <div className="flex flex-wrap gap-1">
-            {tiers.map((tier) => (
+            {tiers.map((tier: string) => (
               <span key={tier} className={`inline-flex items-center rounded-full font-medium px-2 py-0.5 text-xs capitalize ${tierColors[tier] ?? "bg-slate-100 text-slate-600"}`}>
                 {tier}
               </span>
@@ -376,6 +376,23 @@ export default function VouchersPage() {
           )}
         </div>
       ),
+    },
+    {
+      key: "financial",
+      label: "Discount Given",
+      render: (v) => (
+        <div className="text-right">
+          <p className="text-sm font-semibold text-slate-900">
+            {formatCurrency(v.totalDiscountGiven ?? 0)}
+          </p>
+          {(v.avgDiscountPerRedemption ?? 0) > 0 && (
+            <p className="text-xs text-slate-500">
+              Avg: {formatCurrency(v.avgDiscountPerRedemption)}
+            </p>
+          )}
+        </div>
+      ),
+      align: "right",
     },
     {
       key: "validity",
@@ -582,6 +599,41 @@ export default function VouchersPage() {
               <InfoRow label="Redeemed Count" value={`${(selected.redemptionCount ?? selected.usageCount ?? 0).toLocaleString()} times`} />
               <InfoRow label="Valid From" value={formatDate(selected.validFrom)} />
               <InfoRow label="Valid Until" value={formatDate(selected.validUntil)} />
+            </div>
+
+            {/* Financial Impact */}
+            <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-5 border border-amber-200 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-900 border-b border-amber-200 pb-2 flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-amber-600" />
+                Financial Impact
+              </h3>
+              <InfoRow 
+                label="Total Discount Given" 
+                value={
+                  <span className="text-amber-600 font-bold">
+                    {formatCurrency(selected.totalDiscountGiven ?? 0)}
+                  </span>
+                } 
+              />
+              <InfoRow 
+                label="Avg Discount per Redemption" 
+                value={formatCurrency(selected.avgDiscountPerRedemption ?? 0)} 
+              />
+              <InfoRow 
+                label="Total Booking Value" 
+                value={formatCurrency(selected.totalBookingValue ?? 0)} 
+              />
+              <InfoRow 
+                label="Revenue Impact" 
+                value={
+                  <span className={`font-medium ${(selected.totalDiscountGiven ?? 0) > 0 ? "text-amber-600" : "text-slate-500"}`}>
+                    {(selected.totalBookingValue ?? 0) > 0 
+                      ? `${((selected.totalDiscountGiven ?? 0) / (selected.totalBookingValue ?? 1) * 100).toFixed(1)}% discount rate`
+                      : "No redemptions yet"
+                    }
+                  </span>
+                } 
+              />
             </div>
           </div>
         )}
