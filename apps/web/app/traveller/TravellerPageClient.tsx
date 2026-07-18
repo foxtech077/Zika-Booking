@@ -2096,8 +2096,8 @@ export default function TravellerDashboard() {
                         <MapView
                           listings={[detailListing]}
                           hoveredId={detailListing.id}
-                          onHover={() => {}}
-                          onSelect={() => {}}
+                          onHover={() => { }}
+                          onSelect={() => { }}
                         />
                       ) : (
                         <div className="w-full h-full bg-slate-100 flex items-center justify-center">
@@ -2246,40 +2246,40 @@ export default function TravellerDashboard() {
                             )}
                           </div>
                           {detailListing.category === "hotel" && detailListing.roomTypes && detailListing.roomTypes.length > 0 && (
-                                  <div className="p-3 border-t border-slate-200">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Type</p>
-                                    <select
-                                      value={selectedRoomTypeId || ""}
-                                      onChange={(e) => setSelectedRoomTypeId(e.target.value || null)}
-                                      className="w-full mt-1 text-sm bg-transparent outline-none font-semibold text-slate-800"
-                                    >
-                                      {detailListing.roomTypes
-                                        .filter((rt) => rt.isActive !== false)
-                                        .map((rt) => {
-                                          const baseRtPrice = rt.pricePerNight;
-                                          let displayRtPrice = baseRtPrice;
-                                          const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
-                                          const hasLongStay = detailListing.longStayDiscountEnabled;
-                                          const longStayPct = hasLongStay ? 15 : 0;
+                            <div className="p-3 border-t border-slate-200">
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Type</p>
+                              <select
+                                value={selectedRoomTypeId || ""}
+                                onChange={(e) => setSelectedRoomTypeId(e.target.value || null)}
+                                className="w-full mt-1 text-sm bg-transparent outline-none font-semibold text-slate-800"
+                              >
+                                {detailListing.roomTypes
+                                  .filter((rt) => rt.isActive !== false)
+                                  .map((rt) => {
+                                    const baseRtPrice = rt.pricePerNight;
+                                    let displayRtPrice = baseRtPrice;
+                                    const isValidPromo = activePromotion && activePromotion.activity === detailListing.category && isPromotionValid(activePromotion);
+                                    const hasLongStay = detailListing.longStayDiscountEnabled;
+                                    const longStayPct = hasLongStay ? 15 : 0;
 
-                                          if (isValidPromo) {
-                                            const promoDiscount = activePromotion.discountType === "percentage"
-                                              ? Math.round(baseRtPrice * (Number(activePromotion.discountValue) / 100))
-                                              : Math.round(Number(activePromotion.discountValue));
-                                            displayRtPrice = Math.max(0, baseRtPrice - promoDiscount);
-                                          } else if (hasLongStay) {
-                                            displayRtPrice = Math.round(baseRtPrice * (1 - longStayPct / 100));
-                                          }
+                                    if (isValidPromo) {
+                                      const promoDiscount = activePromotion.discountType === "percentage"
+                                        ? Math.round(baseRtPrice * (Number(activePromotion.discountValue) / 100))
+                                        : Math.round(Number(activePromotion.discountValue));
+                                      displayRtPrice = Math.max(0, baseRtPrice - promoDiscount);
+                                    } else if (hasLongStay) {
+                                      displayRtPrice = Math.round(baseRtPrice * (1 - longStayPct / 100));
+                                    }
 
-                                          return (
-                                            <option key={rt.id} value={rt.id}>
-                                              {rt.name} — {detailListing.currency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${detailListing.currency} ${baseRtPrice.toLocaleString()})` : ""}
-                                            </option>
-                                          );
-                                        })}
-                                    </select>
-                                  </div>
-                                )}
+                                    return (
+                                      <option key={rt.id} value={rt.id}>
+                                        {rt.name} — {detailListing.currency} {displayRtPrice.toLocaleString()}/night{baseRtPrice > displayRtPrice ? ` (was ${detailListing.currency} ${baseRtPrice.toLocaleString()})` : ""}
+                                      </option>
+                                    );
+                                  })}
+                              </select>
+                            </div>
+                          )}
 
                           {/* Voucher / Promo code selector */}
                           {renderVoucherSelector()}
@@ -4096,7 +4096,7 @@ export default function TravellerDashboard() {
             </div>
             <div className="overflow-y-auto flex-1 p-5 space-y-5">
               {/* Instant Book */}
-              <div className="flex items-center justify-between">
+              {/* <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-slate-700">Instant Book</p>
                   <p className="text-xs text-slate-400">No approval needed</p>
@@ -4107,7 +4107,7 @@ export default function TravellerDashboard() {
                 >
                   <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${showInstantOnly ? "translate-x-5" : ""}`} />
                 </button>
-              </div>
+              </div> */}
               {/* Price range */}
               <div className="space-y-2">
                 <label className="block text-[10px] font-semibold text-slate-400 uppercase tracking-wider">

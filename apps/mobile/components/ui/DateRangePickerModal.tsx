@@ -70,7 +70,7 @@ function buildMonthGrid(year: number, month: number): (Date | null)[] {
   return arr;
 }
 
-function fmtDisplay(dateStr: string): string {
+export function fmtDisplay(dateStr: string): string {
   if (!dateStr) return "";
   try {
     const parts = dateStr.split("-");

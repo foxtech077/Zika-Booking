@@ -69,7 +69,7 @@ function getListingCoordinates(
   };
 }
 
-import DateRangePickerModal, { calcNights } from "../components/ui/DateRangePickerModal";
+import DateRangePickerModal, { calcNights, fmtDisplay } from "../components/ui/DateRangePickerModal";
 
 // ─── Constants & Types ────────────────────────────────────────────────────────────────
 
@@ -1340,7 +1340,7 @@ export default function SearchScreen() {
     staleTime: 5 * 60_000,
     retry: false,
   });
-  const activePromotion = categoryPromotions?.[0] ?? null;
+  const activePromotion = categoryPromotions?.find((p) => p && p.title && p.title.trim().length > 0) ?? null;
 
   // Fetch signed photo URLs for all search results via /listings/:id/public
   const searchResultIds = useMemo(
@@ -1481,10 +1481,10 @@ export default function SearchScreen() {
             <Text style={{ fontSize: 13, fontWeight: "700", color: TEXT }} numberOfLines={1}>
               {category !== "car"
                 ? (localCheckIn && localCheckOut
-                  ? `${localCheckIn} – ${localCheckOut} (${calcNights(localCheckIn, localCheckOut)} night${calcNights(localCheckIn, localCheckOut) !== 1 ? "s" : ""})`
+                  ? `${fmtDisplay(localCheckIn)} – ${fmtDisplay(localCheckOut)} (${calcNights(localCheckIn, localCheckOut)} night${calcNights(localCheckIn, localCheckOut) !== 1 ? "s" : ""})`
                   : "Select Dates (Min 1 night)")
                 : (localPickup && localReturn
-                  ? `${localPickup.slice(0, 10)} – ${localReturn.slice(0, 10)}`
+                  ? `${fmtDisplay(localPickup)} – ${fmtDisplay(localReturn)}`
                   : "Select Rental Dates")}
             </Text>
           </View>
@@ -1565,7 +1565,7 @@ export default function SearchScreen() {
       )}
 
       {/* ── Active promotion banner ── */}
-      {activePromotion && !isFirstLoad && !searchError && (
+      {activePromotion && activePromotion.title && activePromotion.title.trim().length > 0 && !isFirstLoad && !searchError && (
         <View style={promoBannerStyles.wrap}>
           <Text style={promoBannerStyles.fire}>🔥</Text>
           <View style={{ flex: 1 }}>

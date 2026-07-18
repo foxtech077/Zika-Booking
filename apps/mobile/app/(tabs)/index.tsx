@@ -241,14 +241,14 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
 
   const effectivePromo: ActivePromotion | null = item.promoBadge && promoPercentFromBadge > 0
     ? {
-        activity: isCar ? "car" : isApt ? "apartment" : "hotel",
-        discountType: "percentage",
-        discountValue: String(promoPercentFromBadge),
-        labelText: item.promoBadge.labelText,
-        bannerTitle: item.promoBadge.labelText,
-        status: "active",
-        applyToBooking: true,
-      }
+      activity: isCar ? "car" : isApt ? "apartment" : "hotel",
+      discountType: "percentage",
+      discountValue: String(promoPercentFromBadge),
+      labelText: item.promoBadge.labelText,
+      bannerTitle: item.promoBadge.labelText,
+      status: "active",
+      applyToBooking: true,
+    }
     : promotion ?? null;
 
   const promoted = applyPromotion(rate, effectivePromo);
@@ -343,14 +343,14 @@ const EliteCard = memo(function EliteCard({ item, onPress, badgeLabel, badgeColo
 
   const effectivePromo: ActivePromotion | null = item.promoBadge && promoPercentFromBadge > 0
     ? {
-        activity: isCar ? "car" : isApt ? "apartment" : "hotel",
-        discountType: "percentage",
-        discountValue: String(promoPercentFromBadge),
-        labelText: item.promoBadge.labelText,
-        bannerTitle: item.promoBadge.labelText,
-        status: "active",
-        applyToBooking: true,
-      }
+      activity: isCar ? "car" : isApt ? "apartment" : "hotel",
+      discountType: "percentage",
+      discountValue: String(promoPercentFromBadge),
+      labelText: item.promoBadge.labelText,
+      bannerTitle: item.promoBadge.labelText,
+      status: "active",
+      applyToBooking: true,
+    }
     : promotion ?? null;
 
   const promoted = applyPromotion(rate, effectivePromo);
@@ -575,6 +575,7 @@ function fmtPromoExpiry(expiresAt: string): string {
 const PromoBanner = memo(function PromoBanner({ promo, onPress }: {
   promo: Promotion; onPress: () => void;
 }) {
+  if (!promo || !promo.title || !promo.title.trim()) return null;
   const discountText = promo.discountPercent
     ? `${promo.discountPercent}% OFF`
     : promo.discountAmount
@@ -1112,15 +1113,6 @@ export default function HomeScreen() {
                 <View style={s.notifBadge}>
                   <Text style={s.notifBadgeText}>{notifCount > 9 ? "9+" : notifCount}</Text>
                 </View>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity style={s.avatarBtn} onPress={() => router.push("/profile" as any)}>
-              {user ? (
-                <View style={s.avatarCircle}>
-                  <Text style={s.avatarText}>{(user.firstName?.[0] ?? "U").toUpperCase()}</Text>
-                </View>
-              ) : (
-                <Ionicons name="person-circle-outline" size={36} color="#fff" />
               )}
             </TouchableOpacity>
           </View>

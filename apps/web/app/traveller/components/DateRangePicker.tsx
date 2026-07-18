@@ -35,9 +35,12 @@ function calToStr(d: Date): string {
 function fmtDisplayDate(dateStr: string): string {
   if (!dateStr) return "";
   try {
-    const parts = dateStr.split("-");
-    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    const [y, m, d] = dateStr.split("-").map(Number);
+    if (y !== undefined && m !== undefined && d !== undefined && !isNaN(y) && !isNaN(m) && !isNaN(d)) {
+      const date = new Date(y, m - 1, d);
+      return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    }
+    return dateStr;
   } catch {
     return dateStr;
   }
@@ -46,13 +49,16 @@ function fmtDisplayDate(dateStr: string): string {
 export function calcNights(startStr: string, endStr: string): number {
   if (!startStr || !endStr) return 0;
   try {
-    const sParts = startStr.split("-").map(Number);
-    const eParts = endStr.split("-").map(Number);
-    if (sParts.length === 3 && eParts.length === 3 && !sParts.some(isNaN) && !eParts.some(isNaN)) {
-      const [sY, sM, sD] = sParts as [number, number, number];
-      const [eY, eM, eD] = eParts as [number, number, number];
-      const s = new Date(sY, sM - 1, sD).getTime();
-      const e = new Date(eY, eM - 1, eD).getTime();
+    const [sy, sm, sd] = startStr.split("-").map(Number);
+    const [ey, em, ed] = endStr.split("-").map(Number);
+    if (
+      sy !== undefined && sm !== undefined && sd !== undefined &&
+      ey !== undefined && em !== undefined && ed !== undefined &&
+      !isNaN(sy) && !isNaN(sm) && !isNaN(sd) &&
+      !isNaN(ey) && !isNaN(em) && !isNaN(ed)
+    ) {
+      const s = new Date(sy, sm - 1, sd).getTime();
+      const e = new Date(ey, em - 1, ed).getTime();
       const diff = Math.round((e - s) / 86400000);
       return Math.max(1, diff);
     }
