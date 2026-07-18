@@ -9,6 +9,7 @@ import {
   FlatList,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 const { width: W, height: H } = Dimensions.get("window");
@@ -42,6 +43,7 @@ const SLIDES = [
 ];
 
 export default function OnboardingScreen() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef<FlatList<typeof SLIDES[0]>>(null);
@@ -65,7 +67,7 @@ export default function OnboardingScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top > 0 ? insets.top + 12 : 24 }]}>
         <View style={styles.headerLogo}>
           <View style={styles.headerLogoCircle}>
             <Ionicons name="globe" size={18} color="#fff" />

@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth";
+import { useKeyboard } from "../../hooks/useKeyboard";
 import { useMessages, useSendMessage, useConversations, useListingBasics } from "../../hooks/messaging";
 import { useBooking } from "../../hooks/booking";
 import { ListingImage } from "../../components/ListingImage";
@@ -297,6 +298,7 @@ const ib = StyleSheet.create({
 export default function ConversationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const user = useAuthStore((s) => s.user);
+  const isKeyboardOpen = useKeyboard();
 
   // Find conversation from cached list
   const { data: convList } = useConversations();
@@ -483,7 +485,13 @@ export default function ConversationScreen() {
       {/* ── Messages + compose ── */}
       <KeyboardAvoidingView
         style={s.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : isKeyboardOpen
+              ? "height"
+              : undefined
+        }
         keyboardVerticalOffset={0}
       >
         {isLoading ? (

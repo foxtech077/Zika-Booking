@@ -546,6 +546,7 @@ export default function ListingDetailScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const user = useAuthStore((s) => s.user);
+  const insets = useSafeAreaInsets();
 
   const [photoIdx, setPhotoIdx] = useState(0);
   const [descExpanded, setDescExpanded] = useState(false);
@@ -825,7 +826,7 @@ export default function ListingDetailScreen() {
     <View style={{ flex: 1, backgroundColor: "#fff" }}>
 
       {/* ══ OVERLAY BUTTONS — outside ScrollView so FlatList never blocks them ══ */}
-      <View style={s.overlayTop} pointerEvents="box-none">
+      <View style={[s.overlayTop, { paddingTop: insets.top > 0 ? insets.top + 12 : 12 }]} pointerEvents="box-none">
         <TouchableOpacity style={s.circleBtn} onPress={() => router.back()} activeOpacity={0.85}>
           <Ionicons name="arrow-back" size={20} color={TEXT} />
         </TouchableOpacity>
