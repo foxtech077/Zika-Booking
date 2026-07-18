@@ -593,6 +593,7 @@ export default function TravellerDashboard() {
       customAmenities: l.customAmenities || [],
       distanceKm: l.distanceKm ?? undefined,
       description: l.description || "",
+      allowPreBooking: l.allowPreBooking ?? false,
       isFavourited: l.isFavourited ?? false,
       isAccredited: l.isAccredited ?? false,
       longStayDiscountEnabled: l.longStayDiscountEnabled ?? false,
@@ -1201,6 +1202,7 @@ export default function TravellerDashboard() {
           photos: item.photos || (item.primaryPhotoUrl ? [{ id: "ph", cdnUrl: item.primaryPhotoUrl, position: 1 }] : []),
           amenities: item.amenities || [],
           customAmenities: item.customAmenities || [],
+          allowPreBooking: item.allowPreBooking ?? false,
           roomTypes: rawRoomTypes
         };
         setDetailListing(details);
@@ -2190,7 +2192,9 @@ export default function TravellerDashboard() {
                     )}
 
                     <div className="mb-4 space-y-3">
-                      <MessageProviderButton listingId={detailListing.id} />
+                      {detailListing.allowPreBooking && (
+                        <MessageProviderButton listingId={detailListing.id} />
+                      )}
                       <GiveReviewEntry listingId={detailListing.id} listingName={detailListing.name} />
                     </div>
 
