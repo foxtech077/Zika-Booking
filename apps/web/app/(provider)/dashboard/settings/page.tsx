@@ -203,7 +203,7 @@ export default function SettingsPage() {
     firstName: user?.firstName ?? "",
     lastName: user?.lastName ?? "",
     email: user?.email ?? "",
-    phone: "",
+    phone: user?.phone ?? "",
     bio: "",
     businessName: user?.businessName ?? "",
     address: "",
@@ -280,6 +280,7 @@ export default function SettingsPage() {
         lastName: profileForm.lastName,
         businessName: profileForm.businessName,
         country: profileForm.country,
+        phone: profileForm.phone || undefined,
       }),
     onSuccess: (res) => {
       const updated = res.data?.data?.user ?? res.data?.user;

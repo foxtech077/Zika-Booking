@@ -8,6 +8,7 @@ import { registerSchema } from "@zika/validators";
 import { api, storeToken } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
 import { FormField } from "@/components/ui/FormField";
+import { CountryCombobox } from "@/components/ui/CountryCombobox";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 
 type UserType = "guest" | "provider";
@@ -28,7 +29,7 @@ export default function RegisterPage() {
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "",
     password: "", confirmPassword: "",
-    businessName: "", country: "",
+    businessName: "", country: "", phone: "",
   });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
@@ -175,7 +176,7 @@ export default function RegisterPage() {
         </div>
 
         {/* ── Right Panel: Form ── */}
-        <div className="flex-1 bg-white flex flex-col justify-center px-8 py-8 md:px-12 rounded-r-3xl rounded-l-3xl md:rounded-l-none overflow-y-auto">
+        <div className="flex-1 bg-white flex flex-col justify-start px-8 py-6 md:px-12 rounded-r-3xl rounded-l-3xl md:rounded-l-none overflow-y-auto">
 
           {/* Logo */}
           {/* <div className="flex flex-col items-center mb-3">
@@ -272,7 +273,7 @@ export default function RegisterPage() {
 
             {/* Provider-only fields */}
             {userType === "provider" && (
-              <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <label htmlFor="reg-business" className="block text-xs font-medium text-gray-700 mb-1.5">Business name</label>
                   <div className="relative">
@@ -292,25 +293,37 @@ export default function RegisterPage() {
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="reg-country" className="block text-xs font-medium text-gray-700 mb-1.5">Country code</label>
+                  <CountryCombobox
+                    label="Country"
+                    value={form.country}
+                    onChange={(code) => {
+                      setForm((p) => ({ ...p, country: code }));
+                      setErrors((p) => ({ ...p, country: undefined }));
+                    }}
+                    error={errors.country}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label htmlFor="reg-phone" className="block text-xs font-medium text-gray-700 mb-1.5">Phone number</label>
                   <div className="relative">
                     <InputIcon>
                       <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
                       </svg>
                     </InputIcon>
                     <input
-                      id="reg-country"
-                      value={form.country}
+                      id="reg-phone"
+                      value={form.phone}
                       onChange={(e) => {
-                        setForm((p) => ({ ...p, country: e.target.value.toUpperCase() }));
-                        setErrors((p) => ({ ...p, country: undefined }));
+                        const cleaned = e.target.value.replace(/[^+\d\s-]/g, "");
+                        setForm((p) => ({ ...p, phone: cleaned }));
+                        setErrors((p) => ({ ...p, phone: undefined }));
                       }}
-                      placeholder="KE"
-                      maxLength={2}
-                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.country ? "border-red-400" : "border-gray-200"}`}
+                      placeholder="+254 712 345 678"
+                      type="tel"
+                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.phone ? "border-red-400" : "border-gray-200"}`}
                     />
-                    {errors.country && <p className="text-xs text-red-500 mt-1">{errors.country}</p>}
+                    {errors.phone && <p className="text-xs text-red-500 mt-1">{errors.phone}</p>}
                   </div>
                 </div>
               </div>

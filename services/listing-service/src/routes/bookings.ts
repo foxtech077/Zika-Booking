@@ -357,6 +357,14 @@ export async function bookingRoutes(app: FastifyInstance) {
           pickupDatetime: true,
           returnDatetime: true,
           paymentId: true,
+          subtotal: true,
+          discountAmount: true,
+          serviceFee: true,
+          taxAmount: true,
+          deliveryFee: true,
+          nightsOrDays: true,
+          voucherDiscount: true,
+          voucherCode: true,
           listing: {
             select: {
               name: true,
@@ -1491,6 +1499,8 @@ export async function bookingRoutes(app: FastifyInstance) {
             totalAmount,
             discountAmount,
             deliveryFee,
+            serviceFee: finalBilling.serviceFee,
+            taxAmount: finalBilling.taxAmount,
 
             currency: listing.currency ?? "USD",
 
@@ -1516,6 +1526,9 @@ export async function bookingRoutes(app: FastifyInstance) {
             changedBy: guestId,
           },
         });
+
+        // Consume the lock token — prevent reuse for duplicate bookings
+        await redis.del(`rlk:ctx:${body.lockToken}`).catch(() => {});
 
         if (appliedVoucher) {
           await Promise.all([

@@ -53,6 +53,11 @@ export const patchProfileSchema = z.object({
   photoUrl: z.string().url("Invalid photo URL").optional().nullable(),
   businessName: z.string().max(255).optional().nullable(),
   country: z.string().length(2).toUpperCase().optional().nullable(),
+  phone: z
+    .string()
+    .regex(/^\+[1-9]\d{6,14}$/, "Phone number must be in international format (e.g. +254712345678)")
+    .optional()
+    .nullable(),
 });
 
 // ── Helper: issue tokens and set cookie ─────────────────────────────────────
@@ -62,8 +67,9 @@ async function issueTokens(
   userId: string,
   userType: string,
   status: string,
+  country: string | null,
 ) {
-  const accessToken = await signAccessToken({ sub: userId, type: userType as "guest" | "provider", status });
+  const accessToken = await signAccessToken({ sub: userId, type: userType as "guest" | "provider", status, country: country ?? undefined });
   const refreshToken = generateRefreshToken();
   const tokenHash = hashToken(refreshToken);
   const expiresAt = new Date(Date.now() + REFRESH_TTL * 1000);
@@ -79,13 +85,13 @@ async function issueTokens(
 function publicUser(u: {
   id: string; firstName: string; lastName: string; email: string;
   status: string; userType: string; businessName: string | null;
-  country: string | null; emailVerified: boolean; currentTier: string;
-  loyaltyPoints: number;
+  country: string | null; phone: string | null; emailVerified: boolean;
+  currentTier: string; loyaltyPoints: number;
 }) {
   return {
     id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email,
     status: u.status, userType: u.userType, businessName: u.businessName,
-    country: u.country, emailVerified: u.emailVerified,
+    country: u.country, phone: u.phone, emailVerified: u.emailVerified,
     currentTier: u.currentTier, loyaltyPoints: u.loyaltyPoints,
   };
 }
@@ -115,6 +121,7 @@ export async function authRoutes(app: FastifyInstance) {
           confirmPassword: { type: "string" },
           userType: { type: "string", enum: ["guest", "provider"] },
           businessName: { type: "string" },
+          phone: { type: "string", description: "International format, required for providers" },
           country: {
             type: "string",
             minLength: 2,
@@ -144,7 +151,8 @@ export async function authRoutes(app: FastifyInstance) {
       password,
       userType,
       businessName,
-      country
+      country,
+      phone
     } = parsed.data;
 
     try {
@@ -252,6 +260,7 @@ export async function authRoutes(app: FastifyInstance) {
           userType: userType as "guest" | "provider",
           businessName: businessName ?? null,
           country: country ?? null,
+          phone: phone ?? null,
           ...(skipVerification
             ? {
               status: "active",
@@ -270,7 +279,8 @@ export async function authRoutes(app: FastifyInstance) {
           reply,
           user.id,
           user.userType,
-          "active"
+          "active",
+          user.country
         );
 
         return sendSuccess(reply, 201, {
@@ -558,7 +568,8 @@ export async function authRoutes(app: FastifyInstance) {
             reply,
             record.user.id,
             record.user.userType,
-            "active"
+            "active",
+            record.user.country
           );
 
           return sendSuccess(reply, 200, {
@@ -596,7 +607,8 @@ export async function authRoutes(app: FastifyInstance) {
             reply,
             updatedUser.id,
             updatedUser.userType,
-            "active"
+            "active",
+            updatedUser.country
           );
 
           return sendSuccess(reply, 200, {
@@ -756,7 +768,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
-      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch {
       return sendError(reply, 400, "LOGIN_FAILED", "Unable to complete sign-in. Please check your credentials and try again.");
@@ -882,7 +894,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       // Rotate: revoke old, issue new
       await prisma.session.update({ where: { id: session.id }, data: { revoked: true } });
-      const tokens = await issueTokens(reply, session.userId, session.user.userType, session.user.status);
+      const tokens = await issueTokens(reply, session.userId, session.user.userType, session.user.status, session.user.country);
       return sendSuccess(reply, 200, { tokens });
     } catch {
       return sendError(reply, 400, "REFRESH_FAILED", "Token refresh failed. Please sign in again.");
@@ -992,7 +1004,7 @@ export async function authRoutes(app: FastifyInstance) {
         ]);
 
         const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
-        const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status);
+        const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status, updatedUser.country);
 
         return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser), tokens });
       } catch (err: any) {
@@ -1033,6 +1045,7 @@ export async function authRoutes(app: FastifyInstance) {
             currentTier: true,
             businessName: true,
             country: true,
+            phone: true,
           }
         });
 
@@ -1052,6 +1065,7 @@ export async function authRoutes(app: FastifyInstance) {
             currentTier: user.currentTier,
             businessName: user.businessName,
             country: user.country,
+            phone: user.phone,
           }
         });
       } catch (err: any) {
@@ -1136,7 +1150,7 @@ export async function authRoutes(app: FastifyInstance) {
           );
         }
 
-        const { firstName, lastName, photoUrl, businessName, country } = parsed.data;
+        const { firstName, lastName, photoUrl, businessName, country, phone } = parsed.data;
 
         // Fetch current user type to validate business name restriction
         const userRecord = await prisma.user.findUnique({
@@ -1158,6 +1172,7 @@ export async function authRoutes(app: FastifyInstance) {
         if (photoUrl !== undefined) updateData.photoUrl = photoUrl;
         if (businessName !== undefined) updateData.businessName = businessName;
         if (country !== undefined) updateData.country = country;
+        if (phone !== undefined) updateData.phone = phone;
         
         // Split name into firstName & lastName
          if (firstName !== undefined) updateData.firstName = firstName;
@@ -1173,6 +1188,7 @@ export async function authRoutes(app: FastifyInstance) {
             photoUrl: true,
             businessName: true,
             country: true,
+            phone: true,
           }
         });
 
@@ -1185,6 +1201,7 @@ export async function authRoutes(app: FastifyInstance) {
             photoUrl: signedPhotoUrl,
             businessName: updatedUser.businessName,
             country: updatedUser.country,
+            phone: updatedUser.phone,
           },
           user: {
             id: updatedUser.id,
@@ -1193,6 +1210,7 @@ export async function authRoutes(app: FastifyInstance) {
             photoUrl: signedPhotoUrl,
             businessName: updatedUser.businessName,
             country: updatedUser.country,
+            phone: updatedUser.phone,
           },
         });
       } catch (err: any) {
@@ -1335,7 +1353,7 @@ export async function authRoutes(app: FastifyInstance) {
           },
         });
         await sendWelcomeEmail(email, user.firstName).catch(() => null);
-        const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+        const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
         return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: false });
       }
 
@@ -1383,7 +1401,7 @@ export async function authRoutes(app: FastifyInstance) {
         return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
       }
 
-      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Google could not be completed. Please try again.");
@@ -1427,7 +1445,7 @@ export async function authRoutes(app: FastifyInstance) {
         },
       });
     }
-    const { identityToken, userType, businessName, country } = parsed.data;
+    const { identityToken, userType, businessName, country, phone } = parsed.data;
 
     let appleSub: string;
     let appleEmail: string;
@@ -1465,10 +1483,11 @@ export async function authRoutes(app: FastifyInstance) {
             userType: (userType ?? "guest") as "guest" | "provider",
             businessName: businessName ?? null,
             country: country ?? null,
+            phone: phone ?? null,
           },
         });
         await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
-        const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+        const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
         return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: !userType });
       }
       if (user.status === "pending_verification") {
@@ -1477,7 +1496,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
       if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
 
-      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Apple could not be completed. Please try again.");
@@ -1505,6 +1524,10 @@ export async function authRoutes(app: FastifyInstance) {
             maxLength: 2,
             description: "2-letter ISO country code (e.g. IN, US)",
           },
+          phone: {
+            type: "string",
+            description: "International format, required for providers",
+          },
         },
       },
     },
@@ -1524,7 +1547,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       const userId = (req as FastifyRequest & { userId: string }).userId;
-      const { userType, businessName, country } = parsed.data;
+      const { userType, businessName, country, phone } = parsed.data;
 
       try {
         const updated = await prisma.user.update({
@@ -1533,6 +1556,7 @@ export async function authRoutes(app: FastifyInstance) {
             userType,
             businessName: businessName ?? null,
             country: country ?? null,
+            phone: phone ?? null,
           },
         });
 
@@ -1647,7 +1671,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       // Issue Zika tokens and set HTTP-only cookie
-      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
 
       // Return a beautiful loading HTML that initializes sessionStorage and redirects
       reply.type("text/html").send(`

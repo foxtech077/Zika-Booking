@@ -301,12 +301,13 @@ export async function merchantRoutes(app: FastifyInstance) {
     const payoutsEnabled   = account.payouts_enabled   ?? false;
     const detailsSubmitted = account.details_submitted ?? false;
 
-    // Only activate automatic payouts once the account is fully onboarded
+    // Activate Stripe payouts once the account is fully onboarded
     if (chargesEnabled && payoutsEnabled && detailsSubmitted) {
       await prisma.merchant.update({
         where: { userId },
         data: { payoutMethod: "stripe_connect", updatedAt: new Date() },
       });
+      merchant.payoutMethod = "stripe_connect";
       console.log(`[stripe-connect] Account ${merchant.stripeConnectAccountId} fully onboarded — payoutMethod set to stripe_connect`);
     }
 

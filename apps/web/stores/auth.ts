@@ -12,6 +12,7 @@ export interface AuthUser {
   userType: string;
   businessName?: string | null;
   country?: string | null;
+  phone?: string | null;
   emailVerified: boolean;
   currentTier: string;
   loyaltyPoints: number;
