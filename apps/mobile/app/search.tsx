@@ -1332,15 +1332,26 @@ export default function SearchScreen() {
   const { data: categoryPromotions } = useQuery<Promotion[]>({
     queryKey: ["promotions-active", category],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: Promotion[] }>(
-        `/promotions/active?activity=${category}`,
-      );
-      return res.data.data ?? [];
+      try {
+        const res = await listingApi.get<any>(
+          `/promotions/active?activity=${category}`,
+        );
+        const d = res.data?.data;
+        if (Array.isArray(d)) return d;
+        if (d && Array.isArray(d.promotions)) return d.promotions;
+        return [];
+      } catch {
+        return [];
+      }
     },
     staleTime: 5 * 60_000,
     retry: false,
   });
-  const activePromotion = categoryPromotions?.find((p) => p && p.title && p.title.trim().length > 0) ?? null;
+
+  const activePromotion = useMemo(() => {
+    if (!Array.isArray(categoryPromotions)) return null;
+    return categoryPromotions.find((p) => p && p.title && typeof p.title === "string" && p.title.trim().length > 0) ?? null;
+  }, [categoryPromotions]);
 
   // Fetch signed photo URLs for all search results via /listings/:id/public
   const searchResultIds = useMemo(

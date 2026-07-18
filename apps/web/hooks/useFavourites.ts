@@ -11,7 +11,10 @@ interface FavouritesHook {
 }
 
 export function useFavourites(): FavouritesHook {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, token: storeToken } = useAuthStore();
+  const token = storeToken || (typeof window !== "undefined" ? (sessionStorage.getItem("zika:access_token") ?? localStorage.getItem("zika:access_token")) : null);
+  const isAuth = isAuthenticated || !!token;
+
   const [favouriteIds, setFavouriteIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const fetchedRef = useRef(false);
@@ -44,15 +47,15 @@ export function useFavourites(): FavouritesHook {
   }
 
   useEffect(() => {
-    if (isAuthenticated && !fetchedRef.current) {
+    if (isAuth && !fetchedRef.current) {
       fetchedRef.current = true;
       fetchFavourites();
     }
-    if (!isAuthenticated) {
+    if (!isAuth) {
       fetchedRef.current = false;
       setFavouriteIds(new Set());
     }
-  }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAuth]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isFavourited = useCallback(
     (listingId: string) => favouriteIds.has(listingId),
@@ -61,7 +64,10 @@ export function useFavourites(): FavouritesHook {
 
   const toggleFavourite = useCallback(
     async (listingId: string): Promise<"ok" | "auth_required"> => {
-      if (!isAuthenticated) {
+      const stateToken = useAuthStore.getState().token || (typeof window !== "undefined" ? (sessionStorage.getItem("zika:access_token") ?? localStorage.getItem("zika:access_token")) : null);
+      const isCurrentlyAuth = useAuthStore.getState().isAuthenticated || !!stateToken;
+
+      if (!isCurrentlyAuth) {
         console.log("[Favourites] Auth required | Listing ID:", listingId);
         return "auth_required";
       }
@@ -97,6 +103,7 @@ export function useFavourites(): FavouritesHook {
         }
         return "ok";
       } catch (err: any) {
+        const statusCode = err?.response?.status;
         const errMsg =
           err?.response?.data?.error?.message ?? err?.message ?? "Unknown error";
         console.error(
@@ -112,10 +119,14 @@ export function useFavourites(): FavouritesHook {
           else next.delete(listingId);
           return next;
         });
+
+        if (statusCode === 401) {
+          return "auth_required";
+        }
         return "ok";
       }
     },
-    [isAuthenticated, favouriteIds]
+    [favouriteIds]
   );
 
   return { isFavourited, toggleFavourite, loading, favouriteIds };

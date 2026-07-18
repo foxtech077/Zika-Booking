@@ -15,13 +15,9 @@ interface Props {
   lastName: string;
   email: string;
   tier: LoyaltyTier;
-  roleLabel: string;
   verified: boolean;
   businessName?: string | null;
-  // Neither GET /auth/me nor GET /auth/profile currently returns a join date,
-  // so this stays optional and simply doesn't render until the backend adds one.
   memberSince?: string | null;
-  onEditPress: () => void;
 }
 
 export function ProfileHeader({
@@ -30,11 +26,9 @@ export function ProfileHeader({
   lastName,
   email,
   tier,
-  roleLabel,
   verified,
   businessName,
   memberSince,
-  onEditPress,
 }: Props) {
   const upload = useProfilePhotoUpload();
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -76,9 +70,6 @@ export function ProfileHeader({
       <Text style={s.email}>{email}</Text>
 
       <View style={s.metaRow}>
-        <View style={s.rolePill}>
-          <Text style={s.rolePillText}>{roleLabel}</Text>
-        </View>
         {verified ? (
           <View style={[s.rolePill, s.verifiedPill]}>
             <Ionicons name="checkmark-circle" size={12} color={K.colors.success} />
@@ -98,11 +89,6 @@ export function ProfileHeader({
       <View style={{ marginTop: 12 }}>
         <TierBadge tier={tier} />
       </View>
-
-      <TouchableOpacity style={s.editBtn} onPress={onEditPress} activeOpacity={0.8}>
-        <Ionicons name="pencil-outline" size={14} color={K.colors.darkGreen} />
-        <Text style={s.editBtnText}>Edit Profile</Text>
-      </TouchableOpacity>
 
       <ProfilePhotoBottomSheet
         visible={sheetVisible}

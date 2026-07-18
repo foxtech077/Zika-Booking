@@ -87,6 +87,9 @@ export const useAuthStore = create<AuthState>()(
         // can read it synchronously before the store rehydration completes.
         if (state?.token && typeof window !== "undefined") {
           sessionStorage.setItem(TOKEN_KEY, state.token);
+          if (!state.isAuthenticated) {
+            useAuthStore.setState({ isAuthenticated: true });
+          }
         }
       },
     }

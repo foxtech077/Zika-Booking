@@ -160,12 +160,12 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
       )}
       {availabilityStatus === "unavailable" && (
         <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-xs font-semibold text-red-700">
-           These dates are not available. Please choose different dates.
+          These dates are not available. Please choose different dates.
         </div>
       )}
       {availabilityStatus === "available" && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-xs font-semibold text-emerald-700">
-           Dates are available — reserve now!
+          Dates are available — reserve now!
         </div>
       )}
 
@@ -180,7 +180,7 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
         disabled={lockingListing || availabilityStatus === "unavailable" || availabilityStatus === "checking"}
         className="w-full py-3.5 bg-[#0B1E3F] hover:bg-[#07152B] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm"
       >
-        {lockingListing ? "Securing your dates…" : "Reserve — You won't be charged yet"}
+        {lockingListing ? "Securing your dates…" : "Continue — You won't be charged yet"}
       </button>
 
       {/* Price breakdown */}

@@ -9,6 +9,8 @@ interface ListingGridProps {
   hoveredId?: string | null;
   onHover?: (id: string | null) => void;
   columns?: 2 | 3 | 4;
+  isFavourited?: (id: string) => boolean;
+  onToggleFavourite?: (id: string) => void;
 }
 
 function SkeletonCard() {
@@ -44,6 +46,8 @@ const ListingGrid: React.FC<ListingGridProps> = ({
   hoveredId,
   onHover,
   columns = 4,
+  isFavourited,
+  onToggleFavourite,
 }) => {
   if (loading) {
     return (
@@ -80,6 +84,8 @@ const ListingGrid: React.FC<ListingGridProps> = ({
           onSelect={onSelect}
           hoveredId={hoveredId}
           onHover={onHover}
+          isFavourited={isFavourited ? isFavourited(listing.id) : undefined}
+          onToggleFavourite={onToggleFavourite}
         />
       ))}
     </div>

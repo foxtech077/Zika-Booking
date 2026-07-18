@@ -1523,7 +1523,7 @@ export default function ListingDetailScreen() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={s.bookBtn} onPress={handleBook} activeOpacity={0.88}>
-            <Text style={s.bookBtnText}>Reserve Now</Text>
+            <Text style={s.bookBtnText}>Continue</Text>
             <Ionicons name="arrow-forward" size={16} color="#fff" style={{ marginLeft: 6 }} />
           </TouchableOpacity>
         )}

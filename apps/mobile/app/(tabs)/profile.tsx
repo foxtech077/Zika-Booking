@@ -16,7 +16,6 @@ import { normalizeTier } from "../../constants/loyaltyTiers";
 import { K } from "../../constants/theme";
 import { ProfileHeader } from "../../components/profile/ProfileHeader";
 import { MembershipCard } from "../../components/profile/MembershipCard";
-import { ProfileStats, type StatItem } from "../../components/profile/ProfileStats";
 import { SettingsSection } from "../../components/profile/SettingsSection";
 import { MenuRow } from "../../components/profile/MenuRow";
 import { ProfileSkeleton } from "../../components/profile/ProfileSkeleton";
@@ -44,12 +43,6 @@ export default function ProfileScreen() {
   const photoUrl = data?.photoUrl ?? storeUser?.photoUrl ?? null;
   const verified = data?.emailVerified ?? storeUser?.emailVerified ?? false;
 
-  const stats: StatItem[] = [
-    { key: "trips", icon: "airplane-outline", label: "Trips", onPress: () => router.push("/(tabs)/bookings" as any) },
-    { key: "saved", icon: "bookmark-outline", label: "Saved", onPress: () => router.push("/(tabs)/saved" as any) },
-    { key: "rewards", icon: "star-outline", label: "Rewards", onPress: () => router.push("/(tabs)/loyalty" as any) },
-  ];
-
   const showSkeleton = isLoading && !storeUser;
 
   return (
@@ -69,9 +62,7 @@ export default function ProfileScreen() {
               lastName={lastName}
               email={email}
               tier={tier}
-              roleLabel="Traveller"
               verified={verified}
-              onEditPress={() => router.push("/edit-profile" as any)}
             />
 
             {isError && !storeUser ? (
@@ -87,7 +78,6 @@ export default function ProfileScreen() {
                   nextTier={data?.nextTier ?? null}
                   pointsToNextTier={data?.pointsToNextTier ?? null}
                 />
-                <ProfileStats items={stats} />
               </View>
             )}
 
@@ -114,7 +104,8 @@ export default function ProfileScreen() {
 
             <SettingsSection title="Support & Legal">
               <MenuRow icon="help-circle-outline" label="Help & Support" sublabel="FAQs and guides" onPress={() => router.push("/help" as any)} />
-              <MenuRow icon="document-text-outline" label="Terms & Conditions" sublabel="Our terms of use" onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)} showBorder={false} />
+              <MenuRow icon="document-text-outline" label="Terms & Conditions" sublabel="Our terms of use" onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)} />
+              <MenuRow icon="shield-checkmark-outline" label="Privacy Policy" sublabel="How we handle your data" onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)} showBorder={false} />
             </SettingsSection>
 
             <SettingsSection>

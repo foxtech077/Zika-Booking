@@ -1104,11 +1104,10 @@ export default function CategoryListingsClient({ category }: Props) {
   }
 
   async function handleToggleFavourite(listingId: string) {
-    if (!isAuthenticated) {
+    const res = await toggleFavourite(listingId);
+    if (res === "auth_required") {
       setShowAuthModal(true);
-      return;
     }
-    await toggleFavourite(listingId);
   }
 
   const activeFilterCount = countActiveFilters(filters);

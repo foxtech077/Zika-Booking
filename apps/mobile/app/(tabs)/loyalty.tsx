@@ -61,8 +61,11 @@ function txSign(type: string): string {
   return type === "earned" || type === "refunded" ? "+" : "–";
 }
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+function fmtDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
 // ── Premium Membership Card ───────────────────────────────────────────────────
@@ -70,7 +73,7 @@ function fmtDate(iso: string): string {
 function WalletCard({ tier, points }: { tier: LoyaltyTier; points: number }) {
   const router = useRouter();
   const cfg = CARD_CFG[tier];
-  const { needed, nextLabel } = tierProgress(points, tier);
+  const { needed, nextLabel } = tierProgress(points ?? 0, tier);
   const isTopTier = tier === "diamond";
 
   const progressText = isTopTier
@@ -142,7 +145,7 @@ function WalletCard({ tier, points }: { tier: LoyaltyTier; points: number }) {
           <Text style={[mc.pointsLabel, { color: cfg.textMuted }]}>TOTAL POINTS</Text>
           <View style={mc.pointsRow}>
             <Text style={[mc.pointsValue, { color: cfg.textPrimary }]}>
-              {points.toLocaleString()}
+              {(points ?? 0).toLocaleString()}
             </Text>
             <Text style={[mc.pointsSuffix, { color: cfg.textMuted }]}> pts</Text>
           </View>

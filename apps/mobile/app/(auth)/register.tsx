@@ -46,6 +46,7 @@ interface FieldErrors {
   confirmPassword?: string;
   businessName?:   string;
   country?:        string;
+  phone?:          string;
   general?:        string;
 }
 
@@ -151,6 +152,7 @@ export default function RegisterScreen() {
       userType,
       businessName:    userType === "provider" ? form.businessName.trim() || undefined : undefined,
       country:         form.country || undefined,
+      phone:           userType === "provider" ? form.phone.trim() || undefined : undefined,
     };
     const result = registerSchema.safeParse(payload);
     if (!result.success) {
@@ -169,7 +171,7 @@ export default function RegisterScreen() {
 
   function handleSubmit() {
     if (!privacyAccepted) {
-      setErrors({ general: "Please accept the Privacy Policy to continue." });
+      setErrors({ general: "Please accept the Terms of Use and Privacy Policy to continue." });
       return;
     }
     try {
@@ -419,7 +421,7 @@ export default function RegisterScreen() {
           {errors.confirmPassword ? <Text style={ss.fieldErr}>{errors.confirmPassword}</Text> : null}
         </View>
 
-        {/* Privacy Policy checkbox */}
+        {/* Terms & Privacy Policy checkbox */}
         <TouchableOpacity
           style={ss.checkRow}
           onPress={() => setPrivacyAccepted((v) => !v)}
@@ -430,6 +432,13 @@ export default function RegisterScreen() {
           </View>
           <Text style={ss.checkLabel}>
             I have read and agree to the{" "}
+            <Text
+              style={[ss.checkLink, { color: btnColor }]}
+              onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)}
+            >
+              Terms of Use
+            </Text>{" "}
+            and{" "}
             <Text
               style={[ss.checkLink, { color: btnColor }]}
               onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)}

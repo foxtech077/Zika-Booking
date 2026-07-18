@@ -30,8 +30,8 @@ interface BookingListResponse {
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const FILTER_TABS: FilterTab[] = [
-  { key: "all",       label: "All",       statusParam: undefined },
-  { key: "upcoming",  label: "Upcoming",  statusParam: "confirmed" },
+  { key: "all", label: "All", statusParam: undefined },
+  { key: "upcoming", label: "Upcoming", statusParam: "confirmed" },
   { key: "completed", label: "Completed", statusParam: "completed" },
   { key: "cancelled", label: "Cancelled", statusParam: "cancelled" },
 ];
@@ -100,8 +100,8 @@ export default function ProviderBookingsScreen() {
         <View style={s.header}>
           <View style={s.headerRow}>
             <View>
-              <Text style={s.headerTitle}>Reservations</Text>
-              <Text style={s.headerSub}>Manage your high-end property reservations.</Text>
+              <Text style={s.headerTitle}>Bookings</Text>
+              <Text style={s.headerSub}>Manage your high-end property bookings.</Text>
             </View>
           </View>
 
@@ -131,30 +131,30 @@ export default function ProviderBookingsScreen() {
           <BookingFilterBar tabs={FILTER_TABS} activeKey={activeTab} onSelect={setActiveTab} />
         </View>
 
-      {isLoading ? (
-        <BookingListLoading />
-      ) : isError ? (
-        <BookingErrorState onRetry={() => refetch()} />
-      ) : (
-        <FlatList
-          data={bookings}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={s.list}
-          showsVerticalScrollIndicator={false}
-          removeClippedSubviews
-          windowSize={7}
-          maxToRenderPerBatch={6}
-          initialNumToRender={6}
-          updateCellsBatchingPeriod={50}
-          refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={K.colors.accent} />
-          }
-          ListEmptyComponent={<BookingEmptyState />}
-          renderItem={renderItem}
-          ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
-          ListFooterComponent={() => <View style={{ height: 32 }} />}
-        />
-      )}
+        {isLoading ? (
+          <BookingListLoading />
+        ) : isError ? (
+          <BookingErrorState onRetry={() => refetch()} />
+        ) : (
+          <FlatList
+            data={bookings}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={s.list}
+            showsVerticalScrollIndicator={false}
+            removeClippedSubviews
+            windowSize={7}
+            maxToRenderPerBatch={6}
+            initialNumToRender={6}
+            updateCellsBatchingPeriod={50}
+            refreshControl={
+              <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={K.colors.accent} />
+            }
+            ListEmptyComponent={<BookingEmptyState />}
+            renderItem={renderItem}
+            ItemSeparatorComponent={() => <View style={{ height: 14 }} />}
+            ListFooterComponent={() => <View style={{ height: 32 }} />}
+          />
+        )}
       </View>
     </AppLayout>
   );

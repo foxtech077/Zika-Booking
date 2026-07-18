@@ -25,8 +25,11 @@ const TYPE_META: Record<PointsTransactionType, { label: string; color: string; i
   adjusted: { label: "Adjusted", color: "#f59e0b", icon: "create-outline",    sign: "±" },
 };
 
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", {
+function fmtDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", {
     day: "numeric", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
@@ -55,7 +58,7 @@ function TxRow({ tx }: { tx: PointsTransaction }) {
       </View>
       <View style={s.rowRight}>
         <Text style={[s.rowPts, { color: meta.color }]}>
-          {meta.sign}{tx.points.toLocaleString()}
+          {meta.sign}{(tx.points ?? 0).toLocaleString()}
         </Text>
         <Text style={[s.rowType, { color: meta.color }]}>{meta.label}</Text>
       </View>
@@ -105,7 +108,7 @@ export default function PointsHistoryScreen() {
     isFetchingNextPage,
   } = usePointsHistoryInfinite();
 
-  const allTxs = data?.pages.flatMap((p) => p.transactions) ?? [];
+  const allTxs = data?.pages.flatMap((p) => p.transactions ?? []) ?? [];
   const summary = data?.pages[0];
 
   // Simple client-side filter state is not needed since the API paginates —
@@ -125,7 +128,7 @@ export default function PointsHistoryScreen() {
             { label: "Refunded", value: summary.totalRefunded, color: "#2563eb" },
           ].map(({ label, value, color }) => (
             <View key={label} style={s.summaryChip}>
-              <Text style={[s.summaryVal, { color }]}>{value.toLocaleString()}</Text>
+              <Text style={[s.summaryVal, { color }]}>{(value ?? 0).toLocaleString()}</Text>
               <Text style={s.summaryLabel}>{label}</Text>
             </View>
           ))}

@@ -298,8 +298,14 @@ export default function PaymentScreen() {
   const { data: activePromotion } = useQuery<Promotion | null>({
     queryKey: ["promotions-active", booking?.listingType],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: Promotion[] }>(`/promotions/active?activity=${booking!.listingType}`);
-      return res.data.data?.[0] ?? null;
+      try {
+        const res = await listingApi.get<any>(`/promotions/active?activity=${booking!.listingType}`);
+        const d = res.data?.data;
+        const list = Array.isArray(d) ? d : d?.promotions;
+        return Array.isArray(list) ? list[0] ?? null : null;
+      } catch {
+        return null;
+      }
     },
     enabled: !!booking?.listingType,
     staleTime: 5 * 60_000,
@@ -1108,9 +1114,9 @@ export default function PaymentScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Ionicons name="time" size={48} color="#dc2626" />
-            <Text style={styles.modalTitle}>Reservation Expired</Text>
+            <Text style={styles.modalTitle}>Booking Expired</Text>
             <Text style={styles.modalBody}>
-              Your reservation lock has expired and the selected dates are no longer guaranteed.
+              Your booking lock has expired and the selected dates are no longer guaranteed.
             </Text>
             {/* Primary: Try to Rebook */}
             <TouchableOpacity
@@ -1672,7 +1678,7 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: "#16a34a",
     borderRadius: 12,
-    paddingVertical: 15,
+    padding: 14,
     alignItems: "center",
     marginBottom: 12,
   },

@@ -26,11 +26,11 @@ import { INACTIVE_LISTING } from "../../hooks/messaging";
 type ChipKey = "all" | "unread" | "hotels" | "apartments" | "cars";
 
 const CHIPS: { key: ChipKey; label: string }[] = [
-  { key: "all",        label: "All" },
-  { key: "unread",     label: "Unread" },
-  { key: "hotels",     label: "Hotels" },
-  { key: "apartments", label: "Apartments" },
-  { key: "cars",       label: "Cars" },
+  { key: "all", label: "All" },
+  { key: "unread", label: "Unread" },
+  { key: "hotels", label: "Hotels" },
+  { key: "apartments", label: "Homes" },
+  { key: "cars", label: "Cars" },
 ];
 
 // ── Shimmer ───────────────────────────────────────────────────────────────────
@@ -41,7 +41,7 @@ function useShimmer() {
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(opacity, { toValue: 0.85, duration: 700, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.4,  duration: 700, useNativeDriver: true }),
+        Animated.timing(opacity, { toValue: 0.4, duration: 700, useNativeDriver: true }),
       ])
     );
     loop.start();
@@ -127,10 +127,10 @@ export default function MessagesScreen() {
 
   // Client-side filter
   const filtered = enriched.filter((c) => {
-    if (activeChip === "hotels"     && c.listing?.category !== "hotel")     return false;
+    if (activeChip === "hotels" && c.listing?.category !== "hotel") return false;
     if (activeChip === "apartments" && c.listing?.category !== "apartment") return false;
-    if (activeChip === "cars"       && c.listing?.category !== "car")       return false;
-    if (activeChip === "unread"     && !(c.lastMessage && c.lastMessage.senderId !== currentUserId)) return false;
+    if (activeChip === "cars" && c.listing?.category !== "car") return false;
+    if (activeChip === "unread" && !(c.lastMessage && c.lastMessage.senderId !== currentUserId)) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
       const name = c.listing?.name?.toLowerCase() ?? "";
@@ -144,14 +144,6 @@ export default function MessagesScreen() {
       {/* Header */}
       <View style={s.header}>
         <Text style={s.headerTitle}>Messages</Text>
-        <View style={s.headerActions}>
-          <TouchableOpacity style={s.iconBtn} activeOpacity={0.7}>
-            <Ionicons name="search-outline" size={22} color={K.colors.textDark} />
-          </TouchableOpacity>
-          <TouchableOpacity style={s.iconBtn} activeOpacity={0.7}>
-            <Ionicons name="options-outline" size={22} color={K.colors.textDark} />
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* Search */}
