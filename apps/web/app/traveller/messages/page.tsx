@@ -34,14 +34,13 @@ function shortId(value?: string | null) {
 }
 
 function conversationSummary(conversation: TravellerConversation) {
-  const pieces: string[] = [];
-  if (conversation.providerName) pieces.push(conversation.providerName);
   if (conversation.bookingReference) {
-    pieces.push(`Booking #${conversation.bookingReference}`);
-  } else if (conversation.bookingId) {
-    pieces.push(`Booking ${shortId(conversation.bookingId)}`);
+    return `Booking #${conversation.bookingReference}`;
   }
-  return pieces.length ? pieces.join(" · ") : `Listing ${shortId(conversation.listingId)}`;
+  if (conversation.bookingId) {
+    return `Booking ${shortId(conversation.bookingId)}`;
+  }
+  return `Listing ${shortId(conversation.listingId)}`;
 }
 
 function ConversationSkeleton() {
@@ -384,7 +383,7 @@ export default function TravellerMessagesPage() {
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <p className={cn("truncate text-sm font-semibold", isActive ? "text-white" : "text-slate-950")}>
-                                  {conversation.providerName || `Provider ${shortId(conversation.providerId)}`}
+                                  {conversation.providerName?.split(' ')[0] || `Provider ${shortId(conversation.providerId)}`}
                                 </p>
                                 <p className={cn("truncate text-xs", isActive ? "text-slate-300" : "text-slate-500")}>
                                   {conversationSummary(conversation)}
@@ -474,7 +473,7 @@ export default function TravellerMessagesPage() {
                         <MessageSquare className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-950">{activeConversation.providerName || `Provider ${shortId(activeConversation.providerId)}`}</p>
+                        <p className="truncate font-semibold text-slate-950">{activeConversation.providerName?.split(' ')[0] || `Provider ${shortId(activeConversation.providerId)}`}</p>
                         <p className="truncate text-xs text-slate-500">{conversationSummary(activeConversation)}</p>
                       </div>
                     </div>
