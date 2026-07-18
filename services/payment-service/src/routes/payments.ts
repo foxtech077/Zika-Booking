@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { z } from "zod";
 import { parsePhoneNumber } from "libphonenumber-js";
 import { prisma } from "../lib/prisma.js";
-import { stripe } from "../lib/stripe.js";
+import { stripe, toStripeAmount } from "../lib/stripe.js";
 import { sendError, sendSuccess } from "../lib/errors.js";
 import { requireUser, requireAdmin, requireInternalService, type GuestRequest } from "../middleware/auth.js";
 import { cancelPayout } from "../services/payout.service.js";
@@ -111,7 +111,7 @@ export async function paymentRoutes(app: FastifyInstance) {
           price_data: {
             currency,
             product_data: { name: `Booking ${booking["reference"]}` },
-            unit_amount: Math.round(amount * 100),
+            unit_amount: toStripeAmount(amount, currency),
           },
           quantity: 1,
         },
@@ -416,7 +416,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     // ── 5. Create Stripe intent ─────────────────────────────────────────────
     const intent = await stripe.paymentIntents.create(
       {
-        amount: Math.round(Number(amount) * 100),
+        amount: toStripeAmount(Number(amount), currency),
         currency,
         customer: customerAccount.providerCustomerId,
         automatic_payment_methods: { enabled: true },
@@ -633,7 +633,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         try {
           intent = await stripe.paymentIntents.create(
             {
-              amount: Math.round(Number(amount) * 100),
+              amount: toStripeAmount(Number(amount), currency),
               currency,
               customer: customerAccount.providerCustomerId,
               payment_method: savedMethod.providerPmId,
@@ -884,7 +884,7 @@ export async function paymentRoutes(app: FastifyInstance) {
           const re = await stripe.refunds.create(
             {
               payment_intent: payment.providerPaymentId ?? undefined,
-              amount: Math.round(refundAmount * 100),
+              amount: toStripeAmount(refundAmount, payment.currency),
               reason: "requested_by_customer",
             },
             { idempotencyKey: `stripe-refund-${refund.id}` }

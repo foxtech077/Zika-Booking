@@ -1,5 +1,5 @@
 import { prisma } from "../lib/prisma.js";
-import { stripe } from "../lib/stripe.js";
+import { stripe, toStripeAmount } from "../lib/stripe.js";
 import { withRedisLock } from "../lib/redis.js";
 import { RefundStatus, PayoutStatus } from "../generated/index.js";
 
@@ -424,7 +424,7 @@ async function processSinglePayout(payout: any): Promise<void> {
     ) {
       const transfer = await stripe.transfers.create(
         {
-          amount: Math.round(Number(payout.amount) * 100),
+          amount: toStripeAmount(Number(payout.amount), payout.currency),
           currency: payout.currency.toLowerCase(),
           destination: merchant.stripeConnectAccountId,
           transfer_group: payout.bookingId,
