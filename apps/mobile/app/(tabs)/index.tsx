@@ -1188,7 +1188,7 @@ export default function HomeScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.catScroll}>
             {[
               { label: "Hotels", emoji: "🏨", route: "/browse/hotels" },
-              { label: "Apartments", emoji: "🏠", route: "/browse/apartments" },
+              { label: "Homes", emoji: "🏠", route: "/browse/apartments" },
               { label: "Cars", emoji: "🚗", route: "/browse/cars" },
             ].map(cat => (
               <TouchableOpacity key={cat.label} style={s.catPill} onPress={() => router.push(cat.route as any)} activeOpacity={0.8}>
@@ -1281,11 +1281,11 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Apartment Deals ── */}
+        {/* ── Home Deals ── */}
         {popularApts.length > 0 && (
           <View style={s.section}>
             <SectionHead
-              title="Apartment Deals"
+              title="Home Deals"
               subtitle={detectedCity ? `Deals near ${detectedCity}` : "Save big on your next stay"}
               onViewAll={() => router.push("/browse/apartments" as any)}
             />
@@ -1394,12 +1394,12 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* ── Best Apartments ── */}
+        {/* ── Best Homes ── */}
         {(popularApts.length > 0 || aptsLoading) && (
           <View style={s.section}>
             <SectionHead
-              title="Best Apartments"
-              subtitle={detectedCity ? `Apartments near ${detectedCity}` : "Comfortable long-term stays"}
+              title="Best Homes"
+              subtitle={detectedCity ? `Homes near ${detectedCity}` : "Comfortable long-term stays"}
               onViewAll={() => router.push("/browse/apartments" as any)}
             />
             {aptsLoading ? <EliteCardSkeleton /> : (

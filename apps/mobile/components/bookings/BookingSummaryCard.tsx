@@ -28,7 +28,7 @@ export interface BookingSummaryData {
 export function BookingSummaryCard({ booking }: { booking: BookingSummaryData }) {
   const isCar = booking.listingCategory === "car";
   const catIcon = isCar ? "car-sport" : booking.listingCategory === "hotel" ? "business" : "home";
-  const catLabel = isCar ? "Car Rental" : booking.listingCategory === "hotel" ? "Hotel" : "Apartment";
+  const catLabel = isCar ? "Car Rental" : booking.listingCategory === "hotel" ? "Hotel" : "Home";
 
   const startLabel = isCar ? "Pickup" : "Check-in";
   const endLabel = isCar ? "Return" : "Check-out";

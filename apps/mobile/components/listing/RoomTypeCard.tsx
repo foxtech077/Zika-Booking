@@ -96,14 +96,6 @@ export function RoomTypeCard({
             </View>
           )}
 
-          {roomType.unitCount != null && roomType.unitCount > 0 && (
-            <View style={styles.specPill}>
-              <Ionicons name="business-outline" size={13} color={MUTED} />
-              <Text style={styles.specPillText}>
-                {roomType.unitCount > 50 ? "Available" : `${roomType.unitCount} left`}
-              </Text>
-            </View>
-          )}
         </View>
 
         <View style={styles.priceContainer}>
@@ -112,10 +104,12 @@ export function RoomTypeCard({
               {currency} {Math.round(basePrice).toLocaleString()}
             </Text>
           )}
-          <Text style={styles.priceAmount}>
-            {currency} {Math.round(discountedPrice).toLocaleString()}
-          </Text>
-          <Text style={styles.priceUnit}>/ night</Text>
+          <View style={styles.priceRow}>
+            <Text style={styles.priceAmount}>
+              {currency} {Math.round(discountedPrice).toLocaleString()}
+            </Text>
+            <Text style={styles.priceUnit}>/ night</Text>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -192,17 +186,21 @@ const styles = StyleSheet.create({
   },
   footerRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     marginTop: 12,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: "#F3F4F6",
+    flexWrap: "wrap",
+    gap: 8,
   },
   specsContainer: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
     gap: 6,
+    flexShrink: 1,
   },
   specPill: {
     flexDirection: "row",
@@ -221,15 +219,19 @@ const styles = StyleSheet.create({
     color: MUTED,
   },
   priceContainer: {
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  priceRow: {
     flexDirection: "row",
     alignItems: "baseline",
     gap: 3,
   },
   originalPrice: {
-    fontSize: 12,
+    fontSize: 11,
     color: MUTED,
     textDecorationLine: "line-through",
-    marginRight: 4,
+    marginBottom: 1,
   },
   priceAmount: {
     fontSize: 17,

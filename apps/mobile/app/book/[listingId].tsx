@@ -231,10 +231,10 @@ export default function BookingFlowScreen() {
   // Derive timer state label
   const timerState: "green" | "amber" | "red" | null =
     msLeft < 0 || !lockState ? null
-    : msLeft > 120_000 ? "green"
-    : msLeft > 30_000 ? "amber"
-    : msLeft > 0 ? "red"
-    : null;
+      : msLeft > 120_000 ? "green"
+        : msLeft > 30_000 ? "amber"
+          : msLeft > 0 ? "red"
+            : null;
 
   // Record the lock start time once the lock is first set
   useEffect(() => {
@@ -284,7 +284,7 @@ export default function BookingFlowScreen() {
   const LOCK_TOTAL_MS = 300_000;
   const progressFraction =
     msLeft < 0 ? 1
-    : Math.max(0, Math.min(1, msLeft / LOCK_TOTAL_MS));
+      : Math.max(0, Math.min(1, msLeft / LOCK_TOTAL_MS));
 
   // ── Try to Rebook handler ─────────────────────────────────────────────────
   async function handleTryRebook() {
@@ -424,7 +424,7 @@ export default function BookingFlowScreen() {
             cached.pickupDatetime === pickupDatetime &&
             cached.returnDatetime === returnDatetime &&
             (guests ? cached.guests === guests : !cached.guests);
-          
+
           const expiresAtMs = new Date(cached.expiresAt).getTime();
           if (isMatch && expiresAtMs > Date.now()) {
             lockStartMsRef.current = cached.lockStartMs ?? Date.now();
@@ -540,7 +540,7 @@ export default function BookingFlowScreen() {
       setLockState((prev) => {
         if (!prev) return prev;
         const updated = { ...prev, expiresAt: newExpiresAt };
-        
+
         // Update persisted lock
         SecureStore.getItemAsync("ZIKA_ACTIVE_LOCK").then((cachedLockRaw) => {
           if (cachedLockRaw) {
@@ -549,7 +549,7 @@ export default function BookingFlowScreen() {
             cached.lockState.expiresAt = newExpiresAt;
             SecureStore.setItemAsync("ZIKA_ACTIVE_LOCK", JSON.stringify(cached));
           }
-        }).catch(() => {});
+        }).catch(() => { });
 
         return updated;
       });
@@ -602,7 +602,7 @@ export default function BookingFlowScreen() {
     },
     onSuccess: (data) => {
       bookingCreatedRef.current = true;
-      SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => {});
+      SecureStore.deleteItemAsync("ZIKA_ACTIVE_LOCK").catch(() => { });
       router.push({
         pathname: "/pay/[bookingId]",
         params: {
@@ -914,8 +914,8 @@ export default function BookingFlowScreen() {
                   width: `${Math.round(progressFraction * 100)}%` as any,
                   backgroundColor:
                     timerState === "green" ? "#16a34a"
-                    : timerState === "amber" ? "#d97706"
-                    : "#dc2626",
+                      : timerState === "amber" ? "#d97706"
+                        : "#dc2626",
                 },
               ]}
             />
@@ -1147,8 +1147,8 @@ export default function BookingFlowScreen() {
                             {bestIsVoucher
                               ? `Voucher (${voucherCode})`
                               : promoBadgeLabel
-                              ? `Promotion (${promoBadgeLabel})`
-                              : "Promotion discount"}
+                                ? `Promotion (${promoBadgeLabel})`
+                                : "Promotion discount"}
                             {bothExist ? " ✓ Best deal" : ""}
                           </Text>
                           <Text style={[styles.priceValue, styles.discountValue]}>
@@ -1202,9 +1202,9 @@ export default function BookingFlowScreen() {
                 )}
 
                 {(() => {
-                  const promoAmt   = promoDiscountTotal;
+                  const promoAmt = promoDiscountTotal;
                   const voucherAmt = voucherDiscount ?? 0;
-                  const bestAmt    = Math.max(promoAmt, voucherAmt);
+                  const bestAmt = Math.max(promoAmt, voucherAmt);
                   // pricing.total is computed server-side with no promotion discount
                   // baked in (the backend's own promotion logic is a stub that always
                   // returns 0 — see the comment above `promo` further up), so the full
@@ -1595,7 +1595,7 @@ const styles = StyleSheet.create({
   primaryBtn: {
     backgroundColor: "#16a34a",
     borderRadius: 12,
-    paddingVertical: 14,
+    padding: 14,
     alignItems: "center",
     marginBottom: 12,
   },

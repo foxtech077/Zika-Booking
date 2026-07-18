@@ -189,7 +189,7 @@ const CATEGORY_TABS: {
   icon: keyof typeof Ionicons.glyphMap;
 }[] = [
   { key: "hotel", label: "Hotels", icon: "business-outline" },
-  { key: "apartment", label: "Apartments", icon: "home-outline" },
+  { key: "apartment", label: "Homes", icon: "home-outline" },
   { key: "car", label: "Cars", icon: "car-outline" },
 ];
 

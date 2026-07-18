@@ -708,14 +708,14 @@ export default function ListingDetailScreen() {
 
   const effectivePromo: ActivePromotion | null = customPromoBadge && promoPercentFromBadge > 0
     ? {
-        activity: listing.category,
-        discountType: "percentage",
-        discountValue: String(promoPercentFromBadge),
-        labelText: customPromoBadge.labelText,
-        bannerTitle: customPromoBadge.labelText,
-        status: "active",
-        applyToBooking: true,
-      }
+      activity: listing.category,
+      discountType: "percentage",
+      discountValue: String(promoPercentFromBadge),
+      labelText: customPromoBadge.labelText,
+      bannerTitle: customPromoBadge.labelText,
+      status: "active",
+      applyToBooking: true,
+    }
     : (activePromotions?.[0] as unknown as ActivePromotion | null) ?? null;
 
   const promoted = applyPromotion(baseRate || null, effectivePromo);
@@ -769,10 +769,9 @@ export default function ListingDetailScreen() {
       discount = listing.longStayDiscountType === "percentage" ? base * (v / 100) : v * count;
     }
     const serviceFee = base * 0.05;
-    const tax = base * 0.10;
     const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee ? Number(listing.deliveryFee) : 0;
-    const total = base - discount + serviceFee + tax + delivery;
-    return { rate, count, base, discount, serviceFee, tax, delivery, total };
+    const total = base - discount + serviceFee + delivery;
+    return { rate, count, base, discount, serviceFee, delivery, total };
   })();
 
   // Amenities
@@ -820,7 +819,7 @@ export default function ListingDetailScreen() {
     }
     if (isApartment) {
       return [
-        { icon: "🏠", label: "Apartment", accent: true },
+        { icon: "🏠", label: "Home", accent: true },
         ...(listing.bedrooms ? [{ icon: "🛏️", label: `${listing.bedrooms} Bed` }] : []),
         ...(listing.bathrooms ? [{ icon: "🚿", label: `${listing.bathrooms} Bath` }] : []),
         ...(listing.maxGuests ? [{ icon: "👥", label: `${listing.maxGuests} Guests` }] : []),
@@ -987,7 +986,7 @@ export default function ListingDetailScreen() {
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               <View style={[s.catBadge, isCar && { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" }, isApartment && { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" }]}>
                 <Text style={[s.catBadgeText, isCar && { color: "#C2410C" }, isApartment && { color: GREEN }]}>
-                  {isCar ? "🚗 Car" : isApartment ? "🏠 Apartment" : "🏨 Hotel"}
+                  {isCar ? "🚗 Car" : isApartment ? "🏠 Home" : "🏨 Hotel"}
                 </Text>
               </View>
               {listing.isAccredited && (
@@ -1159,10 +1158,6 @@ export default function ListingDetailScreen() {
               <View style={s.breakRow}>
                 <Text style={s.breakLabel}>Service fee (5%)</Text>
                 <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.serviceFee).toLocaleString()}</Text>
-              </View>
-              <View style={s.breakRow}>
-                <Text style={s.breakLabel}>Local taxes (10%)</Text>
-                <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.tax).toLocaleString()}</Text>
               </View>
               <View style={[s.breakRow, { borderTopWidth: 1, borderTopColor: BORDER, marginTop: 4, paddingTop: 12 }]}>
                 <Text style={s.breakTotal}>Total</Text>
@@ -1416,22 +1411,33 @@ export default function ListingDetailScreen() {
       {/* ══ STICKY BOTTOM BAR ══ */}
       <View style={s.stickyBar}>
         <View style={{ flex: 1, paddingRight: 12 }}>
-          {mrpPrice != null && mrpPrice > rate ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-              <Text style={s.stickyOriginal}>{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
-              {customPromoBadge ? (
-                <Text style={{ fontSize: 10, fontWeight: "800", color: customPromoBadge.labelColour ?? "#C84B2F" }}>
-                  {customPromoBadge.labelText}
-                </Text>
+          {hasDates && pricingBreakout ? (
+            <>
+              <Text style={s.stickyRate}>{curr} {Math.round(pricingBreakout.total).toLocaleString()}</Text>
+              <Text style={s.stickyUnit} numberOfLines={1}>
+                total for {pricingBreakout.count} {isCar ? `day${pricingBreakout.count !== 1 ? "s" : ""}` : `night${pricingBreakout.count !== 1 ? "s" : ""}`}
+                {selectedRoomType ? ` · ${selectedRoomType.name}` : ""}
+              </Text>
+            </>
+          ) : (
+            <>
+              {mrpPrice != null && mrpPrice > rate ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={s.stickyOriginal}>{curr} {Math.round(mrpPrice).toLocaleString()}</Text>
+                  {customPromoBadge ? (
+                    <Text style={{ fontSize: 10, fontWeight: "800", color: customPromoBadge.labelColour ?? "#C84B2F" }}>
+                      {customPromoBadge.labelText}
+                    </Text>
+                  ) : null}
+                </View>
               ) : null}
-            </View>
-          ) : null}
-
-          <Text style={s.stickyRate}>{curr} {Math.round(rate).toLocaleString()}</Text>
-          <Text style={s.stickyUnit} numberOfLines={1}>
-            {rateLabel}
-            {selectedRoomType ? ` · ${selectedRoomType.name}` : ""}
-          </Text>
+              <Text style={s.stickyRate}>{curr} {Math.round(rate).toLocaleString()}</Text>
+              <Text style={s.stickyUnit} numberOfLines={1}>
+                {rateLabel}
+                {selectedRoomType ? ` · ${selectedRoomType.name}` : ""}
+              </Text>
+            </>
+          )}
         </View>
 
         {isProvider ? (

@@ -39,7 +39,7 @@ const BODY_TYPE_LABELS: Record<string, string> = {
 };
 const TRANSMISSION_LABELS: Record<string, string> = { manual: "Manual", automatic: "Automatic", semi_auto: "semi_auto" };
 const FUEL_TYPE_LABELS: Record<string, string> = { petrol: "Petrol", diesel: "Diesel", electric: "Electric", hybrid: "Hybrid" };
-const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Apartment", car: "Car Rental" };
+const CAT_LABEL: Record<string, string> = { hotel: "Hotel", apartment: "Home", car: "Car Rental" };
 
 const STATUS_CFG: Record<string, { label: string; bg: string; text: string; icon: string }> = {
   active:         { label: "Active",           bg: "#059669", text: "#fff", icon: "check-circle" },

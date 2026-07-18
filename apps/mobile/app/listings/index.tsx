@@ -118,7 +118,7 @@ export default function MyListingsScreen() {
         {listings.length === 0 && !isLoading && (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyTitle}>No listings yet</Text>
-            <Text style={styles.emptySubtitle}>Add your first hotel, apartment, or car rental listing.</Text>
+            <Text style={styles.emptySubtitle}>Add your first hotel, home, or car rental listing.</Text>
           </View>
         )}
 

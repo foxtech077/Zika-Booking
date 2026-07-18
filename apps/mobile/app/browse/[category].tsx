@@ -77,7 +77,7 @@ function fmtPrice(n: number | null, currency: string): string {
 
 // ── Category Badge ────────────────────────────────────────────────────────────
 function CategoryBadge({ type }: { type: string }) {
-  const label = type === "hotel" ? "🏨 Hotel" : type === "apartment" ? "🏠 Apartment" : "🚗 Car";
+  const label = type === "hotel" ? "🏨 Hotel" : type === "apartment" ? "🏠 Home" : "🚗 Car";
   const bg = type === "hotel" ? "#EFF6FF" : type === "apartment" ? "#F0FDF4" : "#FFF7ED";
   const color = type === "hotel" ? "#1D4ED8" : type === "apartment" ? "#15803D" : "#C2410C";
   return (
@@ -245,7 +245,7 @@ export default function BrowseCategoryScreen() {
 
   // Map URL segment to API category value
   const apiCategory = category === "apartments" ? "apartment" : category === "cars" ? "car" : "hotel";
-  const screenTitle = category === "apartments" ? "All Apartments" : category === "cars" ? "All Cars" : "All Hotels";
+  const screenTitle = category === "apartments" ? "All Homes" : category === "cars" ? "All Cars" : "All Hotels";
   const icon = category === "cars" ? "🚗" : category === "apartments" ? "🏠" : "🏨";
 
   const browsePromo = useActivePromotion(apiCategory);
