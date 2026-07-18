@@ -89,7 +89,7 @@ function commissionRatePct(b: ProviderBooking): number {
 
 function buildTimelineEvents(b: ProviderBooking): TimelineEvent[] {
   return [
-    { label: "Booking Created",   date: b.createdAt,   done: true },
+    { label: "Booking Created", date: b.createdAt, done: true },
     { label: "Payment Confirmed", date: b.confirmedAt, done: !!b.confirmedAt },
     {
       label: b.listingCategory === "car" ? "Vehicle Picked Up" : "Guest Checked In",
@@ -290,7 +290,7 @@ export default function ProviderBookingDetailScreen() {
             <Feather name="arrow-left" size={20} color="#fff" />
           </TouchableOpacity>
           <View style={s.headerCenter}>
-            <Text style={s.headerTitle}>Reservation</Text>
+            <Text style={s.headerTitle}>Booking</Text>
             <Text style={s.headerRef}>{booking.reference}</Text>
           </View>
           <TouchableOpacity style={s.shareHdrBtn} onPress={handleShare}>
@@ -398,10 +398,10 @@ export default function ProviderBookingDetailScreen() {
           <BookingDetailSection title="Cancellation Details" icon="x-circle">
             <View style={s.cancelBox}>
               <Text style={s.cancelTitle}>
-                {booking.status === "cancelled_by_guest"    ? "Cancelled by guest"
+                {booking.status === "cancelled_by_guest" ? "Cancelled by guest"
                   : booking.status === "cancelled_by_provider" ? "Cancelled by you"
-                  : booking.status === "refunded"               ? "Refund issued"
-                  : "Cancelled by system"}
+                    : booking.status === "refunded" ? "Refund issued"
+                      : "Cancelled by system"}
               </Text>
               {booking.cancelledAt && (
                 <Text style={s.cancelDate}>{fmtFull(booking.cancelledAt)}</Text>

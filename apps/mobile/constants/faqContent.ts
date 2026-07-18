@@ -480,7 +480,7 @@ export const FAQ_SECTIONS: FAQSection[] = [
     items: [
       {
         q: "Where can I find the Terms of Use and Privacy Policy?",
-        a: "Both documents are available in Settings → Legal in the app. They are also accessible at www.kainook.com/terms and www.kainook.com/privacy.",
+        a: "Both documents are available in Settings → Legal in the app. They are also accessible at https://kainook.com/legal/terms and https://kainook.com/legal/privacy.",
       },
       {
         q: "Which law governs Kainook?",

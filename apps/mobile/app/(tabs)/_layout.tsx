@@ -13,7 +13,7 @@ function MessagesTabIcon({ color, focused }: { color: string; focused: boolean }
     <View style={tl.iconWrap}>
       <Ionicons
         name={focused ? "chatbubble" : "chatbubble-outline"}
-        size={24}
+        size={26}
         color={color}
       />
       {count > 0 && (
@@ -26,7 +26,7 @@ function MessagesTabIcon({ color, focused }: { color: string; focused: boolean }
 }
 
 const tl = StyleSheet.create({
-  iconWrap: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
+  iconWrap: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   badge: {
     position: "absolute",
     top: -4,
@@ -66,13 +66,13 @@ export default function TabLayout() {
           backgroundColor: K.colors.tabBarBg,
           borderTopWidth: 1,
           borderTopColor: K.colors.tabBarBorder,
-          height: 58 + insets.bottom,
-          paddingBottom: insets.bottom > 0 ? insets.bottom - 4 : 8,
-          paddingTop: 8,
+          height: 64 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom - 2 : 8,
+          paddingTop: 6,
           ...K.shadow.xs,
         },
         tabBarLabelStyle: {
-          fontSize: SCREEN_W < 375 ? 9 : SCREEN_W < 415 ? 10 : 11,
+          fontSize: SCREEN_W < 375 ? 12 : SCREEN_W < 415 ? 13 : 14,
           fontWeight: "700",
           marginTop: 2,
           letterSpacing: 0.02,
@@ -88,7 +88,7 @@ export default function TabLayout() {
         options={{
           title: "Discover",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "compass" : "compass-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "compass" : "compass-outline"} size={27} color={color} />
           ),
         }}
       />
@@ -97,7 +97,7 @@ export default function TabLayout() {
         options={{
           title: "Trips",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "airplane" : "airplane-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "airplane" : "airplane-outline"} size={27} color={color} />
           ),
         }}
       />
@@ -111,32 +111,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="saved"
-        options={{
-          title: "Saved",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "bookmark" : "bookmark-outline"} size={24} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="loyalty"
-        options={{
-          title: "Rewards",
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "star" : "star-outline"} size={24} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: "You",
           tabBarIcon: ({ color, focused }) => (
-            <Ionicons name={focused ? "person-circle" : "person-circle-outline"} size={24} color={color} />
+            <Ionicons name={focused ? "person-circle" : "person-circle-outline"} size={27} color={color} />
           ),
         }}
       />
+      <Tabs.Screen name="saved" options={{ href: null }} />
+      <Tabs.Screen name="loyalty" options={{ href: null }} />
       <Tabs.Screen name="dashboard" options={{ href: null }} />
     </Tabs>
   );

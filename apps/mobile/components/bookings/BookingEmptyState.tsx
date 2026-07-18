@@ -9,7 +9,7 @@ export function BookingEmptyState() {
         <Ionicons name="calendar-outline" size={36} color={K.colors.textMuted} />
       </View>
       <Text style={e.title}>No bookings found</Text>
-      <Text style={e.sub}>Reservations in this category will appear here.</Text>
+      <Text style={e.sub}>Booking in this category will appear here.</Text>
     </View>
   );
 }

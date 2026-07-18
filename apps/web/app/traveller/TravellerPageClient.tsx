@@ -2099,7 +2099,7 @@ export default function TravellerDashboard() {
                   <div className="pb-6">
                     <h2 className="text-2xl font-semibold mb-3">Where you'll be</h2>
                     {detailListing.address && <p className="text-slate-500 text-sm mb-4">{detailListing.address}</p>}
-                    <div className="w-full h-[300px] rounded-2xl overflow-hidden border border-slate-200 relative z-0">
+                    <div className="w-full h-[300px] rounded-3xl overflow-hidden border border-slate-200 relative z-0">
                       {detailListing.lat && detailListing.lng ? (
                         <MapView
                           listings={[detailListing]}
@@ -2355,7 +2355,7 @@ export default function TravellerDashboard() {
                             disabled={lockingListing || availabilityStatus === "unavailable" || availabilityStatus === "checking"}
                             className="w-full py-3.5 bg-[#0c2614] hover:bg-[#081b0d] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl transition text-sm"
                           >
-                            {lockingListing ? "Securing your dates…" : "Reserve — You won't be charged yet"}
+                            {lockingListing ? "Securing your dates…" : "Continue — You won't be charged yet"}
                           </button>
 
                           {/* Dynamic price breakdown */}

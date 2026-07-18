@@ -928,7 +928,7 @@ export default function BookingFlowScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Ionicons name="time" size={48} color="#dc2626" />
-            <Text style={styles.modalTitle}>Reservation Expired</Text>
+            <Text style={styles.modalTitle}>Booking Expired</Text>
             <Text style={styles.modalBody}>
               Your reservation lock has expired and the selected dates are no longer guaranteed.
             </Text>
@@ -1272,6 +1272,34 @@ export default function BookingFlowScreen() {
             )}
 
 
+            {/* Terms and Privacy Policy acceptance */}
+            <TouchableOpacity
+              style={styles.termsRow}
+              onPress={() => setTermsChecked((prev) => !prev)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.checkbox, termsChecked && styles.checkboxChecked]}>
+                {termsChecked && <Ionicons name="checkmark" size={13} color="#fff" />}
+              </View>
+              <Text style={styles.termsText}>
+                I have read and agree to the{" "}
+                <Text
+                  style={styles.termsLink}
+                  onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)}
+                >
+                  Terms of Use
+                </Text>{" "}
+                and{" "}
+                <Text
+                  style={styles.termsLink}
+                  onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={[
                 styles.primaryBtn,
@@ -1580,6 +1608,7 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: "#16a34a", borderColor: "#16a34a" },
   termsText: { fontSize: 13, color: "#374151", lineHeight: 20, flex: 1 },
+  termsLink: { fontWeight: "700", color: "#16a34a", textDecorationLine: "underline" },
 
   // Buttons
   primaryBtn: {

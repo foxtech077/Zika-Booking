@@ -341,7 +341,7 @@ export default function FAQPage() {
         },
         {
           q: "How does Kainook use my personal data?",
-          a: "We use your data to operate the Platform, process bookings, manage payments, personalise your experience, and comply with legal obligations. We never sell your data. See our full Privacy Policy at www.kainook.com/privacy for complete details."
+          a: "We use your data to operate the Platform, process bookings, manage payments, personalise your experience, and comply with legal obligations. We never sell your data. See our full Privacy Policy at kainook.com/legal/privacy for complete details."
         },
         {
           q: "How do I request a copy of my data?",
@@ -357,7 +357,7 @@ export default function FAQPage() {
         },
         {
           q: "Where can I find the Terms of Use and Privacy Policy?",
-          a: "Both documents are available on the Platform at www.kainook.com/terms and www.kainook.com/privacy. They are also accessible from the footer of every page and in the app under Settings → Legal."
+          a: "Both documents are available on the Platform at kainook.com/legal/terms and kainook.com/legal/privacy. They are also accessible from the footer of every page and in the app under Settings → Legal."
         },
         {
           q: "Which law governs Kainook?",

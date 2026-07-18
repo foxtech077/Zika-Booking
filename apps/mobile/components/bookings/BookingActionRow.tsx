@@ -57,7 +57,7 @@ export function BookingActionRow({
 
       <TouchableOpacity style={a.shareBtn} onPress={onShare} activeOpacity={0.85}>
         <Feather name="share-2" size={15} color={K.colors.textMuted} />
-        <Text style={a.shareBtnText}>Share Reservation Details</Text>
+        <Text style={a.shareBtnText}>Share Booking Details</Text>
       </TouchableOpacity>
     </View>
   );

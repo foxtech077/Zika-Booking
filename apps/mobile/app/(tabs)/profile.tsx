@@ -104,7 +104,8 @@ export default function ProfileScreen() {
 
             <SettingsSection title="Support & Legal">
               <MenuRow icon="help-circle-outline" label="Help & Support" sublabel="FAQs and guides" onPress={() => router.push("/help" as any)} />
-              <MenuRow icon="document-text-outline" label="Terms & Conditions" sublabel="Our terms of use" onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)} showBorder={false} />
+              <MenuRow icon="document-text-outline" label="Terms & Conditions" sublabel="Our terms of use" onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "terms" } } as any)} />
+              <MenuRow icon="shield-checkmark-outline" label="Privacy Policy" sublabel="How we handle your data" onPress={() => router.push({ pathname: "/legal/[doc]", params: { doc: "privacy" } } as any)} showBorder={false} />
             </SettingsSection>
 
             <SettingsSection>
