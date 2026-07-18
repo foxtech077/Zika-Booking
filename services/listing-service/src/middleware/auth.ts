@@ -8,6 +8,7 @@ const ADMIN_JWT_SECRET = new TextEncoder().encode(process.env["ADMIN_JWT_SECRET"
 export interface ProviderRequest extends FastifyRequest {
   providerId: string;
   providerType: string;
+  providerCountry: string | null;
 }
 
 export interface AdminRequest extends FastifyRequest {
@@ -22,6 +23,7 @@ export async function requireProvider(req: FastifyRequest, reply: FastifyReply) 
   if (process.env["DEV_BYPASS_AUTH"] === "true") {
     (req as ProviderRequest).providerId = process.env["DEV_PROVIDER_ID"] ?? "cmos7y8zp0009j9kc5o4ed3c0";
     (req as ProviderRequest).providerType = "provider";
+    (req as ProviderRequest).providerCountry = process.env["DEV_PROVIDER_COUNTRY"] ?? null;
     return;
   }
   const token = req.headers.authorization?.slice(7);
@@ -31,6 +33,7 @@ export async function requireProvider(req: FastifyRequest, reply: FastifyReply) 
     if (!payload.sub) throw new Error("Missing sub");
     (req as ProviderRequest).providerId = payload.sub;
     (req as ProviderRequest).providerType = (payload as { type?: string }).type ?? "traveller";
+    (req as ProviderRequest).providerCountry = (payload as { country?: string | null }).country ?? null;
   } catch {
     return sendError(reply, 401, "INVALID_TOKEN", "Token invalid or expired.");
   }

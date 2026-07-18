@@ -23,6 +23,8 @@ import type { Listing } from "@/types/provider";
 import type { HotelRoomType } from "@/types";
 import { CurrencyCombobox } from "@/components/ui/CurrencyCombobox";
 import { FormShell, type FormStep } from "./shared/FormShell";
+import { useAuthStore } from "@/stores/auth";
+import { PayoutCurrencyWarning } from "./shared/PayoutCurrencyWarning";
 import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { AMENITY_OPTIONS, CATEGORY_MAP, groupAmenities, flattenGroupedAmenities } from "./shared/amenities";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
@@ -209,6 +211,7 @@ interface Props { listingId: string; listing: Listing; }
 export function HotelForm({ listingId, listing }: Props) {
   const router = useRouter();
   const qc = useQueryClient();
+  const providerCountry = useAuthStore((st) => st.user?.country);
 
   const { data: current } = useQuery<any>({
     queryKey: ["listing-edit", listingId],
@@ -644,6 +647,11 @@ export function HotelForm({ listingId, listing }: Props) {
                 {step === "pricing" && (
                   <div className="space-y-4 animate-fade-in">
                     <h3 className="text-lg font-bold text-slate-900">Pricing & Policies</h3>
+                    <PayoutCurrencyWarning
+                      providerCountry={providerCountry}
+                      listingCountry={s.country}
+                      currency={s.currency}
+                    />
                     <div className="grid grid-cols-2 gap-4">
                       <CurrencyCombobox
                         label="Listing Currency"

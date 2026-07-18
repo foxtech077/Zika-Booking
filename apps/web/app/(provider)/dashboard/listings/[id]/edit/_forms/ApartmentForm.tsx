@@ -23,6 +23,8 @@ import { AMENITY_OPTIONS, CATEGORY_MAP, groupAmenities, flattenGroupedAmenities 
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { Listing } from "@/types/provider";
 import { getCurrencyForCountry } from "./shared/countryCurrencyMap";
+import { useAuthStore } from "@/stores/auth";
+import { PayoutCurrencyWarning } from "./shared/PayoutCurrencyWarning";
 
 // ── Enums ────────────────────────────────────────────────────────────────────
 
@@ -233,6 +235,7 @@ interface Props { listingId: string; listing: Listing; }
 export function ApartmentForm({ listingId, listing }: Props) {
   const router = useRouter();
   const qc     = useQueryClient();
+  const providerCountry = useAuthStore((st) => st.user?.country);
 
   const { data: current } = useQuery<any>({
     queryKey:    ["listing-edit", listingId],
@@ -493,6 +496,11 @@ export function ApartmentForm({ listingId, listing }: Props) {
             {step === "pricing" && (
               <div className="space-y-4 animate-fade-in">
                 <h3 className="text-lg font-bold text-slate-900">Pricing & Policies</h3>
+                <PayoutCurrencyWarning
+                  providerCountry={providerCountry}
+                  listingCountry={s.country}
+                  currency={s.currency}
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <Input
                     label="Price per Night"
