@@ -66,40 +66,48 @@ export const ListingCard: React.FC<ListingCardProps> = ({
     }
   }
 
-  const basePrice = listing.pricePerNight || 0;
+  const rawRate = listing.pricePerNight || 0;
   const isCar = listing.category === "car";
   const unit = isCar ? "day" : "night";
 
-  // Calculate discount based on active promotion first, fallback to long stay discount
-  const hasLongStay = listing.longStayDiscountEnabled;
-  const longStayPct = hasLongStay ? 15 : 0;
+  // Derive promotion: listing.promoBadge > mrpPrice > activePromotion
+  const promoPercentFromBadge = listing.promoBadge?.labelText
+    ? parseFloat(listing.promoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
 
-  let displayPrice = basePrice;
+  let basePrice = rawRate;
+  let displayPrice = rawRate;
   let promoBadge = promotionBadge;
 
   const isValidPromo = activePromotion && activePromotion.activity === listing.category && isPromotionValid(activePromotion);
 
-  if (isValidPromo) {
-    console.log("[Promotion] ListingCard received promotion:", activePromotion, "| listing:", listing.id);
+  if (promoPercentFromBadge > 0) {
+    basePrice = rawRate;
+    displayPrice = Math.round(rawRate * (1 - promoPercentFromBadge / 100));
+    promoBadge = {
+      label: listing.promoBadge!.labelText,
+      colour: listing.promoBadge!.labelColour || "#C84B2F"
+    };
+  } else if (listing.mrpPrice && listing.mrpPrice > rawRate) {
+    basePrice = listing.mrpPrice;
+    displayPrice = rawRate;
+    const pct = Math.round(((listing.mrpPrice - rawRate) / listing.mrpPrice) * 100);
+    promoBadge = {
+      label: `${pct}% OFF`,
+      colour: "#C84B2F"
+    };
+  } else if (isValidPromo) {
     const promoDiscount = activePromotion.discountType === "percentage"
-      ? Math.round(basePrice * (Number(activePromotion.discountValue) / 100))
+      ? Math.round(rawRate * (Number(activePromotion.discountValue) / 100))
       : Math.round(Number(activePromotion.discountValue));
-    displayPrice = Math.max(0, basePrice - promoDiscount);
-    console.log("[Promotion] Discounted price calculated:", { basePrice, promoDiscount, displayPrice });
-
+    displayPrice = Math.max(0, rawRate - promoDiscount);
     promoBadge = {
       label: activePromotion.labelText || (
         activePromotion.discountType === "percentage"
           ? `${activePromotion.discountValue}% OFF`
-          : `KES ${activePromotion.discountValue} OFF`
+          : `${listing.currency} ${activePromotion.discountValue} OFF`
       ),
-      colour: activePromotion.labelColour || "#E31C5F"
-    };
-  } else if (hasLongStay) {
-    displayPrice = Math.round(basePrice * (1 - longStayPct / 100));
-    promoBadge = {
-      label: `${longStayPct}% OFF`,
-      colour: "#E31C5F"
+      colour: activePromotion.labelColour || "#C84B2F"
     };
   }
 

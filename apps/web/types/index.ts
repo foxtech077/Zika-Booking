@@ -67,6 +67,12 @@ export interface PublicListingDetail {
   isFavourited?: boolean;
   isAccredited?: boolean;
   longStayDiscountEnabled?: boolean;
+  longStayEnabled?: boolean | null;
+  longStayMinNights?: number | null;
+  longStayDiscountType?: string | null;
+  longStayDiscountValue?: number | null;
+  promoBadge?: { labelText: string; labelColour?: string } | null;
+  mrpPrice?: number | null;
   instantBooking?: boolean;
   roomTypes?: HotelRoomType[];
 }

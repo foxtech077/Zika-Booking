@@ -353,11 +353,8 @@ const ResultCard = memo(function ResultCard({
     router.push({ pathname: `/listing/${item.id}` as any, params });
   }
 
-  // Prefer backend-provided voucher details if exposed, otherwise fall back to category default
-  const voucherCode =
-    (item as any).voucherCode ||
-    (item as any).activeVoucher?.code ||
-    (isCar ? "SAFARI20" : "WELCOME10");
+  // Only display voucher badge if backend explicitly returns a voucher code
+  const voucherCode = (item as any).voucherCode || (item as any).activeVoucher?.code || null;
 
   return (
     <TouchableOpacity
@@ -413,15 +410,17 @@ const ResultCard = memo(function ResultCard({
               <Text style={cardStyles.overlayBadgeText}>Long Stay Offer</Text>
             </View>
           )}
-          <View style={[cardStyles.overlayBadge, { backgroundColor: PRIMARY }]}>
-            <Ionicons
-              name="pricetag"
-              size={10}
-              color="#fff"
-              style={{ marginRight: 2 }}
-            />
-            <Text style={cardStyles.overlayBadgeText}>{voucherCode}</Text>
-          </View>
+          {voucherCode && (
+            <View style={[cardStyles.overlayBadge, { backgroundColor: PRIMARY }]}>
+              <Ionicons
+                name="pricetag"
+                size={10}
+                color="#fff"
+                style={{ marginRight: 2 }}
+              />
+              <Text style={cardStyles.overlayBadgeText}>{voucherCode}</Text>
+            </View>
+          )}
         </View>
 
         {/* Favourite button */}

@@ -45,22 +45,72 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
   const start = isCar ? searchPickupDate : searchCheckIn;
   const end = isCar ? searchReturnDate : searchCheckOut;
   const days = calcDays(start, end);
-  const baseTotal = listing.pricePerNight * days;
-  const serviceFee = days > 0 ? Math.round(baseTotal * 0.1) : 0;
-  const grandTotal = baseTotal + serviceFee;
+
+  const rawRate = listing.pricePerNight || 0;
+
+  // Promo discount calculation
+  const promoPercentFromBadge = listing.promoBadge?.labelText
+    ? parseFloat(listing.promoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
+
+  const hasPromoBadge = promoPercentFromBadge > 0;
+  const promoRate = hasPromoBadge ? Math.round(rawRate * (1 - promoPercentFromBadge / 100)) : rawRate;
+  const mrpPrice = hasPromoBadge ? rawRate : (listing.mrpPrice && listing.mrpPrice > rawRate) ? listing.mrpPrice : null;
+  const effectiveRate = hasPromoBadge ? promoRate : rawRate;
+
+  // Long-stay discount calculation
+  const longStayMin = listing.longStayMinNights ?? 7;
+  const longStayApplies = !isCar && listing.longStayEnabled && days >= longStayMin && (listing.longStayDiscountValue ?? 0) > 0;
+  const longStayVal = Number(listing.longStayDiscountValue ?? 0);
+
+  const originalSubtotal = effectiveRate * days;
+  const longStayDiscountAmount = longStayApplies
+    ? Math.round(listing.longStayDiscountType === "percentage" ? originalSubtotal * (longStayVal / 100) : longStayVal * days)
+    : 0;
+
+  const subtotalAfterDiscount = Math.max(0, originalSubtotal - longStayDiscountAmount);
+  const serviceFee = days > 0 ? Math.round(subtotalAfterDiscount * 0.1) : 0;
+  const grandTotal = subtotalAfterDiscount + serviceFee;
 
   return (
     <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-6 text-left space-y-5">
       {/* Price header */}
-      <div className="flex justify-between items-baseline">
-        <div className="text-2xl font-bold text-slate-900">
-          {listing.currency} {listing.pricePerNight.toLocaleString()}
-          <span className="text-sm font-normal text-slate-500 ml-1">/ {isCar ? "day" : "night"}</span>
-        </div>
-        {listing.starRating && (
-          <span className="text-sm font-semibold text-slate-700">⭐ {listing.starRating}</span>
+      <div>
+        {mrpPrice != null && mrpPrice > effectiveRate && (
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-semibold text-slate-400 line-through">
+              {listing.currency} {mrpPrice.toLocaleString()}
+            </span>
+            {listing.promoBadge?.labelText && (
+              <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                🔥 {listing.promoBadge.labelText}
+              </span>
+            )}
+          </div>
         )}
+        <div className="flex justify-between items-baseline">
+          <div className="text-2xl font-bold text-slate-900">
+            {listing.currency} {effectiveRate.toLocaleString()}
+            <span className="text-sm font-normal text-slate-500 ml-1">/ {isCar ? "day" : "night"}</span>
+          </div>
+          {listing.starRating && (
+            <span className="text-sm font-semibold text-slate-700">⭐ {listing.starRating}</span>
+          )}
+        </div>
       </div>
+
+      {/* Long-Stay Discount Banner */}
+      {listing.longStayEnabled && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-start gap-2.5">
+          <span className="text-base">🎉</span>
+          <div>
+            <p className="font-bold text-amber-900">Long-Stay Discount</p>
+            <p className="text-[11px] text-amber-800 mt-0.5">
+              Book {longStayMin}+ nights and save {listing.longStayDiscountValue ?? 0}{listing.longStayDiscountType === "percentage" ? "%" : ` ${listing.currency}`} automatically.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Date inputs */}
       <div className="border border-slate-300 rounded-xl overflow-hidden divide-y divide-slate-300">
@@ -133,18 +183,32 @@ const SidebarBooking: React.FC<SidebarBookingProps> = ({
 
       {/* Price breakdown */}
       {days > 0 && (
-        <div className="space-y-2 pt-2 border-t border-slate-100 text-sm text-slate-600">
+        <div className="space-y-2 pt-3 border-t border-slate-100 text-sm text-slate-600">
           <div className="flex justify-between">
-            <span>{listing.currency} {listing.pricePerNight.toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}</span>
-            <span>{listing.currency} {baseTotal.toLocaleString()}</span>
+            <span>
+              {listing.currency} {(hasPromoBadge ? rawRate : effectiveRate).toLocaleString()} × {days} {isCar ? "day" : "night"}{days > 1 ? "s" : ""}
+            </span>
+            <span>{listing.currency} {(rawRate * days).toLocaleString()}</span>
           </div>
+          {hasPromoBadge && (
+            <div className="flex justify-between text-emerald-600 font-medium">
+              <span>Promotion discount ({listing.promoBadge?.labelText})</span>
+              <span>−{listing.currency} {((rawRate - promoRate) * days).toLocaleString()}</span>
+            </div>
+          )}
+          {longStayApplies && (
+            <div className="flex justify-between text-emerald-600 font-medium">
+              <span>Long-stay discount</span>
+              <span>−{listing.currency} {longStayDiscountAmount.toLocaleString()}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span>Service fee (10%)</span>
             <span>{listing.currency} {serviceFee.toLocaleString()}</span>
           </div>
-          <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2">
+          <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-2 text-base">
             <span>Total</span>
-            <span>{listing.currency} {grandTotal.toLocaleString()}</span>
+            <span className="text-emerald-700">{listing.currency} {grandTotal.toLocaleString()}</span>
           </div>
         </div>
       )}
