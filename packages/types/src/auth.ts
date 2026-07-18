@@ -102,6 +102,7 @@ export interface JwtPayload {
   sub: string;        // userId
   type: "guest" | "provider";
   status: string;
+  country?: string | null;  // ISO 3166-1 alpha-2 (providers only)
   jti: string;        // JWT ID (unique per token)
   iat: number;
   exp: number;

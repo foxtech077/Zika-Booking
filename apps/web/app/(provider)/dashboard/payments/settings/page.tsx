@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { parsePhoneNumber } from "libphonenumber-js";
 import {
   AlertCircle,
   ArrowLeft,
@@ -33,6 +34,11 @@ import {
   type MerchantProfile,
   type StripeConnectStatusResponse,
 } from "@/lib/payment-api";
+
+const TARA_COUNTRIES = new Set([
+  "BJ", "BF", "CM", "CG", "CD", "CI", "GA", "KE",
+  "RW", "SN", "SL", "UG", "TZ", "GH", "ZM",
+]);
 
 type PayoutMethod = MerchantProfile["payoutMethod"];
 type Toast = { message: string; type: "success" | "error" } | null;
@@ -199,12 +205,21 @@ function getAccountSummary(profile: MerchantProfile | null): { label: string; va
         value: profile.bankAccountNumber ? `Ending ${profile.bankAccountNumber.slice(-4)}` : "Not saved",
         detail: profile.bankName ? `${profile.bankName} - ${maskValue(profile.bankAccountNumber ?? "")}` : "Bank details are saved in masked form.",
       };
-    case "mobile_money":
+    case "mobile_money": {
+      let formatted = profile.mobileMoneyNumber || "Not saved";
+      if (profile.mobileMoneyNumber) {
+        try {
+          formatted = parsePhoneNumber(profile.mobileMoneyNumber).formatInternational();
+        } catch {
+          // use raw value
+        }
+      }
       return {
         label: "Mobile money",
-        value: profile.mobileMoneyNumber ? maskValue(profile.mobileMoneyNumber) : "Not saved",
-        detail: "Stored in a masked format for safety.",
+        value: formatted,
+        detail: "Phone number used for mobile money payouts.",
       };
+    }
     case "manual":
       return {
         label: "Manual payouts",
@@ -277,6 +292,8 @@ export default function PaymentSettingsPage() {
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeRefreshing, setStripeRefreshing] = useState(false);
   const [stripeChecking, setStripeChecking] = useState(false);
+
+  const [mobileMoneyError, setMobileMoneyError] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
@@ -375,6 +392,19 @@ export default function PaymentSettingsPage() {
         return;
       }
 
+      try {
+        const parsed = parsePhoneNumber(mobileMoneyNumber.trim());
+        if (!parsed?.country || !TARA_COUNTRIES.has(parsed.country)) {
+          setMobileMoneyError("This country doesn't support mobile money via Tara. Please use a supported African number.");
+          setSaving(false);
+          return;
+        }
+      } catch {
+        setMobileMoneyError("Please enter a valid phone number in international format (e.g. +233501234567).");
+        setSaving(false);
+        return;
+      }
+
       payload.mobileMoneyNumber = mobileMoneyNumber.trim();
     }
 
@@ -383,15 +413,15 @@ export default function PaymentSettingsPage() {
       setProfile(res.data);
       hydrateForm(res.data);
 
-      if (res.data.stripeConnectAccountId) {
+      // Only fetch Stripe status when payout method is stripe_connect to avoid
+      // the backend resetting payoutMethod back to stripe_connect on a full check.
+      if (payoutMethod === "stripe_connect" && res.data.stripeConnectAccountId) {
         try {
           const stripeRes = await getStripeConnectStatus();
           setStripeStatus(stripeRes.data);
         } catch {
           // Keep the current Stripe status visible if the refresh fails.
         }
-      } else {
-        setStripeStatus(null);
       }
 
       showToast("Payment details updated successfully.");
@@ -599,7 +629,10 @@ export default function PaymentSettingsPage() {
                     <button
                       key={value}
                       type="button"
-                      onClick={() => setPayoutMethod(value)}
+                      onClick={() => {
+                        setPayoutMethod(value);
+                        setMobileMoneyError(null);
+                      }}
                       className={cn(
                         "flex items-center gap-3 rounded-xl border p-3.5 text-left transition-all",
                         payoutMethod === value ? "border-emerald-200 bg-emerald-50 shadow-sm" : "border-slate-100 bg-white hover:bg-slate-50",
@@ -729,18 +762,22 @@ export default function PaymentSettingsPage() {
                 <div className="space-y-4">
                   <SectionNotice
                     title="Mobile Money"
-                    message="The stored mobile number is hidden in the input field for safety. Re-enter it if you need to update the payout destination."
+                    message="Enter your mobile money phone number in international format (e.g. +233501234567)."
                   />
                   <Input
                     label="Mobile Money Phone Number"
                     placeholder="+233 50 123 4567"
-                    type="password"
+                    type="tel"
                     autoComplete="off"
                     required
                     value={mobileMoneyNumber}
-                    onChange={(event) => setMobileMoneyNumber(event.target.value)}
+                    onChange={(event) => {
+                      const cleaned = event.target.value.replace(/[^+\d\s-]/g, "");
+                      setMobileMoneyNumber(cleaned);
+                      setMobileMoneyError(null);
+                    }}
                     leftIcon={<Phone />}
-                    hint="Stored in masked form on screen."
+                    error={mobileMoneyError ?? undefined}
                   />
                 </div>
               )}

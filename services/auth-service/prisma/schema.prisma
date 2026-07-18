@@ -108,8 +108,9 @@ model User {
   passwordHash    String?       @db.VarChar(255)   // null for OAuth-only accounts
   status          UserStatus    @default(pending_verification)
   userType        UserType
-  businessName    String?       @db.VarChar(255)   // providers only
-  country         String?       @db.Char(2)         // providers only (ISO 3166-1)
+   businessName    String?       @db.VarChar(255)   // providers only
+   country         String?       @db.Char(2)         // providers only (ISO 3166-1)
+   phone           String?       @db.VarChar(30)
   emailVerified   Boolean       @default(false)
   emailVerifiedAt DateTime?
   oauthProvider   OAuthProvider?

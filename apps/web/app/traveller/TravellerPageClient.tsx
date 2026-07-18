@@ -383,7 +383,7 @@ export default function TravellerDashboard() {
   // Handle ?tab=bookings, ?listing=<id>, and date query params on first mount
   const urlTabHandled = useRef(false);
   useEffect(() => {
-    if (!ready || urlTabHandled.current) return;
+    if (!ready) return;
     const tab = searchParams.get("tab");
     const listingId = searchParams.get("listing");
     const checkin = searchParams.get("checkin") || searchParams.get("checkIn");
@@ -397,14 +397,20 @@ export default function TravellerDashboard() {
     if (ret) { setSearchReturnDate(ret); setDetailReturnDate(ret); }
 
     if (tab === "bookings") {
-      urlTabHandled.current = true;
-      setActiveTab("bookings");
-      if (user) fetchGuestBookings();
-    } else if (listingId) {
-      urlTabHandled.current = true;
+      if (activeTab !== "bookings") {
+        setActiveTab("bookings");
+        if (user) {
+          fetchGuestBookings();
+        }
+      }
+    } else if (!tab && activeTab === "bookings") {
+      setActiveTab("home");
+    }
+
+    if (listingId && listingId !== selectedListingId) {
       handleSelectListing(listingId);
     }
-  }, [ready, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready, searchParams, user?.id, activeTab, selectedListingId]);
 
   // Success state
   const [bookingSuccessModal, setBookingSuccessModal] = useState<{
@@ -1979,7 +1985,7 @@ export default function TravellerDashboard() {
                     <div className="flex items-center gap-3 text-sm font-semibold text-slate-700">
                       {detailListing.starRating && <span className="flex items-center gap-1"><span className="text-[#1D8D2B]">⭐</span> {detailListing.starRating}</span>}
                       <span className="text-slate-400">•</span>
-                      <span className="underline cursor-pointer hover:text-slate-900">{detailListing.address}, {detailListing.town}, {detailListing.country}</span>
+                      <span className="underline cursor-pointer hover:text-slate-900">{detailListing.address}, {detailListing.neighborhood ? `${detailListing.neighborhood}, ` : ""}{detailListing.town}, {detailListing.country}</span>
                     </div>
                     <div className="flex items-center gap-4 text-sm font-semibold text-slate-700">
                       <button className="flex items-center gap-2 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition border border-slate-300 bg-white">
@@ -2475,7 +2481,7 @@ export default function TravellerDashboard() {
                                 />
                                 <div className="min-w-0">
                                   <p className="font-bold text-slate-900 text-sm leading-tight truncate">{detailListing.name}</p>
-                                  <p className="text-[10px] text-slate-500 mt-0.5 capitalize">{detailListing.category} · {detailListing.town}, {detailListing.country}</p>
+                                  <p className="text-[10px] text-slate-500 mt-0.5 capitalize">{detailListing.category} · {detailListing.neighborhood ? `${detailListing.neighborhood}, ` : ""}{detailListing.town}, {detailListing.country}</p>
                                   {detailListing.starRating && <p className="text-[10px] text-amber-500 font-semibold">⭐ {detailListing.starRating}</p>}
                                 </div>
                               </div>
@@ -3967,14 +3973,14 @@ export default function TravellerDashboard() {
                     ? "Book your next stay or car rental to see it here."
                     : "Try switching to a different filter tab."}
                 </p>
-                {reservationStatusFilter === "all" && (
+                {/* {reservationStatusFilter === "all" && (
                   <button
                     onClick={() => { setActiveTab("home"); setSelectedListingId(null); }}
                     className="mt-6 inline-flex items-center gap-2 bg-[#0c2614] text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-[#081b0d] transition shadow-md"
                   >
                     Explore Listings
                   </button>
-                )}
+                )} */}
               </div>
             ) : (
               // Reservation cards
