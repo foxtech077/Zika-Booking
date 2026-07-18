@@ -71,6 +71,7 @@ export interface PublicListingDetail {
   longStayMinNights?: number | null;
   longStayDiscountType?: string | null;
   longStayDiscountValue?: number | null;
+  allowPreBooking?: boolean;
   promoBadge?: { labelText: string; labelColour?: string } | null;
   mrpPrice?: number | null;
   instantBooking?: boolean;
