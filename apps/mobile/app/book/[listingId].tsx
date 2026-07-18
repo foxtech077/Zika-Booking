@@ -1134,7 +1134,7 @@ export default function BookingFlowScreen() {
 
                 {/* Best discount selection logic — promotion vs voucher, best discount wins */}
                 {(() => {
-                  const promoAmt = promoDiscountTotal;
+                  const promoAmt = pricing.discountAmount ?? promoDiscountTotal;
                   const voucherAmt = voucherDiscount ?? 0;
                   if (promoAmt > 0 || voucherAmt > 0) {
                     const bestIsVoucher = voucherAmt > 0 && voucherAmt >= promoAmt;
@@ -1202,14 +1202,16 @@ export default function BookingFlowScreen() {
                 )}
 
                 {(() => {
-                  const promoAmt = promoDiscountTotal;
+                  const promoAmt = pricing.discountAmount ?? promoDiscountTotal;
                   const voucherAmt = voucherDiscount ?? 0;
                   const bestAmt = Math.max(promoAmt, voucherAmt);
-                  // pricing.total is computed server-side with no promotion discount
-                  // baked in (the backend's own promotion logic is a stub that always
-                  // returns 0 — see the comment above `promo` further up), so the full
-                  // best-of-promo-or-voucher amount is subtracted here on the frontend.
-                  const displayTotal = Math.max(0, pricing.total - bestAmt);
+                  const subAfterDiscount = Math.max(0, pricing.subtotal - bestAmt);
+                  const sFee = pricing.serviceFee ?? 0;
+                  const tFee = pricing.taxAmount ?? 0;
+                  const dFee = pricing.deliveryFee ?? 0;
+
+                  // Total = Subtotal after discount + Service fee + Taxes + Delivery fee
+                  const displayTotal = subAfterDiscount + sFee + tFee + dFee;
                   return (
                     <View style={[styles.priceRow, styles.totalRow]}>
                       <Text style={styles.totalLabel}>Total</Text>

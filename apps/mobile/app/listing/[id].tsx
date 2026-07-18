@@ -116,6 +116,21 @@ function cancelColor(p: string | null) {
   if (p === "moderate") return "#D97706";
   return "#DC2626";
 }
+
+
+
+function openLocationInMaps(lat: number, lng: number, label: string) {
+  const latLng = `${lat},${lng}`;
+  const url = Platform.select({
+    ios: `maps:0,0?q=${encodeURIComponent(label)}@${latLng}`,
+    android: `geo:0,0?q=${latLng}(${encodeURIComponent(label)})`,
+  });
+  if (url) {
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latLng}`);
+    });
+  }
+}
 function cancelText(p: string | null) {
   switch (p) {
     case "flexible": case "free": return "Free cancellation up to 48 hours before check-in.";
@@ -759,19 +774,45 @@ export default function ListingDetailScreen() {
 
   // Pricing
   const pricingBreakout = (() => {
-    if (!hasDates || !rate) return null;
+    if (!hasDates || !baseRate) return null;
     const count = isCar && effectivePU && effectiveRT ? days(effectivePU, effectiveRT)
       : !isCar && effectiveCI && effectiveCO ? nights(effectiveCI, effectiveCO) : 1;
-    const base = rate * count;
-    let discount = 0;
+    const originalSubtotal = baseRate * count;
+
+    // Promo discount per night/day
+    const promoDiscount = promoted.hasPromotion && promoted.savings != null && promoted.savings > 0
+      ? Math.round(promoted.savings) * count
+      : 0;
+
+    let longStayDiscount = 0;
     if (!isCar && listing.longStayEnabled && listing.longStayMinNights && count >= listing.longStayMinNights) {
       const v = Number(listing.longStayDiscountValue ?? 0);
-      discount = listing.longStayDiscountType === "percentage" ? base * (v / 100) : v * count;
+      const subAfterPromo = Math.max(0, originalSubtotal - promoDiscount);
+      longStayDiscount = listing.longStayDiscountType === "percentage" ? subAfterPromo * (v / 100) : v * count;
     }
-    const serviceFee = base * 0.05;
+
+    const totalDiscount = promoDiscount + longStayDiscount;
+    const discountedSubtotal = Math.max(0, originalSubtotal - totalDiscount);
+
+    // Service fee (10% of discounted subtotal)
+    const serviceFeePercent = 10;
+    const serviceFee = Math.round(discountedSubtotal * (serviceFeePercent / 100));
     const delivery = isCar && listing.deliveryAvailable && listing.deliveryFee ? Number(listing.deliveryFee) : 0;
-    const total = base - discount + serviceFee + delivery;
-    return { rate, count, base, discount, serviceFee, delivery, total };
+    const total = discountedSubtotal + serviceFee + delivery;
+
+    return {
+      baseRate,
+      rate,
+      count,
+      originalSubtotal,
+      promoDiscount,
+      longStayDiscount,
+      discountedSubtotal,
+      serviceFeePercent,
+      serviceFee,
+      delivery,
+      total,
+    };
   })();
 
   // Amenities
@@ -1139,14 +1180,20 @@ export default function ListingDetailScreen() {
             <View style={s.breakCard}>
               <View style={s.breakRow}>
                 <Text style={s.breakLabel}>
-                  {curr} {Math.round(pricingBreakout.rate).toLocaleString()} × {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}
+                  {curr} {Math.round(pricingBreakout.baseRate).toLocaleString()} × {pricingBreakout.count} {isCar ? "day" : "night"}{pricingBreakout.count !== 1 ? "s" : ""}
                 </Text>
-                <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.base).toLocaleString()}</Text>
+                <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.originalSubtotal).toLocaleString()}</Text>
               </View>
-              {pricingBreakout.discount > 0 && (
+              {pricingBreakout.promoDiscount > 0 && (
                 <View style={s.breakRow}>
-                  <Text style={[s.breakLabel, { color: "#DC2626" }]}>Long-stay discount</Text>
-                  <Text style={[s.breakVal, { color: "#DC2626" }]}>−{curr} {Math.round(pricingBreakout.discount).toLocaleString()}</Text>
+                  <Text style={[s.breakLabel, { color: "#16a34a", fontWeight: "600" }]}>Promotion discount</Text>
+                  <Text style={[s.breakVal, { color: "#16a34a", fontWeight: "700" }]}>−{curr} {Math.round(pricingBreakout.promoDiscount).toLocaleString()}</Text>
+                </View>
+              )}
+              {pricingBreakout.longStayDiscount > 0 && (
+                <View style={s.breakRow}>
+                  <Text style={[s.breakLabel, { color: "#16a34a", fontWeight: "600" }]}>Long-stay discount</Text>
+                  <Text style={[s.breakVal, { color: "#16a34a", fontWeight: "700" }]}>−{curr} {Math.round(pricingBreakout.longStayDiscount).toLocaleString()}</Text>
                 </View>
               )}
               {pricingBreakout.delivery > 0 && (
@@ -1156,7 +1203,7 @@ export default function ListingDetailScreen() {
                 </View>
               )}
               <View style={s.breakRow}>
-                <Text style={s.breakLabel}>Service fee (5%)</Text>
+                <Text style={s.breakLabel}>Service fee ({pricingBreakout.serviceFeePercent}%)</Text>
                 <Text style={s.breakVal}>{curr} {Math.round(pricingBreakout.serviceFee).toLocaleString()}</Text>
               </View>
               <View style={[s.breakRow, { borderTopWidth: 1, borderTopColor: BORDER, marginTop: 4, paddingTop: 12 }]}>
@@ -1309,27 +1356,53 @@ export default function ListingDetailScreen() {
                 <Ionicons name="location" size={18} color={GREEN} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: TEXT }}>{listing.address}</Text>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: TEXT }}>{listing.address}</Text>
                 {locationStr ? <Text style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>{locationStr}</Text> : null}
               </View>
             </View>
           ) : null}
-          {listing.lat && listing.lng ? (
-            <View style={{ borderRadius: 16, overflow: "hidden", height: 180, borderWidth: 1, borderColor: BORDER }}>
+
+          {listing.lat != null && listing.lng != null && !isNaN(Number(listing.lat)) && !isNaN(Number(listing.lng)) ? (
+            <View style={{ borderRadius: 18, overflow: "hidden", height: 210, borderWidth: 1, borderColor: BORDER, position: "relative" }}>
               {MapView && Marker ? (
                 <MapView
                   style={{ flex: 1 }}
-                  initialRegion={{ latitude: Number(listing.lat), longitude: Number(listing.lng), latitudeDelta: 0.012, longitudeDelta: 0.012 }}
-                  scrollEnabled={false} zoomEnabled={false}
+                  mapType="standard"
+                  userInterfaceStyle="light"
+                  initialRegion={{
+                    latitude: Number(listing.lat),
+                    longitude: Number(listing.lng),
+                    latitudeDelta: 0.012,
+                    longitudeDelta: 0.012,
+                  }}
+                  scrollEnabled={false}
+                  zoomEnabled={false}
                 >
-                  <Marker coordinate={{ latitude: Number(listing.lat), longitude: Number(listing.lng) }} title={listing.name ?? ""} />
+                  <Marker
+                    coordinate={{ latitude: Number(listing.lat), longitude: Number(listing.lng) }}
+                    title={listing.name ?? listing.title ?? "Location"}
+                  >
+                    <View style={s.customMapPin}>
+                      <Ionicons name="location" size={18} color="#ffffff" />
+                    </View>
+                  </Marker>
                 </MapView>
               ) : (
-                <View style={{ flex: 1, backgroundColor: BG, alignItems: "center", justifyContent: "center" }}>
-                  <Ionicons name="map-outline" size={40} color={MUTED} />
-                  <Text style={{ fontSize: 13, color: MUTED, marginTop: 8 }}>Map unavailable</Text>
+                <View style={{ flex: 1, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" }}>
+                  <Ionicons name="map-outline" size={36} color={MUTED} />
+                  <Text style={{ fontSize: 13, color: MUTED, marginTop: 6, fontWeight: "500" }}>Location Map</Text>
                 </View>
               )}
+
+              {/* Get Directions overlay button */}
+              <TouchableOpacity
+                style={s.mapDirectionsBtn}
+                onPress={() => openLocationInMaps(Number(listing.lat), Number(listing.lng), listing.name ?? listing.address ?? "Property")}
+                activeOpacity={0.88}
+              >
+                <Ionicons name="navigate-outline" size={14} color={GREEN} />
+                <Text style={s.mapDirectionsText}>Get Directions</Text>
+              </TouchableOpacity>
             </View>
           ) : null}
         </View>
@@ -1561,6 +1634,43 @@ const s = StyleSheet.create({
   selectDatesBtnText: { color: GREEN, fontWeight: "700", fontSize: 14 },
   providerBtn: { backgroundColor: BG, borderRadius: 16, paddingHorizontal: 18, paddingVertical: 13, borderWidth: 1, borderColor: BORDER },
   providerBtnText: { color: MUTED, fontWeight: "600", fontSize: 13 },
+
+  customMapPin: {
+    backgroundColor: GREEN,
+    padding: 8,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  mapDirectionsBtn: {
+    position: "absolute",
+    bottom: 12,
+    right: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: BORDER,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  mapDirectionsText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: GREEN,
+  },
 
   msgHostBtn: {
     flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14,

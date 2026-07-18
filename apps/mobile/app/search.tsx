@@ -1587,7 +1587,7 @@ export default function SearchScreen() {
                         longitude: Number(geo.lng),
                       }}
                       title="Search Center"
-                      pinColor="#dc2626"
+                      pinColor="#15803D"
                     />
                   )}
 
