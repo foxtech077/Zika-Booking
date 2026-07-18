@@ -862,7 +862,7 @@ export default function BookingFlowScreen() {
       : null;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       {/* Dynamic header title */}
       <Stack.Screen options={{ title: listingTitle ? listingTitle : "Book", headerBackTitle: "Back" }} />
 
@@ -1176,7 +1176,9 @@ export default function BookingFlowScreen() {
 
                 {pricing.serviceFee != null && pricing.serviceFee > 0 && (
                   <View style={styles.priceRow}>
-                    <Text style={styles.priceLabel}>Service fee</Text>
+                    <Text style={styles.priceLabel}>
+                      Service fee ({Math.round((pricing.serviceFee / Math.max(1, pricing.subtotal - (pricing.discountAmount ?? promoDiscountTotal))) * 100)}%)
+                    </Text>
                     <Text style={styles.priceValue}>
                       + {formatCurrency(pricing.serviceFee, pricing.currency)}
                     </Text>
@@ -1286,17 +1288,17 @@ export default function BookingFlowScreen() {
             <TouchableOpacity
               style={[
                 styles.primaryBtn,
-                (!termsChecked || isExpired || msLeft < 10_000) && styles.primaryBtnDisabled,
+                (!termsChecked || isExpired) && styles.primaryBtnDisabled,
               ]}
               onPress={() => {
                 if (!termsChecked) return;
-                if (isExpired || msLeft < 10_000) {
+                if (isExpired) {
                   setExpiredModal(true);
                   return;
                 }
                 createBookingMutation.mutate();
               }}
-              disabled={!termsChecked || createBookingMutation.isPending || isExpired || msLeft < 10_000}
+              disabled={!termsChecked || createBookingMutation.isPending || isExpired}
             >
               {createBookingMutation.isPending ? (
                 <ActivityIndicator size="small" color="#fff" />
@@ -1314,9 +1316,8 @@ export default function BookingFlowScreen() {
             </TouchableOpacity>
           </View>
         )}
-
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

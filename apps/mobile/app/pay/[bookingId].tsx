@@ -1094,7 +1094,7 @@ export default function PaymentScreen() {
   const hasSavedMethods = savedMethods && savedMethods.length > 0;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <Stack.Screen
         options={{
           headerBackVisible: !isProcessing,
@@ -1327,7 +1327,7 @@ export default function PaymentScreen() {
         </TouchableOpacity>
 
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
