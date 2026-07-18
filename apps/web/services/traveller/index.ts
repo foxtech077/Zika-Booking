@@ -79,6 +79,9 @@ export interface TravellerConversation {
   bookingId: string | null;
   guestId: string;
   providerId: string;
+  guestName: string;
+  providerName: string;
+  bookingReference?: string | null;
   status: "open" | "closed" | string;
   lastMessage: ConversationLastMessage | null;
   updatedAt: string;

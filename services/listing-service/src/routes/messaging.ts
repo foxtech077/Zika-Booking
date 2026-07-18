@@ -131,24 +131,61 @@ app.post(
         }),
       ]);
 
+      // Collect unique user IDs and booking IDs
+      const userIds = new Set<string>();
+      const bookingIds = new Set<string>();
+      for (const c of conversations) {
+        userIds.add(c.guestId);
+        userIds.add(c.providerId);
+        if (c.bookingId) bookingIds.add(c.bookingId);
+      }
+
+      // Batch-fetch user names from auth schema
+      const userIdArr = [...userIds];
+      const userRows = userIdArr.length
+        ? await prisma.$queryRawUnsafe<{ id: string; firstName: string; lastName: string }[]>(
+            `SELECT id, "firstName", "lastName" FROM auth."User" WHERE id = ANY($1)`,
+            userIdArr
+          )
+        : [];
+      const userMap = new Map(userRows.map((u) => [u.id, u]));
+
+      // Batch-fetch booking references
+      const bookingIdArr = [...bookingIds];
+      const bookingRows = bookingIdArr.length
+        ? await prisma.$queryRawUnsafe<{ id: string; reference: string; guestFirstName: string; guestLastName: string }[]>(
+            `SELECT id, reference, "guest_first_name" AS "guestFirstName", "guest_last_name" AS "guestLastName" FROM listing."bookings" WHERE id = ANY($1)`,
+            bookingIdArr
+          )
+        : [];
+      const bookingMap = new Map(bookingRows.map((b) => [b.id, b]));
+
       return sendSuccess(reply, 200, {
-        conversations: conversations.map((c) => ({
-          id: c.id,
-          listingId: c.listingId,
-          bookingId: c.bookingId,
-          guestId: c.guestId,
-          providerId: c.providerId,
-          status: c.status,
-          lastMessage: c.messages[0]
-            ? {
-                body: c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
-                senderId: c.messages[0].senderId,
-                senderType: c.messages[0].senderType,
-                createdAt: c.messages[0].createdAt.toISOString(),
-              }
-            : null,
-          updatedAt: c.updatedAt.toISOString(),
-        })),
+        conversations: conversations.map((c) => {
+          const guest = userMap.get(c.guestId);
+          const provider = userMap.get(c.providerId);
+          const booking = c.bookingId ? bookingMap.get(c.bookingId) : undefined;
+          return {
+            id: c.id,
+            listingId: c.listingId,
+            bookingId: c.bookingId,
+            guestId: c.guestId,
+            providerId: c.providerId,
+            guestName: guest ? `${guest.firstName} ${guest.lastName}`.trim() : "Guest",
+            providerName: provider ? `${provider.firstName} ${provider.lastName}`.trim() : "Host",
+            bookingReference: booking?.reference ?? null,
+            status: c.status,
+            lastMessage: c.messages[0]
+              ? {
+                  body: c.messages[0].isFiltered ? "[Message hidden]" : c.messages[0].body,
+                  senderId: c.messages[0].senderId,
+                  senderType: c.messages[0].senderType,
+                  createdAt: c.messages[0].createdAt.toISOString(),
+                }
+              : null,
+            updatedAt: c.updatedAt.toISOString(),
+          };
+        }),
         total,
         page: Number(page),
         limit: Number(limit),

@@ -263,7 +263,7 @@ export default function PayoutManagementPage() {
             </Button>
           )}
 
-          {(p.status === "scheduled" || p.status === "processing" || p.status === "failed") && (
+          {(p.status === "scheduled" || p.status === "failed") && (
             <Button
               variant="danger"
               size="sm"
