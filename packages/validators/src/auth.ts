@@ -20,9 +20,9 @@ export const registerSchema = z
     businessName: z.string().min(1, "Business name is required").max(255).optional(),
     phone: z
       .string()
-      .min(1, "Phone number is required")
       .regex(/^\+[1-9]\d{6,14}$/, "Phone number must be in international format (e.g. +254712345678)")
-      .optional(),
+      .optional()
+      .or(z.literal("")),
     country: z
       .string()
       .length(2, "Please select your country")
