@@ -22,6 +22,8 @@ import { GeocodedAddressFields } from "./shared/GeocodedAddressFields";
 import { MediaUploader, type ExistingPhoto } from "../../../components/MediaUploader";
 import { DocumentUploader, type ExistingDocument } from "../../../components/DocumentUploader";
 import { getCurrencyForCountry } from "./shared/countryCurrencyMap";
+import { useAuthStore } from "@/stores/auth";
+import { PayoutCurrencyWarning } from "./shared/PayoutCurrencyWarning";
 
 // ── Enums (values must match backend Zod enum exactly) ───────────────────────
 
@@ -397,7 +399,8 @@ interface Props { listingId: string; listing: Listing; }
 
 export function CarForm({ listingId, listing }: Props) {
   const router = useRouter();
-  const qc = useQueryClient();
+  const qc     = useQueryClient();
+  const providerCountry = useAuthStore((st) => st.user?.country);
 
   const { data: current } = useQuery<any>({
     queryKey: ["listing-edit", listingId],
@@ -804,6 +807,11 @@ export function CarForm({ listingId, listing }: Props) {
             {step === "pricing" && (
               <div className="space-y-4 animate-fade-in">
                 <h3 className="text-lg font-bold text-slate-900">Pricing & Policy</h3>
+                <PayoutCurrencyWarning
+                  providerCountry={providerCountry}
+                  listingCountry={s.country}
+                  currency={s.currency}
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <Input
                     label="Daily Rate"

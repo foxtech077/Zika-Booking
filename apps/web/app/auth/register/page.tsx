@@ -8,6 +8,7 @@ import { registerSchema } from "@zika/validators";
 import { api, storeToken } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
 import { FormField } from "@/components/ui/FormField";
+import { CountryCombobox } from "@/components/ui/CountryCombobox";
 import type { ApiResponse, AuthResponse } from "@zika/types";
 
 type UserType = "guest" | "provider";
@@ -292,26 +293,15 @@ export default function RegisterPage() {
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="reg-country" className="block text-xs font-medium text-gray-700 mb-1.5">Country code</label>
-                  <div className="relative">
-                    <InputIcon>
-                      <svg className="w-[16px] h-[16px]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
-                      </svg>
-                    </InputIcon>
-                    <input
-                      id="reg-country"
-                      value={form.country}
-                      onChange={(e) => {
-                        setForm((p) => ({ ...p, country: e.target.value.toUpperCase() }));
-                        setErrors((p) => ({ ...p, country: undefined }));
-                      }}
-                      placeholder="KE"
-                      maxLength={2}
-                      className={`w-full pl-9 pr-3 py-2.5 rounded-xl border text-sm bg-[#f6fdf8] text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition placeholder:text-gray-400 ${errors.country ? "border-red-400" : "border-gray-200"}`}
-                    />
-                    {errors.country && <p className="text-xs text-red-500 mt-1">{errors.country}</p>}
-                  </div>
+                  <CountryCombobox
+                    label="Country"
+                    value={form.country}
+                    onChange={(code) => {
+                      setForm((p) => ({ ...p, country: code }));
+                      setErrors((p) => ({ ...p, country: undefined }));
+                    }}
+                    error={errors.country}
+                  />
                 </div>
                 <div className="col-span-2">
                   <label htmlFor="reg-phone" className="block text-xs font-medium text-gray-700 mb-1.5">Phone number</label>

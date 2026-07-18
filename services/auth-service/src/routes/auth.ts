@@ -67,8 +67,9 @@ async function issueTokens(
   userId: string,
   userType: string,
   status: string,
+  country: string | null,
 ) {
-  const accessToken = await signAccessToken({ sub: userId, type: userType as "guest" | "provider", status });
+  const accessToken = await signAccessToken({ sub: userId, type: userType as "guest" | "provider", status, country: country ?? undefined });
   const refreshToken = generateRefreshToken();
   const tokenHash = hashToken(refreshToken);
   const expiresAt = new Date(Date.now() + REFRESH_TTL * 1000);
@@ -278,7 +279,8 @@ export async function authRoutes(app: FastifyInstance) {
           reply,
           user.id,
           user.userType,
-          "active"
+          "active",
+          user.country
         );
 
         return sendSuccess(reply, 201, {
@@ -566,7 +568,8 @@ export async function authRoutes(app: FastifyInstance) {
             reply,
             record.user.id,
             record.user.userType,
-            "active"
+            "active",
+            record.user.country
           );
 
           return sendSuccess(reply, 200, {
@@ -604,7 +607,8 @@ export async function authRoutes(app: FastifyInstance) {
             reply,
             updatedUser.id,
             updatedUser.userType,
-            "active"
+            "active",
+            updatedUser.country
           );
 
           return sendSuccess(reply, 200, {
@@ -764,7 +768,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       console.log("[Login] SUCCESS → issuing tokens for user:", user.id);
-      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens });
     } catch {
       return sendError(reply, 400, "LOGIN_FAILED", "Unable to complete sign-in. Please check your credentials and try again.");
@@ -890,7 +894,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       // Rotate: revoke old, issue new
       await prisma.session.update({ where: { id: session.id }, data: { revoked: true } });
-      const tokens = await issueTokens(reply, session.userId, session.user.userType, session.user.status);
+      const tokens = await issueTokens(reply, session.userId, session.user.userType, session.user.status, session.user.country);
       return sendSuccess(reply, 200, { tokens });
     } catch {
       return sendError(reply, 400, "REFRESH_FAILED", "Token refresh failed. Please sign in again.");
@@ -1000,7 +1004,7 @@ export async function authRoutes(app: FastifyInstance) {
         ]);
 
         const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: record.userId } });
-        const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status);
+        const tokens = await issueTokens(reply, updatedUser.id, updatedUser.userType, updatedUser.status, updatedUser.country);
 
         return sendSuccess(reply, 200, { message: "Your password has been updated. You're now signed in.", user: publicUser(updatedUser), tokens });
       } catch (err: any) {
@@ -1349,7 +1353,7 @@ export async function authRoutes(app: FastifyInstance) {
           },
         });
         await sendWelcomeEmail(email, user.firstName).catch(() => null);
-        const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+        const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
         return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: false });
       }
 
@@ -1397,7 +1401,7 @@ export async function authRoutes(app: FastifyInstance) {
         return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
       }
 
-      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Google could not be completed. Please try again.");
@@ -1483,7 +1487,7 @@ export async function authRoutes(app: FastifyInstance) {
           },
         });
         await sendWelcomeEmail(appleEmail, user.firstName).catch(() => null);
-        const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+        const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
         return sendSuccess(reply, 201, { user: publicUser(user), tokens, needsAccountType: !userType });
       }
       if (user.status === "pending_verification") {
@@ -1492,7 +1496,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (user.status === "suspended") return sendError(reply, 403, "ACCOUNT_SUSPENDED", "Your account has been suspended.");
       if (user.status === "banned") return sendError(reply, 403, "ACCOUNT_BANNED", "Your account has been permanently removed from Kainook.");
 
-      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
       return sendSuccess(reply, 200, { user: publicUser(user), tokens, needsAccountType: false });
     } catch (err) {
       return sendError(reply, 400, "OAUTH_FAILED", "Sign in with Apple could not be completed. Please try again.");
@@ -1667,7 +1671,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       // Issue Zika tokens and set HTTP-only cookie
-      const tokens = await issueTokens(reply, user.id, user.userType, user.status);
+      const tokens = await issueTokens(reply, user.id, user.userType, user.status, user.country);
 
       // Return a beautiful loading HTML that initializes sessionStorage and redirects
       reply.type("text/html").send(`
