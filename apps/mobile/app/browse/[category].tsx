@@ -54,6 +54,8 @@ interface Listing {
   isFavourited?: boolean;
   cancellationPolicy?: string;
   longStayDiscountEnabled?: boolean;
+  promoBadge?: { labelText: string; labelColour?: string } | null;
+  roomTypes?: Array<{ id: string; name: string; roomType: string; pricePerNight: number }> | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -168,6 +170,9 @@ function ListingCard({ item, apiCategory, onPress, signedPhotoUrl, promotion }: 
               </View>
             ) : (
               <Text style={card.price}>
+                {item.roomTypes && item.roomTypes.length > 1 ? (
+                  <Text style={{ fontSize: 11, color: MUTED, fontWeight: "500" }}>From </Text>
+                ) : null}
                 <Text style={card.currency}>{item.currency} </Text>
                 {price.toLocaleString()}
                 <Text style={card.unit}>{unit}</Text>

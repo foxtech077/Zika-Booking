@@ -29,6 +29,8 @@ interface SearchResult {
   isAccredited: boolean; longStayDiscountEnabled?: boolean;
   carMake: string | null; carModel: string | null; carYear: number | null;
   transmission: string | null; seats: number | null;
+  promoBadge?: { labelText: string; labelColour?: string } | null;
+  roomTypes?: Array<{ id: string; name: string; roomType: string; pricePerNight: number }> | null;
 }
 interface SearchResponse { data: { totalCount: number; nextCursor: string | null; results: SearchResult[] } }
 interface Promotion {
@@ -269,6 +271,9 @@ const ListingCard = memo(function ListingCard({ item, onPress, width = 240, badg
           </View>
         ) : (
           <View style={lc.priceRow}>
+            {item.roomTypes && item.roomTypes.length > 1 ? (
+              <Text style={{ fontSize: 10, color: K.colors.textMuted, fontWeight: "500" }}>From </Text>
+            ) : null}
             <Text style={lc.price}>{fmtPrice(rate, item.currency)}</Text>
             {rate ? <Text style={lc.priceUnit}>/{unit}</Text> : null}
           </View>

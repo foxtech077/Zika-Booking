@@ -119,6 +119,20 @@ interface GeoResult {
   country: string;
 }
 
+interface PromoBadge {
+  labelText: string;
+  labelColour?: string;
+}
+
+interface RoomTypeSummary {
+  id: string;
+  name: string;
+  roomType: string;
+  pricePerNight: number | string;
+  unitCount?: number | null;
+  maxGuests?: number | null;
+}
+
 interface SearchResult {
   id: string;
   listingType: string;
@@ -134,6 +148,7 @@ interface SearchResult {
   starRating: number | null;
   isAccredited: boolean;
   roomType: string | null;
+  roomTypes?: RoomTypeSummary[] | null;
   bedrooms: number | null;
   bathrooms: number | null;
   maxGuests: number | null;
@@ -144,6 +159,7 @@ interface SearchResult {
   seats: number | null;
   isFavourited: boolean;
   longStayDiscountEnabled?: boolean;
+  promoBadge?: PromoBadge | null;
 }
 
 interface SearchResponse {
@@ -376,7 +392,7 @@ const ResultCard = memo(function ResultCard({
                 color="#fff"
                 style={{ marginRight: 2 }}
               />
-              <Text style={cardStyles.overlayBadgeText}>Promo</Text>
+              <Text style={cardStyles.overlayBadgeText}>Long Stay Offer</Text>
             </View>
           )}
           <View style={[cardStyles.overlayBadge, { backgroundColor: PRIMARY }]}>
@@ -530,6 +546,9 @@ const ResultCard = memo(function ResultCard({
               </View>
             ) : (
               <Text style={cardStyles.price}>
+                {item.roomTypes && item.roomTypes.length > 1 ? (
+                  <Text style={{ fontSize: 11, color: MUTED, fontWeight: "500" }}>From </Text>
+                ) : null}
                 <Text style={cardStyles.priceCurrency}>{item.currency} </Text>
                 {price.toLocaleString()}
                 <Text style={cardStyles.priceUnit}>{priceLabel}</Text>
