@@ -8,6 +8,7 @@ interface RoomTypeSelectorProps {
   selectedRoomTypeId: string | null;
   onSelectRoomType: (roomTypeId: string) => void;
   currency?: string;
+  discountPercent?: number | null;
 }
 
 const TEXT = "#111827";
@@ -19,6 +20,7 @@ export function RoomTypeSelector({
   selectedRoomTypeId,
   onSelectRoomType,
   currency = "XAF",
+  discountPercent,
 }: RoomTypeSelectorProps) {
   if (!roomTypes || roomTypes.length === 0) {
     return null;
@@ -49,6 +51,7 @@ export function RoomTypeSelector({
             selected={selectedRoomTypeId === rt.id}
             onSelect={() => onSelectRoomType(rt.id)}
             currency={currency}
+            discountPercent={discountPercent}
           />
         ))}
       </View>

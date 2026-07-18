@@ -74,6 +74,7 @@ interface PublicListing {
   isFavourited: boolean | undefined;
   isAccredited?: boolean;
   promoBadge?: PromoBadge | null;
+  mrpPrice?: number | null;
   roomTypes?: RoomType[];
   hotelRoomTypes?: RoomType[];
 }
@@ -689,8 +690,8 @@ export default function ListingDetailScreen() {
   // Selected room type object if hotel has room types
   const selectedRoomType = roomTypes.find((r) => r.id === selectedRoomTypeId) ?? roomTypes[0];
 
-  // Derive active rate per night/day
-  const rate = isCar
+  // Derive base rate per night/day before discount
+  const baseRate = isCar
     ? Number(listing.dailyRate ?? listing.pricePerDay ?? 0)
     : selectedRoomType
       ? Number(selectedRoomType.pricePerNight || 0)
@@ -698,18 +699,43 @@ export default function ListingDetailScreen() {
 
   const rateLabel = isCar ? "per day" : "per night";
   const isFav = listing.isFavourited ?? false;
-  const activePromo = (activePromotions?.[0] as unknown) as ActivePromotion | null | undefined;
-  const promoted = applyPromotion(rate || null, activePromo ?? null);
 
-  // Derive MRP / Original Rack Price (when minStayNights > 100 or when promo discount applies)
-  const mrpPrice = (listing.minStayNights && listing.minStayNights > 100)
-    ? listing.minStayNights
-    : (promoted.hasPromotion && promoted.originalPrice != null && promoted.originalPrice > rate)
-      ? promoted.originalPrice
+  // Derive effective promotion from listing.promoBadge or activePromotions
+  const customPromoBadge = listing.promoBadge;
+  const promoPercentFromBadge = customPromoBadge?.labelText
+    ? parseFloat(customPromoBadge.labelText.replace(/[^0-9.]/g, ""))
+    : 0;
+
+  const effectivePromo: ActivePromotion | null = customPromoBadge && promoPercentFromBadge > 0
+    ? {
+        activity: listing.category,
+        discountType: "percentage",
+        discountValue: String(promoPercentFromBadge),
+        labelText: customPromoBadge.labelText,
+        bannerTitle: customPromoBadge.labelText,
+        status: "active",
+        applyToBooking: true,
+      }
+    : (activePromotions?.[0] as unknown as ActivePromotion | null) ?? null;
+
+  const promoted = applyPromotion(baseRate || null, effectivePromo);
+  const activePromo = effectivePromo;
+
+  // Final rate (discounted rate if promotion applies, otherwise baseRate)
+  const rate = promoted.hasPromotion && promoted.discountedPrice != null
+    ? promoted.discountedPrice
+    : baseRate;
+
+  // Strikethrough MRP price (baseRate if promo applies, or listing.mrpPrice if higher than baseRate)
+  const mrpPrice = promoted.hasPromotion && promoted.originalPrice != null && promoted.originalPrice > rate
+    ? promoted.originalPrice
+    : (listing.mrpPrice && listing.mrpPrice > baseRate)
+      ? listing.mrpPrice
       : null;
 
-  // Custom Promo Badge from API
-  const customPromoBadge = listing.promoBadge;
+  const discountPercent = promoted.hasPromotion && promoted.originalPrice && promoted.discountedPrice
+    ? Math.round(((promoted.originalPrice - promoted.discountedPrice) / promoted.originalPrice) * 100)
+    : null;
 
   // Locally selected dates take priority over URL params
   const effectivePU = localStart ?? pickupDatetime;
@@ -1043,6 +1069,7 @@ export default function ListingDetailScreen() {
               selectedRoomTypeId={selectedRoomTypeId}
               onSelectRoomType={(rtId) => setSelectedRoomTypeId(rtId)}
               currency={curr}
+              discountPercent={discountPercent}
             />
           </View>
         )}

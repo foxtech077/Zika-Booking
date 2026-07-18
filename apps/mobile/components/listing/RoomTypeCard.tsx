@@ -19,6 +19,7 @@ interface RoomTypeCardProps {
   selected: boolean;
   onSelect: () => void;
   currency?: string;
+  discountPercent?: number | null;
 }
 
 const GREEN = "#15803D";
@@ -38,10 +39,14 @@ export function RoomTypeCard({
   selected,
   onSelect,
   currency = "XAF",
+  discountPercent,
 }: RoomTypeCardProps) {
-  const price = typeof roomType.pricePerNight === "number"
+  const basePrice = typeof roomType.pricePerNight === "number"
     ? roomType.pricePerNight
     : parseFloat(roomType.pricePerNight || "0");
+
+  const hasDiscount = discountPercent != null && discountPercent > 0;
+  const discountedPrice = hasDiscount ? basePrice * (1 - discountPercent / 100) : basePrice;
 
   return (
     <TouchableOpacity
@@ -102,8 +107,13 @@ export function RoomTypeCard({
         </View>
 
         <View style={styles.priceContainer}>
+          {hasDiscount && (
+            <Text style={styles.originalPrice}>
+              {currency} {Math.round(basePrice).toLocaleString()}
+            </Text>
+          )}
           <Text style={styles.priceAmount}>
-            {currency} {Math.round(price).toLocaleString()}
+            {currency} {Math.round(discountedPrice).toLocaleString()}
           </Text>
           <Text style={styles.priceUnit}>/ night</Text>
         </View>
@@ -214,6 +224,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "baseline",
     gap: 3,
+  },
+  originalPrice: {
+    fontSize: 12,
+    color: MUTED,
+    textDecorationLine: "line-through",
+    marginRight: 4,
   },
   priceAmount: {
     fontSize: 17,
