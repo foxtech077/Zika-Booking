@@ -38,16 +38,16 @@ function formatDaySep(iso: string): string {
   const today = new Date();
   const isToday =
     d.getFullYear() === today.getFullYear() &&
-    d.getMonth()    === today.getMonth() &&
-    d.getDate()     === today.getDate();
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
   const isYest =
     d.getFullYear() === yesterday.getFullYear() &&
-    d.getMonth()    === yesterday.getMonth() &&
-    d.getDate()     === yesterday.getDate();
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate();
   if (isToday) return "Today";
-  if (isYest)  return "Yesterday";
+  if (isYest) return "Yesterday";
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
 
@@ -122,7 +122,7 @@ const b = StyleSheet.create({
     marginVertical: 3,
     maxWidth: "82%",
   },
-  wrapOwn:   { alignSelf: "flex-end", flexDirection: "row-reverse" },
+  wrapOwn: { alignSelf: "flex-end", flexDirection: "row-reverse" },
   wrapOther: { alignSelf: "flex-start" },
 
   avatarSlot: { width: 30, flexShrink: 0, marginRight: 8 },
@@ -141,20 +141,20 @@ const b = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  bubbleOwn:   { backgroundColor: K.colors.darkGreen, borderBottomRightRadius: 4 },
+  bubbleOwn: { backgroundColor: K.colors.darkGreen, borderBottomRightRadius: 4 },
   bubbleOther: {
     backgroundColor: K.colors.bgCard,
     borderWidth: 1,
     borderColor: K.colors.border,
     borderBottomLeftRadius: 4,
   },
-  text:    { fontSize: K.font.base, color: K.colors.textDark, lineHeight: 22 },
+  text: { fontSize: K.font.base, color: K.colors.textDark, lineHeight: 22 },
   textOwn: { color: "#fff" },
 
-  meta:    { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, marginHorizontal: 4 },
+  meta: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, marginHorizontal: 4 },
   metaOwn: { justifyContent: "flex-end" },
-  time:    { fontSize: 10, color: K.colors.textMuted },
-  tick:    { fontSize: 11, color: K.colors.textMuted },
+  time: { fontSize: 10, color: K.colors.textMuted },
+  tick: { fontSize: 11, color: K.colors.textMuted },
   tickRead: { color: K.colors.accent },
 });
 
@@ -165,9 +165,9 @@ function BookingCard({ bookingId }: { bookingId: string }) {
   if (!booking) return null;
 
   const statusToken = K.colors[booking.status as keyof typeof K.colors] as any;
-  const statusBg   = typeof statusToken === "object" ? statusToken.bg   : K.colors.bgSubtle;
+  const statusBg = typeof statusToken === "object" ? statusToken.bg : K.colors.bgSubtle;
   const statusText = typeof statusToken === "object" ? statusToken.text : K.colors.textMuted;
-  const checkIn  = booking.checkIn  ?? booking.pickupDatetime;
+  const checkIn = booking.checkIn ?? booking.pickupDatetime;
   const checkOut = booking.checkOut ?? booking.returnDatetime;
 
   return (
@@ -398,7 +398,7 @@ export default function ConversationScreen() {
   // Show avatar only on the last message in a run from the other party
   const avatarVisibleIds = new Set<string>();
   for (let i = 0; i < allMessages.length; i++) {
-    const cur  = allMessages[i];
+    const cur = allMessages[i];
     const next = allMessages[i + 1];
     const isOtherParty = cur && cur.senderId !== user?.id;
     const nextIsOtherParty = next && next.senderId !== user?.id;
@@ -450,7 +450,7 @@ export default function ConversationScreen() {
 
         {/* Actions — hide call when inactive */}
         <View style={s.headerRight}>
-          {!isInactive && (
+          {/* {!isInactive && (
             <TouchableOpacity
               style={s.headerBtn}
               activeOpacity={0.7}
@@ -458,13 +458,13 @@ export default function ConversationScreen() {
             >
               <Ionicons name="call-outline" size={20} color={K.colors.textDark} />
             </TouchableOpacity>
-          )}
+          )} */}
           <TouchableOpacity
             style={s.headerBtn}
             activeOpacity={0.7}
             onPress={() =>
               Alert.alert("Options", undefined, [
-                { text: "Report Conversation", style: "destructive", onPress: () => {} },
+                { text: "Report Conversation", style: "destructive", onPress: () => { } },
                 { text: "Cancel", style: "cancel" },
               ])
             }
@@ -588,12 +588,12 @@ export default function ConversationScreen() {
           </View>
         ) : (
           <View style={s.compose}>
-            <TouchableOpacity style={s.composeIcon} activeOpacity={0.7}>
+            {/* <TouchableOpacity style={s.composeIcon} activeOpacity={0.7}>
               <Ionicons name="add-circle-outline" size={28} color={K.colors.textMuted} />
             </TouchableOpacity>
             <TouchableOpacity style={s.composeIcon} activeOpacity={0.7}>
               <Ionicons name="camera-outline" size={24} color={K.colors.textMuted} />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             <TextInput
               ref={inputRef}
@@ -606,9 +606,9 @@ export default function ConversationScreen() {
               maxLength={1000}
             />
 
-            <TouchableOpacity style={s.composeIcon} activeOpacity={0.7}>
+            {/* <TouchableOpacity style={s.composeIcon} activeOpacity={0.7}>
               <Ionicons name="happy-outline" size={24} color={K.colors.textMuted} />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             <TouchableOpacity
               style={[s.sendBtn, sendDisabled && s.sendBtnOff]}

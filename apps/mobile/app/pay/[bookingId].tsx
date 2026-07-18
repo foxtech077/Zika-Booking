@@ -298,8 +298,14 @@ export default function PaymentScreen() {
   const { data: activePromotion } = useQuery<Promotion | null>({
     queryKey: ["promotions-active", booking?.listingType],
     queryFn: async () => {
-      const res = await listingApi.get<{ data: Promotion[] }>(`/promotions/active?activity=${booking!.listingType}`);
-      return res.data.data?.[0] ?? null;
+      try {
+        const res = await listingApi.get<any>(`/promotions/active?activity=${booking!.listingType}`);
+        const d = res.data?.data;
+        const list = Array.isArray(d) ? d : d?.promotions;
+        return Array.isArray(list) ? list[0] ?? null : null;
+      } catch {
+        return null;
+      }
     },
     enabled: !!booking?.listingType,
     staleTime: 5 * 60_000,

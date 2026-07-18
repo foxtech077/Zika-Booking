@@ -1271,19 +1271,6 @@ export default function BookingFlowScreen() {
               </View>
             )}
 
-            {/* Terms checkbox */}
-            <TouchableOpacity
-              style={styles.termsRow}
-              onPress={() => setTermsChecked((v) => !v)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.checkbox, termsChecked && styles.checkboxChecked]}>
-                {termsChecked && <Ionicons name="checkmark" size={14} color="#fff" />}
-              </View>
-              <Text style={styles.termsText}>
-                I agree to Kainook's Terms of Service and the cancellation policy above.
-              </Text>
-            </TouchableOpacity>
 
             <TouchableOpacity
               style={[
