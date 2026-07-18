@@ -623,7 +623,7 @@ export async function searchRoutes(app: FastifyInstance) {
         }[]>(`
           SELECT room_type_id, check_in, check_out, pickup_datetime, return_datetime
           FROM bookings
-          WHERE listing_id = ANY($1)
+          WHERE listing_id = $1
             AND room_type_id IS NOT NULL
             AND (
               status = 'confirmed'
@@ -634,7 +634,7 @@ export async function searchRoutes(app: FastifyInstance) {
               (check_in IS NOT NULL AND check_in < $3 AND check_out > $2)
               OR (pickup_datetime IS NOT NULL AND pickup_datetime < $3 AND return_datetime > $2)
             )
-        `, roomTypeIds, rangeStart, rangeEnd, pendingExpiry);
+        `, id, rangeStart, rangeEnd, pendingExpiry);
 
         // Fetch iCal blocked dates (affects ALL room types)
         const blockedDates = await prisma.icalBlockedDate.findMany({
