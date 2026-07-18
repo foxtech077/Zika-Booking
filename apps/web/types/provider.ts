@@ -47,6 +47,7 @@ export interface Listing {
   cancellationPolicy?: string | null;
   smokingAllowed?: boolean;
   petsAllowed?: boolean;
+  allowPreBooking?: boolean;
   address?: string | null;
   lat?: number | null;
   lng?: number | null;

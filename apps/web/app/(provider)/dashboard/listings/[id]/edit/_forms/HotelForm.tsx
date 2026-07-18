@@ -69,6 +69,7 @@ type HotelState = {
   cancellationPolicy: string;
   smokingAllowed: boolean;
   petsAllowed: boolean;
+  allowPreBooking: boolean;
   selectedAmenities: string[];
   customAmenities: string[];
   customInput: string;
@@ -93,6 +94,7 @@ function initState(l: Listing): HotelState {
     cancellationPolicy: l.cancellationPolicy ?? "flexible",
     smokingAllowed: l.smokingAllowed ?? false,
     petsAllowed: l.petsAllowed ?? false,
+    allowPreBooking: l.allowPreBooking ?? false,
     selectedAmenities: flattenGroupedAmenities((l as any).amenities),
     customAmenities: ((l as any).customAmenities ?? []).map((a: any) =>
       typeof a === "string" ? a : (a?.label ?? "")),
@@ -150,6 +152,7 @@ function buildPayload(s: HotelState): Record<string, unknown> {
 
   p.smokingAllowed = s.smokingAllowed;
   p.petsAllowed = s.petsAllowed;
+  p.allowPreBooking = s.allowPreBooking;
 
   p.amenities = groupAmenities(s.selectedAmenities);
   p.customAmenities = s.customAmenities.map((x) => (typeof x === "string" ? x.trim() : "")).filter(Boolean);
@@ -711,6 +714,15 @@ export function HotelForm({ listingId, listing }: Props) {
                           className="rounded border-slate-300 text-primary focus:ring-primary"
                         />
                         <span className="text-sm text-slate-700">Pets Allowed</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={s.allowPreBooking}
+                          onChange={(e) => set("allowPreBooking", e.target.checked)}
+                          className="rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm text-slate-700">Allow pre-booking messages</span>
                       </label>
                     </div>
                   </div>

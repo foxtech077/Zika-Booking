@@ -55,6 +55,7 @@ type ApartmentState = {
   cancellationPolicy: string;
   smokingAllowed: boolean;
   petsAllowed: boolean;
+  allowPreBooking: boolean;
   bedrooms: string;
   bathrooms: string;
   maxGuests: string;
@@ -106,6 +107,7 @@ function initState(l: Listing): ApartmentState {
     cancellationPolicy:  l.cancellationPolicy ?? "flexible",
     smokingAllowed:      l.smokingAllowed    ?? false,
     petsAllowed:         l.petsAllowed       ?? false,
+    allowPreBooking:     l.allowPreBooking   ?? false,
     bedrooms:            l.bedrooms          != null ? String(l.bedrooms)  : "",
     bathrooms:           l.bathrooms         != null ? String(l.bathrooms) : "",
     maxGuests:           l.maxGuests         != null ? String(l.maxGuests) : "",
@@ -146,6 +148,7 @@ function buildPayload(s: ApartmentState): Record<string, unknown> {
 
   p.smokingAllowed = s.smokingAllowed;
   p.petsAllowed    = s.petsAllowed;
+  p.allowPreBooking = s.allowPreBooking;
 
   // apartment-specific specs
   const bedrooms = toNullableInt(s.bedrooms);
@@ -539,6 +542,10 @@ export function ApartmentForm({ listingId, listing }: Props) {
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input type="checkbox" checked={s.petsAllowed} onChange={(e) => set("petsAllowed", e.target.checked)} className="rounded border-slate-300 text-primary focus:ring-primary" />
                     <span className="text-sm text-slate-700">Pets Allowed</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" checked={s.allowPreBooking} onChange={(e) => set("allowPreBooking", e.target.checked)} className="rounded border-slate-300 text-primary focus:ring-primary" />
+                    <span className="text-sm text-slate-700">Allow pre-booking messages</span>
                   </label>
                 </div>
               </div>
